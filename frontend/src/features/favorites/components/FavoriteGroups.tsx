@@ -87,7 +87,7 @@ export function FavoriteGroups() {
               </Button>
             )}
           </h2>
-          <div className="grid grid-cols-3 gap-4 max-md:grid-cols-2 max-[500px]:grid-cols-1">
+          <div className="grid grid-cols-1 gap-4 min-[501px]:grid-cols-2 md:grid-cols-3">
             {items.map((s) => (
               <FavoriteCard key={s.id} service={s} onToggleCompare={onToggleCompare} onRemove={onRemove} />
             ))}

@@ -5,7 +5,8 @@
 > File này chưa có trong danh sách `docs/api/` của ARCHITECTURE.md; thêm vì BE có module `favorites` riêng.
 
 Phạm vi: cặp đôi lưu dịch vụ yêu thích (mục 3.1, 3.2 trong prototype).
-So sánh dịch vụ (3.3, 3.4) **không cần API riêng**: FE giữ danh sách đang chọn trong tab trình duyệt, bảng so sánh dùng `GET /services/:id` của catalog.
+Theo quyết định của nhóm, đơn vị yêu thích là **nhà cung cấp** (ở FE đang gọi là "service", `serviceId`). Khi database.md được chốt, đổi tên đường dẫn theo (ví dụ `/favorites/{vendorId}`).
+So sánh và đề xuất: xem [compare.md](compare.md). Danh sách đang chọn để so sánh chỉ nằm ở FE (tab trình duyệt).
 
 Role cho mọi endpoint: **COUPLE**. Mỗi cặp đôi chỉ thấy và sửa yêu thích của mình.
 
