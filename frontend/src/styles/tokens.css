@@ -1,0 +1,111 @@
+/*
+ * Design tokens lấy từ docs/prototype/prototype.html (:root và các màu dùng lặp lại).
+ * File này chỉ khai báo giá trị thô. Tên dùng trong class Tailwind nằm ở theme.css.
+ */
+:root {
+  /* Nền và chữ */
+  --bg: #faf7f2;
+  --surface: #ffffff;
+  --ink: #29231d;
+  --muted: #948a7c;
+  --line: #eadfd0;
+  --line-soft: #f0e6d8;
+  --header-bg: rgba(250, 247, 242, 0.94);
+  /* Nền mờ sau modal (.mb trong prototype) */
+  --overlay: rgba(10, 18, 19, 0.55);
+
+  /* Thương hiệu */
+  --accent: #c49a4a;
+  --accent-ink: #ffffff;
+  --accent-soft: #f5ebd8;
+  --gold: #ae8131;
+  --nav-ink: #756a5d;
+
+  /* Trạng thái */
+  --sage: #3f8a63;
+  --sage-soft: #e8f5ec;
+  --warn: #b94a42;
+  --warn-soft: #fbe9e6;
+  --info: #3a6b93;
+  --info-soft: #e6eff7;
+  --heart: #f05a83;
+  --notify: #e34f5f;
+
+  /* Màu theo hạng mục dịch vụ */
+  --c1: #b5546f;
+  --c2: #4f8a72;
+  --c3: #c08a3e;
+  --c4: #4f7fa8;
+  --c5: #7a62a8;
+  --c6: #b8664a;
+
+  /* Font */
+  --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --sans: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+
+  /* Màu gốc của đổ bóng (nâu ấm như prototype) */
+  --shadow-rgb: 65 45 20;
+}
+
+/* Chế độ tối giữ như prototype: theo hệ điều hành, hoặc ép bằng data-theme trên <html> */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #141a1b;
+    --surface: #1d2627;
+    --ink: #ecf0ee;
+    --muted: #9aa8a6;
+    --line: #2e3b3b;
+    --line-soft: #263232;
+    --header-bg: rgba(20, 26, 27, 0.92);
+    --accent: #d58aa8;
+    --accent-ink: #1c1416;
+    --accent-soft: #3a2430;
+    --gold: #d4a94f;
+    --nav-ink: #9aa8a6;
+    --sage: #7fb59e;
+    --sage-soft: #1f3029;
+    --warn: #e8826c;
+    --warn-soft: #3a221d;
+    --info: #7faad0;
+    --info-soft: #1e2c38;
+    --heart: #f07ca0;
+    --notify: #e8826c;
+    --c1: #d77c95;
+    --c2: #7fb59e;
+    --c3: #d9aa63;
+    --c4: #7faad0;
+    --c5: #a590ce;
+    --c6: #de9276;
+    --shadow-rgb: 0 0 0;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #141a1b;
+  --surface: #1d2627;
+  --ink: #ecf0ee;
+  --muted: #9aa8a6;
+  --line: #2e3b3b;
+  --line-soft: #263232;
+  --header-bg: rgba(20, 26, 27, 0.92);
+  --accent: #d58aa8;
+  --accent-ink: #1c1416;
+  --accent-soft: #3a2430;
+  --gold: #d4a94f;
+  --nav-ink: #9aa8a6;
+  --sage: #7fb59e;
+  --sage-soft: #1f3029;
+  --warn: #e8826c;
+  --warn-soft: #3a221d;
+  --info: #7faad0;
+  --info-soft: #1e2c38;
+  --heart: #f07ca0;
+  --notify: #e8826c;
+  --c1: #d77c95;
+  --c2: #7fb59e;
+  --c3: #d9aa63;
+  --c4: #7faad0;
+  --c5: #a590ce;
+  --c6: #de9276;
+  --shadow-rgb: 0 0 0;
+}

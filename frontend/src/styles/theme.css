@@ -1,0 +1,83 @@
+/*
+ * Cấu hình Tailwind v4 (thay cho tailwind.config.js): ánh xạ tokens.css thành class.
+ * Có thêm tên ngữ nghĩa của shadcn/ui (background, primary, muted...) để component
+ * shadcn dùng đúng màu WebPlan.
+ *
+ * Ví dụ: bg-bg, bg-surface, text-ink, text-muted-foreground, border-line, bg-primary,
+ *        text-gold, bg-sage-soft, text-cat-1, font-serif, rounded-pill, shadow-card.
+ */
+@theme inline {
+  /* Màu theo prototype */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-header: var(--header-bg);
+  --color-overlay: var(--overlay);
+  --color-gold: var(--gold);
+  --color-nav: var(--nav-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-sage: var(--sage);
+  --color-sage-soft: var(--sage-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-heart: var(--heart);
+  --color-notify: var(--notify);
+  --color-cat-1: var(--c1);
+  --color-cat-2: var(--c2);
+  --color-cat-3: var(--c3);
+  --color-cat-4: var(--c4);
+  --color-cat-5: var(--c5);
+  --color-cat-6: var(--c6);
+
+  /* Tên ngữ nghĩa shadcn/ui */
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-ink);
+  --color-secondary: var(--accent-soft);
+  --color-secondary-foreground: var(--gold);
+  --color-muted: color-mix(in srgb, var(--line) 45%, var(--surface));
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--accent-soft);
+  --color-accent-foreground: var(--gold);
+  --color-destructive: var(--warn);
+  --color-destructive-foreground: var(--surface);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--accent);
+
+  /* Font */
+  --font-sans: var(--sans);
+  --font-serif: var(--serif);
+
+  /* Bo góc theo prototype: nút/ô nhập 8, thẻ 12, modal 16, khối lớn 22, header 28 */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 22px;
+  --radius-3xl: 28px;
+  --radius-pill: 999px;
+
+  /* Đổ bóng theo prototype */
+  --shadow-soft: 0 3px 10px rgb(var(--shadow-rgb) / 0.08);
+  --shadow-card: 0 7px 18px rgb(var(--shadow-rgb) / 0.09);
+  --shadow-header: 0 8px 24px rgb(var(--shadow-rgb) / 0.1);
+  --shadow-panel: 0 8px 26px rgb(var(--shadow-rgb) / 0.06);
+  --shadow-pill: 0 3px 9px rgb(164 122 44 / 0.22);
+  --shadow-fab: 0 4px 14px rgb(var(--shadow-rgb) / 0.18);
+  --shadow-tray: 0 12px 34px rgb(var(--shadow-rgb) / 0.2);
+  --shadow-bubble: 0 2px 8px rgb(var(--shadow-rgb) / 0.06);
+  --shadow-fab-hover: 0 7px 18px rgb(var(--shadow-rgb) / 0.22);
+
+  /* Chiều rộng vùng nội dung phía cặp đôi */
+  --container-content: 1240px;
+}
