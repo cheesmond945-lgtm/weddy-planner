@@ -46,6 +46,8 @@
   --gold-lo: #9a7230;
   --gold-grad: linear-gradient(135deg, #b88d3f 0%, #d9b86e 38%, #f0dda6 52%, #c9a157 68%, #a57a31 100%);
   --gold-line: linear-gradient(90deg, transparent, #d8b66c 20%, #f2e2b0 50%, #d8b66c 80%, transparent);
+  /* Chữ trên nền vàng ánh kim (nút chính, nhãn ảnh bìa) */
+  --gold-on: #2a1d07;
   --scrim: rgba(20, 22, 20, 0.42);
   --portal-shadow: 0 1px 2px rgba(60, 42, 12, 0.05), 0 10px 30px -16px rgba(60, 42, 12, 0.22);
   --portal-shadow-lift: 0 2px 4px rgba(60, 42, 12, 0.06), 0 22px 44px -18px rgba(60, 42, 12, 0.32);
@@ -98,6 +100,7 @@
     --gold-ink: #e8cb8c;
     --gold-hi: #f3dea6;
     --gold-lo: #b28a44;
+    --gold-on: #1e1505;
     --gold-grad: linear-gradient(135deg, #b8904a 0%, #ddbe78 38%, #f3e1ae 52%, #cfa75e 68%, #a9803a 100%);
     --scrim: rgba(0, 0, 0, 0.6);
     --portal-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 26px -14px rgba(0, 0, 0, 0.6);
@@ -131,6 +134,7 @@
   --gold-ink: #e8cb8c;
   --gold-hi: #f3dea6;
   --gold-lo: #b28a44;
+  --gold-on: #1e1505;
   --gold-grad: linear-gradient(135deg, #b8904a 0%, #ddbe78 38%, #f3e1ae 52%, #cfa75e 68%, #a9803a 100%);
   --scrim: rgba(0, 0, 0, 0.6);
   --portal-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 26px -14px rgba(0, 0, 0, 0.6);

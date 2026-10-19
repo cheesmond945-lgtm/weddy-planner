@@ -29,7 +29,7 @@ export function UnsavedChangesGuard({ when }: { when: boolean }) {
         blocker.proceed?.()
       }}
     >
-      <p>Các thay đổi trên hồ sơ chưa được lưu sẽ bị mất.</p>
+      <p>Các thay đổi chưa được lưu sẽ bị mất.</p>
     </ConfirmDialog>
   )
 }
