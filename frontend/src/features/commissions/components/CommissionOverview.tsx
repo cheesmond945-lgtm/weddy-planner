@@ -5,6 +5,7 @@ import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { CommissionStatementSummary } from '@/types/commission'
 import { formatPeriod, remainingOf } from '../constants'
+import { StatCard } from './StatCard'
 
 /** Chọn kỳ (tháng) xem số liệu, như ô chọn "Tháng 09/2026" của prototype. */
 export function PeriodSelect({ statements, value, onChange }: { statements: CommissionStatementSummary[]; value: string; onChange: (id: string) => void }) {
@@ -37,14 +38,18 @@ export function CommissionOverview({ statement: s }: { statement: CommissionStat
     <>
       <div className="mb-[18px] grid grid-cols-3 gap-4 max-sm:grid-cols-1 max-sm:gap-2.5">
         {cards.map((c) => (
-          <div key={c.label} className="min-w-0 rounded-md border border-line bg-surface px-5 pt-5 pb-[18px] shadow-portal max-sm:p-4">
-            <p className="text-[12.5px] text-muted-foreground">{c.label}</p>
-            <p className={cn('mt-2.5 truncate text-[27px] font-semibold tracking-tight tabular-nums max-sm:text-[23px]', c.tone)}>{formatMoney(c.value)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Kỳ {formatPeriod(s.period)}
-              {c.label === 'Còn phải thanh toán' && s.pendingAmount > 0 && ' · có minh chứng chờ xác nhận'}
-            </p>
-          </div>
+          <StatCard
+            key={c.label}
+            label={c.label}
+            value={formatMoney(c.value)}
+            tone={c.tone}
+            foot={
+              <>
+                Kỳ {formatPeriod(s.period)}
+                {c.label === 'Còn phải thanh toán' && s.pendingAmount > 0 && ' · có minh chứng chờ xác nhận'}
+              </>
+            }
+          />
         ))}
       </div>
       {s.status === 'OPEN' ? (
