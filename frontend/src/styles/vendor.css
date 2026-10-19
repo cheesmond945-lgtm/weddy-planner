@@ -1,0 +1,141 @@
+/*
+ * Design tokens phía Nhà cung cấp, lấy từ :root của docs/prototype/prototype_vendor/prototype-ncc.slim.html
+ * (khối gốc + khối "v6: luxury champagne gold" ghi đè ở cuối CSS).
+ *
+ * Chỉ có hiệu lực khi <html data-portal="vendor"> (VendorLayout gắn khi mount, gỡ khi unmount),
+ * nên không đụng tới màu phía cặp đôi trong tokens.css. Đặt trên <html> thay vì một <div> bọc ngoài
+ * để Dialog, Toast (render qua portal vào <body>) cũng nhận màu NCC.
+ *
+ * Gồm hai phần:
+ * 1. Gán lại biến dùng chung (--bg, --ink, --accent...) để component có sẵn (Button, Dialog...) ra màu NCC.
+ * 2. Biến chỉ NCC mới có (--side, --surface-2, --gold-ink...). Tên class Tailwind nằm ở theme.css.
+ */
+:root[data-portal='vendor'] {
+  /* 1. Biến dùng chung, giá trị theo prototype NCC */
+  --bg: #f7f4ee;
+  --surface: #ffffff;
+  --ink: #211e1b;
+  --muted: #7b746b;
+  --line: #e8e0d2;
+  --line-soft: var(--line);
+  --header-bg: color-mix(in srgb, var(--bg) 86%, transparent);
+  --overlay: var(--scrim);
+  --accent: var(--gold);
+  --accent-ink: #ffffff;
+  --accent-soft: var(--gold-soft);
+  --nav-ink: var(--muted);
+  --sage: #3b7357;
+  --sage-soft: #e7f1ea;
+  --warn: #a9473b;
+  --warn-soft: #f7e9e6;
+  --info: #3f6489;
+  --info-soft: #e8eef5;
+  --notify: var(--warn);
+  --serif: 'Cormorant Garamond', 'Lora', Georgia, serif;
+  --sans: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --shadow-rgb: 60 42 12;
+
+  /* 2. Biến riêng NCC */
+  --surface-2: #faf8f5;
+  --line-strong: #d8d0c3;
+  --gold: #a9823a;
+  --gold-strong: #8c6726;
+  --gold-soft: #f6eedd;
+  --gold-ink: #7c5a1e;
+  --gold-hi: #e9d39b;
+  --gold-lo: #9a7230;
+  --gold-grad: linear-gradient(135deg, #b88d3f 0%, #d9b86e 38%, #f0dda6 52%, #c9a157 68%, #a57a31 100%);
+  --gold-line: linear-gradient(90deg, transparent, #d8b66c 20%, #f2e2b0 50%, #d8b66c 80%, transparent);
+  --scrim: rgba(20, 22, 20, 0.42);
+  --portal-shadow: 0 1px 2px rgba(60, 42, 12, 0.05), 0 10px 30px -16px rgba(60, 42, 12, 0.22);
+  --portal-shadow-lift: 0 2px 4px rgba(60, 42, 12, 0.06), 0 22px 44px -18px rgba(60, 42, 12, 0.32);
+
+  /* Sidebar tối: giữ nguyên ở cả chế độ sáng và tối */
+  --side: #15191a;
+  --side-2: #1f2526;
+  --side-fg: #c9c3b6;
+  --side-muted: #8b9188;
+  /* Chữ sáng và vàng nhạt trên nền sidebar (#F2ECE0, #D3B27A trong prototype) */
+  --side-ink: #f2ece0;
+  --side-gold: #d3b27a;
+  --side-grad: linear-gradient(180deg, #171c1d 0%, var(--side) 60%, #101414 100%);
+  --side-border: rgba(216, 182, 108, 0.14);
+  /* Đường viền vàng mảnh mép phải sidebar */
+  --side-hairline: linear-gradient(180deg, transparent, rgba(216, 182, 108, 0.5) 30%, rgba(216, 182, 108, 0.15) 70%, transparent);
+  --side-divider: rgba(255, 255, 255, 0.07);
+  --side-active: linear-gradient(90deg, rgba(216, 182, 108, 0.16), rgba(216, 182, 108, 0.02));
+  /* Logo chữ viết tắt (.studio-logo) trên sidebar và trên header */
+  --side-logo-bg: linear-gradient(135deg, #2b2a22, #1d1f1c);
+  --side-logo-ink: #e3c57e;
+  --side-logo-border: rgba(216, 182, 108, 0.35);
+  --logo-bg: linear-gradient(135deg, var(--gold-soft), color-mix(in srgb, var(--gold-hi) 30%, var(--gold-soft)));
+  /* Quầng vàng nhẹ góc phải trên nền trang */
+  --portal-glow: radial-gradient(1200px 500px at 85% -10%, color-mix(in srgb, var(--gold) 9%, transparent), transparent 70%);
+}
+
+/* Chế độ tối như prototype: theo hệ điều hành, hoặc ép bằng data-theme trên <html> */
+@media (prefers-color-scheme: dark) {
+  :root[data-portal='vendor']:not([data-theme='light']) {
+    --bg: #101312;
+    --surface: #191d1b;
+    --ink: #ece7de;
+    --muted: #9c968b;
+    --line: #2b312e;
+    --accent-ink: #191d1b;
+    --sage: #7dbe9a;
+    --sage-soft: #1b2a22;
+    --warn: #e08e80;
+    --warn-soft: #2e1c19;
+    --info: #8db0d6;
+    --info-soft: #1a2430;
+    --shadow-rgb: 0 0 0;
+
+    --surface-2: #1e2321;
+    --line-strong: #38403c;
+    --gold: #d4af66;
+    --gold-strong: #e6c680;
+    --gold-soft: #2b2519;
+    --gold-ink: #e8cb8c;
+    --gold-hi: #f3dea6;
+    --gold-lo: #b28a44;
+    --gold-grad: linear-gradient(135deg, #b8904a 0%, #ddbe78 38%, #f3e1ae 52%, #cfa75e 68%, #a9803a 100%);
+    --scrim: rgba(0, 0, 0, 0.6);
+    --portal-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 26px -14px rgba(0, 0, 0, 0.6);
+
+    --side: #0b0d0d;
+    --side-2: #171b1b;
+    --side-muted: #7d847c;
+  }
+}
+
+:root[data-portal='vendor'][data-theme='dark'] {
+  --bg: #101312;
+  --surface: #191d1b;
+  --ink: #ece7de;
+  --muted: #9c968b;
+  --line: #2b312e;
+  --accent-ink: #191d1b;
+  --sage: #7dbe9a;
+  --sage-soft: #1b2a22;
+  --warn: #e08e80;
+  --warn-soft: #2e1c19;
+  --info: #8db0d6;
+  --info-soft: #1a2430;
+  --shadow-rgb: 0 0 0;
+
+  --surface-2: #1e2321;
+  --line-strong: #38403c;
+  --gold: #d4af66;
+  --gold-strong: #e6c680;
+  --gold-soft: #2b2519;
+  --gold-ink: #e8cb8c;
+  --gold-hi: #f3dea6;
+  --gold-lo: #b28a44;
+  --gold-grad: linear-gradient(135deg, #b8904a 0%, #ddbe78 38%, #f3e1ae 52%, #cfa75e 68%, #a9803a 100%);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --portal-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 26px -14px rgba(0, 0, 0, 0.6);
+
+  --side: #0b0d0d;
+  --side-2: #171b1b;
+  --side-muted: #7d847c;
+}

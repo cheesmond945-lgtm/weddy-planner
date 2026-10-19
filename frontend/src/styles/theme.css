@@ -80,4 +80,34 @@
 
   /* Chiều rộng vùng nội dung phía cặp đôi */
   --container-content: 1240px;
+
+  /*
+   * Phía NCC (giá trị trong vendor.css, chỉ có khi <html data-portal="vendor">).
+   * Ví dụ: bg-side, text-side-fg, bg-surface-2, border-line-strong, text-gold-ink,
+   *        bg-gold-soft, shadow-portal, bg-(image:--gold-grad).
+   * Trong vùng NCC, các tên chung ở trên (bg-bg, text-ink, bg-primary, font-serif...) cũng ra màu/font NCC.
+   */
+  --color-surface-2: var(--surface-2);
+  --color-line-strong: var(--line-strong);
+  --color-gold-strong: var(--gold-strong);
+  --color-gold-soft: var(--gold-soft);
+  --color-gold-ink: var(--gold-ink);
+  --color-gold-hi: var(--gold-hi);
+  --color-gold-lo: var(--gold-lo);
+  --color-scrim: var(--scrim);
+  --color-side: var(--side);
+  --color-side-2: var(--side-2);
+  --color-side-fg: var(--side-fg);
+  --color-side-muted: var(--side-muted);
+  --color-side-ink: var(--side-ink);
+  --color-side-gold: var(--side-gold);
+  --color-side-border: var(--side-border);
+  --color-side-divider: var(--side-divider);
+  --color-side-logo-ink: var(--side-logo-ink);
+  --color-side-logo-border: var(--side-logo-border);
+  --shadow-portal: var(--portal-shadow);
+  --shadow-portal-lift: var(--portal-shadow-lift);
+  /* Chiều rộng sidebar và vùng nội dung NCC */
+  --spacing-side: 252px;
+  --container-portal: 1380px;
 }
