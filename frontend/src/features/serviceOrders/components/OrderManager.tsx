@@ -20,7 +20,7 @@ type Action = 'pay' | 'adjust' | 'cancel'
 function availableActions(o: ServiceOrder) {
   const st = o.status === 'CONFIRMED' ? adjustmentStateOf(o) : null
   return {
-    pay: o.status === 'CONFIRMED' && (currentVersion(o)?.content.installments.length ?? 0) > 1,
+    pay: o.status === 'CONFIRMED' && (currentVersion(o)?.content.installments.length ?? 0) > 0,
     /** null: không lập được (đang chờ khách duyệt phương án, hoặc đơn chưa xác nhận) */
     adjust:
       o.status !== 'CONFIRMED' || st?.kind === 'AWAITING_CONFIRMATION'

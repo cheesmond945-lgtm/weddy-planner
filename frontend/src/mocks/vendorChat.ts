@@ -19,7 +19,8 @@ import type { ChatMessageType, CustomerSimulation, VendorConversation, VendorMes
  * Muốn làm lại từ đầu thì xóa khóa localStorage bên dưới.
  */
 // .v2: thêm hủy đơn, minh chứng thanh toán, tỷ lệ nguyên (dữ liệu cũ trong trình duyệt được bỏ qua)
-const STORAGE_KEY = 'weddy.mock.vendorChat.v2'
+// .v3: thêm đơn đã hoàn thành (căn cứ hoa hồng)
+const STORAGE_KEY = 'weddy.mock.vendorChat.v3'
 
 type StoredConversation = Pick<VendorConversation, 'id' | 'customer' | 'interestPackage' | 'unreadCount'>
 
@@ -328,6 +329,62 @@ function seed(userId: string): VendorChatData {
   o13.history.push({ at: at('2026-09-27', '10:30'), text: `Hủy đơn: ${reason13}` })
   msg(c13, 'SYSTEM', 'ORDER_CANCELLED', at('2026-09-27', '10:30'), { orderId: o13.id, text: reason13 })
 
+  // c14–c18: đơn đã qua ngày sự kiện (đơn hoàn thành), có đủ khoản thu, làm căn cứ cho bảng kê hoa hồng
+  // (Tài chính & đối soát). #WP1015 có khoản thu sau ngày chốt kỳ 09 nên thành dòng bổ sung ở kỳ 10.
+  const pay = (o: ServiceOrder, idx: number, amount: number, when: string, method: 'BANK_TRANSFER' | 'CASH') => {
+    const inst = o.versions[0].content.installments[idx]
+    o.payments.push({
+      id: nextId('p'),
+      installmentId: inst.id,
+      installmentName: inst.name,
+      amount,
+      paidAt: when,
+      method,
+      plannedMethod: inst.method,
+      recordedBy: 'VENDOR',
+      proofFile: null,
+      note: null,
+    })
+    o.history.push({ at: when, text: `Ghi nhận ${formatMoney(amount)} — ${inst.name} (${PAYMENT_METHOD_LABEL[method]})` })
+    msg(o.conversationId, 'SYSTEM', 'PAYMENT_RECORDED', when, { orderId: o.id, text: `Đã ghi nhận ${formatMoney(amount)} · ${inst.name} · ${PAYMENT_METHOD_LABEL[method]}` })
+  }
+  const completed = (
+    convId: string,
+    code: string,
+    name: string,
+    phone: string,
+    eventDate: string,
+    tables: number,
+    days: { sent: string; confirm: string; deposit: string },
+    finals: [number, string, 'BANK_TRANSFER' | 'CASH'][],
+  ) => {
+    const c = conv(convId, name, phone)
+    const content = menuA(name, phone, eventDate, tables)
+    content.installments[0].dueDate = days.deposit
+    const o = order(code, c, 'CONFIRMED', content, at(days.sent, '10:00'))
+    orderCard(o, 1, at(days.sent, '10:00'))
+    confirm(o, at(days.confirm, '09:00'))
+    deposit(o, at(days.deposit, '11:30'))
+    for (const [amount, when, method] of finals) pay(o, 1, amount, when, method)
+    return o
+  }
+  completed('vc-14', '#WP1011', 'Lan Hương & Minh Đức', '0912 678 345', '2026-07-25', 18, { sent: '2026-06-15', confirm: '2026-06-16', deposit: '2026-06-20' }, [
+    [57_600_000, at('2026-07-25', '21:00'), 'CASH'],
+  ])
+  completed('vc-15', '#WP1013', 'Diệu Linh & Hữu Phước', '0938 221 904', '2026-08-16', 20, { sent: '2026-07-05', confirm: '2026-07-06', deposit: '2026-07-10' }, [
+    [64_000_000, at('2026-08-16', '14:00'), 'BANK_TRANSFER'],
+  ])
+  completed('vc-16', '#WP1015', 'Bích Ngọc & Thành Công', '0971 450 812', '2026-09-12', 25, { sent: '2026-08-01', confirm: '2026-08-02', deposit: '2026-08-05' }, [
+    [70_000_000, at('2026-09-12', '21:30'), 'CASH'],
+    [10_000_000, at('2026-10-05', '10:00'), 'BANK_TRANSFER'],
+  ])
+  completed('vc-17', '#WP1016', 'Hà My & Tuấn Anh', '0904 337 615', '2026-09-27', 15, { sent: '2026-08-25', confirm: '2026-08-26', deposit: '2026-08-30' }, [
+    [48_000_000, at('2026-09-27', '21:00'), 'CASH'],
+  ])
+  completed('vc-18', '#WP1017', 'Thùy Dung & Văn Khoa', '0966 802 117', '2026-10-11', 12, { sent: '2026-09-01', confirm: '2026-09-02', deposit: '2026-09-05' }, [
+    [38_400_000, at('2026-10-11', '15:00'), 'BANK_TRANSFER'],
+  ])
+
   data.orders.forEach(finalize)
   return data
 }
@@ -465,6 +522,11 @@ export const mockVendorChat = {
     return withData(userId, (d) => d.orders.filter((o) => o.conversationId === conversationId))
   },
 
+  /** Mọi đơn của NCC (mock hoa hồng tính bảng kê từ khoản thu thật của các đơn này). */
+  allOrders(userId: string): ServiceOrder[] {
+    return withData(userId, (d) => d.orders)
+  },
+
   getOrder(userId: string, orderId: string): ServiceOrder {
     return withData(userId, (d) => findOrder(d, orderId))
   },
@@ -587,7 +649,7 @@ export const mockVendorChat = {
     })
   },
 
-  /** NCC ghi nhận khoản thu cho một đợt sau đặt cọc (cọc do hệ thống ghi nhận qua VNPay). */
+  /** NCC ghi nhận khoản thu trả trực tiếp (chuyển khoản, tiền mặt) cho một đợt, kể cả đợt cọc khi khách không trả qua VNPay. */
   recordPayment(userId: string, orderId: string, body: RecordPaymentBody): ServiceOrder {
     return withData(userId, (d) => {
       const o = findOrder(d, orderId)
@@ -595,7 +657,6 @@ export const mockVendorChat = {
       const insts = currentVersion(o)!.content.installments
       const idx = insts.findIndex((i) => i.id === body.installmentId)
       if (idx < 0) throw new ApiError(400, 'VALIDATION_ERROR', 'Đợt thanh toán không có trong đơn hiện hành.')
-      if (idx === 0) throw new ApiError(400, 'VALIDATION_ERROR', 'Đợt đặt cọc do hệ thống ghi nhận khi khách thanh toán qua VNPay.')
       if (!(body.amount > 0)) throw new ApiError(400, 'VALIDATION_ERROR', 'Số tiền phải lớn hơn 0.')
       if (body.method === 'VNPAY') throw new ApiError(400, 'VALIDATION_ERROR', 'Chọn chuyển khoản hoặc tiền mặt.')
       const inst = insts[idx]

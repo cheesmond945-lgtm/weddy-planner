@@ -1,11 +1,10 @@
-import { FileText, LoaderCircle, Paperclip, X } from 'lucide-react'
+import { LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
 import { MoneyInput } from '@/components/MoneyInput'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { controlClass, Field, Notice } from '@/features/vendors/components/FormParts'
-import { DOCUMENT_TYPES, formatFileSize, MAX_FILE_SIZE } from '@/features/vendors/constants'
-import { useUploadVendorFile } from '@/features/vendors/hooks'
+import { ProofFileField } from '@/features/vendors/components/ProofFileField'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { OrderPaymentMethod, ServiceOrder } from '@/types/serviceOrder'
@@ -19,13 +18,12 @@ import { PanelDialog } from './PanelDialog'
 const nowLocal = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
 
 /**
- * NCC ghi nhận khoản thu thực tế cho một đợt sau đặt cọc (PaymentModal trong prototype NCC).
- * Đặt cọc khách trả qua VNPay, hệ thống tự ghi nhận nên không có ở đây.
+ * NCC ghi nhận khoản thu thực tế cho một đợt (PaymentModal trong prototype NCC).
+ * Đặt cọc mặc định khách trả qua VNPay và hệ thống tự ghi nhận; NCC chỉ ghi nhận cọc khi khách trả trực tiếp.
  */
 export function RecordPaymentDialog({ order, onClose }: { order: ServiceOrder; onClose: () => void }) {
   const record = useRecordPayment(order.id)
-  const upload = useUploadVendorFile('PAYMENT_PROOF')
-  const insts = currentVersion(order)?.content.installments.slice(1) ?? []
+  const insts = currentVersion(order)?.content.installments ?? []
   const paidOf = (id: string) => order.payments.filter((p) => p.installmentId === id).reduce((s, p) => s + p.amount, 0)
   const first = insts.find((i) => paidOf(i.id) < i.amount) ?? insts[0]
 
@@ -36,25 +34,12 @@ export function RecordPaymentDialog({ order, onClose }: { order: ServiceOrder; o
   const [paidAt, setPaidAt] = useState(nowLocal)
   const [note, setNote] = useState('')
   const [proof, setProof] = useState<VendorFile | null>(null)
-  const [fileError, setFileError] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
 
   const total = order.totalAmount
   const over = order.paidAmount + amount - total
-
-  async function pickFile(f: File | undefined) {
-    if (!f) return
-    if (!DOCUMENT_TYPES.includes(f.type)) return setFileError('Định dạng không hỗ trợ, dùng PDF, JPG, PNG hoặc WEBP.')
-    if (f.size > MAX_FILE_SIZE) return setFileError('Tệp vượt 10MB.')
-    setFileError('')
-    try {
-      setProof(await upload.mutateAsync(f))
-    } catch (e) {
-      setFileError((e as Error).message)
-    }
-  }
 
   function submit() {
     const e: Record<string, string> = {}
@@ -92,10 +77,19 @@ export function RecordPaymentDialog({ order, onClose }: { order: ServiceOrder; o
       }
     >
       {!insts.length ? (
-        <p className="text-sm text-muted-foreground">Đơn chỉ có đợt đặt cọc. Khoản cọc khách trả qua VNPay được hệ thống tự ghi nhận.</p>
+        <p className="text-sm text-muted-foreground">Đơn chưa có đợt thanh toán nào.</p>
       ) : (
         <fieldset disabled={record.isPending} className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3.5 max-sm:grid-cols-1">
-          <Field label="Đợt liên quan" error={errors.inst} full hint="Đợt đặt cọc do hệ thống ghi nhận khi khách thanh toán qua VNPay.">
+          <Field
+            label="Đợt liên quan"
+            error={errors.inst}
+            full
+            hint={
+              inst?.id === insts[0]?.id
+                ? 'Đặt cọc trả qua VNPay được hệ thống tự ghi nhận. Chỉ ghi nhận ở đây khi khách trả cọc trực tiếp (chuyển khoản, tiền mặt).'
+                : undefined
+            }
+          >
             <select
               className={controlClass}
               value={instId}
@@ -147,32 +141,8 @@ export function RecordPaymentDialog({ order, onClose }: { order: ServiceOrder; o
               ))}
             </div>
           </Field>
-          <Field label="Tệp minh chứng" full group error={fileError} hint="Tùy chọn · Ảnh chuyển khoản, phiếu thu… PDF hoặc ảnh, tối đa 10MB.">
-            {proof ? (
-              <div className="flex min-w-0 items-center gap-2.5 rounded-sm border border-line px-3 py-2 text-[13px]">
-                <FileText className="size-4 flex-none text-gold" />
-                <span className="min-w-0 flex-1 truncate">{proof.fileName}</span>
-                <span className="text-muted-foreground">{formatFileSize(proof.size)}</span>
-                <button type="button" aria-label="Bỏ tệp minh chứng" onClick={() => setProof(null)} className="grid size-7 place-items-center rounded-sm text-muted-foreground hover:bg-surface-2">
-                  <X className="size-3.5" />
-                </button>
-              </div>
-            ) : (
-              <label className={cn('relative inline-flex h-[34px] w-fit cursor-pointer items-center gap-1.5 rounded-sm border border-line-strong bg-surface px-3 text-[13px] hover:border-gold focus-within:outline-2 focus-within:outline-ring', upload.isPending && 'pointer-events-none opacity-60')}>
-                {upload.isPending ? <LoaderCircle className="size-[15px] animate-spin" /> : <Paperclip className="size-[15px]" />}
-                {upload.isPending ? 'Đang tải…' : 'Chọn tệp'}
-                <input
-                  type="file"
-                  accept=".pdf,image/jpeg,image/png,image/webp"
-                  aria-label="Tải tệp minh chứng"
-                  className="absolute size-px opacity-0"
-                  onChange={(e) => {
-                    void pickFile(e.target.files?.[0])
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-            )}
+          <Field label="Tệp minh chứng" full group hint="Tùy chọn · Ảnh chuyển khoản, phiếu thu… PDF hoặc ảnh, tối đa 10MB.">
+            <ProofFileField value={proof} onChange={setProof} />
           </Field>
           <Field label="Ghi chú đối chiếu" full>
             <Input className={controlClass} value={note} onChange={(e) => setNote(e.target.value)} placeholder="VD: Mã giao dịch, người nhận tiền mặt…" />

@@ -144,6 +144,7 @@ Cùng bảng hội thoại / tin nhắn với phía cặp đôi. Mỗi hội tho
 | `ADJUSTMENT_REQUESTED` | `COUPLE` | Khách đề nghị điều chỉnh đơn đã xác nhận | `orderId`, `text` |
 | `ADJUSTMENT_REVISION_REQUESTED` | `COUPLE` | Khách yêu cầu sửa phương án điều chỉnh | `orderId`, `adjustmentId`, `text` |
 | `ADJUSTMENT_ACCEPTED` | `COUPLE` | Khách đồng ý phương án, phiên bản mới có hiệu lực | `orderId`, `orderVersion` (mới) |
+| `ORDER_CANCELLED` | `SYSTEM` | NCC hủy đơn (chỉ khi chưa có khoản thu); chỉ thêm khi đơn đã gửi khách | `orderId`, `text` (lý do hủy) |
 
 Trường không dùng thì `null` (`text` thì chuỗi rỗng). Phía cặp đôi hiện chỉ hiểu `TEXT` và `ORDER`; khi phía cặp đôi chuyển sang đơn mới ([orders.md](orders.md)) thì dùng chung các loại tin này.
 

@@ -254,7 +254,7 @@ export function OrderDetailDialog({ order, version, onClose, actions }: OrderDet
                 <th className={th}>Đợt liên quan</th>
                 <th className={cn(th, 'text-right')}>Số tiền</th>
                 <th className={th}>Thời điểm</th>
-                <th className={th}>Phương thức thực tế</th>
+                <th className={th}>Hình thức thanh toán</th>
                 <th className={th}>Minh chứng</th>
               </tr>
             </thead>
@@ -266,6 +266,7 @@ export function OrderDetailDialog({ order, version, onClose, actions }: OrderDet
                   <td className={td}>{formatStamp(p.paidAt)}</td>
                   <td className={td}>
                     {PAYMENT_METHOD_LABEL[p.method]}
+                    <span className="block text-[12.5px] text-muted-foreground">{p.recordedBy === 'SYSTEM' ? 'Hệ thống ghi nhận' : 'NCC ghi nhận'}</span>
                     {p.plannedMethod !== p.method && <span className="block text-[12.5px] text-muted-foreground">Dự kiến: {PAYMENT_METHOD_LABEL[p.plannedMethod]}</span>}
                     {p.note && <span className="block text-[12.5px] text-muted-foreground">{p.note}</span>}
                   </td>
