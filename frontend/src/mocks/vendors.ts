@@ -7,7 +7,8 @@ import { mockCatalog } from './catalog'
 /*
  * Hồ sơ NCC giả, lưu theo từng tài khoản NCC trong localStorage.
  * Tài khoản mẫu u-vendor-1 dùng dữ liệu "Mây Palace" của prototype NCC, đang ở trạng thái Cần bổ sung
- * để thử được cả luồng sửa và gửi xác minh lại. Tài khoản NCC khác bắt đầu bằng hồ sơ trống.
+ * để thử được cả luồng sửa và gửi xác minh lại. Tài khoản u-vendor-2 "Studio Mây Wedding" đã xác minh
+ * (để thử Gửi duyệt gói). Tài khoản NCC khác bắt đầu bằng hồ sơ trống.
  * Chưa có phần Admin duyệt: muốn làm lại từ đầu thì xóa khóa localStorage bên dưới.
  *
  * Tệp upload giả dùng URL.createObjectURL, chỉ xem được tới khi tải lại trang.
@@ -30,8 +31,38 @@ function categoryRef(slug: string): CategoryRef | null {
   return c ? { id: c.id, slug: c.slug, name: c.name } : null
 }
 
+/** u-vendor-2 "Studio Mây Wedding" (theo prototype NCC): hồ sơ đã xác minh lĩnh vực Chụp ảnh, dùng để thử Gửi duyệt gói. */
+function seedVerifiedStudio(): VendorProfile {
+  const category = categoryRef('chup-anh')
+  return {
+    id: 'vp-2',
+    status: 'VERIFIED',
+    businessName: 'Hộ kinh doanh Studio Mây',
+    taxCode: '0318765432',
+    representativeName: 'Nguyễn Minh Phương',
+    category,
+    verifiedCategory: category,
+    province: PROVINCE,
+    district: 'Cầu Giấy',
+    address: '12 Trần Thái Tông',
+    googleMapsUrl: null,
+    businessHours: { fromDay: 'MONDAY', toDay: 'SUNDAY', openTime: '09:00', closeTime: '21:00' },
+    documents: [
+      { type: 'BUSINESS_LICENSE', ...sampleFile('GPKD-StudioMay.pdf', 500_000) },
+      { type: 'FIRE_SAFETY', ...sampleFile('PCCC-StudioMay.pdf', 420_000) },
+    ],
+    photos: [
+      { type: 'FRONT', url: photo('photo-1537633552985-df8429e8048b'), publicId: 'mock/sample/studio.jpg', fileName: 'studio.jpg', size: 300_000, mimeType: 'image/jpeg' },
+    ],
+    reviewNote: null,
+    submittedAt: '2026-08-20T03:00:00.000Z',
+    updatedAt: '2026-08-22T03:00:00.000Z',
+  }
+}
+
 function seedProfile(userId: string): VendorProfile {
   const now = new Date().toISOString()
+  if (userId === 'u-vendor-2') return seedVerifiedStudio()
   if (userId !== 'u-vendor-1') {
     return {
       id: `vp-${userId}`,

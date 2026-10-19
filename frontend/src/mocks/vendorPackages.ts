@@ -10,6 +10,7 @@ import { mockVendors } from './vendors'
  * Gói dịch vụ giả của NCC, lưu theo từng tài khoản NCC trong localStorage.
  * Tài khoản u-vendor-1 có 4 gói "Mây Palace" chép từ prototype NCC (đủ 4 trạng thái).
  * Hồ sơ mẫu của u-vendor-1 đang Cần bổ sung nên chưa gửi duyệt được (như prototype khi hồ sơ chưa xác minh).
+ * Tài khoản u-vendor-2 (hồ sơ đã xác minh) có 3 bản nháp để thử Gửi duyệt.
  * Chưa có phần Admin duyệt: muốn làm lại từ đầu thì xóa khóa localStorage bên dưới.
  */
 const STORAGE_KEY = 'weddy.mock.vendorPackages'
@@ -31,7 +32,54 @@ function categoryRef(slug: string): CategoryRef {
   return { id: c.id, slug: c.slug, name: c.name }
 }
 
+const PHOTO = 'photo-1537633552985-df8429e8048b'
+
+/** u-vendor-2 "Studio Mây Wedding" (hồ sơ đã xác minh Chụp ảnh): 3 bản nháp, 2 gói đủ thông tin để Gửi duyệt ngay, 1 gói còn thiếu để thử báo lỗi. */
+function seedStudio(): VendorPackage[] {
+  const category = categoryRef('chup-anh')
+  const base = { category, capacity: null, coverPublicId: null, status: 'DRAFT' as const }
+  return [
+    {
+      ...base,
+      id: 'DV201',
+      name: 'Pre-wedding Đà Lạt 2 ngày',
+      description: 'Hai ngày chụp ngoại cảnh Đà Lạt, phong cách tự nhiên, 30 ảnh chỉnh sửa và album 25×25.',
+      tags: ['Pre-wedding', 'Ngoại cảnh Đà Lạt', 'Album cưới'],
+      price: 22_000_000,
+      maxPrice: 30_000_000,
+      note: 'Chưa gồm di chuyển, lưu trú.',
+      photos: [photo(PHOTO, 'doi-thong.jpg'), photo(PHOTO, 'doi-thong-2.jpg', zoom(0.2, 0.3)), photo(PHOTO, 'ho-xuan-huong.jpg', zoom(0.8, 0.7))],
+      updatedAt: '2026-10-10T03:00:00.000Z',
+    },
+    {
+      ...base,
+      id: 'DV202',
+      name: 'Phóng sự cưới trọn ngày',
+      description: 'Một nhiếp ảnh gia và một quay phim theo sát lễ gia tiên và tiệc cưới, giao 300 ảnh và clip highlight 3 phút.',
+      tags: ['Phóng sự cưới', 'Album cưới'],
+      price: 12_000_000,
+      maxPrice: 18_000_000,
+      note: null,
+      photos: [photo(PHOTO, 'phong-su.jpg', zoom(0.5, 0.4)), photo(PHOTO, 'phong-su-2.jpg', zoom(0.3, 0.8))],
+      updatedAt: '2026-10-12T03:00:00.000Z',
+    },
+    {
+      ...base,
+      id: 'DV203',
+      name: 'Quay phim cinematic',
+      description: 'Phim cưới cinematic 3–5 phút.',
+      tags: ['Quay phim cinematic'],
+      price: 15_000_000,
+      maxPrice: null,
+      note: null,
+      photos: [],
+      updatedAt: '2026-10-02T03:00:00.000Z',
+    },
+  ]
+}
+
 function seed(userId: string): VendorPackage[] {
+  if (userId === 'u-vendor-2') return seedStudio()
   if (userId !== 'u-vendor-1') return []
   const category = categoryRef('nha-hang')
   const base = { category, note: null, capacity: null, coverPublicId: null }

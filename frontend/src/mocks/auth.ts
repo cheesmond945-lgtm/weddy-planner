@@ -28,12 +28,18 @@ const SEED: MockAccount[] = [
   { id: 'u-couple-1', name: 'Nguyễn Minh Anh', email: 'minh.anh@example.com', phone: '0901234567', role: 'COUPLE', password: MOCK_PASSWORD },
   { id: 'u-vendor-1', name: 'Nhà cung cấp mẫu', email: 'vendor@example.com', phone: '0907654321', role: 'VENDOR', password: MOCK_PASSWORD },
   { id: 'u-admin-1', name: 'Quản trị viên', email: 'admin@example.com', phone: '0900000000', role: 'ADMIN', password: MOCK_PASSWORD },
+  // NCC thứ hai: hồ sơ đã xác minh, có sẵn gói bản nháp để thử luồng Gửi duyệt (mocks/vendors.ts, mocks/vendorPackages.ts)
+  { id: 'u-vendor-2', name: 'Studio Mây Wedding', email: 'studio@example.com', phone: '0907111222', role: 'VENDOR', password: MOCK_PASSWORD },
 ]
 
 function loadAccounts(): MockAccount[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as MockAccount[]
+    if (raw) {
+      // Trình duyệt đã lưu danh sách cũ: thêm các tài khoản mẫu mới chưa có, không sửa tài khoản đã có
+      const saved = JSON.parse(raw) as MockAccount[]
+      return [...saved, ...SEED.filter((s) => !saved.some((a) => a.id === s.id))]
+    }
   } catch {
     // bỏ qua
   }
