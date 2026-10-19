@@ -1,4 +1,4 @@
-import { Check, CreditCard, MessageSquare, RefreshCw } from 'lucide-react'
+import { Ban, Check, CreditCard, MessageSquare, RefreshCw } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { currentVersion, formatStamp } from '@/features/serviceOrders/calc'
 import { AdjustmentCard, OrderCard } from '@/features/serviceOrders/components/OrderCard'
@@ -46,12 +46,12 @@ function RequestCard({ active, title, text, note }: { active: boolean; title: Re
 }
 
 /** Sự kiện ở giữa khung chat (khách xác nhận, thanh toán…). */
-function Event({ tone, icon, children, at }: { tone: 'ok' | 'pay'; icon: ReactNode; children: ReactNode; at: string }) {
+function Event({ tone, icon, children, at }: { tone: 'ok' | 'pay' | 'stop'; icon: ReactNode; children: ReactNode; at: string }) {
   return (
     <div
       className={cn(
         'flex max-w-[94%] flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center rounded-2xl border px-3.5 py-[7px] text-center text-[12.5px] [&>svg]:size-3.5',
-        tone === 'ok' ? 'border-transparent bg-sage-soft text-sage' : 'border-line bg-surface text-sage',
+        tone === 'ok' ? 'border-transparent bg-sage-soft text-sage' : tone === 'stop' ? 'border-transparent bg-warn-soft text-warn' : 'border-line bg-surface text-sage',
       )}
     >
       {icon}
@@ -138,6 +138,13 @@ export function MessageItem({ message: m, order, highlightOrderId, onViewOrder, 
       return (
         <Event tone="ok" icon={<Check />} at={m.createdAt}>
           Khách đồng ý điều chỉnh {code}, v{m.orderVersion} có hiệu lực
+        </Event>
+      )
+    case 'ORDER_CANCELLED':
+      return (
+        <Event tone="stop" icon={<Ban />} at={m.createdAt}>
+          Đã hủy đơn {code}
+          {m.text ? ` · Lý do: ${m.text}` : ''}
         </Event>
       )
     case 'PAYMENT_RECORDED':

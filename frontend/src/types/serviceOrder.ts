@@ -6,9 +6,10 @@
  * Kiểu Order cũ ở types/order.ts (phía cặp đôi: một trạng thái gộp SENT/REVISION_REQUESTED/PAID) giữ nguyên;
  * cách ánh xạ sang kiểu này ghi trong docs/api/orders.md để phía cặp đôi chuyển dần.
  */
+import type { VendorFile } from './vendor'
 
 /** Trạng thái đơn (tách riêng trạng thái thanh toán). Nhãn ở features/serviceOrders/constants.ts. */
-export const ORDER_STATUSES = ['DRAFT', 'AWAITING_CONFIRMATION', 'REVISION_REQUESTED', 'CONFIRMED'] as const
+export const ORDER_STATUSES = ['DRAFT', 'AWAITING_CONFIRMATION', 'REVISION_REQUESTED', 'CONFIRMED', 'CANCELLED'] as const
 export type ServiceOrderStatus = (typeof ORDER_STATUSES)[number]
 
 /** Trạng thái thanh toán, BE tính từ các khoản đã thu và đợt đặt cọc. */
@@ -41,7 +42,10 @@ export interface OrderLine {
 export interface OrderInstallment {
   id: string
   name: string
-  /** Tỷ lệ trên tổng đơn (%), tối đa 2 chữ số thập phân; null khi nhập số tiền trực tiếp */
+  /**
+   * Tỷ lệ trên tổng đơn, số nguyên phần trăm; null khi nhập số tiền trực tiếp.
+   * Khi mọi đợt có tỷ lệ và cộng đủ 100%, đợt cuối nhận phần tiền lẻ còn lại.
+   */
   rate: number | null
   amount: number
   /** Hạn thanh toán "YYYY-MM-DD" */
@@ -99,6 +103,8 @@ export interface OrderPayment {
   /** Phương thức dự kiến theo lịch (khi khác phương thức thực tế) */
   plannedMethod: OrderPaymentMethod
   recordedBy: 'SYSTEM' | 'VENDOR'
+  /** Ảnh hoặc PDF minh chứng (NCC ghi nhận) */
+  proofFile: VendorFile | null
   note: string | null
 }
 
@@ -124,6 +130,8 @@ export interface OrderAdjustment {
   resultVersion: number | null
   /** Phương án này sửa lại từ phương án nào */
   revisionOf: string | null
+  /** Yêu cầu điều chỉnh của khách mà phương án này đáp ứng */
+  forRequest: { note: string; requestedAt: string } | null
 }
 
 export interface OrderHistoryEntry {
@@ -151,6 +159,38 @@ export interface ServiceOrder {
   /** Tổng đã thu thực tế, đồng */
   paidAmount: number
   history: OrderHistoryEntry[]
+  /** Khi CANCELLED */
+  cancellation: { reason: string; cancelledAt: string } | null
   createdAt: string
   updatedAt: string
+}
+
+export interface OrderListQuery {
+  q?: string
+  status?: ServiceOrderStatus
+  paymentStatus?: OrderPaymentStatus
+  /** Ngày sự kiện từ / đến "YYYY-MM-DD" (gồm cả hai đầu) */
+  from?: string
+  to?: string
+  page?: number
+  pageSize?: number
+}
+
+/** Body của POST /vendors/me/orders/:id/payments. */
+export interface RecordPaymentBody {
+  installmentId: string
+  amount: number
+  /** ISO thời điểm nhận */
+  paidAt: string
+  method: OrderPaymentMethod
+  proofFile: VendorFile | null
+  note: string | null
+}
+
+/** Body của POST /vendors/me/orders/:id/adjustments. */
+export interface ProposeAdjustmentBody {
+  reason: string
+  after: OrderContent
+  /** Sửa lại phương án khách yêu cầu sửa */
+  revisionOf: string | null
 }

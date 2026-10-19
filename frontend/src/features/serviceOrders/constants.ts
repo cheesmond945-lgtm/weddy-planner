@@ -7,7 +7,11 @@ export const ORDER_STATUS: Record<ServiceOrderStatus, { label: string; tone: Bad
   AWAITING_CONFIRMATION: { label: 'Chờ khách xác nhận', tone: 'wait' },
   REVISION_REQUESTED: { label: 'Khách yêu cầu chỉnh sửa', tone: 'warn' },
   CONFIRMED: { label: 'Đã xác nhận', tone: 'done' },
+  CANCELLED: { label: 'Đã hủy', tone: 'warn' },
 }
+
+/** Chỉ hủy được khi đơn chưa hủy và chưa có khoản thu nào (chưa nhận cọc). */
+export const canCancelOrder = (o: Pick<ServiceOrder, 'status' | 'paidAmount'>) => o.status !== 'CANCELLED' && o.paidAmount === 0
 
 /** Nhãn trạng thái thanh toán theo prototype NCC. */
 export const PAYMENT_STATUS: Record<OrderPaymentStatus, { label: string; tone: BadgeTone }> = {

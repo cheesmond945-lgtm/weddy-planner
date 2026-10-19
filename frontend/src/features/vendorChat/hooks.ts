@@ -14,9 +14,16 @@ function useVendorId() {
   return user?.role === 'VENDOR' ? user.id : undefined
 }
 
-export function useVendorConversations() {
+/** pollMs: trang Tin nhắn hỏi lại mỗi 2,5 giây; sidebar (số chưa đọc) thưa hơn. */
+export function useVendorConversations(pollMs = POLL_MS) {
   const uid = useVendorId()
-  return useQuery({ queryKey: vendorChatKeys.conversations(uid), queryFn: vendorChatApi.listConversations, enabled: !!uid, refetchInterval: POLL_MS })
+  return useQuery({ queryKey: vendorChatKeys.conversations(uid), queryFn: vendorChatApi.listConversations, enabled: !!uid, refetchInterval: pollMs })
+}
+
+/** Tổng số tin chưa đọc (mục "Tin nhắn" trên sidebar). */
+export function useUnreadCount() {
+  const { data } = useVendorConversations(15_000)
+  return data?.reduce((s, c) => s + c.unreadCount, 0) ?? 0
 }
 
 export function useVendorMessages(conversationId: string | null) {

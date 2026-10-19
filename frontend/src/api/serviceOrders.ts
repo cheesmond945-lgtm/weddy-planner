@@ -1,7 +1,8 @@
 import { mockVendorChat } from '@/mocks/vendorChat'
 import { authStore } from '@/store/auth'
-import type { OrderContent, ServiceOrder } from '@/types/serviceOrder'
-import { ApiError, http } from './client'
+import type { Paginated } from '@/types/api'
+import type { OrderContent, OrderListQuery, ProposeAdjustmentBody, RecordPaymentBody, ServiceOrder, ServiceOrderStatus } from '@/types/serviceOrder'
+import { ApiError, http, requestRaw } from './client'
 import { USE_MOCK, mockDelay } from './mock'
 
 function mockUserId() {
@@ -12,11 +13,19 @@ function mockUserId() {
 
 const mock = <T>(fn: (userId: string) => T, ms = 300) => mockDelay(null, ms).then(() => fn(mockUserId()))
 
-/**
- * Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp).
- * Ghi nhận thanh toán và phương án điều chỉnh làm cùng trang Quản lý đơn hàng.
- */
+/** Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp). */
 export const serviceOrdersApi = {
+  /** Danh sách đơn có lọc, phân trang (trang Quản lý đơn hàng). */
+  list: async (query: OrderListQuery): Promise<Paginated<ServiceOrder>> => {
+    if (USE_MOCK) return mock((u) => mockVendorChat.listAllOrders(u, query), 250)
+    const res = await requestRaw<ServiceOrder[]>('/vendors/me/orders', { query: { ...query } })
+    return { data: res.data, meta: res.meta! }
+  },
+
+  /** Số đơn theo trạng thái (không theo bộ lọc). */
+  counts: (): Promise<Record<ServiceOrderStatus, number>> =>
+    USE_MOCK ? mock((u) => mockVendorChat.orderCounts(u), 150) : http.get('/vendors/me/orders/counts'),
+
   /** Đơn của một hội thoại (gồm cả bản nháp). */
   listByConversation: (conversationId: string): Promise<ServiceOrder[]> =>
     USE_MOCK
@@ -37,4 +46,18 @@ export const serviceOrdersApi = {
   /** Gửi bản nháp lần đầu (v1) hoặc gửi lại phiên bản mới. baseVersion: phiên bản đang sửa dựa trên. */
   send: (orderId: string, body: { content: OrderContent; baseVersion: number | null }): Promise<ServiceOrder> =>
     USE_MOCK ? mock((u) => mockVendorChat.sendOrder(u, orderId, body), 600) : http.post(`/vendors/me/orders/${orderId}/send`, body),
+
+  /** NCC ghi nhận khoản thu cho đợt sau đặt cọc. Tệp minh chứng upload trước qua vendorsApi.uploadFile('PAYMENT_PROOF'). */
+  recordPayment: (orderId: string, body: RecordPaymentBody): Promise<ServiceOrder> =>
+    USE_MOCK ? mock((u) => mockVendorChat.recordPayment(u, orderId, body), 500) : http.post(`/vendors/me/orders/${orderId}/payments`, body),
+
+  /** Lập phương án điều chỉnh (revisionOf: sửa lại phương án khách yêu cầu sửa), gửi khách qua chat. */
+  proposeAdjustment: (orderId: string, body: ProposeAdjustmentBody): Promise<ServiceOrder> =>
+    USE_MOCK
+      ? mock((u) => mockVendorChat.proposeAdjustment(u, orderId, body), 600)
+      : http.post(`/vendors/me/orders/${orderId}/adjustments`, body),
+
+  /** Hủy đơn khi chưa có khoản thu nào. */
+  cancel: (orderId: string, reason: string): Promise<ServiceOrder> =>
+    USE_MOCK ? mock((u) => mockVendorChat.cancelOrder(u, orderId, reason), 400) : http.post(`/vendors/me/orders/${orderId}/cancel`, { reason }),
 }

@@ -1,9 +1,11 @@
 import { ApiError } from '@/api/client'
 import { cleanContent, currentVersion, diffContent, paymentStatusOf, totalOf } from '@/features/serviceOrders/calc'
-import { validateOrder } from '@/features/serviceOrders/validation'
+import { PAYMENT_METHOD_LABEL } from '@/features/serviceOrders/constants'
+import { validateAdjustment, validateOrder } from '@/features/serviceOrders/validation'
 import { formatMoney } from '@/lib/format'
 import type { MessageSender } from '@/types/chat'
-import type { OrderContent, OrderLine, ServiceOrder, ServiceOrderStatus } from '@/types/serviceOrder'
+import type { Paginated } from '@/types/api'
+import type { OrderContent, OrderLine, OrderListQuery, ProposeAdjustmentBody, RecordPaymentBody, ServiceOrder, ServiceOrderStatus } from '@/types/serviceOrder'
 import type { ChatMessageType, CustomerSimulation, VendorConversation, VendorMessage } from '@/types/vendorChat'
 
 /*
@@ -16,7 +18,8 @@ import type { ChatMessageType, CustomerSimulation, VendorConversation, VendorMes
  * giả lập bằng simulate(): CHỈ CÓ TRONG MOCK, BE không làm.
  * Muốn làm lại từ đầu thì xóa khóa localStorage bên dưới.
  */
-const STORAGE_KEY = 'weddy.mock.vendorChat'
+// .v2: thêm hủy đơn, minh chứng thanh toán, tỷ lệ nguyên (dữ liệu cũ trong trình duyệt được bỏ qua)
+const STORAGE_KEY = 'weddy.mock.vendorChat.v2'
 
 type StoredConversation = Pick<VendorConversation, 'id' | 'customer' | 'interestPackage' | 'unreadCount'>
 
@@ -102,6 +105,7 @@ function seed(userId: string): VendorChatData {
       totalAmount: 0,
       paidAmount: 0,
       history: [{ at: sentAt, text: 'Gửi đơn v1 cho khách' }],
+      cancellation: null,
       createdAt: sentAt,
       updatedAt: sentAt,
     }
@@ -119,6 +123,7 @@ function seed(userId: string): VendorChatData {
       method,
       plannedMethod: inst.method,
       recordedBy: method === 'VNPAY' ? 'SYSTEM' : 'VENDOR',
+      proofFile: null,
       note,
     })
     const how = method === 'VNPAY' ? 'qua VNPay' : '· Tiền mặt'
@@ -176,6 +181,7 @@ function seed(userId: string): VendorChatData {
     totalAmount: 0,
     paidAmount: 0,
     history: [{ at: draftAt, text: 'Lưu nháp' }],
+    cancellation: null,
     createdAt: draftAt,
     updatedAt: draftAt,
   })
@@ -207,7 +213,7 @@ function seed(userId: string): VendorChatData {
   const t2 = totalOf(v2.lines)
   v2.installments[0].amount = Math.round(t2 * 0.2)
   v2.installments[1].amount = t2 - v2.installments[0].amount
-  v2.installments[1].rate = Math.round((v2.installments[1].amount / t2) * 10000) / 100
+  v2.installments[1].rate = 80 // 20% + 80%: đợt cuối nhận phần tiền lẻ
   const o5 = order('#WP1024', c5, 'AWAITING_CONFIRMATION', v1, at('2026-10-12', '14:00'))
   o5.versions.push({ version: 2, sentAt: at('2026-10-13', '09:10'), content: v2, changes: diffContent(v1, v2), fromAdjustmentId: null })
   o5.history.push({ at: at('2026-10-12', '20:30'), text: 'Khách yêu cầu chỉnh sửa v1' }, { at: at('2026-10-13', '09:10'), text: 'Gửi lại v2 — v1 đã thay thế' })
@@ -257,6 +263,7 @@ function seed(userId: string): VendorChatData {
       customerNoteAt: null,
       resultVersion: null,
       revisionOf: null,
+      forRequest: null,
     } as ServiceOrder['adjustments'][number]
     o.adjustments.push(adj)
     o.history.push({ at: proposedAt, text: 'Gửi phương án điều chỉnh' })
@@ -267,10 +274,10 @@ function seed(userId: string): VendorChatData {
     const c = clone(content)
     c.lines[0].quantity = tables
     c.lines.push(line('Phí giảm số bàn (theo chính sách đã thỏa thuận)', 'Khoản', 1, fee, { isPolicyFee: true }))
-    const total = totalOf(c.lines)
     c.installments[1].amount = remaining
-    c.installments[0].rate = Math.round((c.installments[0].amount / total) * 10000) / 100
-    c.installments[1].rate = Math.round((remaining / total) * 10000) / 100
+    // Đợt cọc đã thu giữ nguyên số tiền; nhập số tiền trực tiếp nên không còn tỷ lệ
+    c.installments[0].rate = null
+    c.installments[1].rate = null
     return c
   }
 
@@ -301,6 +308,8 @@ function seed(userId: string): VendorChatData {
   const after12 = clone(o12.versions[0].content)
   after12.lines[0].quantity = 25
   after12.installments[1].amount = 84_000_000
+  after12.installments[0].rate = null
+  after12.installments[1].rate = null
   const a12 = withAdjustment(o12, after12, 'Khách tăng từ 20 lên 25 bàn.', at('2026-10-02', '14:00'), 'ACCEPTED')
   const okAt = at('2026-10-03', '09:15')
   o12.versions.push({ version: 2, sentAt: okAt, content: after12, changes: diffContent(o12.versions[0].content, after12), fromAdjustmentId: a12.id })
@@ -308,6 +317,16 @@ function seed(userId: string): VendorChatData {
   o12.history.push({ at: okAt, text: 'Khách đồng ý điều chỉnh — v2 có hiệu lực' })
   msg(c12, 'COUPLE', 'ADJUSTMENT_ACCEPTED', okAt, { orderId: o12.id, orderVersion: 2 })
   orderCard(o12, 2, okAt)
+
+  // c13: đơn đã hủy khi chưa nhận cọc
+  const c13 = conv('vc-13', 'Thảo Vy & Quang Minh', '0989 135 790')
+  const o13 = order('#WP1020', c13, 'CANCELLED', menuA('Thảo Vy & Quang Minh', '0989 135 790', '2026-12-19', 22), at('2026-09-25', '15:00'))
+  orderCard(o13, 1, at('2026-09-25', '15:00'))
+  text(c13, 'COUPLE', at('2026-09-27', '10:12'), 'Nhà mình đổi kế hoạch tổ chức ở quê, xin phép hủy đơn ạ.')
+  const reason13 = 'Khách đổi địa điểm tổ chức, xin hủy trước khi đặt cọc.'
+  o13.cancellation = { reason: reason13, cancelledAt: at('2026-09-27', '10:30') }
+  o13.history.push({ at: at('2026-09-27', '10:30'), text: `Hủy đơn: ${reason13}` })
+  msg(c13, 'SYSTEM', 'ORDER_CANCELLED', at('2026-09-27', '10:30'), { orderId: o13.id, text: reason13 })
 
   data.orders.forEach(finalize)
   return data
@@ -356,7 +375,8 @@ function push(d: VendorChatData, m: Omit<VendorMessage, 'id' | 'createdAt' | 'te
 
 const isOpenAdjustment = (a: ServiceOrder['adjustments'][number]) => a.status === 'AWAITING_CONFIRMATION' || a.status === 'REVISION_REQUESTED'
 const needsAction = (o: ServiceOrder) =>
-  !!o.draft || o.status === 'REVISION_REQUESTED' || !!o.adjustmentRequest || o.adjustments.some((a) => a.status === 'REVISION_REQUESTED')
+  o.status !== 'CANCELLED' &&
+  (!!o.draft || o.status === 'REVISION_REQUESTED' || !!o.adjustmentRequest || o.adjustments.some((a) => a.status === 'REVISION_REQUESTED'))
 
 function summarize(d: VendorChatData, c: StoredConversation): VendorConversation {
   const msgs = d.messages.filter((m) => m.conversationId === c.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -471,6 +491,7 @@ export const mockVendorChat = {
         totalAmount: 0,
         paidAmount: 0,
         history: [{ at: now, text: 'Lưu nháp' }],
+        cancellation: null,
         createdAt: now,
         updatedAt: now,
       }
@@ -529,6 +550,143 @@ export const mockVendorChat = {
     })
   },
 
+  /** Danh sách đơn của NCC (gồm bản nháp, đơn đã hủy), lọc và phân trang như BE. */
+  listAllOrders(userId: string, q: OrderListQuery): Paginated<ServiceOrder> {
+    return withData(userId, (d) => {
+      const k = (q.q ?? '').trim().toLowerCase()
+      const digits = k.replace(/\D/g, '')
+      const rows = d.orders
+        .filter((o) => {
+          const c = currentVersion(o)?.content ?? o.draft?.content
+          const hay = `${o.code} ${c?.customerName ?? ''}`.toLowerCase()
+          const phone = (c?.customerPhone ?? '').replace(/\D/g, '')
+          return (
+            (!k || hay.includes(k) || (digits.length >= 3 && phone.includes(digits))) &&
+            (!q.status || o.status === q.status) &&
+            (!q.paymentStatus || o.paymentStatus === q.paymentStatus) &&
+            (!q.from || (!!c?.eventDate && c.eventDate >= q.from)) &&
+            (!q.to || (!!c?.eventDate && c.eventDate <= q.to))
+          )
+        })
+        .sort((a, b) => b.code.localeCompare(a.code))
+      const page = Math.max(1, q.page ?? 1)
+      const pageSize = Math.min(100, q.pageSize ?? 20)
+      return {
+        data: rows.slice((page - 1) * pageSize, page * pageSize),
+        meta: { page, pageSize, total: rows.length, totalPages: Math.max(1, Math.ceil(rows.length / pageSize)) },
+      }
+    })
+  },
+
+  /** Số đơn theo trạng thái (dải đếm đầu trang Quản lý đơn hàng). */
+  orderCounts(userId: string): Record<ServiceOrderStatus, number> {
+    return withData(userId, (d) => {
+      const counts: Record<ServiceOrderStatus, number> = { DRAFT: 0, AWAITING_CONFIRMATION: 0, REVISION_REQUESTED: 0, CONFIRMED: 0, CANCELLED: 0 }
+      for (const o of d.orders) counts[o.status] += 1
+      return counts
+    })
+  },
+
+  /** NCC ghi nhận khoản thu cho một đợt sau đặt cọc (cọc do hệ thống ghi nhận qua VNPay). */
+  recordPayment(userId: string, orderId: string, body: RecordPaymentBody): ServiceOrder {
+    return withData(userId, (d) => {
+      const o = findOrder(d, orderId)
+      if (o.status !== 'CONFIRMED') throw new ApiError(409, 'ORDER_NOT_PAYABLE', 'Chỉ ghi nhận thanh toán cho đơn đã được khách xác nhận.')
+      const insts = currentVersion(o)!.content.installments
+      const idx = insts.findIndex((i) => i.id === body.installmentId)
+      if (idx < 0) throw new ApiError(400, 'VALIDATION_ERROR', 'Đợt thanh toán không có trong đơn hiện hành.')
+      if (idx === 0) throw new ApiError(400, 'VALIDATION_ERROR', 'Đợt đặt cọc do hệ thống ghi nhận khi khách thanh toán qua VNPay.')
+      if (!(body.amount > 0)) throw new ApiError(400, 'VALIDATION_ERROR', 'Số tiền phải lớn hơn 0.')
+      if (body.method === 'VNPAY') throw new ApiError(400, 'VALIDATION_ERROR', 'Chọn chuyển khoản hoặc tiền mặt.')
+      const inst = insts[idx]
+      o.payments.push({
+        id: nextId('p'),
+        installmentId: inst.id,
+        installmentName: inst.name,
+        amount: body.amount,
+        paidAt: body.paidAt,
+        method: body.method,
+        plannedMethod: inst.method,
+        recordedBy: 'VENDOR',
+        proofFile: body.proofFile,
+        note: body.note?.trim() || null,
+      })
+      const now = new Date().toISOString()
+      const how = PAYMENT_METHOD_LABEL[body.method]
+      o.history.push({ at: now, text: `Ghi nhận ${formatMoney(body.amount)} — ${inst.name} (${how})` })
+      o.updatedAt = now
+      push(d, { conversationId: o.conversationId, sender: 'SYSTEM', type: 'PAYMENT_RECORDED', orderId: o.id, text: `Đã ghi nhận ${formatMoney(body.amount)} · ${inst.name} · ${how}` })
+      return finalize(o)
+    })
+  },
+
+  /** Lập phương án điều chỉnh (hoặc sửa phương án khách yêu cầu sửa), gửi khách qua chat. */
+  proposeAdjustment(userId: string, orderId: string, body: ProposeAdjustmentBody): ServiceOrder {
+    return withData(userId, (d) => {
+      const o = findOrder(d, orderId)
+      if (o.status !== 'CONFIRMED') throw new ApiError(409, 'ORDER_NOT_ADJUSTABLE', 'Chỉ điều chỉnh đơn đã được khách xác nhận.')
+      if (!body.reason.trim()) throw new ApiError(400, 'VALIDATION_ERROR', 'Nhập lý do điều chỉnh.')
+      const after = cleanContent(body.after)
+      const paidIds = [...new Set(o.payments.map((p) => p.installmentId))]
+      const errors = validateAdjustment(after, paidIds)
+      if (Object.keys(errors).length) throw new ApiError(400, 'VALIDATION_ERROR', Object.values(errors)[0])
+      const cur = currentVersion(o)!
+      if (!diffContent(cur.content, after).length) throw new ApiError(400, 'ORDER_NO_CHANGES', 'Chưa có thay đổi so với đơn hiệu lực.')
+      const now = new Date().toISOString()
+      if (body.revisionOf) {
+        const old = o.adjustments.find((a) => a.id === body.revisionOf)
+        if (!old || old.status !== 'REVISION_REQUESTED') throw new ApiError(409, 'CONFLICT', 'Phương án này vừa thay đổi trạng thái. Đóng và mở lại.')
+        old.status = 'SUPERSEDED'
+        o.history.push({ at: now, text: 'Gửi lại phương án điều chỉnh đã sửa' })
+      } else {
+        if (o.adjustments.some(isOpenAdjustment)) throw new ApiError(409, 'ADJUSTMENT_PENDING', 'Đơn đã có phương án điều chỉnh đang chờ khách.')
+        o.history.push({ at: now, text: o.adjustmentRequest ? 'Gửi phương án theo yêu cầu điều chỉnh của khách' : 'Gửi đề nghị điều chỉnh' })
+      }
+      const adj: ServiceOrder['adjustments'][number] = {
+        id: nextId('adj'),
+        status: 'AWAITING_CONFIRMATION',
+        reason: body.reason.trim(),
+        proposedAt: now,
+        before: cur.content,
+        after,
+        beforeTotal: totalOf(cur.content.lines),
+        afterTotal: totalOf(after.lines),
+        paidAmount: o.payments.reduce((s, p) => s + p.amount, 0),
+        customerNote: null,
+        customerNoteAt: null,
+        resultVersion: null,
+        revisionOf: body.revisionOf,
+        forRequest: o.adjustmentRequest,
+      }
+      o.adjustmentRequest = null
+      o.adjustments.push(adj)
+      o.updatedAt = now
+      push(d, { conversationId: o.conversationId, sender: 'VENDOR', type: 'ADJUSTMENT_PROPOSED', orderId: o.id, adjustmentId: adj.id })
+      return finalize(o)
+    })
+  },
+
+  /** Hủy đơn khi chưa có khoản thu nào. Đơn đã gửi khách thì thêm tin "Đã hủy đơn" vào hội thoại. */
+  cancelOrder(userId: string, orderId: string, reason: string): ServiceOrder {
+    return withData(userId, (d) => {
+      const o = findOrder(d, orderId)
+      if (o.status === 'CANCELLED') throw new ApiError(409, 'CONFLICT', 'Đơn đã được hủy.')
+      if (o.payments.length) throw new ApiError(409, 'ORDER_HAS_PAYMENTS', 'Đơn đã có khoản thu nên không hủy được.')
+      if (!reason.trim()) throw new ApiError(400, 'VALIDATION_ERROR', 'Nhập lý do hủy đơn.')
+      const now = new Date().toISOString()
+      o.status = 'CANCELLED'
+      o.cancellation = { reason: reason.trim(), cancelledAt: now }
+      o.draft = null
+      o.revisionRequest = null
+      o.adjustmentRequest = null
+      for (const a of o.adjustments) if (isOpenAdjustment(a)) a.status = 'SUPERSEDED'
+      o.history.push({ at: now, text: `Hủy đơn: ${reason.trim()}` })
+      o.updatedAt = now
+      if (o.versions.length) push(d, { conversationId: o.conversationId, sender: 'SYSTEM', type: 'ORDER_CANCELLED', orderId: o.id, text: reason.trim() })
+      return finalize(o)
+    })
+  },
+
   /** CHỈ CÓ TRONG MOCK: giả lập khách làm một việc trên đơn mới nhất của hội thoại. */
   simulate(userId: string, conversationId: string, action: CustomerSimulation) {
     withData(userId, (d) => {
@@ -579,6 +737,7 @@ export const mockVendorChat = {
             method: 'VNPAY',
             plannedMethod: inst.method,
             recordedBy: 'SYSTEM',
+            proofFile: null,
             note: null,
           })
           o.history.push({ at: now, text: `Ghi nhận ${formatMoney(inst.amount)} — ${inst.name} (VNPay)` })

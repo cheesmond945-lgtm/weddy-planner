@@ -5,4 +5,7 @@ export const vendorChatKeys = {
   messages: (userId: string | undefined, conversationId: string) => ['vendor-chat', userId, 'messages', conversationId] as const,
   orders: (userId: string | undefined, conversationId: string) => ['vendor-chat', userId, 'orders', conversationId] as const,
   order: (userId: string | undefined, orderId: string) => ['vendor-chat', userId, 'order', orderId] as const,
+  /** Danh sách đơn trang Quản lý đơn hàng (mọi bộ lọc) */
+  orderLists: (userId: string | undefined) => ['vendor-chat', userId, 'order-list'] as const,
+  orderCounts: (userId: string | undefined) => ['vendor-chat', userId, 'order-counts'] as const,
 }

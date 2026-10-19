@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, matchPath, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
+import { useUnreadCount } from '@/features/vendorChat/hooks'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
@@ -74,6 +75,8 @@ function Wordmark() {
 
 function Sidebar({ open, onNavigate, onLogout }: { open: boolean; onNavigate: () => void; onLogout: () => void }) {
   const { user } = useAuth()
+  // Số tin chưa đọc trên mục Tin nhắn (nav-count trong prototype)
+  const unread = useUnreadCount()
   return (
     <aside
       className={cn(
@@ -106,6 +109,11 @@ function Sidebar({ open, onNavigate, onLogout }: { open: boolean; onNavigate: ()
               <>
                 <Icon strokeWidth={1.6} className={cn('size-[18px]', isActive ? 'text-side-gold' : 'text-side-muted')} />
                 {label}
+                {to === paths.vendor.chat && unread > 0 && (
+                  <span aria-label={`${unread} tin chưa đọc`} className="ml-auto rounded-pill bg-(image:--gold-grad) px-[7px] text-[11px] leading-[18px] font-semibold text-gold-on">
+                    {unread}
+                  </span>
+                )}
               </>
             )}
           </NavLink>

@@ -41,6 +41,8 @@ export function lastMessagePreview(m: VendorConversation['lastMessage']) {
       return `Khách yêu cầu sửa phương án ${code}`
     case 'ADJUSTMENT_ACCEPTED':
       return `Khách đồng ý điều chỉnh ${code}`
+    case 'ORDER_CANCELLED':
+      return `Đã hủy đơn ${code}`
     default:
       return `${mine}${m.text}`
   }

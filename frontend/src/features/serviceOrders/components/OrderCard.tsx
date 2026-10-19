@@ -10,8 +10,9 @@ import { currentVersion, formatDay, headlineOf, totalOf } from '../calc'
 import { ADJUSTMENT_STATUS, adjustmentStateOf, PAYMENT_METHOD_LABEL } from '../constants'
 import { OrderStatusBadge, StatusBadge } from './OrderBadges'
 
-/** Trang Quản lý đơn hàng, mở sẵn đơn (ghi nhận thanh toán, phương án điều chỉnh làm ở đó). */
-export const orderPageHref = (o: Pick<ServiceOrder, 'id'>) => `${paths.vendor.orders}?order=${encodeURIComponent(o.id)}`
+/** Trang Quản lý đơn hàng, mở sẵn đơn; action mở luôn hộp ghi nhận thanh toán / lập phương án điều chỉnh. */
+export const orderPageHref = (o: Pick<ServiceOrder, 'id'>, action?: 'pay' | 'adjust') =>
+  `${paths.vendor.orders}?order=${encodeURIComponent(o.id)}${action ? `&do=${action}` : ''}`
 
 const Card = ({ old, highlight, children, ...rest }: { old?: boolean; highlight?: boolean; children: ReactNode; 'data-order'?: string }) => (
   <div
@@ -97,9 +98,9 @@ export function OrderCard({ order, version, highlight, onView, onEdit, onViewAdj
       {label}
     </Button>
   )
-  const toOrders = (label: string, primary?: boolean) => (
+  const toOrders = (label: string, primary?: boolean, action?: 'pay' | 'adjust') => (
     <Button key={label} asChild size="sm" variant={primary ? 'default' : 'outline'} className={primary ? '' : 'border-line-strong'}>
-      <Link to={orderPageHref(order)}>
+      <Link to={orderPageHref(order, action)}>
         {label}
         <ArrowUpRight />
       </Link>
@@ -116,13 +117,13 @@ export function OrderCard({ order, version, highlight, onView, onEdit, onViewAdj
     actions = [view, btn('Chỉnh sửa đơn', onEdit, { primary: true, icon: <Pencil /> })]
   } else if (adj?.kind === 'REQUESTED') {
     extra = <Request title="Khách yêu cầu điều chỉnh" text={order.adjustmentRequest!.note} />
-    actions = [view, toOrders('Lập phương án điều chỉnh', true)]
+    actions = [view, toOrders('Lập phương án điều chỉnh', true, 'adjust')]
   } else if (adj?.kind === 'AWAITING_CONFIRMATION') {
     extra = <p className="mb-1.5 rounded-[7px] bg-gold-soft px-2.5 py-1.5 text-[12.5px] text-gold-ink">Phương án điều chỉnh đang chờ khách xác nhận, đơn hiện hành giữ nguyên.</p>
     actions = [view, btn('Xem đề nghị', () => onViewAdjustment(adj.adjustment.id))]
   } else if (adj?.kind === 'REVISION_REQUESTED') {
     extra = <Request title="Khách yêu cầu sửa phương án" text={adj.adjustment.customerNote ?? ''} />
-    actions = [view, toOrders('Sửa phương án', true)]
+    actions = [view, toOrders('Sửa phương án', true, 'adjust')]
   } else if (confirmed) actions = [view, toOrders('Thanh toán & điều chỉnh')]
   else actions = [view]
 
@@ -218,7 +219,7 @@ export function AdjustmentCard({ order, adjustmentId, onView }: AdjustmentCardPr
         </Button>
         {a.status === 'REVISION_REQUESTED' && (
           <Button asChild size="sm">
-            <Link to={orderPageHref(order)}>
+            <Link to={orderPageHref(order, 'adjust')}>
               Sửa phương án
               <ArrowUpRight />
             </Link>

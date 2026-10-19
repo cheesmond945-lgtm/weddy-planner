@@ -31,37 +31,48 @@ export const scheduledOf = (insts: OrderInstallment[]) => insts.reduce((s, i) =>
 export const newLine = (): OrderLine => ({ id: uid('l'), packageId: null, name: '', unit: '', quantity: 0, unitPrice: 0, isPolicyFee: false })
 
 /** Đợt mới: đợt đầu là đặt cọc (VNPay); đợt sau nhận phần còn thiếu. */
+/**
+ * Đợt mới: đợt đầu là đặt cọc (VNPay). Nếu các đợt hiện có đều theo tỷ lệ và chưa đủ 100% thì đợt mới nhận phần %
+ * còn lại, ngược lại nhận phần tiền còn thiếu.
+ */
 export function newInstallment(index: number, total: number, current: OrderInstallment[]): OrderInstallment {
-  const rest = Math.max(0, total - scheduledOf(current))
-  return {
+  const allRated = current.length > 0 && current.every((i) => i.rate !== null)
+  const restRate = Math.max(0, 100 - current.reduce((s, i) => s + (i.rate ?? 0), 0))
+  const inst: OrderInstallment = {
     id: uid('i'),
     name: index === 0 ? 'Đợt 1 – Đặt cọc' : `Đợt ${index + 1}`,
-    rate: total > 0 ? round2((rest / total) * 100) : null,
-    amount: index === 0 ? 0 : rest,
+    rate: allRated && restRate > 0 ? restRate : null,
+    amount: index === 0 ? 0 : Math.max(0, total - scheduledOf(current)),
     dueDate: '',
     method: index === 0 ? 'VNPAY' : 'BANK_TRANSFER',
     note: null,
   }
+  return inst
 }
 
-export const round2 = (n: number) => Math.round(n * 100) / 100
-
-/** Đổi tỷ lệ thì tính lại số tiền. */
+/** Đổi tỷ lệ (số nguyên %) thì tính lại số tiền. */
 export const withRate = (i: OrderInstallment, rate: number | null, total: number): OrderInstallment => ({
   ...i,
   rate,
-  amount: rate === null ? 0 : Math.round((total * rate) / 100),
+  amount: rate === null ? i.amount : Math.round((total * rate) / 100),
 })
 
-/** Đổi số tiền thì tính lại tỷ lệ. */
-export const withAmount = (i: OrderInstallment, amount: number, total: number): OrderInstallment => ({
-  ...i,
-  amount,
-  rate: total > 0 ? round2((amount / total) * 100) : null,
-})
+/** Nhập số tiền trực tiếp: bỏ tỷ lệ (tỷ lệ chỉ là số nguyên, không suy ngược từ số tiền). */
+export const withAmount = (i: OrderInstallment, amount: number): OrderInstallment => ({ ...i, amount, rate: null })
 
-/** Tổng đơn đổi: các đợt có tỷ lệ tính lại số tiền. */
-export const rebalance = (insts: OrderInstallment[], total: number) => insts.map((i) => (i.rate === null ? i : withRate(i, i.rate, total)))
+/**
+ * Tính lại số tiền các đợt theo tỷ lệ. Khi mọi đợt có tỷ lệ và cộng đủ 100%, đợt cuối nhận phần tiền lẻ còn lại
+ * để tổng các đợt luôn bằng tổng đơn. Đợt trong `locked` (đã có khoản thu) giữ nguyên.
+ */
+export function rebalance(insts: OrderInstallment[], total: number, locked: string[] = []): OrderInstallment[] {
+  const out = insts.map((i) => (i.rate === null || locked.includes(i.id) ? i : withRate(i, i.rate, total)))
+  const last = out[out.length - 1]
+  const allRated = out.every((i) => i.rate !== null)
+  if (last && allRated && out.reduce((s, i) => s + (i.rate ?? 0), 0) === 100 && !locked.includes(last.id)) {
+    out[out.length - 1] = { ...last, amount: Math.max(0, total - scheduledOf(out.slice(0, -1))) }
+  }
+  return out
+}
 
 export function emptyContent(customer?: { name: string; phone: string }): OrderContent {
   return {

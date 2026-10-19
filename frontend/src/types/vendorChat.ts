@@ -20,6 +20,7 @@ export const CHAT_MESSAGE_TYPES = [
   'ADJUSTMENT_REQUESTED',
   'ADJUSTMENT_REVISION_REQUESTED',
   'ADJUSTMENT_ACCEPTED',
+  'ORDER_CANCELLED',
 ] as const
 export type ChatMessageType = (typeof CHAT_MESSAGE_TYPES)[number]
 

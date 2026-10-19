@@ -136,10 +136,12 @@ interface OrderDetailDialogProps {
   /** Phiên bản mở sẵn; không có thì phiên bản hiện hành */
   version?: number | null
   onClose: () => void
+  /** Nút thao tác thêm ở chân (trang Quản lý đơn hàng: ghi nhận thanh toán, điều chỉnh, hủy) */
+  actions?: ReactNode
 }
 
 /** Xem chi tiết đơn (OrderDetail trong prototype NCC), chỉ xem. */
-export function OrderDetailDialog({ order, version, onClose }: OrderDetailDialogProps) {
+export function OrderDetailDialog({ order, version, onClose, actions }: OrderDetailDialogProps) {
   const current = currentVersion(order)
   const [v, setV] = useState(version ?? current?.version ?? null)
   const shown = order.versions.find((x) => x.version === v)
@@ -155,8 +157,20 @@ export function OrderDetailDialog({ order, version, onClose }: OrderDetailDialog
       onRequestClose={onClose}
       title={`Đơn dịch vụ ${order.code}`}
       subtitle={shown ? `Phiên bản v${shown.version} · gửi lúc ${formatStamp(shown.sentAt)}` : 'Bản nháp, chưa gửi khách'}
-      footer={<Button onClick={onClose}>Đóng</Button>}
+      footer={
+        <>
+          {actions}
+          <Button variant={actions ? 'outline' : 'default'} className={actions ? 'border-line-strong' : ''} onClick={onClose}>
+            Đóng
+          </Button>
+        </>
+      }
     >
+      {order.cancellation && (
+        <p className="mb-3 rounded-md border-l-[3px] border-warn bg-warn-soft px-3.5 py-2.5 text-[13.5px]">
+          <b>Đã hủy lúc {formatStamp(order.cancellation.cancelledAt)}.</b> Lý do: {order.cancellation.reason}
+        </p>
+      )}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge tone={ORDER_STATUS[order.status].tone}>{ORDER_STATUS[order.status].label}</StatusBadge>
@@ -241,6 +255,7 @@ export function OrderDetailDialog({ order, version, onClose }: OrderDetailDialog
                 <th className={cn(th, 'text-right')}>Số tiền</th>
                 <th className={th}>Thời điểm</th>
                 <th className={th}>Phương thức thực tế</th>
+                <th className={th}>Minh chứng</th>
               </tr>
             </thead>
             <tbody>
@@ -253,6 +268,19 @@ export function OrderDetailDialog({ order, version, onClose }: OrderDetailDialog
                     {PAYMENT_METHOD_LABEL[p.method]}
                     {p.plannedMethod !== p.method && <span className="block text-[12.5px] text-muted-foreground">Dự kiến: {PAYMENT_METHOD_LABEL[p.plannedMethod]}</span>}
                     {p.note && <span className="block text-[12.5px] text-muted-foreground">{p.note}</span>}
+                  </td>
+                  <td className={td}>
+                    {p.proofFile ? (
+                      p.proofFile.url ? (
+                        <a href={p.proofFile.url} target="_blank" rel="noreferrer" className="text-gold-ink underline-offset-2 hover:underline">
+                          {p.proofFile.fileName}
+                        </a>
+                      ) : (
+                        p.proofFile.fileName
+                      )
+                    ) : (
+                      <span className="text-muted-foreground">{p.recordedBy === 'SYSTEM' ? 'VNPay' : '—'}</span>
+                    )}
                   </td>
                 </tr>
               ))}
