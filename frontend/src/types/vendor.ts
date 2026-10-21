@@ -13,8 +13,8 @@ export type VendorProfileStatus = (typeof VENDOR_PROFILE_STATUSES)[number]
 export const VENDOR_DOCUMENT_TYPES = ['BUSINESS_LICENSE', 'FIRE_SAFETY', 'FOOD_SAFETY'] as const
 export type VendorDocumentType = (typeof VENDOR_DOCUMENT_TYPES)[number]
 
-/** Loại ảnh cơ sở: mặt tiền, sảnh. Mỗi loại nhiều ảnh. */
-export const VENDOR_PHOTO_TYPES = ['FRONT', 'HALL'] as const
+/** Loại ảnh cơ sở: mặt tiền. Mỗi loại nhiều ảnh. */
+export const VENDOR_PHOTO_TYPES = ['FRONT'] as const
 export type VendorPhotoType = (typeof VENDOR_PHOTO_TYPES)[number]
 
 export const WEEKDAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const
@@ -52,7 +52,10 @@ export interface VendorProfile {
   businessName: string | null
   taxCode: string | null
   representativeName: string | null
-  /** Lĩnh vực cung cấp, dùng chung danh mục với phía cặp đôi (GET /categories) */
+  /**
+   * Lĩnh vực cung cấp (dùng chung danh mục với phía cặp đôi, GET /categories). Admin gán khi tạo tài khoản NCC,
+   * NCC chỉ xem, không đổi được. null chỉ khi tài khoản chưa được gán (dữ liệu lỗi).
+   */
   category: CategoryRef | null
   /** Lĩnh vực đã được Admin xác minh. null khi chưa xác minh lần nào */
   verifiedCategory: CategoryRef | null
@@ -73,12 +76,11 @@ export interface VendorProfile {
 
 // ---- Request / response theo docs/api/vendors.md ----
 
-/** Body của PATCH /vendors/me/profile (lưu nháp) và POST /vendors/me/profile/submit (gửi xác minh). */
+/** Body của PATCH /vendors/me/profile (lưu nháp) và POST /vendors/me/profile/submit (gửi xác minh). Không có lĩnh vực (chỉ đọc). */
 export interface UpdateVendorProfileRequest {
   businessName: string | null
   taxCode: string | null
   representativeName: string | null
-  categoryId: string | null
   district: string | null
   address: string | null
   googleMapsUrl: string | null

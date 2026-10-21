@@ -2,22 +2,12 @@ import { Lock, Send } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { FormField } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
-import { useCategories } from '@/features/catalog/hooks'
 import { cn } from '@/lib/utils'
-import type { Category } from '@/types/catalog'
 import type { VendorDocument, VendorPhoto, VendorProfile } from '@/types/vendor'
 import { documentSlotsOf, isProfileLocked, photoSlotsOf, photosRequired, PROVINCE, RESTAURANT_SLUG } from '../constants'
 import { useSaveVendorProfile } from '../hooks'
-import {
-  changeCategory,
-  filesLostOnCategoryChange,
-  toFormValues,
-  toRequest,
-  validateProfile,
-  type ProfileFormValues,
-} from '../profileForm'
+import { toFormValues, toRequest, validateProfile, type ProfileFormValues } from '../profileForm'
 import { BusinessHoursField } from './BusinessHoursField'
-import { ConfirmDialog } from './ConfirmDialog'
 import { DistrictCombobox } from './DistrictCombobox'
 import { DocumentRow } from './DocumentRow'
 import { controlClass, Field, FormSection } from './FormParts'
@@ -36,35 +26,22 @@ function scrollToFirstError() {
  * Đặt key theo profile.updatedAt để form nạp lại giá trị sau mỗi lần lưu.
  */
 export function VendorProfileForm({ profile }: { profile: VendorProfile }) {
-  const { data: categories } = useCategories()
   const save = useSaveVendorProfile()
   const baseline = useMemo(() => toFormValues(profile), [profile])
   const [values, setValues] = useState(baseline)
   // Sau lần bấm đầu tiên thì kiểm tra lại theo từng lần sửa (như prototype)
   const [checkMode, setCheckMode] = useState<'draft' | 'submit' | null>(null)
-  const [pendingCategory, setPendingCategory] = useState<{ category: Category; lost: string[] } | null>(null)
 
   const locked = isProfileLocked(profile.status)
   const busy = save.isPending
   const dirty = JSON.stringify(values) !== JSON.stringify(baseline)
 
-  // Danh mục chưa tải xong (hoặc lĩnh vực đã bị bỏ khỏi danh mục) vẫn hiện được lĩnh vực đang chọn
-  const categoryOptions = useMemo(() => {
-    const list = categories ?? []
-    return profile.category && !list.some((c) => c.id === profile.category!.id) ? [profile.category, ...list] : list
-  }, [categories, profile.category])
-  const slug = categoryOptions.find((c) => c.id === values.categoryId)?.slug
+  // Lĩnh vực do Admin gán khi tạo tài khoản, NCC không đổi được
+  const category = profile.category
+  const slug = category?.slug
   const errors = checkMode ? validateProfile(values, slug, checkMode) : {}
 
   const set = (patch: Partial<ProfileFormValues>) => setValues((v) => ({ ...v, ...patch }))
-
-  function selectCategory(id: string) {
-    const next = categories?.find((c) => c.id === id)
-    if (!next) return
-    const lost = filesLostOnCategoryChange(values, slug, next.slug)
-    if (lost.length) setPendingCategory({ category: next, lost })
-    else setValues((v) => changeCategory(v, next))
-  }
 
   function handleSave(submit: boolean) {
     const mode = submit ? 'submit' : 'draft'
@@ -115,20 +92,11 @@ export function VendorProfileForm({ profile }: { profile: VendorProfile }) {
               onChange={(e) => set({ representativeName: e.target.value })}
               error={errors.representativeName}
             />
-            <Field label="Lĩnh vực cung cấp *" error={errors.categoryId} hint="Giấy tờ và ảnh cơ sở thay đổi theo lĩnh vực.">
-              <select
-                className={input}
-                aria-invalid={errors.categoryId ? true : undefined}
-                value={values.categoryId}
-                onChange={(e) => selectCategory(e.target.value)}
-              >
-                {!values.categoryId && <option value="">Chọn lĩnh vực</option>}
-                {categoryOptions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+            <Field label="Lĩnh vực cung cấp" error={errors.categoryId} hint="Liên hệ WebPlan nếu cần đổi lĩnh vực." group>
+              <div className={cn(controlClass, 'flex items-center bg-surface-2', !category && 'text-muted-foreground')}>
+                <Lock className="mr-2 size-4 flex-none text-muted-foreground" />
+                {category?.name ?? 'Chưa được gán'}
+              </div>
             </Field>
             <Field label="Tỉnh/Thành phố" group>
               <div className={cn(controlClass, 'flex items-center bg-surface-2')}>
@@ -170,7 +138,7 @@ export function VendorProfileForm({ profile }: { profile: VendorProfile }) {
         title="Ảnh cơ sở"
         description={
           slug === RESTAURANT_SLUG
-            ? 'Nhà hàng cần ảnh mặt tiền và ảnh sảnh. Ảnh hồ sơ tách biệt với album ảnh của gói dịch vụ và không tự công khai.'
+            ? 'Nhà hàng cần ảnh mặt tiền. Ảnh hồ sơ tách biệt với album ảnh của gói dịch vụ và không tự công khai.'
             : 'Ảnh mặt tiền hoặc nơi hoạt động. Tách biệt với album ảnh của gói dịch vụ, không tự công khai.'
         }
       >
@@ -192,7 +160,7 @@ export function VendorProfileForm({ profile }: { profile: VendorProfile }) {
 
       <FormSection
         title="Giấy tờ"
-        description={`Bộ giấy tờ cho lĩnh vực ${categoryOptions.find((c) => c.id === values.categoryId)?.name ?? 'đã chọn'}. Chỉ phục vụ xét duyệt, không hiển thị công khai.`}
+        description={`Bộ giấy tờ cho lĩnh vực ${category?.name ?? 'của bạn'}. Chỉ phục vụ xét duyệt, không hiển thị công khai.`}
       >
         {documentSlotsOf(slug).map((s) => (
           <DocumentRow
@@ -232,24 +200,6 @@ export function VendorProfileForm({ profile }: { profile: VendorProfile }) {
           )}
         </Button>
       </div>
-
-      <ConfirmDialog
-        open={!!pendingCategory}
-        onOpenChange={(open) => !open && setPendingCategory(null)}
-        title="Đổi lĩnh vực cung cấp?"
-        confirmLabel="Đổi lĩnh vực"
-        onConfirm={() => pendingCategory && setValues((v) => changeCategory(v, pendingCategory.category))}
-      >
-        <p>
-          Thông tin doanh nghiệp, giấy tờ kinh doanh và PCCC được giữ lại. Các tài liệu không còn phù hợp với <b>{pendingCategory?.category.name}</b> sẽ bị
-          loại khỏi hồ sơ:
-        </p>
-        <ul>
-          {pendingCategory?.lost.map((l) => (
-            <li key={l}>{l}</li>
-          ))}
-        </ul>
-      </ConfirmDialog>
 
       <UnsavedChangesGuard when={dirty && !locked && !busy} />
     </form>

@@ -16,7 +16,7 @@ interface PhotoSlotProps {
   onRemove: (publicId: string) => void
 }
 
-/** Một loại ảnh cơ sở (mặt tiền, sảnh): tải nhiều ảnh, xem lớn, xóa (PhotoSlot trong prototype NCC). */
+/** Một loại ảnh cơ sở (mặt tiền): tải nhiều ảnh, xem lớn, xóa (PhotoSlot trong prototype NCC). */
 export function PhotoSlot({ slot, required, photos, locked, error, onAdd, onRemove }: PhotoSlotProps) {
   const upload = useUploadVendorFile('VENDOR_PHOTO')
   const [fileError, setFileError] = useState('')

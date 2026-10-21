@@ -12,7 +12,7 @@ export const PROFILE_STATUS: Record<VendorProfileStatus, { label: string; tone: 
 /** Đang chờ duyệt hoặc đã xác minh thì hồ sơ chỉ đọc. */
 export const isProfileLocked = (status: VendorProfileStatus) => status === 'PENDING' || status === 'VERIFIED'
 
-/** Lĩnh vực nhà hàng (slug danh mục) cần thêm giấy ATTP và ảnh sảnh. */
+/** Lĩnh vực nhà hàng (slug danh mục) cần thêm giấy ATTP và bắt buộc ảnh mặt tiền. */
 export const RESTAURANT_SLUG = 'nha-hang'
 
 export interface FileSlot<T extends string> {
@@ -29,14 +29,9 @@ export function documentSlotsOf(categorySlug: string | null | undefined): FileSl
   ]
 }
 
-/** Ảnh cơ sở theo lĩnh vực: nhà hàng cần mặt tiền và sảnh (bắt buộc), lĩnh vực khác chỉ mặt tiền (tùy chọn). */
+/** Ảnh cơ sở theo lĩnh vực: chỉ ảnh mặt tiền, nhà hàng bắt buộc, lĩnh vực khác tùy chọn. */
 export function photoSlotsOf(categorySlug: string | null | undefined): FileSlot<VendorPhotoType>[] {
-  return categorySlug === RESTAURANT_SLUG
-    ? [
-        { type: 'FRONT', label: 'Ảnh mặt tiền' },
-        { type: 'HALL', label: 'Ảnh sảnh' },
-      ]
-    : [{ type: 'FRONT', label: 'Ảnh mặt tiền / cơ sở hoạt động' }]
+  return [{ type: 'FRONT', label: categorySlug === RESTAURANT_SLUG ? 'Ảnh mặt tiền' : 'Ảnh mặt tiền / cơ sở hoạt động' }]
 }
 
 export const photosRequired = (categorySlug: string | null | undefined) => categorySlug === RESTAURANT_SLUG

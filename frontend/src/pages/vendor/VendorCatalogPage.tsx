@@ -1,5 +1,3 @@
-import { Plus } from 'lucide-react'
-import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
 import { Button } from '@/components/ui/button'
@@ -9,7 +7,6 @@ import { PackageTable } from '@/features/vendorPackages/components/PackageTable'
 import { allTagsOf, matchPackages, sortPackages, usePackageFilters } from '@/features/vendorPackages/filters'
 import { usePackages } from '@/features/vendorPackages/hooks'
 import { useVendorProfile } from '@/features/vendors/hooks'
-import { paths } from '@/routes/paths'
 
 /** Quản lý dịch vụ: danh sách gói theo trạng thái, tìm, lọc tag, sắp xếp, thao tác nhanh. */
 export default function VendorCatalogPage() {
@@ -22,18 +19,9 @@ export default function VendorCatalogPage() {
   const shown = sortPackages(matched, filters)
   const hasFilter = !!filters.q || filters.tags.length > 0
 
-  const addButton = (
-    <Button asChild>
-      <Link to={paths.vendor.packageNew}>
-        <Plus />
-        Thêm gói dịch vụ
-      </Link>
-    </Button>
-  )
-
   return (
     <>
-      <PageTitle title="Quản lý dịch vụ" description={profile && <PackageStatusSummary profile={profile} />} actions={addButton} />
+      <PageTitle title="Quản lý dịch vụ" description={profile && <PackageStatusSummary profile={profile} />} />
       {profile && <PackageStatusSummary profile={profile} notice />}
 
       <StatusTabs value={filters.status} onChange={(status) => update({ status })} matched={matched} />
@@ -47,19 +35,7 @@ export default function VendorCatalogPage() {
         ) : shown.length ? (
           <PackageTable packages={shown} profile={profile} />
         ) : !all.length ? (
-          <EmptyState
-            className="border-0"
-            title="Chưa có gói dịch vụ"
-            description="Tạo gói để giới thiệu dịch vụ tới khách."
-            action={
-              <Button asChild variant="outline" size="sm">
-                <Link to={paths.vendor.packageNew}>
-                  <Plus />
-                  Tạo gói đầu tiên
-                </Link>
-              </Button>
-            }
-          />
+          <EmptyState className="border-0" title="Chưa có gói dịch vụ" description="Các gói dịch vụ của bạn sẽ hiện ở đây." />
         ) : (
           <EmptyState
             className="border-0"
