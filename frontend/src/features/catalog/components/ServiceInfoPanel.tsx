@@ -49,7 +49,7 @@ export function ServiceInfoPanel({ service, onOpenGallery }: { service: ServiceD
             onClick={() => onOpenGallery(a)}
             className="overflow-hidden rounded-[20px] border border-line bg-surface p-0 text-left"
           >
-            <div className="grid grid-cols-[2fr_1fr] grid-rows-[70px_70px] gap-[3px]">
+            <div className="grid grid-cols-[2fr_1fr] grid-rows-[110px_110px] gap-[3px]">
               {a.previewImageUrls.map((src, i) => (
                 <div key={src} className="overflow-hidden bg-line first:row-span-2">
                   <img src={src} alt={`${a.title}, ảnh ${i + 1}`} loading="lazy" className="block size-full object-cover" />
