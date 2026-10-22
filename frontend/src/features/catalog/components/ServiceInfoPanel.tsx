@@ -1,10 +1,10 @@
 import { Check } from 'lucide-react'
 import { formatMoney } from '@/lib/format'
-import type { ServiceDetail } from '@/types/catalog'
+import type { ServiceAlbum, ServiceDetail } from '@/types/catalog'
 import { DetailCard } from './DetailCard'
 
 /** Tab "Thông tin chung": giới thiệu, gói dịch vụ, bộ sưu tập (2.2). */
-export function ServiceInfoPanel({ service, onOpenGallery }: { service: ServiceDetail; onOpenGallery: () => void }) {
+export function ServiceInfoPanel({ service, onOpenGallery }: { service: ServiceDetail; onOpenGallery: (album?: ServiceAlbum) => void }) {
   const highlights = service.capacity ? [...service.highlights, `Sức chứa tối đa ${service.capacity} khách`] : service.highlights
 
   return (
@@ -37,7 +37,7 @@ export function ServiceInfoPanel({ service, onOpenGallery }: { service: ServiceD
 
       <div className="mt-[26px] mb-3.5 flex items-center justify-between gap-3">
         <h2 className="text-2xl">Bộ sưu tập</h2>
-        <button type="button" onClick={onOpenGallery} className="text-sm font-medium text-primary underline underline-offset-[3px]">
+        <button type="button" onClick={() => onOpenGallery()} className="text-sm font-medium text-primary underline underline-offset-[3px]">
           Xem tất cả ảnh
         </button>
       </div>
@@ -46,7 +46,7 @@ export function ServiceInfoPanel({ service, onOpenGallery }: { service: ServiceD
           <button
             key={a.id}
             type="button"
-            onClick={onOpenGallery}
+            onClick={() => onOpenGallery(a)}
             className="overflow-hidden rounded-[20px] border border-line bg-surface p-0 text-left"
           >
             <div className="grid grid-cols-[2fr_1fr] grid-rows-[70px_70px] gap-[3px]">

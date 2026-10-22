@@ -41,6 +41,8 @@ export interface ServiceAlbum {
   title: string
   imageCount: number
   previewImageUrls: string[]
+  /** Toàn bộ ảnh của album (mở khi bấm vào album). Dữ liệu giả có thể không có: khi đó dùng ảnh của cả dịch vụ */
+  imageUrls?: string[]
 }
 
 export interface ServiceDetail extends ServiceSummary {

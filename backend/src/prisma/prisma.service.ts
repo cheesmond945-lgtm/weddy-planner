@@ -1,16 +1,18 @@
-import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
-import { PrismaClient } from '@prisma/client'
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../generated/prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(PrismaService.name)
-
-  async onModuleInit() {
-    await this.$connect()
-    this.logger.log('Đã kết nối PostgreSQL')
+  constructor() {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error('Thiếu DATABASE_URL trong backend/.env');
+    super({ adapter: new PrismaPg({ connectionString }) });
   }
-
+  async onModuleInit() {
+    await this.$connect();
+  }
   async onModuleDestroy() {
-    await this.$disconnect()
+    await this.$disconnect();
   }
 }
