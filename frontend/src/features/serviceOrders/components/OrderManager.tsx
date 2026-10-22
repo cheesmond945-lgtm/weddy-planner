@@ -3,9 +3,8 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { ApiError } from '@/api'
 import { Button } from '@/components/ui/button'
-import type { ServiceOrder } from '@/types/serviceOrder'
-import { currentVersion } from '../calc'
-import { adjustmentStateOf, canCancelOrder } from '../constants'
+import type { OrderAdjustment, ServiceOrder } from '@/types/serviceOrder'
+import { canCancelOrder } from '../constants'
 import { useOrder } from '../hooks'
 import { AdjustmentDialog } from './AdjustmentDialog'
 import { CancelOrderDialog } from './CancelOrderDialog'
@@ -18,16 +17,12 @@ type Action = 'pay' | 'adjust' | 'cancel'
 
 /** Những việc NCC làm được với đơn lúc này (nút ở chân hộp chi tiết). */
 function availableActions(o: ServiceOrder) {
-  const st = o.status === 'CONFIRMED' ? adjustmentStateOf(o) : null
   return {
-    pay: o.status === 'CONFIRMED' && (currentVersion(o)?.content.installments.length ?? 0) > 0,
+    // Chỉ còn đợt 2 (phần còn lại) để ghi nhận; đặt cọc do hệ thống ghi nhận
+    pay: o.status === 'CONFIRMED' && o.paymentStatus === 'DEPOSIT_PAID',
     /** null: không lập được (đang chờ khách duyệt phương án, hoặc đơn chưa xác nhận) */
-    adjust:
-      o.status !== 'CONFIRMED' || st?.kind === 'AWAITING_CONFIRMATION'
-        ? null
-        : st?.kind === 'REVISION_REQUESTED'
-          ? { label: 'Sửa phương án', revise: st.adjustment }
-          : { label: o.adjustmentRequest ? 'Lập phương án điều chỉnh' : 'Đề nghị điều chỉnh', revise: undefined },
+    // CSDL không có phương án điều chỉnh cho đơn đã đặt cọc
+    adjust: null as { label: string; revise: OrderAdjustment | undefined } | null,
     cancel: canCancelOrder(o),
   }
 }
@@ -82,7 +77,7 @@ export function OrderManager({ orderId, initialAction, onClose }: OrderManagerPr
             {can.pay && (
               <Button onClick={() => setAction('pay')}>
                 <CreditCard />
-                Ghi nhận thanh toán
+                Xác nhận đã thu đủ
               </Button>
             )}
           </>

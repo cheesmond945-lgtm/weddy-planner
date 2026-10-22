@@ -48,12 +48,8 @@ export function PackageDetails({ pkg }: { pkg: VendorPackage }) {
               </span>
             ) : null}
           </Item>
-          <Item label="Giá tối thiểu">{pkg.price === null ? null : formatMoney(pkg.price)}</Item>
-          <Item label="Giá tối đa">{pkg.maxPrice === null ? null : formatMoney(pkg.maxPrice)}</Item>
+          <Item label="Giá">{formatMoney(pkg.price)}</Item>
           {isVenue(pkg.category) && <Item label="Sức chứa tối đa">{pkg.capacity ? `${pkg.capacity} khách` : null}</Item>}
-          <Item label="Ghi chú" full>
-            {pkg.note}
-          </Item>
         </dl>
       </FormSection>
       <FormSection title="Hình ảnh dịch vụ">

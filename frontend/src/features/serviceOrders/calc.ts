@@ -81,7 +81,10 @@ export function emptyContent(customer?: { name: string; phone: string }): OrderC
     eventDate: '',
     note: null,
     lines: [newLine()],
-    installments: [{ id: uid('i'), name: 'Đợt 1 – Đặt cọc', rate: null, amount: 0, dueDate: '', method: 'VNPAY', note: null }],
+    installments: [
+      { id: 'deposit', name: 'Đợt 1 – Đặt cọc', rate: 30, amount: 0, dueDate: '', method: 'VNPAY', note: null },
+      { id: 'final', name: 'Đợt 2 – Thanh toán còn lại', rate: 70, amount: 0, dueDate: '', method: 'CASH', note: null },
+    ],
   }
 }
 

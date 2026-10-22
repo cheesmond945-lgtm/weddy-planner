@@ -3,7 +3,7 @@
  * Hợp đồng: docs/api/orders.md, docs/api/payments.md
  */
 
-export type OrderStatus = 'SENT' | 'REVISION_REQUESTED' | 'PAID'
+export type OrderStatus = 'SENT' | 'REVISION_REQUESTED' | 'PAID' | 'CANCELLED'
 
 /** Đơn dịch vụ NCC gửi trong khung chat (7.3). */
 export interface Order {

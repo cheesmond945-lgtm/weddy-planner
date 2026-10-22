@@ -83,8 +83,7 @@ export function PackageTable({ packages, profile }: PackageTableProps) {
           <thead>
             <tr>
               <th className={th}>Tên gói</th>
-              <th className={`${th} text-right`}>Giá tối thiểu</th>
-              <th className={`${th} text-right`}>Giá tối đa</th>
+              <th className={`${th} text-right`}>Giá</th>
               <th className={th}>Tags</th>
               <th className={th}>Trạng thái</th>
               <th className={th}>Ngày cập nhật</th>
@@ -122,8 +121,7 @@ export function PackageTable({ packages, profile }: PackageTableProps) {
                       </div>
                     </div>
                   </td>
-                  <td className={`${td} text-right whitespace-nowrap tabular-nums`}>{pkg.price === null ? '—' : formatMoney(pkg.price)}</td>
-                  <td className={`${td} text-right whitespace-nowrap tabular-nums`}>{pkg.maxPrice === null ? '—' : formatMoney(pkg.maxPrice)}</td>
+                  <td className={`${td} text-right whitespace-nowrap tabular-nums`}>{formatMoney(pkg.price)}</td>
                   <td className={`${td} w-[230px]`}>
                     <div className="flex max-w-[230px] items-center gap-1 overflow-hidden">
                       {pkg.tags.slice(0, 2).map((t) => (

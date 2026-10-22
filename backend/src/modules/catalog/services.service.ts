@@ -28,6 +28,13 @@ const slugify = (s: string) =>
 
 export const categorySlug = (name: string) => CATEGORY_SLUGS[name] ?? slugify(name);
 
+/** Thứ tự hiển thị danh mục (như prototype): các slug lạ xếp cuối. */
+export const CATEGORY_ORDER = ['nha-hang', 'decor', 'trang-phuc', 'makeup', 'chup-anh', 'co-cuoi', 'hoa-cuoi'];
+export const categoryRank = (slug: string) => {
+  const i = CATEGORY_ORDER.indexOf(slug);
+  return i === -1 ? CATEGORY_ORDER.length : i;
+};
+
 /**
  * Frontend gọi "dịch vụ" = nhà cung cấp (vendor_profiles) đã duyệt có ít nhất một gói Approved.
  * "Gói" của dịch vụ = service_packages; mỗi gói là một album (package_albums).
@@ -71,10 +78,20 @@ export class ServicesService {
     };
   }
 
+  /** Dịch vụ dạng thẻ của các NCC đang hiển thị (NCC bị ẩn thì bỏ qua). */
+  async summaries(ids: string[]) {
+    const wanted = new Set(ids);
+    return (await this.loadVisible()).filter((v) => wanted.has(v.id)).map((v) => this.summarize(v));
+  }
+
+  async isVisible(id: string) {
+    return (await this.loadVisible()).some((v) => v.id === id);
+  }
+
   async categories() {
     const vendors = await this.loadVisible();
     const cats = await this.prisma.service_categories.findMany({ orderBy: { name: 'asc' } });
-    return cats.map((c) => {
+    return cats.sort((x, y) => categoryRank(categorySlug(x.name)) - categoryRank(categorySlug(y.name))).map((c) => {
       const mine = vendors.filter((v) => v.category_id === c.id);
       const cover = mine.flatMap((v) => v.service_packages.flatMap((p) => p.package_albums))[0];
       return {

@@ -4,6 +4,13 @@
 > Quy ước chung: [README.md](README.md).
 > **Chờ đối chiếu `docs/database.md` và `docs/state-diagrams.md` (trạng thái đơn).**
 
+> **Triển khai thật (khớp CSDL Supabase):** đơn hàng, chat, kế hoạch, timeline, hoa hồng đã chạy trên dữ liệu thật. Điểm khác so với bản nháp bên dưới:
+> - Mỗi đơn chỉ có **hai đợt**: đặt cọc theo `rate` % (khách trả qua cổng thanh toán) và phần còn lại (khách trả trực tiếp, NCC bấm xác nhận đã thu đủ thì đơn `Completed`, lập hóa đơn và tính hoa hồng).
+> - Không có phiên bản đơn (`versions` tối đa 1; gửi lại thì ghi đè và ghi các thay đổi vào tin hội thoại), không có phương án điều chỉnh (`POST .../adjustments` trả 409 `ORDER_NOT_ADJUSTABLE`), không lưu minh chứng thanh toán, không lưu nháp cho đơn đã gửi.
+> - Trạng thái: `Draft`→`DRAFT`, `Pending`→`AWAITING_CONFIRMATION` (chờ đặt cọc), `NeedRevision`→`REVISION_REQUESTED`, `Deposited`/`Completed`→`CONFIRMED` (+ `DEPOSIT_PAID`/`PAID`), `Expired`/`Cancelled`→`CANCELLED`. Phía cặp đôi thêm `CANCELLED`.
+> - `POST /payments` chạy **giả lập** (ghi nhận thanh toán thành công ngay) vì chưa có tài khoản VNPay; đặt `PAYMENT_MODE` khác `simulate` để tắt.
+> - Số lượng dòng báo giá phải là số nguyên; `code` đơn dạng `DH<YYMM><số>`.
+
 Phạm vi: cặp đôi xem đơn dịch vụ NCC gửi trong khung chat và yêu cầu chỉnh sửa (mục 7.3). NCC tạo/sửa đơn làm khi tới phần NCC. Đặt cọc: xem [payments.md](payments.md).
 
 Role: **COUPLE**, chỉ đơn của mình.

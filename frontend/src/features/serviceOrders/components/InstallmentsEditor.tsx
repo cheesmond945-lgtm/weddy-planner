@@ -1,12 +1,10 @@
-import { Plus, Trash2 } from 'lucide-react'
-import { MoneyInput } from '@/components/MoneyInput'
 import { Input } from '@/components/ui/input'
 import { controlClass } from '@/features/vendors/components/FormParts'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { OrderInstallment, OrderPaymentMethod } from '@/types/serviceOrder'
-import { newInstallment, rebalance, scheduledOf, withAmount, withRate } from '../calc'
-import { OFFLINE_METHODS, PAYMENT_METHOD_LABEL } from '../constants'
+import type { OrderInstallment } from '@/types/serviceOrder'
+import { rebalance } from '../calc'
+import { PAYMENT_METHOD_LABEL } from '../constants'
 import type { OrderErrors } from '../validation'
 
 interface InstallmentsEditorProps {
@@ -14,215 +12,108 @@ interface InstallmentsEditorProps {
   onChange: (installments: OrderInstallment[]) => void
   total: number
   errors: OrderErrors
-  /** Đã bấm gửi: hiện cảnh báo phân bổ ngay cả khi chưa có lỗi từ kiểm tra */
-  showAllocation: boolean
-  /** Đợt đã có khoản thu: không sửa, không xóa (phương án điều chỉnh) */
+  /** Giữ để tương thích với nơi gọi; không còn dùng (đơn luôn có đúng hai đợt, cộng đủ tổng đơn) */
+  showAllocation?: boolean
   locked?: string[]
 }
 
 const cell = cn(controlClass, 'h-10')
 
-/** Ô tỷ lệ: số nguyên 0–100 (%). */
-function RateInput({ value, onChange, label, invalid, disabled }: { value: number | null; onChange: (v: number | null) => void; label: string; invalid?: boolean; disabled?: boolean }) {
-  return (
-    <div className="relative">
-      <Input
-        className={cn(cell, 'pr-7 text-right tabular-nums')}
-        inputMode="numeric"
-        placeholder="—"
-        aria-label={label}
-        aria-invalid={invalid || undefined}
-        disabled={disabled}
-        value={value === null ? '' : String(value)}
-        onChange={(e) => {
-          const v = e.target.value.replace(/\D/g, '')
-          if (v !== '' && Number(v) > 100) return
-          onChange(v === '' ? null : Number(v))
-        }}
-      />
-      <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[13px] text-muted-foreground">%</span>
-    </div>
-  )
-}
-
 /**
- * Các đợt thanh toán: tên, tỷ lệ, số tiền, hạn, phương thức, ghi chú (InstallmentTable trong prototype NCC).
- * Đợt 1 là đặt cọc, khách trả qua VNPay; các đợt sau chuyển khoản hoặc tiền mặt.
- * Tỷ lệ là số nguyên phần trăm; khi các tỷ lệ cộng đủ 100%, đợt cuối tự nhận phần tiền lẻ còn lại.
- * Nhập số tiền trực tiếp thì đợt đó không còn tỷ lệ.
+ * Hai đợt thanh toán của đơn (khớp CSDL): đợt 1 đặt cọc theo tỷ lệ phần trăm, khách trả trực tuyến qua cổng thanh toán;
+ * đợt 2 là phần còn lại, khách trả trực tiếp cho nhà cung cấp. Chỉ nhập tỷ lệ cọc và hạn đặt cọc.
  */
-export function InstallmentsEditor({ installments, onChange, total, errors, showAllocation, locked = [] }: InstallmentsEditorProps) {
-  const commit = (list: OrderInstallment[]) => onChange(rebalance(list, total, locked))
-  const update = (id: string, fn: (i: OrderInstallment) => OrderInstallment) => commit(installments.map((i) => (i.id === id ? fn(i) : i)))
-  const e = (i: OrderInstallment, f: string) => errors[`inst:${i.id}:${f}`]
-  const err = (m?: string) => m && <span className="mt-0.5 block text-xs leading-snug text-destructive">{m}</span>
+export function InstallmentsEditor({ installments, onChange, total, errors }: InstallmentsEditorProps) {
+  const deposit = installments[0]
+  const rest = installments[1]
+  const rate = deposit?.rate ?? null
 
-  const diff = total - scheduledOf(installments)
-  const rateSum = installments.reduce((s, i) => s + (i.rate ?? 0), 0)
-  const allRated = installments.every((i) => i.rate !== null)
-  const allocation =
-    errors.allocation ??
-    (showAllocation && total > 0 && diff !== 0
-      ? diff > 0
-        ? `Các đợt thanh toán còn thiếu ${formatMoney(diff)}.`
-        : `Các đợt thanh toán đang vượt tổng đơn ${formatMoney(-diff)}.`
-      : undefined)
+  const commit = (nextRate: number | null, dueDate: string) => {
+    const base = (i: OrderInstallment | undefined, fallback: Partial<OrderInstallment>): OrderInstallment => ({
+      id: i?.id ?? fallback.id!,
+      name: fallback.name!,
+      rate: null,
+      amount: 0,
+      dueDate: '',
+      method: fallback.method!,
+      note: null,
+    })
+    const d = { ...base(deposit, { id: 'deposit', name: 'Đợt 1 – Đặt cọc', method: 'VNPAY' }), rate: nextRate, dueDate }
+    const r = { ...base(rest, { id: 'final', name: 'Đợt 2 – Thanh toán còn lại', method: 'CASH' }), rate: nextRate === null ? null : 100 - nextRate, dueDate: rest?.dueDate ?? '' }
+    onChange(rebalance([d, r], total))
+  }
 
   const th = 'border-b border-line pr-2 pb-2 text-left text-[11.5px] font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase'
   const td = 'border-b border-dashed border-line py-1.5 pr-2 align-top'
+  const err = (m?: string) => m && <span className="mt-0.5 block text-xs leading-snug text-destructive">{m}</span>
+  const rateError = errors[`inst:${deposit?.id}:rate`] ?? errors.installments
 
   return (
     <div className="grid gap-3">
       <div className="relative overflow-x-auto">
-        <table className="w-full min-w-[860px] table-fixed border-collapse">
+        <table className="w-full min-w-[640px] table-fixed border-collapse">
           <colgroup>
-            <col className="w-[180px]" />
-            <col className="w-[100px]" />
+            <col className="w-[200px]" />
+            <col className="w-[110px]" />
             <col className="w-[160px]" />
-            <col className="w-[150px]" />
             <col className="w-[160px]" />
             <col />
-            <col className="w-14" />
           </colgroup>
           <thead>
             <tr>
-              <th className={th}>Tên đợt</th>
+              <th className={th}>Đợt</th>
               <th className={th}>Tỷ lệ (%)</th>
               <th className={th}>Số tiền (VNĐ)</th>
               <th className={th}>Hạn thanh toán</th>
-              <th className={th}>Phương thức</th>
-              <th className={th}>Ghi chú</th>
-              <th className={th}>
-                <span className="sr-only">Xóa</span>
-              </th>
+              <th className={th}>Cách thanh toán</th>
             </tr>
           </thead>
           <tbody>
-            {installments.map((i, idx) => {
-              const isLocked = locked.includes(i.id)
-              return (
-                <tr key={i.id} className={cn(isLocked && '[&>td]:bg-sage-soft/50')}>
-                  <td className={td}>
-                    <Input
-                      className={cell}
-                      aria-label={`Tên đợt ${idx + 1}`}
-                      aria-invalid={e(i, 'name') ? true : undefined}
-                      disabled={isLocked}
-                      value={i.name}
-                      onChange={(ev) => update(i.id, (x) => ({ ...x, name: ev.target.value }))}
-                    />
-                    {err(e(i, 'name'))}
-                  </td>
-                  <td className={td}>
-                    <RateInput
-                      label={`Tỷ lệ đợt ${idx + 1}`}
-                      value={i.rate}
-                      disabled={isLocked}
-                      invalid={!!e(i, 'rate')}
-                      onChange={(rate) => update(i.id, (x) => withRate(x, rate, total))}
-                    />
-                    {err(e(i, 'rate'))}
-                  </td>
-                  <td className={td}>
-                    <MoneyInput
-                      className={cn(cell, 'text-right tabular-nums')}
-                      aria-label={`Số tiền đợt ${idx + 1}`}
-                      aria-invalid={e(i, 'amount') ? true : undefined}
-                      disabled={isLocked}
-                      value={i.amount}
-                      onChange={(amount) => update(i.id, (x) => withAmount(x, amount))}
-                    />
-                    {err(e(i, 'amount'))}
-                  </td>
-                  <td className={td}>
-                    <Input
-                      type="date"
-                      className={cn(cell, 'px-2')}
-                      aria-label={`Hạn thanh toán đợt ${idx + 1}`}
-                      aria-invalid={e(i, 'dueDate') ? true : undefined}
-                      disabled={isLocked}
-                      value={i.dueDate}
-                      onChange={(ev) => update(i.id, (x) => ({ ...x, dueDate: ev.target.value }))}
-                    />
-                    {err(e(i, 'dueDate'))}
-                  </td>
-                  <td className={td}>
-                    {idx === 0 ? (
-                      <div className={cn(cell, 'flex items-center bg-surface-2 px-2 text-[13px] text-muted-foreground')} title="Khách đặt cọc trực tuyến qua VNPay">
-                        {PAYMENT_METHOD_LABEL.VNPAY}
-                      </div>
-                    ) : (
-                      <select
-                        className={cn(cell, 'px-2')}
-                        aria-label={`Phương thức đợt ${idx + 1}`}
-                        disabled={isLocked}
-                        value={i.method}
-                        onChange={(ev) => update(i.id, (x) => ({ ...x, method: ev.target.value as OrderPaymentMethod }))}
-                      >
-                        {OFFLINE_METHODS.map((m) => (
-                          <option key={m} value={m}>
-                            {PAYMENT_METHOD_LABEL[m]}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </td>
-                  <td className={td}>
-                    <Input
-                      className={cell}
-                      aria-label={`Ghi chú đợt ${idx + 1}`}
-                      placeholder="Ghi chú"
-                      disabled={isLocked}
-                      value={i.note ?? ''}
-                      onChange={(ev) => update(i.id, (x) => ({ ...x, note: ev.target.value || null }))}
-                    />
-                  </td>
-                  <td className={cn(td, 'pt-2 text-right')}>
-                    {isLocked ? (
-                      <span title="Đợt đã có khoản thu thực tế" className="rounded-pill bg-sage-soft px-2 py-0.5 text-[11px] whitespace-nowrap text-sage">
-                        Đã thu
-                      </span>
-                    ) : (
-                      idx > 0 && (
-                        <button
-                          type="button"
-                          aria-label={`Xóa ${i.name}`}
-                          title="Xóa đợt"
-                          onClick={() => commit(installments.filter((x) => x.id !== i.id))}
-                          className="ml-auto grid size-7 place-items-center rounded-sm text-warn hover:bg-warn-soft"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      )
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
+            <tr>
+              <td className={cn(td, 'pt-3 text-[13.5px]')}>Đợt 1 – Đặt cọc</td>
+              <td className={td}>
+                <div className="relative">
+                  <Input
+                    className={cn(cell, 'pr-7 text-right tabular-nums')}
+                    inputMode="numeric"
+                    placeholder="VD: 30"
+                    aria-label="Tỷ lệ đặt cọc (%)"
+                    aria-invalid={rateError ? true : undefined}
+                    value={rate === null ? '' : String(rate)}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, '')
+                      if (v !== '' && Number(v) > 99) return
+                      commit(v === '' ? null : Number(v), deposit?.dueDate ?? '')
+                    }}
+                  />
+                  <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[13px] text-muted-foreground">%</span>
+                </div>
+                {err(rateError)}
+              </td>
+              <td className={cn(td, 'pt-3 text-right text-[13.5px] tabular-nums')}>{formatMoney(deposit?.amount ?? 0)}</td>
+              <td className={td}>
+                <Input
+                  type="date"
+                  className={cn(cell, 'px-2')}
+                  aria-label="Hạn đặt cọc"
+                  aria-invalid={errors[`inst:${deposit?.id}:dueDate`] ? true : undefined}
+                  value={deposit?.dueDate ?? ''}
+                  onChange={(e) => commit(rate, e.target.value)}
+                />
+                {err(errors[`inst:${deposit?.id}:dueDate`])}
+              </td>
+              <td className={cn(td, 'pt-3 text-[13px] text-muted-foreground')}>{PAYMENT_METHOD_LABEL.VNPAY}</td>
+            </tr>
+            <tr>
+              <td className={cn(td, 'pt-3 text-[13.5px]')}>Đợt 2 – Thanh toán còn lại</td>
+              <td className={cn(td, 'pt-3 text-right text-[13.5px] tabular-nums')}>{rate === null ? '—' : `${100 - rate}%`}</td>
+              <td className={cn(td, 'pt-3 text-right text-[13.5px] tabular-nums')}>{formatMoney(rest?.amount ?? 0)}</td>
+              <td className={cn(td, 'pt-3 text-[13px] text-muted-foreground')}>Ngày sự kiện</td>
+              <td className={cn(td, 'pt-3 text-[13px] text-muted-foreground')}>Khách trả trực tiếp cho nhà cung cấp</td>
+            </tr>
           </tbody>
         </table>
       </div>
-      <div className="flex flex-wrap items-center gap-4">
-        <button
-          type="button"
-          onClick={() => commit([...installments, newInstallment(installments.length, total, installments)])}
-          className="inline-flex items-center gap-1.5 py-1.5 text-[13px] font-medium text-gold-ink hover:underline"
-        >
-          <Plus className="size-4" />
-          Thêm đợt thanh toán
-        </button>
-        {allRated && rateSum !== 100 && (
-          <span className="text-[12.5px] text-gold-ink">Tổng tỷ lệ đang là {rateSum}%, cần đủ 100%.</span>
-        )}
-        {allRated && rateSum === 100 && installments.length > 1 && (
-          <span className="text-[12.5px] text-muted-foreground">Đợt cuối nhận phần tiền lẻ còn lại.</span>
-        )}
-      </div>
-      {allocation && (
-        <p role="alert" data-field-error className="text-[13px] text-destructive">
-          {allocation}
-        </p>
-      )}
     </div>
   )
 }

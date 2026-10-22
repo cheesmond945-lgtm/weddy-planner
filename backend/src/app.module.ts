@@ -5,8 +5,14 @@ import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
 import { HealthModule } from './modules/health/health.module';
+import { FavoritesModule } from './modules/favorites/favorites.module';
+import { CompareModule } from './modules/compare/compare.module';
+import { WeddingsModule } from './modules/weddings/weddings.module';
+import { ChatModule } from './modules/chat/chat.module';
+import { OrdersModule } from './modules/orders/orders.module';
+import { CommissionsModule } from './modules/commissions/commissions.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, AuthModule, CatalogModule, VendorsModule, HealthModule],
+  imports: [PrismaModule, StorageModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule],
 })
 export class AppModule {}

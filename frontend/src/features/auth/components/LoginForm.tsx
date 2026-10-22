@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { USE_MOCK } from '@/api'
+import { isMock } from '@/api'
 import { FormError, FormField } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
 import { MOCK_PASSWORD } from '@/mocks/auth'
@@ -52,7 +52,7 @@ export function LoginForm({ onSuccess, onCancel }: LoginFormProps) {
       />
       <FormError message={login.error?.message} />
 
-      {USE_MOCK && (
+      {isMock('auth') && (
         <p className="rounded-md bg-accent-soft px-3.5 py-2.5 text-[13px]">
           Dữ liệu giả: <b>minh.anh@example.com</b> (cặp đôi), <b>vendor@example.com</b>, <b>admin@example.com</b>. Mật khẩu{' '}
           <b>{MOCK_PASSWORD}</b>.

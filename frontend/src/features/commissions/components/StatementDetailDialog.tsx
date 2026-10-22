@@ -1,24 +1,20 @@
-import { Check, Copy, FlaskConical, LoaderCircle } from 'lucide-react'
+import { Check, Copy, FlaskConical } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { USE_MOCK } from '@/api'
-import { MoneyInput } from '@/components/MoneyInput'
+import { isMock } from '@/api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { formatDay, formatStamp } from '@/features/serviceOrders/calc'
 import { StatusBadge } from '@/features/serviceOrders/components/OrderBadges'
 import { orderPageHref } from '@/features/serviceOrders/components/OrderCard'
 import { PanelDialog } from '@/features/serviceOrders/components/PanelDialog'
 import { PAYMENT_METHOD_LABEL } from '@/features/serviceOrders/constants'
-import { controlClass, Field, Notice } from '@/features/vendors/components/FormParts'
-import { ProofFileField } from '@/features/vendors/components/ProofFileField'
+import { Notice } from '@/features/vendors/components/FormParts'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { CommissionStatement } from '@/types/commission'
-import type { VendorFile } from '@/types/vendor'
-import { canSubmitProof, COMMISSION_PAYMENT_STATUS, COMMISSION_STATUS, formatPeriod, remainingOf } from '../constants'
-import { useCommissionStatement, useSimulateReview, useSubmitCommissionPayment } from '../hooks'
+import { COMMISSION_PAYMENT_STATUS, COMMISSION_STATUS, formatPeriod, remainingOf } from '../constants'
+import { useCommissionStatement, useSimulateReview } from '../hooks'
 
 const H = ({ children }: { children: ReactNode }) => (
   <h4 className="mt-[22px] mb-2.5 font-sans text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase first:mt-0">{children}</h4>
@@ -65,54 +61,10 @@ function TransferCard({ statement: s }: { statement: CommissionStatement }) {
   )
 }
 
-/** Gửi minh chứng đã chuyển tiền hoa hồng (số tiền, tệp, ghi chú đối chiếu). */
-function ProofForm({ statement: s }: { statement: CommissionStatement }) {
-  const submit = useSubmitCommissionPayment(s.id)
-  const rest = remainingOf(s)
-  const [amount, setAmount] = useState(rest)
-  const [proof, setProof] = useState<VendorFile | null>(null)
-  const [note, setNote] = useState('')
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [formError, setFormError] = useState('')
-
-  function send() {
-    const e: Record<string, string> = {}
-    if (!(amount > 0)) e.amount = 'Số tiền phải lớn hơn 0.'
-    else if (amount > rest) e.amount = `Không vượt số còn phải trả (${formatMoney(rest)}).`
-    if (!proof) e.proof = 'Cần tải tệp minh chứng.'
-    setErrors(e)
-    if (Object.keys(e).length || !proof) return
-    setFormError('')
-    submit.mutate({ amount, proofFile: proof, note: note.trim() || null }, { onError: (err) => setFormError(err.message) })
-  }
-
-  return (
-    <fieldset disabled={submit.isPending} className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 max-sm:grid-cols-1">
-      <Field label="Số tiền *" error={errors.amount}>
-        <MoneyInput className={cn(controlClass, 'text-right tabular-nums')} aria-invalid={errors.amount ? true : undefined} value={amount} onChange={setAmount} />
-      </Field>
-      <Field label="Tệp minh chứng *" group>
-        <ProofFileField value={proof} onChange={setProof} error={errors.proof} disabled={submit.isPending} />
-      </Field>
-      <Field label="Ghi chú đối chiếu" full>
-        <Input className={controlClass} value={note} onChange={(e) => setNote(e.target.value)} placeholder="VD: Ngân hàng, mã giao dịch, ngày chuyển…" />
-      </Field>
-      <div className="col-span-full flex flex-wrap items-center gap-3">
-        <Button onClick={send}>
-          {submit.isPending && <LoaderCircle className="animate-spin" />}
-          Gửi minh chứng
-        </Button>
-        {formError && <span role="alert" className="text-[13px] text-destructive">{formError}</span>}
-      </div>
-      <p className="col-span-full text-[12.5px] text-muted-foreground">Chỉ khi WebPlan (Admin) xác nhận, số tiền còn trả mới giảm.</p>
-    </fieldset>
-  )
-}
-
 /** CHỈ CÓ KHI DÙNG MOCK: giả lập Admin xác nhận / từ chối minh chứng đang chờ. */
 function MockReview({ id }: { id: string }) {
   const review = useSimulateReview(id)
-  if (!USE_MOCK) return null
+  if (!isMock('commissions')) return null
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 rounded-sm border border-dashed border-info/50 bg-info-soft px-3 py-2 text-[12.5px] text-info">
       <FlaskConical className="size-4" />
@@ -246,13 +198,19 @@ export function StatementDetailDialog({ id, onClose }: { id: string; onClose: ()
                 </div>
                 <p className="text-[12.5px] text-muted-foreground">
                   Gửi {formatStamp(p.submittedAt)}
-                  {p.reviewedAt && ` · xử lý ${formatStamp(p.reviewedAt)}`} · Minh chứng:{' '}
-                  {p.proofFile.url ? (
-                    <a href={p.proofFile.url} target="_blank" rel="noreferrer" className="text-gold-ink hover:underline">
-                      {p.proofFile.fileName}
-                    </a>
-                  ) : (
-                    p.proofFile.fileName
+                  {p.reviewedAt && ` · xử lý ${formatStamp(p.reviewedAt)}`}
+                  {p.proofFile && (
+                    <>
+                      {' '}
+                      · Minh chứng:{' '}
+                      {p.proofFile.url ? (
+                        <a href={p.proofFile.url} target="_blank" rel="noreferrer" className="text-gold-ink hover:underline">
+                          {p.proofFile.fileName}
+                        </a>
+                      ) : (
+                        p.proofFile.fileName
+                      )}
+                    </>
                   )}
                 </p>
                 {p.note && <p className="text-[12.5px]">Ghi chú đối chiếu: {p.note}</p>}
@@ -264,11 +222,10 @@ export function StatementDetailDialog({ id, onClose }: { id: string; onClose: ()
         </>
       )}
 
-      {canSubmitProof(s) && (
-        <>
-          <H>Minh chứng thanh toán</H>
-          <ProofForm key={`${s.paidAmount}-${s.payments.length}`} statement={s} />
-        </>
+      {s.status !== 'OPEN' && s.status !== 'PAID' && (
+        <div className="mt-4">
+          <Notice tone="info" title="Chuyển khoản theo thông tin ở trên. WebPlan (Admin) ghi nhận khi nhận được tiền, bảng kê sẽ chuyển sang Đã thanh toán." />
+        </div>
       )}
     </PanelDialog>
   )

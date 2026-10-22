@@ -123,23 +123,13 @@ export function PackageEditor({ pkg, profile, category, initialCheck }: PackageE
             <Field label="Tags" hint="Tags hiển thị công khai khi gói được duyệt đăng." full group>
               <TagsInput tags={values.tags} onChange={(tags) => set({ tags })} suggestions={TAG_SUGGESTIONS[category.slug] ?? []} />
             </Field>
-            <Field label="Giá tối thiểu *" error={errors.price}>
+            <Field label="Giá *" error={errors.price}>
               <WithUnit unit="đ">
                 <MoneyInput
                   className={cn(controlClass, 'pr-8 text-right tabular-nums')}
                   aria-invalid={errors.price ? true : undefined}
                   value={values.price}
                   onChange={(price) => set({ price })}
-                />
-              </WithUnit>
-            </Field>
-            <Field label="Giá tối đa *" error={errors.maxPrice}>
-              <WithUnit unit="đ">
-                <MoneyInput
-                  className={cn(controlClass, 'pr-8 text-right tabular-nums')}
-                  aria-invalid={errors.maxPrice ? true : undefined}
-                  value={values.maxPrice}
-                  onChange={(maxPrice) => set({ maxPrice })}
                 />
               </WithUnit>
             </Field>
@@ -160,15 +150,6 @@ export function PackageEditor({ pkg, profile, category, initialCheck }: PackageE
                 </WithUnit>
               </Field>
             )}
-            <Field label="Ghi chú" full>
-              <textarea
-                rows={2}
-                className={area}
-                placeholder="VD: Giá tính theo bàn 10 khách, chưa gồm đồ uống."
-                value={values.note}
-                onChange={(e) => set({ note: e.target.value })}
-              />
-            </Field>
           </div>
         </FormSection>
 

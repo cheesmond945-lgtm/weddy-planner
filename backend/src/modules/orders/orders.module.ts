@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common'
+import { Module } from '@nestjs/common';
+import { CoupleOrdersController, PaymentsController, VendorOrdersController } from './orders.controller';
+import { OrdersService } from './orders.service';
 
-// Chưa có logic: controller, service, dto thêm khi làm module này.
-@Module({})
+@Module({ controllers: [CoupleOrdersController, PaymentsController, VendorOrdersController], providers: [OrdersService], exports: [OrdersService] })
 export class OrdersModule {}

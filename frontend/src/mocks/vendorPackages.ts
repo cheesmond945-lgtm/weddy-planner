@@ -46,8 +46,6 @@ function seedStudio(): VendorPackage[] {
       description: 'Hai ngày chụp ngoại cảnh Đà Lạt, phong cách tự nhiên, 30 ảnh chỉnh sửa và album 25×25.',
       tags: ['Pre-wedding', 'Ngoại cảnh Đà Lạt', 'Album cưới'],
       price: 22_000_000,
-      maxPrice: 30_000_000,
-      note: 'Chưa gồm di chuyển, lưu trú.',
       photos: [photo(PHOTO, 'doi-thong.jpg'), photo(PHOTO, 'doi-thong-2.jpg', zoom(0.2, 0.3)), photo(PHOTO, 'ho-xuan-huong.jpg', zoom(0.8, 0.7))],
       updatedAt: '2026-10-10T03:00:00.000Z',
     },
@@ -58,8 +56,6 @@ function seedStudio(): VendorPackage[] {
       description: 'Một nhiếp ảnh gia và một quay phim theo sát lễ gia tiên và tiệc cưới, giao 300 ảnh và clip highlight 3 phút.',
       tags: ['Phóng sự cưới', 'Album cưới'],
       price: 12_000_000,
-      maxPrice: 18_000_000,
-      note: null,
       photos: [photo(PHOTO, 'phong-su.jpg', zoom(0.5, 0.4)), photo(PHOTO, 'phong-su-2.jpg', zoom(0.3, 0.8))],
       updatedAt: '2026-10-12T03:00:00.000Z',
     },
@@ -70,8 +66,6 @@ function seedStudio(): VendorPackage[] {
       description: 'Phim cưới cinematic 3–5 phút.',
       tags: ['Quay phim cinematic'],
       price: 15_000_000,
-      maxPrice: null,
-      note: null,
       photos: [],
       updatedAt: '2026-10-02T03:00:00.000Z',
     },
@@ -82,7 +76,7 @@ function seed(userId: string): VendorPackage[] {
   if (userId === 'u-vendor-2') return seedStudio()
   if (userId !== 'u-vendor-1') return []
   const category = categoryRef('nha-hang')
-  const base = { category, note: null, capacity: null, coverPublicId: null }
+  const base = { category, capacity: null, coverPublicId: null }
   return [
     {
       ...base,
@@ -92,9 +86,7 @@ function seed(userId: string): VendorPackage[] {
         'Tiệc cưới tại sảnh Mây với thực đơn 8 món Menu A, bao gồm trang trí sân khấu cơ bản, âm thanh ánh sáng và đội ngũ phục vụ trọn buổi.',
       tags: ['Tiệc cưới', 'Menu A', 'Trọn gói'],
       price: 3_500_000,
-      maxPrice: 4_500_000,
       capacity: 500,
-      note: 'Giá tính theo bàn 10 khách, chưa gồm đồ uống.',
       photos: [photo(HALL, 'sanh-may-toi.jpg'), photo(HALL, 'san-khau.jpg', zoom(0.2, 0.3)), photo(FEAST, 'ban-tiec.jpg'), photo(HALL, 'loi-di.jpg', zoom(0.8, 0.7))],
       status: 'PUBLISHED',
       updatedAt: '2026-10-08T03:00:00.000Z',
@@ -106,7 +98,6 @@ function seed(userId: string): VendorPackage[] {
       description: 'Thuê sảnh Ngân Hà để tự tổ chức tiệc, bao gồm bàn ghế, âm thanh cơ bản và thời gian sử dụng 5 giờ.',
       tags: ['Cho thuê sảnh trống', 'Tiệc 300 khách'],
       price: 30_000_000,
-      maxPrice: 45_000_000,
       capacity: 300,
       photos: [photo(HALL, 'sanh-ngan-ha.jpg', zoom(0.6, 0.4)), photo(FEAST, 'sanh-ngan-ha-2.jpg', zoom(0.3, 0.6))],
       status: 'PENDING',
@@ -118,8 +109,7 @@ function seed(userId: string): VendorPackage[] {
       name: 'Tiệc cưới – Menu B',
       description: '',
       tags: ['Menu B'],
-      price: null,
-      maxPrice: null,
+      price: 5_000_000,
       photos: [],
       status: 'DRAFT',
       updatedAt: '2026-10-16T03:00:00.000Z',
@@ -131,9 +121,7 @@ function seed(userId: string): VendorPackage[] {
       description: 'Tiệc cưới ngoài trời tại sân vườn với đèn dây, sân khấu nhỏ và thực đơn buffet.',
       tags: ['Sảnh ngoài trời', 'Tiệc cưới'],
       price: 2_800_000,
-      maxPrice: 3_800_000,
       capacity: 200,
-      note: 'Phụ thuộc thời tiết, có phương án mái che.',
       photos: [photo(DECOR, 'san-vuon.jpg'), photo(DECOR, 'san-vuon-2.jpg', zoom(0.7, 0.3))],
       status: 'HIDDEN',
       updatedAt: '2026-09-20T03:00:00.000Z',
@@ -182,9 +170,7 @@ function changeStatus(p: VendorPackage, from: PackageStatus, to: PackageStatus) 
 /** Ghi các trường của request, kiểm tra như BE. */
 function apply(p: VendorPackage, req: SavePackageRequest) {
   if (!req.name.trim()) throw new ApiError(400, 'VALIDATION_ERROR', 'Nhập tên gói.')
-  if (req.price !== null && req.maxPrice !== null && req.maxPrice < req.price) {
-    throw new ApiError(400, 'VALIDATION_ERROR', 'Giá tối đa phải ≥ giá tối thiểu.')
-  }
+  if (!(req.price > 0)) throw new ApiError(400, 'VALIDATION_ERROR', 'Nhập giá.')
   Object.assign(p, {
     ...req,
     description: req.description ?? '',
@@ -242,7 +228,7 @@ export const mockVendorPackages = {
       if (!canSubmitPackage(profile, p.category)) {
         throw new ApiError(409, 'VENDOR_NOT_VERIFIED', 'Hồ sơ nhà cung cấp chưa được xác minh cho lĩnh vực này.')
       }
-      if (!p.description || p.price === null || p.maxPrice === null || !p.photos.length) {
+      if (!p.description || !p.photos.length) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Gói còn thiếu mô tả, giá hoặc ảnh.')
       }
       return changeStatus(p, 'DRAFT', 'PENDING')

@@ -4,9 +4,9 @@ import type { AdjustmentStatus, OrderPaymentMethod, OrderPaymentStatus, ServiceO
 /** Nhãn trạng thái đơn theo prototype NCC. */
 export const ORDER_STATUS: Record<ServiceOrderStatus, { label: string; tone: BadgeTone }> = {
   DRAFT: { label: 'Bản nháp', tone: 'neutral' },
-  AWAITING_CONFIRMATION: { label: 'Chờ khách xác nhận', tone: 'wait' },
+  AWAITING_CONFIRMATION: { label: 'Chờ khách đặt cọc', tone: 'wait' },
   REVISION_REQUESTED: { label: 'Khách yêu cầu chỉnh sửa', tone: 'warn' },
-  CONFIRMED: { label: 'Đã xác nhận', tone: 'done' },
+  CONFIRMED: { label: 'Đã đặt cọc', tone: 'done' },
   CANCELLED: { label: 'Đã hủy', tone: 'warn' },
 }
 

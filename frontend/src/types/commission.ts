@@ -55,7 +55,8 @@ export type CommissionPaymentStatus = (typeof COMMISSION_PAYMENT_STATUSES)[numbe
 export interface CommissionPayment {
   id: string
   amount: number
-  proofFile: VendorFile
+  /** null khi Admin ghi nhận thanh toán (hệ thống không lưu minh chứng NCC gửi) */
+  proofFile: VendorFile | null
   /** Ghi chú đối chiếu của NCC (mã giao dịch, ngân hàng…) */
   note: string | null
   submittedAt: string

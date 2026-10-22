@@ -14,4 +14,5 @@ export const ORDER_STATUS: Record<OrderStatus, { label: string; tone: BadgeTone 
   SENT: { label: 'Chờ thanh toán cọc', tone: 'wait' },
   REVISION_REQUESTED: { label: 'Đang chỉnh sửa', tone: 'talk' },
   PAID: { label: 'Đã cọc', tone: 'done' },
+  CANCELLED: { label: 'Đã hủy', tone: 'wait' },
 }

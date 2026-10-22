@@ -4,5 +4,5 @@ import { CatalogService } from './catalog.service';
 import { ServicesController } from './services.controller';
 import { ServicesService } from './services.service';
 
-@Module({ controllers: [CatalogController, ServicesController], providers: [CatalogService, ServicesService] })
+@Module({ controllers: [CatalogController, ServicesController], providers: [CatalogService, ServicesService], exports: [ServicesService] })
 export class CatalogModule {}

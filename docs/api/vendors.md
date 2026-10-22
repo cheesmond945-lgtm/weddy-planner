@@ -4,6 +4,11 @@
 > Quy ước chung: [README.md](README.md).
 > **Chờ đối chiếu `docs/database.md` và `docs/state-diagrams.md`** (hai tài liệu này đang trống): tên thực thể, tên trường, enum và trạng thái hồ sơ đang suy từ prototype NCC (`docs/prototype/prototype_vendor`, màn Hồ sơ nhà cung cấp).
 
+> **Cập nhật (Supabase):** backend lưu hồ sơ, giấy tờ, ảnh và gói vào Supabase (Postgres + Storage), không dùng Cloudinary.
+> Upload bằng `POST /vendors/me/uploads` (multipart: `file`, `purpose` = `VENDOR_DOCUMENT` | `VENDOR_PHOTO` | `PACKAGE_PHOTO`), trả `VendorFile` có `publicId` là đường dẫn trong Storage.
+> Giấy tờ và ảnh cơ sở ở bucket riêng tư (`url` là link ký 1 giờ); ảnh gói ở bucket công khai, tối đa 5MB. `POST /vendors/me/uploads/signature` không còn dùng.
+> Gói dịch vụ chỉ có một `price` (giá "từ", bắt buộc kể cả bản nháp); không có `maxPrice` và `note`.
+
 Phạm vi: NCC xem, lưu nháp và gửi xác minh hồ sơ của mình; xin chữ ký upload ảnh/giấy tờ. Lĩnh vực cung cấp chỉ đọc (Admin gán khi tạo tài khoản).
 Chưa có: Admin duyệt hồ sơ, yêu cầu bổ sung (làm khi tới phần Admin, sẽ bổ sung vào file này).
 

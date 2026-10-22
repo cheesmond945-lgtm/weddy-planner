@@ -1,6 +1,6 @@
 import { ChevronDown, FlaskConical } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { USE_MOCK } from '@/api'
+import { isMock } from '@/api'
 import { currentVersion } from '@/features/serviceOrders/calc'
 import { cn } from '@/lib/utils'
 import type { ServiceOrder } from '@/types/serviceOrder'
@@ -49,7 +49,7 @@ export function CustomerSimulator({ conversationId, latestOrder }: { conversatio
     }
   }, [open])
 
-  if (!USE_MOCK) return null
+  if (!isMock('vendorChat')) return null
 
   return (
     <div ref={ref} className="relative">

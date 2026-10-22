@@ -42,4 +42,16 @@ export class StorageService {
     if (error) throw error;
     return path;
   }
+
+  /** Upload tổng quát; trả về đường dẫn đã lưu. Lỗi (sai định dạng, quá dung lượng...) ném Error có message của Supabase. */
+  async upload(bucket: string, path: string, file: Buffer, contentType: string) {
+    const { error } = await this.supabase.storage.from(bucket).upload(path, file, { contentType, upsert: false });
+    if (error) throw new Error(error.message);
+    return path;
+  }
+
+  /** Xóa file (không báo lỗi nếu file không tồn tại). */
+  async remove(bucket: string, paths: string[]) {
+    if (paths.length) await this.supabase.storage.from(bucket).remove(paths);
+  }
 }

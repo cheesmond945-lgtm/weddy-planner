@@ -25,17 +25,12 @@ export function validateOrder(c: OrderContent): OrderErrors {
   if (!lines.length) e.lines = 'Cần ít nhất một dòng báo giá hợp lệ.'
   else if (total <= 0) e.lines = 'Tổng giá trị đơn phải lớn hơn 0.'
 
-  for (const i of c.installments) {
-    if (!i.name.trim()) e[`inst:${i.id}:name`] = 'Nhập tên đợt.'
-    if (!(Math.round(i.amount) > 0)) e[`inst:${i.id}:amount`] = 'Số tiền > 0.'
-    else if (i.amount > total) e[`inst:${i.id}:amount`] = 'Không vượt tổng đơn.'
-    if (i.rate !== null && (!Number.isInteger(i.rate) || i.rate < 0 || i.rate > 100)) e[`inst:${i.id}:rate`] = 'Tỷ lệ là số nguyên 0–100%.'
-    if (!i.dueDate) e[`inst:${i.id}:dueDate`] = 'Chọn hạn.'
+  // Đơn gồm 2 đợt (khớp CSDL): đặt cọc theo tỷ lệ % và phần còn lại
+  const deposit = c.installments[0]
+  if (!deposit || deposit.rate === null || !Number.isInteger(deposit.rate) || deposit.rate < 1 || deposit.rate > 99) {
+    e[`inst:${deposit?.id}:rate`] = 'Tỷ lệ đặt cọc là số nguyên từ 1 đến 99%.'
   }
-  const diff = total - scheduledOf(c.installments)
-  if (total > 0 && diff !== 0) {
-    e.allocation = diff > 0 ? `Các đợt thanh toán còn thiếu ${formatMoney(diff)}.` : `Các đợt thanh toán đang vượt tổng đơn ${formatMoney(-diff)}.`
-  }
+  if (!deposit?.dueDate) e[`inst:${deposit?.id}:dueDate`] = 'Chọn hạn đặt cọc.'
   return e
 }
 

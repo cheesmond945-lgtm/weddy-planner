@@ -2,7 +2,7 @@ import { mockVendorPackages } from '@/mocks/vendorPackages'
 import { authStore } from '@/store/auth'
 import type { SavePackageRequest, VendorPackage } from '@/types/vendorPackage'
 import { ApiError, http } from './client'
-import { USE_MOCK, mockDelay } from './mock'
+import { isMock, mockDelay } from './mock'
 
 function mockUserId() {
   const user = authStore.getSession()?.user
@@ -14,24 +14,24 @@ const mock = <T>(fn: (userId: string) => T, ms = 300) => mockDelay(null, ms).the
 
 /** Hợp đồng: docs/api/catalog.md (phần Nhà cung cấp). Ảnh gói upload qua vendorsApi.uploadFile('PACKAGE_PHOTO'). */
 export const vendorPackagesApi = {
-  list: (): Promise<VendorPackage[]> => (USE_MOCK ? mock((u) => mockVendorPackages.list(u)) : http.get('/vendors/me/packages')),
+  list: (): Promise<VendorPackage[]> => (isMock('vendors') ? mock((u) => mockVendorPackages.list(u)) : http.get('/vendors/me/packages')),
 
-  get: (id: string): Promise<VendorPackage> => (USE_MOCK ? mock((u) => mockVendorPackages.get(u, id)) : http.get(`/vendors/me/packages/${id}`)),
+  get: (id: string): Promise<VendorPackage> => (isMock('vendors') ? mock((u) => mockVendorPackages.get(u, id)) : http.get(`/vendors/me/packages/${id}`)),
 
   create: (body: SavePackageRequest): Promise<VendorPackage> =>
-    USE_MOCK ? mock((u) => mockVendorPackages.create(u, body), 450) : http.post('/vendors/me/packages', body),
+    isMock('vendors') ? mock((u) => mockVendorPackages.create(u, body), 450) : http.post('/vendors/me/packages', body),
 
   update: (id: string, body: SavePackageRequest): Promise<VendorPackage> =>
-    USE_MOCK ? mock((u) => mockVendorPackages.update(u, id, body), 450) : http.patch(`/vendors/me/packages/${id}`, body),
+    isMock('vendors') ? mock((u) => mockVendorPackages.update(u, id, body), 450) : http.patch(`/vendors/me/packages/${id}`, body),
 
   remove: (id: string): Promise<null> =>
-    USE_MOCK ? mock((u) => (mockVendorPackages.remove(u, id), null)) : http.delete(`/vendors/me/packages/${id}`),
+    isMock('vendors') ? mock((u) => (mockVendorPackages.remove(u, id), null)) : http.delete(`/vendors/me/packages/${id}`),
 
   submit: (id: string): Promise<VendorPackage> =>
-    USE_MOCK ? mock((u) => mockVendorPackages.submit(u, id)) : http.post(`/vendors/me/packages/${id}/submit`),
+    isMock('vendors') ? mock((u) => mockVendorPackages.submit(u, id)) : http.post(`/vendors/me/packages/${id}/submit`),
 
-  hide: (id: string): Promise<VendorPackage> => (USE_MOCK ? mock((u) => mockVendorPackages.hide(u, id)) : http.post(`/vendors/me/packages/${id}/hide`)),
+  hide: (id: string): Promise<VendorPackage> => (isMock('vendors') ? mock((u) => mockVendorPackages.hide(u, id)) : http.post(`/vendors/me/packages/${id}/hide`)),
 
   republish: (id: string): Promise<VendorPackage> =>
-    USE_MOCK ? mock((u) => mockVendorPackages.republish(u, id)) : http.post(`/vendors/me/packages/${id}/republish`),
+    isMock('vendors') ? mock((u) => mockVendorPackages.republish(u, id)) : http.post(`/vendors/me/packages/${id}/republish`),
 }

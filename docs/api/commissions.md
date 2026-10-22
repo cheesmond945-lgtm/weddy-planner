@@ -4,6 +4,8 @@
 > Quy ước chung: [README.md](README.md). Khoản thu: xem [orders.md](orders.md) phần Nhà cung cấp (`OrderPayment`).
 > **Chờ đối chiếu `docs/database.md` và `docs/state-diagrams.md`**: tên trường, trạng thái suy từ prototype NCC (`docs/prototype/prototype_vendor`, màn Tài chính & đối soát) và quyết định của nhóm.
 
+> **Triển khai thật (khớp CSDL):** bảng kê theo tháng hoàn thành đơn, tỷ lệ lấy từ `service_categories.commission_rate`, hạn ngày 25 tháng sau, chỉ có `Unpaid`/`Paid` do Admin ghi nhận. NCC không gửi minh chứng qua hệ thống (`POST .../payments` trả 409 `COMMISSION_NOT_PAYABLE`).
+
 Phạm vi: NCC xem bảng kê hoa hồng theo kỳ tháng, chi tiết đơn / khoản thu tính hoa hồng, gửi minh chứng đã chuyển tiền cho WebPlan.
 Chưa có: Admin xác nhận / từ chối minh chứng, cấu hình tỷ lệ (làm khi tới phần Admin, bổ sung vào đây).
 

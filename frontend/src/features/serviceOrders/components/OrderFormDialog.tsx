@@ -102,7 +102,7 @@ export function OrderFormDialog({ conversationId, customer, order, onClose, onSe
 
   const title = sent ? `Chỉnh sửa đơn hàng ${order!.code}` : 'Thêm đơn hàng'
   const subtitle = sent
-    ? `Đang soạn v${sent.version + 1} · v${sent.version} vẫn giữ nguyên cho tới khi gửi lại`
+    ? 'Sửa nội dung rồi gửi lại cho khách (chưa gửi lại thì đơn hiện tại giữ nguyên)'
     : order
       ? `Bản nháp ${order.code} · Gửi tới ${customer.name}`
       : `Gửi tới ${customer.name} trong cuộc trò chuyện này`
@@ -126,9 +126,11 @@ export function OrderFormDialog({ conversationId, customer, order, onClose, onSe
             <Button type="button" variant="ghost" onClick={requestClose} disabled={busy}>
               Hủy
             </Button>
-            <Button type="button" variant="outline" className="border-line-strong" onClick={() => persist(false)} disabled={busy}>
-              Lưu nháp
-            </Button>
+            {!sent && (
+              <Button type="button" variant="outline" className="border-line-strong" onClick={() => persist(false)} disabled={busy}>
+                Lưu nháp
+              </Button>
+            )}
             <Button type="button" onClick={() => persist(true)} disabled={busy}>
               {busy ? (
                 <>
@@ -208,7 +210,7 @@ export function OrderFormDialog({ conversationId, customer, order, onClose, onSe
             />
           </Section>
 
-          <Section title="Các đợt thanh toán" hint="Lịch yêu cầu thanh toán, chưa phải tiền đã thu. Đợt 1 là đặt cọc, khách trả qua VNPay.">
+          <Section title="Các đợt thanh toán" hint="Đợt 1 là đặt cọc, khách trả trực tuyến. Phần còn lại khách trả trực tiếp cho nhà cung cấp.">
             <InstallmentsEditor installments={content.installments} total={total} errors={errors} showAllocation={checked} onChange={(installments) => set({ installments })} />
           </Section>
         </fieldset>
@@ -234,19 +236,21 @@ export function OrderFormDialog({ conversationId, customer, order, onClose, onSe
             >
               Bỏ thay đổi
             </Button>
-            <Button
-              onClick={() => {
-                setConfirmClose(false)
-                persist(false)
-              }}
-            >
-              Lưu nháp
-            </Button>
+            {!sent && (
+              <Button
+                onClick={() => {
+                  setConfirmClose(false)
+                  persist(false)
+                }}
+              >
+                Lưu nháp
+              </Button>
+            )}
           </>
         }
       >
         <p className="text-sm leading-relaxed">
-          {sent ? `Bản đang sửa chưa được lưu. Phiên bản v${sent.version} đã gửi và trạng thái hiện tại sẽ giữ nguyên.` : 'Đơn đang soạn chưa được lưu.'}
+          {sent ? 'Các thay đổi chưa được gửi. Đơn hiện tại giữ nguyên.' : 'Đơn đang soạn chưa được lưu.'}
         </p>
       </PanelDialog>
 
