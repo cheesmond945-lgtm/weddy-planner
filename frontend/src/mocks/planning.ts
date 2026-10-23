@@ -3,6 +3,7 @@ import { addDays, daysBetween, parseDate, toISODate, today } from '@/lib/date'
 import type { CategoryRef } from '@/types/catalog'
 import type { AiSuggestionResult, PlanItem, Timeline, TimelineItem, TimelineItemPatch, Wedding, WeddingInput } from '@/types/wedding'
 import { mockCatalog } from './catalog'
+import { readMockGoogleRating } from './googleRating'
 import { nextId, read, write, type StoredWedding, type UserData } from './db'
 
 /* Quy tắc lập kế hoạch giả, chép từ prototype (CATS.share/dead, DT, allRows, aiPick, addPlan). */
@@ -176,6 +177,15 @@ export function openServiceTasks(data: UserData, planItemId: string) {
 
 // ---- Gợi ý AI ----
 
+/** Điểm Google như BE gọi Places API (bản giả); thiếu PlaceId thì null. */
+const google = (id: string) => {
+  try {
+    return readMockGoogleRating(id, 'summary')
+  } catch {
+    return null
+  }
+}
+
 const formatMillions = (n: number) => `${(n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} triệu`
 
 function aiSuggest(data: UserData, slug: string): AiSuggestionResult {
@@ -187,7 +197,7 @@ function aiSuggest(data: UserData, slug: string): AiSuggestionResult {
   const fits = (s: (typeof all)[number]) => s.priceFrom <= budget && (!guestCount || (s.capacity ?? 0) >= guestCount)
   const picked = all
     .filter((s) => s.location === w.location && fits(s))
-    .sort((a, b) => styleHits(b).length - styleHits(a).length || b.rating - a.rating || b.reviewCount - a.reviewCount)
+    .sort((a, b) => styleHits(b).length - styleHits(a).length || (google(b.id)?.rating ?? 0) - (google(a.id)?.rating ?? 0) || (google(b.id)?.userRatingCount ?? 0) - (google(a.id)?.userRatingCount ?? 0))
     .slice(0, 3)
   const byPrice = (list: typeof all) => [...list].sort((a, b) => a.priceFrom - b.priceFrom)[0]
   const cheapest = byPrice(all.filter((s) => s.location === w.location)) ?? byPrice(all)
@@ -203,7 +213,8 @@ function aiSuggest(data: UserData, slug: string): AiSuggestionResult {
       const hits = styleHits(s)
       const reasons = [`Giá từ ${formatMillions(s.priceFrom)}, nằm trong ngân sách hạng mục.`]
       if (hits.length) reasons.push(`Hợp phong cách ${hits.join(', ').toLowerCase()}.`)
-      reasons.push(`Điểm ${s.rating.toFixed(1)} trên Google Maps.`)
+      const g = google(s.id)
+      if (g?.rating != null) reasons.push(`Điểm ${g.rating.toFixed(1)} trên Google Maps.`)
       if (s.capacity && w.guestCount) reasons.push(`Chứa tối đa ${s.capacity} khách.`)
       return { service: mockCatalog.getSummary(s.id), reasons }
     }),

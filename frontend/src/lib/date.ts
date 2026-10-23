@@ -43,6 +43,26 @@ export function formatShortDate(s: string) {
   return formatDate(s).slice(0, 5)
 }
 
+/** ISO thời điểm -> "3 ngày trước", "2 tháng trước"… bằng tiếng Việt. Không hợp lệ thì trả null. */
+export function formatRelativeTime(iso: string) {
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return null
+  const seconds = Math.round((t - Date.now()) / 1000)
+  const rtf = new Intl.RelativeTimeFormat('vi', { numeric: 'auto' })
+  const steps: [Intl.RelativeTimeFormatUnit, number][] = [
+    ['year', 31_536_000],
+    ['month', 2_592_000],
+    ['week', 604_800],
+    ['day', 86_400],
+    ['hour', 3_600],
+    ['minute', 60],
+  ]
+  for (const [unit, size] of steps) {
+    if (Math.abs(seconds) >= size) return rtf.format(Math.round(seconds / size), unit)
+  }
+  return 'vừa xong'
+}
+
 /** ISO thời điểm -> "14:32" hoặc "Hôm qua" / "dd/MM" như danh sách hội thoại */
 export function formatMessageTime(iso: string) {
   const d = new Date(iso)

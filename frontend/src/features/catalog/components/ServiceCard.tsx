@@ -44,7 +44,7 @@ export function ServiceCard({ service, index = 0, imageAction, extraActions, bad
             {service.name}
           </Link>
         </h3>
-        <RatingMeta location={service.location} rating={service.rating} reviewCount={service.reviewCount} />
+        <RatingMeta location={service.location} vendorId={service.id} />
         <div className="text-[11px] text-muted-foreground">
           Từ <b className="text-sm font-semibold text-ink">{formatMoney(service.priceFrom)}</b>
         </div>

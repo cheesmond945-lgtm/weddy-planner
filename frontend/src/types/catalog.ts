@@ -23,9 +23,7 @@ export interface ServiceSummary {
   location: string
   /** Giá thấp nhất trong các gói, đơn vị đồng */
   priceFrom: number
-  /** Điểm đánh giá lấy từ Google Maps */
-  rating: number
-  reviewCount: number
+  // Điểm Google Maps không thuộc catalog (CSDL không có cột điểm): lấy riêng qua GET /vendors/{id}/google-rating
   coverImageUrl: string
 }
 

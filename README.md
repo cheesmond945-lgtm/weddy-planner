@@ -80,6 +80,25 @@ Nhà cung cấp giả trong khung chat (chỉ có ở chế độ dữ liệu gi
 
 Dữ liệu giả lưu trong localStorage của trình duyệt (các key bắt đầu bằng `weddy.mock.`). Xóa các key này (hoặc chạy `localStorage.clear()` trong Console) để về dữ liệu ban đầu.
 
+### Điểm Google Maps (dữ liệu giả)
+
+Điểm và đánh giá Google không lưu ở đâu cả, chỉ nằm trong bộ nhớ khi trang đang mở. Mỗi lần gọi trễ 300–800ms, thỉnh thoảng lỗi 502. Mở Console để xem log `[mock] GET /vendors/…/google-rating`. Cờ thử (gõ trong Console rồi tải lại trang):
+
+| Lệnh | Tác dụng |
+|---|---|
+| `localStorage.setItem('weddy.mock.googleError', '1')` | Luôn lỗi 502 (thử nút Thử lại) |
+| `localStorage.setItem('weddy.mock.googleError', '0')` | Không bao giờ lỗi |
+| `localStorage.removeItem('weddy.mock.googleError')` | Lỗi ngẫu nhiên khoảng 8% (mặc định) |
+
+## Unit test
+
+```bash
+cd frontend
+npm run test
+```
+
+Dùng test runner có sẵn của Node 24 (`node --test`), không cần cài thêm thư viện. File test: `src/**/*.test.ts`.
+
 ## Lệnh hay dùng
 
 | Lệnh | Thư mục | Việc |

@@ -50,7 +50,7 @@ export const FavoriteCard = memo(function FavoriteCard({ service, onToggleCompar
       <div className="flex flex-1 flex-col gap-[7px] px-[15px] pt-[13px] pb-[15px]">
         <span className="text-[11px] font-medium text-gold">{service.category.name}</span>
         <h3 className="text-base leading-[1.3]">{service.name}</h3>
-        <RatingMeta location={service.location} rating={service.rating} reviewCount={service.reviewCount} />
+        <RatingMeta location={service.location} vendorId={service.id} />
         <div className="text-xs text-muted-foreground">
           Từ <b className="text-sm font-semibold text-ink">{formatMoney(service.priceFrom)}</b>
         </div>

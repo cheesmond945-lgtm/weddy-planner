@@ -66,7 +66,7 @@ export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSug
             {data.suggestions.map(({ service, reasons }) => (
               <div key={service.id} className="grid gap-1.5 rounded-md border border-line px-4 py-3.5">
                 <h4 className="text-base">{service.name}</h4>
-                <RatingMeta location={service.location} rating={service.rating} reviewCount={service.reviewCount} />
+                <RatingMeta location={service.location} vendorId={service.id} />
                 <div className="text-[13px] text-muted-foreground">{reasons.join(' ')}</div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button asChild variant="outline" size="sm">

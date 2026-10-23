@@ -4,7 +4,7 @@ import type { Category, ServiceDetail, ServiceListQuery, ServiceSummary } from '
 
 /*
  * Dữ liệu giả chép từ docs/prototype/prototype.html (CATS, SV, STYLES, ADDR, PK, INTRO).
- * TẠM: rating, reviewCount là điểm Google Maps, chưa có trong database.md (thực tế lấy qua PlaceId của NCC).
+ * Điểm Google Maps không nằm ở đây: xem mocks/googleRating.ts (cột điểm/số đánh giá trong seed chỉ để tham khảo).
  */
 
 const IMG = {
@@ -116,7 +116,7 @@ const premiumPrice = (p: number) => Math.round((p * 1.45) / 500000) * 500000
 const categories = CATEGORY_SEEDS.map((c, i) => ({ ...c, id: `cat-${i + 1}` }))
 const categoryBySlug = (slug: string) => categories.find((c) => c.slug === slug)!
 
-const services: ServiceDetail[] = SERVICE_SEEDS.map(([n, name, slug, price, rating, reviewCount, capacity, highlights, styles, address]) => {
+const services: ServiceDetail[] = SERVICE_SEEDS.map(([n, name, slug, price, _rating, _reviewCount, capacity, highlights, styles, address]) => {
   const cat = categoryBySlug(slug)
   const id = `sv-${n}`
   const images = CROPS.map((crop, i) => unsplash(cat.serviceImage, i === 0 ? 1400 : 900, crop))
@@ -128,8 +128,6 @@ const services: ServiceDetail[] = SERVICE_SEEDS.map(([n, name, slug, price, rati
     location: 'Hà Nội',
     priceFrom: prices[0],
     priceTo: prices[1],
-    rating,
-    reviewCount,
     coverImageUrl: unsplash(cat.serviceImage),
     address: `${address}, Hà Nội`,
     description: `${name} ${cat.intro}`,
@@ -150,8 +148,8 @@ const services: ServiceDetail[] = SERVICE_SEEDS.map(([n, name, slug, price, rati
   }
 })
 
-const toSummary = ({ id, name, category, location, priceFrom, rating, reviewCount, coverImageUrl }: ServiceDetail): ServiceSummary => ({
-  id, name, category, location, priceFrom, rating, reviewCount, coverImageUrl,
+const toSummary = ({ id, name, category, location, priceFrom, coverImageUrl }: ServiceDetail): ServiceSummary => ({
+  id, name, category, location, priceFrom, coverImageUrl,
 })
 
 export const mockCatalog = {

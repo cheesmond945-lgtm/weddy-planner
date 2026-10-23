@@ -26,8 +26,6 @@ Chưa có: NCC quản lý dịch vụ/gói, Admin duyệt (làm khi tới phần
   "category": { "id": "cat-1", "slug": "nha-hang", "name": "Nhà hàng" },
   "location": "Hà Nội",
   "priceFrom": 128000000,
-  "rating": 4.7,
-  "reviewCount": 1824,
   "coverImageUrl": "https://…"
 }
 ```
@@ -35,7 +33,7 @@ Chưa có: NCC quản lý dịch vụ/gói, Admin duyệt (làm khi tới phần
 | Trường | Ghi chú |
 |---|---|
 | `priceFrom` | Giá thấp nhất trong các gói đang bán, đồng |
-| `rating`, `reviewCount` | Điểm và số đánh giá lấy từ Google Maps (prototype ghi rõ "không phải đánh giá trên WebPlan"). `rating` một chữ số thập phân |
+| Điểm Google Maps | **Không** nằm trong catalog (CSDL không có cột điểm). FE lấy riêng qua `GET /vendors/{vendorId}/google-rating`, xem [vendors.md](vendors.md) |
 | `location` | Tỉnh/thành, dùng cho bộ lọc khu vực |
 
 ---
@@ -124,8 +122,6 @@ Response 200
     "location": "Hà Nội",
     "priceFrom": 128000000,
     "priceTo": 185500000,
-    "rating": 4.7,
-    "reviewCount": 1824,
     "coverImageUrl": "https://…",
     "address": "Số 18 Đại lộ Thăng Long, P. Mễ Trì, Q. Nam Từ Liêm, Hà Nội",
     "description": "Grand Lotus Palace là không gian tiệc được thiết kế cho…",
@@ -164,6 +160,6 @@ Lỗi: 404 `SERVICE_NOT_FOUND` (không có, hoặc NCC chưa được duyệt / 
 ## Cần chốt
 
 1. Tên thực thể và trường theo `docs/database.md`.
-2. Điểm đánh giá lấy từ Google Maps: nhập tay hay đồng bộ tự động?
+2. (Đã chốt) Điểm Google Maps lấy lúc gọi qua PlaceId, không lưu database: xem vendors.md.
 3. Album: có cần endpoint xem toàn bộ ảnh của từng album không? Hiện prototype bấm album nào cũng mở chung thư viện ảnh của dịch vụ.
 4. `workingHours` dạng chuỗi hay dạng có cấu trúc.

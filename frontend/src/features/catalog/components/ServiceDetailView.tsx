@@ -6,7 +6,9 @@ import type { ServiceDetail } from '@/types/catalog'
 import { GalleryDialog } from './GalleryDialog'
 import { ServiceGallery } from './ServiceGallery'
 import { ServiceInfoPanel } from './ServiceInfoPanel'
-import { ServiceReviewsPanel } from './ServiceReviewsPanel'
+import { useGoogleRating } from '../useGoogleRating'
+import { GoogleAttribution } from './GoogleAttribution'
+import { GoogleReviewsPanel } from './GoogleReviewsPanel'
 import { ServiceSidebar } from './ServiceSidebar'
 
 type Tab = 'info' | 'reviews'
@@ -66,13 +68,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
       </div>
 
       <div className="mt-3 mb-3.5 flex flex-wrap items-center gap-x-[18px] gap-y-2.5 text-sm text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
-          <Star className="size-[17px] fill-gold text-gold" aria-hidden />
-          <b className="text-base font-semibold text-ink">{service.rating.toFixed(1)}</b>
-          <button type="button" onClick={showReviews} className="text-sm font-medium text-primary underline underline-offset-[3px]">
-            ({formatNumber(service.reviewCount)} đánh giá)
-          </button>
-        </span>
+        <HeaderRating vendorId={service.id} onShowReviews={showReviews} />
         <span className="inline-flex items-center gap-1.5">
           <MapPin className="size-4" aria-hidden />
           {service.address}
@@ -123,7 +119,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
             {tab === 'info' ? (
               <ServiceInfoPanel service={service} onOpenGallery={() => setGalleryOpen(true)} />
             ) : (
-              <ServiceReviewsPanel service={service} />
+              <GoogleReviewsPanel vendorId={service.id} />
             )}
           </div>
         </div>
@@ -132,5 +128,22 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
 
       <GalleryDialog title={service.name} images={service.images} open={galleryOpen} onOpenChange={setGalleryOpen} />
     </>
+  )
+}
+
+/** Điểm Google cạnh tên dịch vụ; dùng chung lần gọi (mode reviews) với tab Đánh giá. */
+function HeaderRating({ vendorId, onShowReviews }: { vendorId: string; onShowReviews: () => void }) {
+  const { data, isPending, isError } = useGoogleRating(vendorId, 'reviews')
+  if (isPending) return <span aria-label="Đang tải điểm Google" className="inline-block h-4 w-40 animate-pulse rounded-sm bg-muted" />
+  if (isError || !data || data.rating === null) return <span>Chưa có điểm Google</span>
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Star className="size-[17px] fill-gold text-gold" aria-hidden />
+      <b className="text-base font-semibold text-ink">{data.rating.toFixed(1)}</b>
+      <button type="button" onClick={onShowReviews} className="text-sm font-medium text-primary underline underline-offset-[3px]">
+        ({formatNumber(data.userRatingCount)} đánh giá)
+      </button>
+      <GoogleAttribution compact className="rounded-sm border border-line px-1 leading-4" />
+    </span>
   )
 }

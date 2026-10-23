@@ -6,13 +6,19 @@ import { formatMillions, formatMoney, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { ServiceDetail } from '@/types/catalog'
+import { GoogleAttribution } from '@/features/catalog/components/GoogleAttribution'
 import { CAPACITY_CATEGORIES } from '../recommend.config'
+
+/** Điểm Google của một cột: đang tải, có điểm, hoặc chưa có (lỗi / chưa liên kết / chưa có điểm). */
+export type RatingCell = { status: 'loading' } | { status: 'none' } | { status: 'ok'; rating: number; count: number }
 
 interface CompareTableProps {
   services: ServiceDetail[]
   /** Phương án được đề xuất (null khi ngang nhau) */
   recommendedId: string | null
   isTie: boolean
+  /** Điểm Google theo id (GET /vendors/{id}/google-rating, mode summary) */
+  ratings: Record<string, RatingCell>
   /** Nút thêm vào kế hoạch cho từng cột; primary = nút chính */
   renderActions?: (s: ServiceDetail, primary: boolean) => ReactNode
 }
@@ -35,9 +41,10 @@ function RecommendTag() {
 }
 
 /** Bảng so sánh 2–3 nhà cung cấp cùng hạng mục (renderCompare trong prototype, 3.4). */
-export function CompareTable({ services, recommendedId, isTie, renderActions }: CompareTableProps) {
+export function CompareTable({ services, recommendedId, isTie, ratings, renderActions }: CompareTableProps) {
   const minPrice = Math.min(...services.map((s) => s.priceFrom))
-  const maxRating = Math.max(...services.map((s) => s.rating))
+  const okRatings = services.map((s) => ratings[s.id]).filter((r): r is Extract<RatingCell, { status: 'ok' }> => r?.status === 'ok')
+  const maxRating = okRatings.length ? Math.max(...okRatings.map((r) => r.rating)) : null
   // Sức chứa chỉ áp dụng cho nhà hàng
   const showCapacity = CAPACITY_CATEGORIES.includes(services[0].category.slug)
   const recCell = (s: ServiceDetail) => (s.id === recommendedId ? 'bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))]' : '')
@@ -59,16 +66,21 @@ export function CompareTable({ services, recommendedId, isTie, renderActions }: 
     },
     {
       label: 'Điểm Google Maps',
-      cell: (s) => (
-        <>
-          <span className="inline-flex items-center gap-[5px] text-[13px]">
-            <Star className="size-3.5 fill-gold text-gold" aria-hidden />
-            <b className="font-semibold">{s.rating.toFixed(1)}</b>
-          </span>
-          <div className="text-[13px] text-muted-foreground">{formatNumber(s.reviewCount)} đánh giá</div>
-          {s.rating === maxRating && <BestBadge>Điểm cao nhất</BestBadge>}
-        </>
-      ),
+      cell: (s) => {
+        const r = ratings[s.id] ?? { status: 'loading' }
+        if (r.status === 'loading') return <span aria-label="Đang tải điểm Google" className="inline-block h-4 w-24 animate-pulse rounded-sm bg-muted" />
+        if (r.status === 'none') return <span className="text-[13px] text-muted-foreground">Chưa có điểm Google</span>
+        return (
+          <>
+            <span className="inline-flex items-center gap-[5px] text-[13px]">
+              <Star className="size-3.5 fill-gold text-gold" aria-hidden />
+              <b className="font-semibold">{r.rating.toFixed(1)}</b>
+            </span>
+            <div className="text-[13px] text-muted-foreground">{formatNumber(r.count)} đánh giá</div>
+            {okRatings.length > 1 && r.rating === maxRating && <BestBadge>Điểm cao nhất</BestBadge>}
+          </>
+        )
+      },
     },
     { label: 'Khu vực', cell: (s) => s.location },
     { label: 'Phong cách', cell: (s) => s.styles.join(', ') },
@@ -135,6 +147,9 @@ export function CompareTable({ services, recommendedId, isTie, renderActions }: 
           ))}
         </tbody>
       </table>
+      <div className="border-t border-line px-4 py-2 text-right">
+        <GoogleAttribution />
+      </div>
     </div>
   )
 }
