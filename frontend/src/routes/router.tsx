@@ -29,6 +29,7 @@ import VendorChatPage from '@/pages/vendor/VendorChatPage'
 import VendorCommissionsPage from '@/pages/vendor/VendorCommissionsPage'
 import VendorDashboardPage from '@/pages/vendor/VendorDashboardPage'
 import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
+import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
 import VendorProfilePage from '@/pages/vendor/VendorProfilePage'
 import { RequireRole } from './RequireRole'
 import { paths } from './paths'
@@ -76,6 +77,8 @@ export const router = createBrowserRouter([
           { path: paths.vendor.dashboard, element: <VendorDashboardPage /> },
           { path: paths.vendor.profile, element: <VendorProfilePage /> },
           { path: paths.vendor.catalog, element: <VendorCatalogPage /> },
+          { path: paths.vendor.packageNew, element: <VendorPackagePage /> },
+          { path: '/vendor/catalog/:packageId', element: <VendorPackagePage /> },
           { path: paths.vendor.orders, element: <VendorOrdersPage /> },
           { path: paths.vendor.chat, element: <VendorChatPage /> },
           { path: paths.vendor.commissions, element: <VendorCommissionsPage /> },

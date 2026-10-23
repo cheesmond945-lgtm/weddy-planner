@@ -66,6 +66,7 @@ export function OrderCard({ orderId, categorySlug, onRevise }: OrderCardProps) {
           <span className="text-muted-foreground">Chờ nhà cung cấp gửi lại đơn.</span>
         </div>
       )}
+      {o.status === 'CANCELLED' && <div className="mt-2.5 text-[13px] font-semibold text-warn">Đơn đã bị hủy hoặc hết hạn đặt cọc.</div>}
       {o.status === 'SENT' && (
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="success" onClick={() => navigate(paths.deal(o.id))}>

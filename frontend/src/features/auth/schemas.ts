@@ -29,7 +29,7 @@ export const otpSchema = z.object({
 
 export const profileSchema = z.object({
   name: z.string().trim().min(1, 'Họ và tên không được để trống.'),
-  email: z.union([z.literal(''), z.string().trim().regex(EMAIL_RE, 'Email chưa hợp lệ.')]),
+  email: z.string().trim().regex(EMAIL_RE, 'Email chưa hợp lệ.'),
   phone: z.union([z.literal(''), z.string().trim().regex(PHONE_RE, 'Số điện thoại cần 10 số, bắt đầu bằng 0.')]),
 })
 

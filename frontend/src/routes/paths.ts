@@ -22,6 +22,8 @@ export const paths = {
     dashboard: '/vendor',
     profile: '/vendor/profile',
     catalog: '/vendor/catalog',
+    packageNew: '/vendor/catalog/new',
+    package: (id: string) => `/vendor/catalog/${id}`,
     orders: '/vendor/orders',
     chat: '/vendor/chat',
     commissions: '/vendor/commissions',

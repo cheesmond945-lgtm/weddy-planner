@@ -1,93 +1,217 @@
-# API: vendors
+# API: vendors (hồ sơ nhà cung cấp)
 
-> **Bản nháp để nhóm duyệt.** Quy ước chung: [README.md](README.md).
-> **Chờ đối chiếu `docs/database.md`.** Ở FE, id nhà cung cấp hiện trùng với id "service" của catalog (ví dụ `sv-1`).
+> **Bản nháp** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/vendors.ts`).
+> Quy ước chung: [README.md](README.md).
+> **Chờ đối chiếu `docs/database.md` và `docs/state-diagrams.md`** (hai tài liệu này đang trống): tên thực thể, tên trường, enum và trạng thái hồ sơ đang suy từ prototype NCC (`docs/prototype/prototype_vendor`, màn Hồ sơ nhà cung cấp).
 
-## GET /vendors/{vendorId}/google-rating
+> **Cập nhật (Supabase):** backend lưu hồ sơ, giấy tờ, ảnh và gói vào Supabase (Postgres + Storage), không dùng Cloudinary.
+> Upload bằng `POST /vendors/me/uploads` (multipart: `file`, `purpose` = `VENDOR_DOCUMENT` | `VENDOR_PHOTO` | `PACKAGE_PHOTO`), trả `VendorFile` có `publicId` là đường dẫn trong Storage.
+> Giấy tờ và ảnh cơ sở ở bucket riêng tư (`url` là link ký 1 giờ); ảnh gói ở bucket công khai, tối đa 5MB. `POST /vendors/me/uploads/signature` không còn dùng.
+> Gói dịch vụ chỉ có một `price` (giá "từ", bắt buộc kể cả bản nháp); không có `maxPrice` và `note`.
 
-Điểm và đánh giá Google Maps của nhà cung cấp, lấy **lúc gọi** qua `PlaceId` của VendorProfiles. CSDL không có cột điểm hay đánh giá và **không lưu** các dữ liệu này.
+Phạm vi: NCC xem, lưu nháp và gửi xác minh hồ sơ của mình; xin chữ ký upload ảnh/giấy tờ. Lĩnh vực cung cấp chỉ đọc (Admin gán khi tạo tài khoản).
+Chưa có: Admin duyệt hồ sơ, yêu cầu bổ sung (làm khi tới phần Admin, sẽ bổ sung vào file này).
 
-FE đã làm theo bằng dữ liệu giả (`frontend/src/mocks/googleRating.ts`, `src/api/googleRating.ts`, hook `useGoogleRating`).
+## Enum
 
-**Role:** Couple. **Cần nhóm quyết định:** trang Dịch vụ cưới và trang chi tiết đang cho khách chưa đăng nhập xem, nên endpoint có lẽ cần **Public**. Nếu để Public thì bắt buộc giới hạn tần suất theo IP (xem ghi chú hạn mức).
-
-### Query
-
-| Tham số | Giá trị | Ghi chú |
+| Enum | Giá trị | Nhãn FE |
 |---|---|---|
-| `fields` | `summary` (mặc định) \| `reviews` | `summary`: điểm + số đánh giá (thẻ dịch vụ, bảng so sánh). `reviews`: thêm tối đa 5 đánh giá (tab "Đánh giá và phản hồi") |
+| `VendorProfileStatus` | `NOT_SUBMITTED` | Chưa gửi xác minh |
+| | `PENDING` | Chờ duyệt |
+| | `NEEDS_REVISION` | Cần bổ sung |
+| | `VERIFIED` | Đã xác minh |
+| `VendorDocumentType` | `BUSINESS_LICENSE` | Giấy tờ kinh doanh |
+| | `FIRE_SAFETY` | Giấy tờ PCCC |
+| | `FOOD_SAFETY` | Giấy tờ ATTP |
+| `VendorPhotoType` | `FRONT` | Ảnh mặt tiền / cơ sở hoạt động |
+| `Weekday` | `MONDAY` … `SUNDAY` | Thứ 2 … Chủ nhật |
 
-### Response 200, `fields=reviews`
+### Trạng thái hồ sơ
+
+```
+NOT_SUBMITTED ──submit──▶ PENDING ──Admin duyệt──▶ VERIFIED
+                             │
+                             └──Admin yêu cầu bổ sung──▶ NEEDS_REVISION ──submit──▶ PENDING
+```
+
+- Lưu nháp (`PATCH`) **không đổi** trạng thái: `NOT_SUBMITTED` giữ `NOT_SUBMITTED`, `NEEDS_REVISION` giữ `NEEDS_REVISION`.
+- `PENDING` và `VERIFIED`: hồ sơ chỉ đọc, `PATCH` và `submit` trả `409 VENDOR_PROFILE_LOCKED`. Muốn đổi thông tin đã xác minh thì liên hệ Admin (chưa có luồng).
+- Hai bước của Admin chờ chốt ở `state-diagrams.md`.
+
+## Luật theo lĩnh vực
+
+Lĩnh vực cung cấp dùng chung danh mục với phía cặp đôi (`GET /categories`, [catalog.md](catalog.md)).
+
+- Mỗi tài khoản NCC gắn **đúng 1** lĩnh vực. Admin chọn khi tạo tài khoản NCC từ yêu cầu tư vấn; NCC **không đổi được** (form hiển thị chỉ đọc, kèm "Liên hệ WebPlan nếu cần đổi lĩnh vực").
+- API hồ sơ không nhận trường lĩnh vực: `UpdateVendorProfileRequest` không có `categoryId`; nếu client vẫn gửi thì BE bỏ qua.
+- Luật giấy tờ, ảnh cơ sở bên dưới, tỷ lệ hoa hồng ([commissions.md](commissions.md)) và lĩnh vực của gói ([catalog.md](catalog.md)) đều đọc `category` / `verifiedCategory` của hồ sơ.
+
+| Lĩnh vực | Giấy tờ bắt buộc | Ảnh cơ sở |
+|---|---|---|
+| Nhà hàng (`slug = nha-hang`) | `BUSINESS_LICENSE`, `FIRE_SAFETY`, `FOOD_SAFETY` | `FRONT`, ít nhất 1 ảnh (bắt buộc) |
+| Lĩnh vực khác | `BUSINESS_LICENSE`, `FIRE_SAFETY` | `FRONT`, tùy chọn |
+
+- Giấy tờ: mỗi loại **một** tệp, PDF hoặc ảnh JPG/PNG/WEBP, tối đa 10MB. Chỉ phục vụ xét duyệt, không công khai.
+- Ảnh cơ sở: chỉ có ảnh mặt tiền (`FRONT`, đã bỏ ảnh sảnh), nhiều ảnh, JPG/PNG/WEBP, tối đa 10MB mỗi ảnh. Tách biệt với album ảnh của gói dịch vụ, không tự công khai.
+- Tệp thuộc loại không có trong bộ của lĩnh vực: BE trả `400 VALIDATION_ERROR`.
+
+## Đối tượng dùng chung
+
+`VendorFile` (tệp đã upload lên Cloudinary)
+
+```json
+{
+  "url": "https://res.cloudinary.com/…/gpkd.pdf",
+  "publicId": "vendors/vp-1/documents/gpkd",
+  "fileName": "GPKD-MayPalace.pdf",
+  "size": 820000,
+  "mimeType": "application/pdf"
+}
+```
+
+`VendorDocument` = `VendorFile` + `"type": VendorDocumentType`. `VendorPhoto` = `VendorFile` + `"type": VendorPhotoType`.
+
+`VendorProfile`
+
+```json
+{
+  "id": "vp-1",
+  "status": "NEEDS_REVISION",
+  "businessName": "Công ty TNHH Mây Palace",
+  "taxCode": "0312345678",
+  "representativeName": "Trần Thu Mây",
+  "category": { "id": "cat-1", "slug": "nha-hang", "name": "Nhà hàng" },
+  "verifiedCategory": null,
+  "province": "Hà Nội",
+  "district": "Hai Bà Trưng",
+  "address": "128 Bà Triệu",
+  "googleMapsUrl": "https://maps.app.goo.gl/…",
+  "businessHours": { "fromDay": "MONDAY", "toDay": "SUNDAY", "openTime": "09:00", "closeTime": "21:00" },
+  "documents": [
+    { "type": "BUSINESS_LICENSE", "url": "https://…", "publicId": "…", "fileName": "GPKD-MayPalace.pdf", "size": 820000, "mimeType": "application/pdf" }
+  ],
+  "photos": [
+    { "type": "FRONT", "url": "https://…", "publicId": "…", "fileName": "mat-tien.jpg", "size": 412000, "mimeType": "image/jpeg" }
+  ],
+  "reviewNote": "Giấy PCCC đã hết hạn, vui lòng tải bản còn hiệu lực.",
+  "submittedAt": "2026-10-10T02:30:00.000Z",
+  "updatedAt": "2026-10-12T08:15:00.000Z"
+}
+```
+
+| Trường | Ghi chú |
+|---|---|
+| `businessName`, `taxCode`, `representativeName`, `address`, `district` | `null` khi chưa nhập (hồ sơ mới, lưu nháp dở) |
+| `category` | **Chỉ đọc.** Lĩnh vực Admin gán khi tạo tài khoản, luôn có. NCC không đổi qua API này |
+| `verifiedCategory` | Lĩnh vực Admin đã xác minh; dùng để cho phép NCC gửi duyệt gói thuộc lĩnh vực đó. `null` khi chưa xác minh lần nào. Vì lĩnh vực không đổi được nên khi có thì trùng `category` |
+| `province` | Hiện chỉ phục vụ Hà Nội, BE luôn trả `"Hà Nội"`, FE không gửi lên |
+| `district` | Một trong 12 quận nội thành Hà Nội (danh sách ở `frontend/src/features/vendors/constants.ts`, BE kiểm tra cùng danh sách) |
+| `businessHours` | Một khung giờ chung, tùy chọn. `openTime`, `closeTime` dạng `HH:mm`, bước 30 phút, `closeTime > openTime`. `null` khi không khai |
+| `reviewNote` | Lý do Admin yêu cầu bổ sung, có khi `NEEDS_REVISION` |
+| `submittedAt` | Lần gửi xác minh gần nhất |
+
+`UpdateVendorProfileRequest` (body chung của lưu nháp và gửi xác minh)
+
+```json
+{
+  "businessName": "Công ty TNHH Mây Palace",
+  "taxCode": "0312345678",
+  "representativeName": "Trần Thu Mây",
+  "district": "Hai Bà Trưng",
+  "address": "128 Bà Triệu",
+  "googleMapsUrl": null,
+  "businessHours": null,
+  "documents": [{ "type": "BUSINESS_LICENSE", "url": "…", "publicId": "…", "fileName": "…", "size": 820000, "mimeType": "application/pdf" }],
+  "photos": []
+}
+```
+
+Không có trường lĩnh vực (chỉ đọc, BE bỏ qua `categoryId` nếu client gửi). Gửi **toàn bộ** hồ sơ mỗi lần (không gửi từng phần). `documents`, `photos` là danh sách cuối cùng: tệp không còn trong danh sách là đã bị xóa.
+
+---
+
+### GET /vendors/me/profile
+Role: VENDOR
+
+Hồ sơ của NCC đang đăng nhập. Tài khoản NCC mới (vừa đặt mật khẩu lần đầu) có sẵn hồ sơ trống, trạng thái `NOT_SUBMITTED`, đã có `category` do Admin gán.
+
+Response 200: `{ "data": VendorProfile }`
+
+Lỗi: 401, 403
+
+### PATCH /vendors/me/profile
+Role: VENDOR
+
+Lưu nháp. Không đổi trạng thái.
+
+Request: `UpdateVendorProfileRequest`. Các trường được để trống (`null`), chỉ kiểm tra định dạng của trường đã nhập:
+- `googleMapsUrl`: link Google Maps (`https://maps.app.goo.gl/…`, `https://www.google.com/maps/…`, `https://goo.gl/maps/…`).
+- `businessHours`: đủ 4 trường và `closeTime > openTime`.
+
+Response 200: `{ "data": VendorProfile }`
+
+Lỗi: 400 VALIDATION_ERROR, 409 VENDOR_PROFILE_LOCKED
+
+### POST /vendors/me/profile/submit
+Role: VENDOR
+
+Lưu và gửi xác minh trong một bước. Chỉ khi trạng thái là `NOT_SUBMITTED` hoặc `NEEDS_REVISION`. Thành công: `status = PENDING`, `submittedAt` = thời điểm gửi.
+
+Request: `UpdateVendorProfileRequest`, kiểm tra như `PATCH` và thêm:
+- Bắt buộc: `businessName`, `taxCode`, `representativeName`, `district`, `address`. Tài khoản chưa được gán lĩnh vực (dữ liệu lỗi) thì trả `400`, NCC liên hệ WebPlan.
+- `taxCode`: 10 chữ số, hoặc 10 + 3 số chi nhánh (`0312345678`, `0312345678-001`).
+- Đủ giấy tờ và ảnh cơ sở theo lĩnh vực (mục Luật theo lĩnh vực).
+
+Response 200: `{ "data": VendorProfile }`
+
+Lỗi: 400 VALIDATION_ERROR (`details` liệt kê trường thiếu/sai), 409 VENDOR_PROFILE_LOCKED
+
+### POST /vendors/me/uploads/signature
+Role: VENDOR
+
+Xin chữ ký để FE upload thẳng lên Cloudinary (README mục 9). Sau khi upload, FE đưa `url`, `publicId`… vào `documents`/`photos` của request lưu hồ sơ.
+
+Request
+
+```json
+{ "purpose": "VENDOR_DOCUMENT" }
+```
+
+`purpose`: `VENDOR_DOCUMENT` (giấy tờ, nhận PDF và ảnh) hoặc `VENDOR_PHOTO` (ảnh cơ sở, chỉ nhận ảnh). BE chọn thư mục theo mục đích.
+
+Response 200
 
 ```json
 {
   "data": {
-    "placeId": "ChIJ…",
-    "rating": 4.7,
-    "userRatingCount": 1824,
-    "googleMapsUri": "https://maps.google.com/?cid=…",
-    "reviews": [
-      {
-        "authorName": "Nguyễn Thị Hồng Nhung",
-        "authorUri": "https://www.google.com/maps/contrib/…",
-        "authorPhotoUri": "https://lh3.googleusercontent.com/…",
-        "rating": 5,
-        "text": "Tụi mình tổ chức tiệc 450 khách ở đây…",
-        "publishTime": "2026-10-12T08:30:00Z",
-        "relativeTime": "6 ngày trước",
-        "languageCode": "vi"
-      }
-    ],
-    "reviewsSortedBy": "relevance"
+    "uploadUrl": "https://api.cloudinary.com/v1_1/<cloud-name>/auto/upload",
+    "apiKey": "…",
+    "timestamp": 1760760000,
+    "signature": "…",
+    "folder": "vendors/vp-1/documents"
   }
 }
 ```
 
-### Response 200, `fields=summary`
+FE gửi `multipart/form-data` tới `uploadUrl` gồm `file`, `api_key`, `timestamp`, `signature`, `folder`; Cloudinary trả `secure_url`, `public_id`.
 
-```json
-{ "data": { "placeId": "ChIJ…", "rating": 4.7, "userRatingCount": 1824, "googleMapsUri": "https://maps.google.com/?cid=…" } }
-```
+Lỗi: 400 VALIDATION_ERROR
 
-Không có `reviews`, `reviewsSortedBy`.
+## Mã lỗi riêng
 
-| Trường | Ghi chú |
-|---|---|
-| `rating` | 1.0–5.0, hoặc `null` khi địa điểm chưa có điểm |
-| `userRatingCount` | Tổng số lượt đánh giá trên Google (không phải số phần tử của `reviews`) |
-| `googleMapsUri` | Liên kết "Xem tất cả đánh giá trên Google Maps" |
-| `reviews` | **Tối đa 5**, sắp theo mức liên quan (giới hạn của Places API; không lấy được "tất cả đánh giá") |
-| `reviews[].authorName`, `authorUri` | Bắt buộc hiển thị tên tác giả, có liên kết nếu có `authorUri` |
-| `reviews[].publishTime` | ISO 8601; FE tự tính "x ngày trước" bằng tiếng Việt |
-| `reviews[].relativeTime` | Chuỗi Google trả sẵn (`relativePublishTimeDescription`), dự phòng |
-| `reviews[].text` | Có thể rỗng; FE chỉ hiện đánh giá có nội dung |
+| HTTP | `code` | Khi nào |
+|---|---|---|
+| 409 | `VENDOR_PROFILE_LOCKED` | Sửa hoặc gửi hồ sơ đang `PENDING` / `VERIFIED` |
 
-### Lỗi (`{ "error": { "code", "message" } }`)
+## Khác biệt với prototype
 
-| HTTP | `code` | Khi nào | FE hiển thị |
-|---|---|---|---|
-| 400 | `VALIDATION_ERROR` | `fields` sai | |
-| 404 | `VENDOR_NOT_FOUND` | Không có nhà cung cấp | |
-| 404 | `VENDOR_PLACE_NOT_FOUND` | Nhà cung cấp chưa có `PlaceId` | "Chưa có điểm Google", không có nút thử lại |
-| 429 | `GOOGLE_QUOTA_EXCEEDED` | Vượt hạn mức (của WebPlan hoặc của Google) | "Chưa có điểm Google" |
-| 502 | `GOOGLE_UPSTREAM_ERROR` | Google lỗi hoặc quá thời gian | Thẻ: "Chưa có điểm Google"; tab đánh giá: nút "Thử lại" |
+- Lĩnh vực: prototype có danh sách riêng 6 mục ("Nhà hàng / Trung tâm tiệc cưới", "Media — Quay phim, chụp ảnh"…) và cho NCC tự chọn. Ở đây dùng chung danh mục `GET /categories` theo quyết định của nhóm, và lĩnh vực cố định theo tài khoản (Admin gán), NCC không chọn.
+- README prototype ghi 3 trạng thái; code prototype có thêm "Chưa gửi xác minh" (sau Lưu nháp). Dùng 4 trạng thái.
+- Prototype lưu nháp chỉ kiểm tra link Google Maps. Ở đây kiểm tra thêm giờ hoạt động (thiếu một phần thì không lưu được thành `businessHours`).
+- Bỏ phần chuyển đổi "giờ hoạt động kiểu cũ theo từng ngày" của prototype (dữ liệu cũ của prototype, không có ở hệ thống mới).
 
-FE thử lại **1 lần** với lỗi 502 và lỗi mạng, không thử lại 404/429.
+## Cần chốt
 
-### Ghi chú cho BE
-
-- Khóa `GOOGLE_PLACES_API_KEY` **chỉ ở backend** (biến môi trường, không commit). FE không chứa khóa và không gọi thẳng Google.
-- Dùng Places API (New) **Place Details** với **field mask** chỉ chứa trường cần thiết, vì giá tính theo trường yêu cầu:
-  - `summary`: `rating,userRatingCount,googleMapsUri`
-  - `reviews`: thêm `reviews`
-  - Gửi `languageCode=vi` để `relativePublishTimeDescription` là tiếng Việt.
-- **Không lưu** nội dung Places (điểm, số đánh giá, đánh giá) vào database. Chỉ `placeId` được lưu lâu dài. Nếu cần cache để giảm chi phí thì chỉ cache ngắn trong bộ nhớ, theo đúng điều khoản Google Maps Platform.
-- Đặt **giới hạn ngân sách và cảnh báo** trong Google Cloud Console, giới hạn khóa theo API (chỉ Places API) và theo IP máy chủ.
-- Giới hạn tần suất gọi endpoint này phía WebPlan (đặc biệt nếu để Public), trả 429 khi vượt.
-- Hàm đề xuất so sánh (BE tính, [compare.md](compare.md)) dùng `rating`, `userRatingCount` từ endpoint này; thiếu điểm thì bỏ yếu tố điểm.
-
-### Ghi chú về FE
-
-- Thẻ dịch vụ chỉ gọi `summary` khi thẻ vào vùng nhìn thấy (IntersectionObserver).
-- Kết quả chỉ giữ trong cache bộ nhớ của React Query (`staleTime` 5 phút), **không** ghi vào localStorage, sessionStorage hay IndexedDB.
-- Hiển thị dữ liệu Google không kèm bản đồ thì có ghi nguồn Google (`GoogleAttribution`). Hiện đang dùng chữ "Google Maps" tạm; **TODO:** thay bằng logo chính thức theo hướng dẫn ghi nguồn của Google Maps Platform.
+- **Phần Admin (làm sau):** màn tạo tài khoản NCC (từ yêu cầu tư vấn) phải **bắt buộc chọn lĩnh vực** (1 danh mục trong `GET /categories`). API tạo tài khoản NCC của Admin cần nhận `categoryId` và tạo sẵn hồ sơ trống với `category` đó.
+- Luồng đổi lĩnh vực khi NCC liên hệ WebPlan: Admin sửa ở đâu, giấy tờ/ảnh không còn thuộc bộ của lĩnh vực mới xử lý thế nào, gói đang đăng thuộc lĩnh vực cũ ra sao, và hồ sơ có phải xác minh lại không.
+- Khi lĩnh vực đã cố định, `verifiedCategory` có thể gộp vào `category` + `status = VERIFIED`. Tạm giữ vì gói dịch vụ và hoa hồng đang đọc trường này.

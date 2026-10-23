@@ -49,7 +49,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
     if (!date) errs.date = 'Vui lòng chọn ngày tổ chức.'
     else if (date <= toISODate(today())) errs.date = 'Ngày tổ chức phải sau hôm nay.'
     if (!location) errs.location = 'Vui lòng chọn địa điểm tổ chức.'
-    if (guestCount && !(guests! >= 1)) errs.guestCount = 'Sức chứa phải lớn hơn 0.'
+    if (!guestCount || !(guests! >= 1)) errs.guestCount = 'Vui lòng nhập số khách dự kiến (từ 1).'
     if (!(budget > 0)) errs.budget = 'Vui lòng nhập tổng ngân sách lớn hơn 0.'
     setErrors(errs)
     if (Object.keys(errs).length) return
@@ -95,7 +95,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
 
       <div className="grid gap-3.5 sm:grid-cols-2">
         <FormField
-          label="Sức chứa dự kiến (khách)"
+          label="Sức chứa dự kiến (khách) *"
           type="number"
           min={1}
           inputMode="numeric"

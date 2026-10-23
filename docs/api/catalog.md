@@ -163,3 +163,165 @@ Lỗi: 404 `SERVICE_NOT_FOUND` (không có, hoặc NCC chưa được duyệt / 
 2. (Đã chốt) Điểm Google Maps lấy lúc gọi qua PlaceId, không lưu database: xem vendors.md.
 3. Album: có cần endpoint xem toàn bộ ảnh của từng album không? Hiện prototype bấm album nào cũng mở chung thư viện ảnh của dịch vụ.
 4. `workingHours` dạng chuỗi hay dạng có cấu trúc.
+
+---
+
+# Phía Nhà cung cấp: quản lý gói dịch vụ
+
+> **Bản nháp** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/vendorPackages.ts`). Phần này bổ sung, không đổi các endpoint phía cặp đôi ở trên.
+> **Chờ đối chiếu `docs/database.md` và `docs/state-diagrams.md`**: trường mở rộng và trạng thái gói đang suy từ prototype NCC (`docs/prototype/prototype_vendor`, màn Quản lý dịch vụ).
+
+Phạm vi: NCC tạo, sửa, xóa bản nháp, gửi duyệt, ẩn và đăng lại gói dịch vụ của mình.
+Chưa có: Admin duyệt / từ chối gói (làm khi tới phần Admin, bổ sung vào đây).
+
+## Gói NCC và `ServicePackage`
+
+Gói NCC là **cùng thực thể** với `ServicePackage` mà phía cặp đôi đang hiển thị trong `GET /services/:id`. NCC thấy đủ trường; phía cặp đôi chỉ nhận 4 trường gốc `id`, `name`, `description`, `price` của các gói `PUBLISHED`.
+
+| Trường | Kiểu | Ghi chú |
+|---|---|---|
+| `id`, `name`, `description` | string | Như `ServicePackage`. Bản nháp có thể có `description` rỗng |
+| `price` | int \| null | **Giá tối thiểu** (= "giá từ" bên cặp đôi), đồng. Bản nháp có thể `null`; gói đã đăng luôn có |
+| `maxPrice` | int \| null | Giá tối đa, đồng, `maxPrice >= price` |
+| `category` | `CategoryRef` | Lĩnh vực của gói. BE gán lúc tạo theo hồ sơ NCC ([vendors.md](vendors.md)): `verifiedCategory` nếu hồ sơ `VERIFIED`, ngược lại `category`. Không đổi sau đó |
+| `status` | `PackageStatus` | Xem dưới |
+| `tags` | string[] | Hiển thị công khai khi gói được đăng |
+| `capacity` | int \| null | Sức chứa tối đa (khách), chỉ nhận khi lĩnh vực là nhà hàng (`slug = nha-hang`), lĩnh vực khác BE bỏ qua |
+| `note` | string \| null | Ghi chú |
+| `photos` | `VendorFile[]` | Bộ ảnh của gói theo thứ tự hiển thị. `VendorFile` như [vendors.md](vendors.md); upload bằng `POST /vendors/me/uploads/signature` với `purpose = PACKAGE_PHOTO` (chỉ nhận ảnh JPG/PNG/WEBP, tối đa 10MB) |
+| `coverPublicId` | string \| null | `publicId` của ảnh bìa; `null` thì dùng ảnh đầu |
+| `updatedAt` | ISO 8601 | |
+
+Khi dựng `ServiceDetail` cho cặp đôi (đề xuất, **cần chốt** cùng phần couple):
+- `packages`: các gói `PUBLISHED`, chỉ 4 trường gốc.
+- `priceFrom` / `priceTo`: nhỏ nhất của `price` / lớn nhất của `maxPrice` trong các gói đã đăng.
+- `albums`: mỗi gói đã đăng là một `ServiceAlbum` (`title` = tên gói, `imageCount` = số ảnh, `previewImageUrls` = 3 ảnh đầu, ảnh bìa trước).
+- `images`: ảnh bìa các gói rồi tới các ảnh còn lại.
+- `capacity`: lớn nhất trong các gói đã đăng.
+- `description`, `highlights`, `styles`, `address`, `workingHours` của `ServiceDetail` chưa có nguồn phía NCC (địa chỉ, giờ hoạt động có trong hồ sơ NCC; còn lại **cần chốt**).
+
+### Trạng thái gói (`PackageStatus`)
+
+| Giá trị | Nhãn FE | NCC được làm |
+|---|---|---|
+| `DRAFT` | Bản nháp | Sửa, xóa, gửi duyệt |
+| `PENDING` | Chờ duyệt | Chỉ xem |
+| `PUBLISHED` | Đã đăng | Chỉ xem, ẩn |
+| `HIDDEN` | Ẩn | Chỉ xem, đăng lại |
+
+```
+DRAFT ──submit──▶ PENDING ──Admin duyệt──▶ PUBLISHED ◀──republish── HIDDEN
+                                                  └──────hide──────▶
+```
+
+- Chỉ `DRAFT` sửa / xóa được; trạng thái khác trả `409 PACKAGE_NOT_EDITABLE`.
+- Gửi duyệt cần hồ sơ NCC `VERIFIED` và `verifiedCategory` trùng `category` của gói, ngược lại `409 VENDOR_NOT_VERIFIED` (chưa xác minh vẫn tạo và lưu nháp được).
+- Đăng lại hiển thị đúng phiên bản đã duyệt (gói không sửa được khi đã đăng nên nội dung không đổi).
+- Bước Admin duyệt / từ chối và gói bị từ chối quay về đâu: chờ chốt ở `state-diagrams.md`.
+
+`SavePackageRequest` (body chung của tạo và sửa)
+
+```json
+{
+  "name": "Tiệc cưới – Menu A",
+  "description": "Tiệc cưới tại sảnh Mây với thực đơn 8 món…",
+  "price": 3500000,
+  "maxPrice": 4500000,
+  "tags": ["Tiệc cưới", "Menu A"],
+  "capacity": 500,
+  "note": "Giá tính theo bàn 10 khách, chưa gồm đồ uống.",
+  "photos": [{ "url": "https://…", "publicId": "…", "fileName": "sanh.jpg", "size": 480000, "mimeType": "image/jpeg" }],
+  "coverPublicId": "…"
+}
+```
+
+Gửi toàn bộ gói mỗi lần; `photos` là danh sách cuối cùng theo thứ tự hiển thị.
+
+---
+
+### GET /vendors/me/packages
+Role: VENDOR
+
+Tất cả gói của NCC đang đăng nhập. Không phân trang (danh sách ngắn); tìm, lọc tag, lọc trạng thái và sắp xếp làm ở FE. Nếu sau này cần phân trang thì thêm `page`, `pageSize`, `status`, `q`, `sort=-updatedAt|price|-price` theo README.
+
+Response 200: `{ "data": [VendorPackage] }`
+
+### GET /vendors/me/packages/:id
+Role: VENDOR
+
+Response 200: `{ "data": VendorPackage }`
+
+Lỗi: 404 PACKAGE_NOT_FOUND (không có hoặc của NCC khác)
+
+### POST /vendors/me/packages
+Role: VENDOR
+
+Tạo gói ở trạng thái `DRAFT`. Kiểm tra như lưu nháp:
+- `name` bắt buộc.
+- `price`, `maxPrice` nếu có: số nguyên dương, `maxPrice >= price`.
+- `capacity` nếu có: số nguyên dương.
+
+Request: `SavePackageRequest`. Response 201: `{ "data": VendorPackage }`
+
+Lỗi: 400 VALIDATION_ERROR, 422 VENDOR_CATEGORY_REQUIRED (hồ sơ chưa chọn lĩnh vực)
+
+### PATCH /vendors/me/packages/:id
+Role: VENDOR
+
+Lưu nháp. Kiểm tra như `POST`.
+
+Request: `SavePackageRequest`. Response 200: `{ "data": VendorPackage }`
+
+Lỗi: 400 VALIDATION_ERROR, 404 PACKAGE_NOT_FOUND, 409 PACKAGE_NOT_EDITABLE
+
+### DELETE /vendors/me/packages/:id
+Role: VENDOR
+
+Xóa bản nháp cùng ảnh của nó (BE xóa ảnh trên Cloudinary). Không hoàn tác.
+
+Response 200: `{ "data": null }`
+
+Lỗi: 404 PACKAGE_NOT_FOUND, 409 PACKAGE_NOT_EDITABLE
+
+### POST /vendors/me/packages/:id/submit
+Role: VENDOR
+
+`DRAFT` → `PENDING`. FE lưu (`POST`/`PATCH`) trước rồi mới gọi endpoint này. Cần đủ: `description`, `price`, `maxPrice`, ít nhất 1 ảnh.
+
+Response 200: `{ "data": VendorPackage }`
+
+Lỗi: 400 VALIDATION_ERROR, 404 PACKAGE_NOT_FOUND, 409 VENDOR_NOT_VERIFIED, 409 CONFLICT (không ở `DRAFT`)
+
+### POST /vendors/me/packages/:id/hide
+Role: VENDOR
+
+`PUBLISHED` → `HIDDEN`: gói không còn trong danh sách, tìm kiếm và trang chi tiết dịch vụ phía cặp đôi.
+
+Response 200: `{ "data": VendorPackage }`
+
+Lỗi: 404 PACKAGE_NOT_FOUND, 409 CONFLICT (không ở `PUBLISHED`)
+
+### POST /vendors/me/packages/:id/republish
+Role: VENDOR
+
+`HIDDEN` → `PUBLISHED`.
+
+Response 200: `{ "data": VendorPackage }`
+
+Lỗi: 404 PACKAGE_NOT_FOUND, 409 CONFLICT (không ở `HIDDEN`)
+
+## Mã lỗi riêng (phía NCC)
+
+| HTTP | `code` | Khi nào |
+|---|---|---|
+| 404 | `PACKAGE_NOT_FOUND` | Gói không có hoặc của NCC khác |
+| 409 | `PACKAGE_NOT_EDITABLE` | Sửa / xóa gói không ở `DRAFT` |
+| 409 | `VENDOR_NOT_VERIFIED` | Gửi duyệt khi hồ sơ chưa xác minh đúng lĩnh vực của gói |
+| 422 | `VENDOR_CATEGORY_REQUIRED` | Tạo gói khi hồ sơ chưa chọn lĩnh vực |
+
+## Khác biệt với prototype NCC
+
+- Prototype đặt tên `minPrice` / `maxPrice`. Ở đây giữ `price` của `ServicePackage` làm giá tối thiểu, thêm `maxPrice`, theo quyết định của nhóm.
+- Prototype bản cũ có nhiều album mỗi gói; bản cuối gộp thành một bộ ảnh có ảnh bìa. Dùng bản cuối (`photos` + `coverPublicId`).
+- Bỏ nút "Viết mô tả bằng AI" (prototype ghi "chưa kết nối AI thật"), làm khi có `integrations/ai`.
+- Ô giá FE dùng 0 cho ô trống, nên giá phải > 0 (prototype cho phép giá 0).

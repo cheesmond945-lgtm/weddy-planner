@@ -2,7 +2,7 @@ import { Check, Info, Lock, MapPin, Star } from 'lucide-react'
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { formatNumber } from '@/lib/format'
-import type { ServiceDetail } from '@/types/catalog'
+import type { ServiceAlbum, ServiceDetail } from '@/types/catalog'
 import { GalleryDialog } from './GalleryDialog'
 import { ServiceGallery } from './ServiceGallery'
 import { ServiceInfoPanel } from './ServiceInfoPanel'
@@ -31,7 +31,13 @@ interface ServiceDetailViewProps {
 export function ServiceDetailView({ service, headActions, sidebarActions, sidebarTip }: ServiceDetailViewProps) {
   const [tab, setTab] = useState<Tab>('info')
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const [galleryAlbum, setGalleryAlbum] = useState<ServiceAlbum | null>(null)
   const tabsRef = useRef<HTMLDivElement>(null)
+
+  function openGallery(album?: ServiceAlbum) {
+    setGalleryAlbum(album?.imageUrls?.length ? album : null)
+    setGalleryOpen(true)
+  }
 
   function showReviews() {
     setTab('reviews')
@@ -83,7 +89,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
         ))}
       </div>
 
-      <ServiceGallery name={service.name} images={service.images} onOpenAll={() => setGalleryOpen(true)} />
+      <ServiceGallery name={service.name} images={service.images} onOpenAll={() => openGallery()} />
 
       <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-7 max-[900px]:grid-cols-1">
         <div className="min-w-0">
@@ -117,7 +123,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
           </div>
           <div id="service-tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
             {tab === 'info' ? (
-              <ServiceInfoPanel service={service} onOpenGallery={() => setGalleryOpen(true)} />
+              <ServiceInfoPanel service={service} onOpenGallery={openGallery} />
             ) : (
               <GoogleReviewsPanel vendorId={service.id} />
             )}
@@ -126,7 +132,12 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
         <ServiceSidebar service={service} actions={sidebarActions} tip={sidebarTip} />
       </div>
 
-      <GalleryDialog title={service.name} images={service.images} open={galleryOpen} onOpenChange={setGalleryOpen} />
+      <GalleryDialog
+        title={galleryAlbum?.title ?? service.name}
+        images={galleryAlbum?.imageUrls ?? service.images}
+        open={galleryOpen}
+        onOpenChange={setGalleryOpen}
+      />
     </>
   )
 }

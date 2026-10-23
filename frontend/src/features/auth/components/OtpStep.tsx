@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { USE_MOCK } from '@/api'
+import { isMock } from '@/api'
 import { FormError, FormField } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
@@ -75,7 +75,7 @@ export function OtpStep({ sent, onResent, onBack, onSuccess }: OtpStepProps) {
           setError(undefined)
         }}
         error={error}
-        hint={USE_MOCK ? `Dữ liệu giả: mã OTP là ${MOCK_OTP}.` : undefined}
+        hint={isMock('auth') ? `Dữ liệu giả: mã OTP là ${MOCK_OTP}.` : undefined}
         autoFocus
       />
       <FormError message={verify.error?.message ?? resend.error?.message} />
