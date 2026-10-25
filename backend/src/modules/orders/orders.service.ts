@@ -444,8 +444,16 @@ export class OrdersService {
     const category = await this.prisma.service_categories.findUniqueOrThrow({ where: { id: vendor.category_id } });
     const rate = Number(category.commission_rate);
     const commission = Math.round((total * rate) / 100);
-    const periodStart = new Date(Date.UTC(paidAt.getUTCFullYear(), paidAt.getUTCMonth(), 1));
-    const dueDate = new Date(Date.UTC(paidAt.getUTCFullYear(), paidAt.getUTCMonth() + 1, 25));
+    // Kỳ tính hoa hồng là tháng hoàn thành. Bảng kê đã thanh toán thì đã khép lại: hoa hồng của đơn hoàn thành sau đó
+    // được tính dồn sang bảng kê tháng sau (lặp tới kỳ chưa thanh toán). Hạn thanh toán là ngày 25 của tháng sau kỳ.
+    // Tháng hoàn thành tính theo giờ Việt Nam (cùng cách hiển thị tháng ở bảng kê)
+    let periodStart = new Date(`${ymdVN(paidAt).slice(0, 7)}-01T00:00:00Z`);
+    for (;;) {
+      const closed = await this.prisma.commission_statements.findUnique({ where: { vendor_id_period_month: { vendor_id: vendor.id, period_month: periodStart } }, select: { status: true } });
+      if (closed?.status !== 'Paid') break;
+      periodStart = new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth() + 1, 1));
+    }
+    const dueDate = new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth() + 1, 25));
     const invoiceCode = await this.nextCode('HD', 'final');
 
     await this.prisma.$transaction(async (tx) => {

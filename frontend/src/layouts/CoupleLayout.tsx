@@ -1,3 +1,4 @@
+import { CoupleNotificationBell } from '@/features/coupleNotifications/components/CoupleNotificationBell'
 import { Heart, MessageCircle } from 'lucide-react'
 import { useState, type MouseEvent } from 'react'
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation, useMatch, useNavigate } from 'react-router'
@@ -120,6 +121,7 @@ function Header() {
               <Link to={homeOf[user.role]}>Trang quản lý</Link>
             </Button>
           )}
+          {user?.role === 'COUPLE' && <CoupleNotificationBell />}
           {user && (
             <>
               {user.role === 'COUPLE' && (

@@ -56,30 +56,6 @@ Lệnh `npm` phải chạy trong `frontend/` hoặc `backend/`. Thư mục gốc
 
 Kiểm tra backend kết nối được DB: mở http://localhost:3000/api/health, kết quả `{"data":{"status":"ok","db":"up"}}`.
 
-### Chế độ dữ liệu giả
-
-`VITE_USE_MOCK=true` trong `frontend/.env`: frontend dùng dữ liệu trong `frontend/src/mocks`, không cần backend.
-
-Tài khoản mẫu (mật khẩu đều là `123456`):
-
-| Vai trò | Đăng nhập bằng |
-|---|---|
-| Cặp đôi | `minh.anh@example.com` hoặc `0901234567` |
-| Nhà cung cấp | `vendor@example.com` |
-| Quản trị viên | `admin@example.com` |
-
-Đăng ký mới: mã OTP giả luôn là `123456`.
-
-Tài khoản cặp đôi mẫu chưa có thông tin đám cưới (đăng nhập lần đầu sẽ hiện hộp thiết lập), nhưng đã có sẵn một hội thoại với Lumi Wedding Studio và một đơn chờ đặt cọc để thử luồng thanh toán.
-
-Nhà cung cấp giả trong khung chat (chỉ có ở chế độ dữ liệu giả):
-
-- tự trả lời theo câu mẫu (hỏi giá, lịch, cọc);
-- nhắn có chữ **"gửi đơn"** hoặc **"chốt"** thì NCC tự gửi đơn dịch vụ;
-- yêu cầu chỉnh sửa đơn thì sau 2 giây NCC tự gửi lại đơn.
-
-Dữ liệu giả lưu trong localStorage của trình duyệt (các key bắt đầu bằng `weddy.mock.`). Xóa các key này (hoặc chạy `localStorage.clear()` trong Console) để về dữ liệu ban đầu.
-
 ## Lệnh hay dùng
 
 | Lệnh | Thư mục | Việc |
@@ -102,7 +78,7 @@ frontend/src/
   routes/      Bảng route, guard theo role, đường dẫn
   pages/       Mỗi file một trang, chỉ ghép thành phần
   features/    Logic nghiệp vụ theo module
-  api/         HTTP client (gắn token, xử lý 401), cờ VITE_USE_MOCK
+  api/         HTTP client (gắn token, xử lý 401)
   store/       Phiên đăng nhập
   styles/      Design tokens và cấu hình Tailwind
 backend/src/

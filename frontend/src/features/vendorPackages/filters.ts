@@ -14,6 +14,8 @@ export interface PackageFilters {
   q: string
   tags: string[]
   sort: PackageSort
+  /** Trang hiện tại của danh sách (từ 1) */
+  page: number
 }
 
 /** Tìm theo tên gói hoặc tag, không phân biệt hoa thường. */
@@ -42,7 +44,7 @@ export function sortPackages(list: VendorPackage[], f: Pick<PackageFilters, 'sta
 /** Tất cả tag đang dùng, xếp theo bảng chữ cái tiếng Việt. */
 export const allTagsOf = (list: VendorPackage[]) => [...new Set(list.flatMap((p) => p.tags))].sort((a, b) => a.localeCompare(b, 'vi'))
 
-/** Bộ lọc nằm trên URL (?status=&q=&tags=a,b&sort=) để quay lại từ trang chi tiết vẫn giữ nguyên. */
+/** Bộ lọc nằm trên URL (?status=&q=&tags=a,b&sort=&trang=) để quay lại từ trang chi tiết vẫn giữ nguyên. */
 export function usePackageFilters() {
   const [params, setParams] = useSearchParams()
   const status = params.get('status') as PackageStatus | null
@@ -52,15 +54,18 @@ export function usePackageFilters() {
     q: params.get('q') ?? '',
     tags: params.get('tags')?.split(',').filter(Boolean) ?? [],
     sort: sort && SORTS.some((s) => s.value === sort) ? sort : 'updated',
+    page: Math.max(1, Number(params.get('trang')) || 1),
   }
 
   function update(patch: Partial<PackageFilters>) {
-    const next = { ...filters, ...patch }
+    // Đổi bộ lọc thì về trang 1; chỉ đổi trang thì giữ bộ lọc
+    const next = { ...filters, ...patch, page: patch.page ?? 1 }
     const p = new URLSearchParams()
     if (next.status) p.set('status', next.status)
     if (next.q) p.set('q', next.q)
     if (next.tags.length) p.set('tags', next.tags.join(','))
     if (next.sort !== 'updated') p.set('sort', next.sort)
+    if (next.page > 1) p.set('trang', String(next.page))
     setParams(p, { replace: true })
   }
 

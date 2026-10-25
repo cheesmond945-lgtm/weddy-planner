@@ -9,7 +9,6 @@ import type { ServiceOrder } from '@/types/serviceOrder'
 import type { VendorConversation } from '@/types/vendorChat'
 import { useConversationOrders, useMarkRead, useSendVendorMessage, useVendorMessages } from '../hooks'
 import { PersonAvatar } from '../preview'
-import { CustomerSimulator } from './CustomerSimulator'
 import { MessageItem, type MessageActions } from './MessageItem'
 
 interface ChatThreadProps extends MessageActions {
@@ -39,7 +38,6 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
 
   const sentOrders = orders.filter((o) => o.versions.length)
   const drafts = orders.filter((o) => o.draft)
-  const latestOrder = [...sentOrders].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).pop()
 
   // Mở hội thoại hoặc có tin mới khi đang mở: đánh dấu đã đọc
   const { mutate: read } = markRead
@@ -79,7 +77,6 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
             {sentOrders.length > 0 && ` · ${sentOrders.length} đơn`}
           </p>
         </div>
-        <CustomerSimulator conversationId={c.id} latestOrder={latestOrder} />
         <Button size="sm" aria-label="Thêm đơn hàng" onClick={() => onOpenForm()}>
           <Plus />
           <span className="max-sm:hidden">Thêm đơn hàng</span>

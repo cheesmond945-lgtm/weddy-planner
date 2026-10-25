@@ -14,8 +14,8 @@ export interface SavePackageBody {
   coverPublicId?: string | null;
 }
 
-// Gói bị Admin yêu cầu sửa (NeedRevision) hiển thị như bản nháp để NCC sửa và gửi lại.
-const STATUS_OUT: Record<string, string> = { Draft: 'DRAFT', NeedRevision: 'DRAFT', Pending: 'PENDING', Approved: 'PUBLISHED', Hidden: 'HIDDEN' };
+// Gói bị Admin yêu cầu sửa (NeedRevision) hiện nhãn riêng "Cần chỉnh sửa"; vẫn sửa được và gửi lại như bản nháp.
+const STATUS_OUT: Record<string, string> = { Draft: 'DRAFT', NeedRevision: 'NEEDS_REVISION', Pending: 'PENDING', Approved: 'PUBLISHED', Hidden: 'HIDDEN' };
 const EDITABLE = ['Draft', 'NeedRevision'];
 const MAX_PHOTOS = 30;
 
@@ -43,6 +43,7 @@ export class VendorPackagesService {
   private include = {
     package_albums: { orderBy: [{ display_order: 'asc' as const }, { id: 'asc' as const }] },
     package_tags: true,
+    package_verifications: { orderBy: { created_date: 'desc' as const }, take: 1 },
   };
 
   /** Gói thuộc NCC đang đăng nhập; không thấy hoặc của NCC khác đều là 404. */
@@ -70,6 +71,8 @@ export class VendorPackagesService {
       price: Number(p.price),
       category: { id: category.id, slug: categorySlug(category.name), name: category.name },
       status: STATUS_OUT[p.status] ?? 'DRAFT',
+      /** Lý do Admin yêu cầu chỉnh sửa (khi NEEDS_REVISION) */
+      reviewNote: p.status === 'NeedRevision' ? (p.package_verifications[0]?.admin_note ?? null) : null,
       tags: p.package_tags.map((t) => t.tag),
       capacity: p.capacity,
       photos,
@@ -105,7 +108,8 @@ export class VendorPackagesService {
     if (price === null || !Number.isInteger(price) || price <= 0) errors.price = 'Giá phải là số nguyên dương.';
     if (capacity !== null && (!Number.isInteger(capacity) || capacity <= 0)) errors.capacity = 'Sức chứa phải là số nguyên dương.';
 
-    const tags = [...new Set((body.tags ?? []).map((t) => String(t).trim()).filter(Boolean))];
+    // Tag viết hoa chữ cái đầu, không trùng
+    const tags = [...new Set((body.tags ?? []).map((t) => String(t).trim()).filter(Boolean).map((t) => t.charAt(0).toLocaleUpperCase('vi') + t.slice(1)))];
     if (tags.some((t) => t.length > 50)) errors.tags = 'Mỗi thẻ tối đa 50 ký tự.';
 
     const photos = (body.photos ?? []).map((p) => p.publicId);
@@ -127,6 +131,10 @@ export class VendorPackagesService {
 
   async create(userId: string, body: SavePackageBody) {
     const vendor = await this.vendorOf(userId);
+    // Chỉ NCC có hồ sơ đã duyệt mới thêm được gói dịch vụ
+    if (vendor.status !== 'Approved') {
+      return fail('VENDOR_NOT_VERIFIED', 'Hồ sơ nhà cung cấp chưa được duyệt nên chưa thêm được gói dịch vụ.', 409);
+    }
     const d = this.parse(body, categorySlug(vendor.service_categories.name) === 'nha-hang', vendor.id, new Set());
     const created = await this.prisma.$transaction(async (tx) => {
       const p = await tx.service_packages.create({
@@ -137,6 +145,27 @@ export class VendorPackagesService {
       return p.id;
     });
     return this.get(userId, created);
+  }
+
+  /**
+   * Gợi ý đoạn mô tả gói từ tên, tags, giá, sức chứa. Chưa nối mô hình AI (integrations/ai còn trống):
+   * dựng đoạn mẫu để NCC chỉnh lại.
+   */
+  async suggestDescription(userId: string, body: { name?: string | null; tags?: string[]; price?: number | null; capacity?: number | null }) {
+    const vendor = await this.vendorOf(userId);
+    const name = body.name?.trim() || 'Gói dịch vụ này';
+    const field = vendor.service_categories.name.toLowerCase();
+    const tags = (body.tags ?? []).map((t) => String(t).trim()).filter(Boolean).slice(0, 5);
+    const price = Number(body.price);
+    const capacity = Number(body.capacity);
+    const parts = [
+      `${name} là gói ${field} dành cho tiệc cưới, được thiết kế gọn gàng và dễ tùy chỉnh theo nhu cầu của cặp đôi.`,
+      tags.length ? `Điểm nhấn: ${tags.join(', ')}.` : null,
+      capacity > 0 ? `Phù hợp tới khoảng ${capacity} khách.` : null,
+      price > 0 ? `Giá từ ${price.toLocaleString('vi-VN')}đ, có thể điều chỉnh theo yêu cầu cụ thể.` : null,
+      'Liên hệ để được tư vấn chi tiết và nhận báo giá phù hợp.',
+    ];
+    return { description: parts.filter(Boolean).join(' ') };
   }
 
   async update(userId: string, id: string, body: SavePackageBody) {

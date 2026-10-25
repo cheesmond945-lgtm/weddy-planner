@@ -1,7 +1,7 @@
 /*
  * Kiểu dữ liệu module vendors, theo docs/api/vendors.md (bản nháp).
  * CHỜ ĐỐI CHIẾU docs/database.md: tên trường và enum đang suy từ prototype NCC (màn Hồ sơ nhà cung cấp).
- * Khi database.md được chốt, sửa ở đây trước rồi sửa mocks/ và docs/api/vendors.md theo.
+ * Khi database.md được chốt, sửa ở đây trước rồi sửa docs/api/vendors.md theo.
  */
 import type { CategoryRef } from './catalog'
 
@@ -9,24 +9,13 @@ import type { CategoryRef } from './catalog'
 export const VENDOR_PROFILE_STATUSES = ['NOT_SUBMITTED', 'PENDING', 'NEEDS_REVISION', 'VERIFIED'] as const
 export type VendorProfileStatus = (typeof VENDOR_PROFILE_STATUSES)[number]
 
-/** Loại giấy tờ: kinh doanh, phòng cháy chữa cháy, an toàn thực phẩm. Mỗi loại một tệp. */
-export const VENDOR_DOCUMENT_TYPES = ['BUSINESS_LICENSE', 'FIRE_SAFETY', 'FOOD_SAFETY'] as const
+/** Loại giấy tờ: kinh doanh, phòng cháy chữa cháy, an toàn thực phẩm, chứng chỉ tay nghề (tùy chọn). Mỗi loại một tệp. */
+export const VENDOR_DOCUMENT_TYPES = ['BUSINESS_LICENSE', 'FIRE_SAFETY', 'FOOD_SAFETY', 'SKILL_CERTIFICATE'] as const
 export type VendorDocumentType = (typeof VENDOR_DOCUMENT_TYPES)[number]
 
 /** Loại ảnh cơ sở: mặt tiền. Mỗi loại nhiều ảnh. */
 export const VENDOR_PHOTO_TYPES = ['FRONT'] as const
 export type VendorPhotoType = (typeof VENDOR_PHOTO_TYPES)[number]
-
-export const WEEKDAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const
-export type Weekday = (typeof WEEKDAYS)[number]
-
-/** Một khung giờ chung: từ ngày đến ngày, giờ mở và đóng cửa (HH:mm). */
-export interface BusinessHours {
-  fromDay: Weekday
-  toDay: Weekday
-  openTime: string
-  closeTime: string
-}
 
 /** Tệp đã upload lên Cloudinary (xem docs/api/README.md mục 9). */
 export interface VendorFile {
@@ -59,16 +48,25 @@ export interface VendorProfile {
   category: CategoryRef | null
   /** Lĩnh vực đã được Admin xác minh. null khi chưa xác minh lần nào */
   verifiedCategory: CategoryRef | null
-  /** Hiện chỉ phục vụ Hà Nội, BE luôn trả "Hà Nội" */
-  province: string
-  district: string | null
+  /** Tỉnh / thành phố (cột city), NCC tự nhập */
+  province: string | null
+  /** Phường / xã (cột ward) */
+  ward: string | null
   address: string | null
   googleMapsUrl: string | null
-  businessHours: BusinessHours | null
+  /** Giờ mở và đóng cửa (HH:mm); BE nối thành chuỗi "09:00–21:00" khi lưu */
+  openTime: string | null
+  closeTime: string | null
+  /** Giới thiệu hiển thị cho cặp đôi */
+  description: string | null
   documents: VendorDocument[]
   photos: VendorPhoto[]
   /** Lý do Admin yêu cầu bổ sung (khi NEEDS_REVISION) */
   reviewNote: string | null
+  /** Đã xác minh và đã gửi cập nhật, đang chờ Admin kiểm tra: hồ sơ chỉ đọc */
+  pendingReview: boolean
+  /** Đã xác minh (vẫn hiển thị) nhưng bản cập nhật gần nhất bị Admin yêu cầu chỉnh sửa; lý do ở reviewNote */
+  revisionRequested: boolean
   /** Lần gửi xác minh gần nhất */
   submittedAt: string | null
   updatedAt: string
@@ -81,10 +79,13 @@ export interface UpdateVendorProfileRequest {
   businessName: string | null
   taxCode: string | null
   representativeName: string | null
-  district: string | null
+  province: string | null
+  ward: string | null
   address: string | null
   googleMapsUrl: string | null
-  businessHours: BusinessHours | null
+  openTime: string | null
+  closeTime: string | null
+  description: string | null
   documents: VendorDocument[]
   photos: VendorPhoto[]
 }
@@ -99,4 +100,23 @@ export interface UploadSignature {
   timestamp: number
   signature: string
   folder: string
+}
+
+/** Thông báo của NCC (chuông ở header): duyệt hồ sơ và gói, đơn hàng, hoa hồng. */
+export interface VendorNotification {
+  id: string
+  type: string
+  title: string
+  content: string
+  isRead: boolean
+  /** ISO */
+  createdAt: string
+  refType: string | null
+  refId: string | null
+}
+
+export interface VendorNotificationList {
+  /** Tổng số chưa đọc (không chỉ trong danh sách trả về) */
+  unread: number
+  items: VendorNotification[]
 }

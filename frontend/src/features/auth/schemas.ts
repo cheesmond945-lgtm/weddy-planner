@@ -6,7 +6,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const MIN_PASSWORD = 6
 
 export const loginSchema = z.object({
-  identifier: z.string().trim().min(1, 'Vui lòng nhập email hoặc số điện thoại.'),
+  identifier: z.string().trim().regex(EMAIL_RE, 'Email chưa hợp lệ.'),
   password: z.string().min(MIN_PASSWORD, `Mật khẩu cần tối thiểu ${MIN_PASSWORD} ký tự.`),
 })
 

@@ -210,6 +210,7 @@ Khi dựng `ServiceDetail` cho cặp đôi (đề xuất, **cần chốt** cùng
 |---|---|---|
 | `DRAFT` | Bản nháp | Sửa, xóa, gửi duyệt |
 | `PENDING` | Chờ duyệt | Chỉ xem |
+| `NEEDS_REVISION` | Cần chỉnh sửa | Sửa, xóa, gửi lại duyệt (kèm `reviewNote`: lý do Admin) |
 | `PUBLISHED` | Đã đăng | Chỉ xem, ẩn |
 | `HIDDEN` | Ẩn | Chỉ xem, đăng lại |
 
@@ -218,8 +219,8 @@ DRAFT ──submit──▶ PENDING ──Admin duyệt──▶ PUBLISHED ◀�
                                                   └──────hide──────▶
 ```
 
-- Chỉ `DRAFT` sửa / xóa được; trạng thái khác trả `409 PACKAGE_NOT_EDITABLE`.
-- Gửi duyệt cần hồ sơ NCC `VERIFIED` và `verifiedCategory` trùng `category` của gói, ngược lại `409 VENDOR_NOT_VERIFIED` (chưa xác minh vẫn tạo và lưu nháp được).
+- Chỉ `DRAFT` và `NEEDS_REVISION` sửa / xóa được; trạng thái khác trả `409 PACKAGE_NOT_EDITABLE`.
+- Gửi duyệt cần hồ sơ NCC `VERIFIED` và `verifiedCategory` trùng `category` của gói, ngược lại `409 VENDOR_NOT_VERIFIED`. **Thêm gói mới (`POST`) cũng chỉ NCC có hồ sơ `VERIFIED` mới làm được**, ngược lại `409 VENDOR_NOT_VERIFIED`.
 - Đăng lại hiển thị đúng phiên bản đã duyệt (gói không sửa được khi đã đăng nên nội dung không đổi).
 - Bước Admin duyệt / từ chối và gói bị từ chối quay về đâu: chờ chốt ở `state-diagrams.md`.
 
@@ -256,6 +257,9 @@ Role: VENDOR
 Response 200: `{ "data": VendorPackage }`
 
 Lỗi: 404 PACKAGE_NOT_FOUND (không có hoặc của NCC khác)
+
+### POST /vendors/me/packages/suggest-description
+Role: VENDOR. Nút "Tạo với AI" ở ô Mô tả. Body `{ "name", "tags", "price", "capacity" }` (tùy chọn). Response 200: `{ "data": { "description": "…" } }`. Hiện dựng đoạn mẫu (chưa gọi mô hình AI).
 
 ### POST /vendors/me/packages
 Role: VENDOR

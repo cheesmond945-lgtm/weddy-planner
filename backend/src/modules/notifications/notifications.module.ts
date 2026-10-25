@@ -1,5 +1,10 @@
-import { Module } from '@nestjs/common'
+import { Module } from '@nestjs/common';
+import { NotificationsController } from './notifications.controller';
+import { NotificationsService } from './notifications.service';
 
-// Chưa có logic: controller, service, dto thêm khi làm module này.
-@Module({})
+@Module({
+  controllers: [NotificationsController],
+  providers: [NotificationsService],
+  exports: [NotificationsService],
+})
 export class NotificationsModule {}

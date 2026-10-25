@@ -103,7 +103,8 @@ export class CommissionsService {
         baseAmount: Number(c.order_amount),
         commissionAmount: Number(c.amount),
         payments,
-        originPeriod: null,
+        // Đơn hoàn thành ở tháng khác kỳ này là đơn được tính dồn (bảng kê tháng đó đã thanh toán)
+        originPeriod: o.completed_date && ymdVN(o.completed_date).slice(0, 7) !== period ? ymdVN(o.completed_date).slice(0, 7) : null,
       };
     });
 

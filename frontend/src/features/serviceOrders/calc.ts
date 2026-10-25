@@ -102,7 +102,7 @@ export function headlineOf(c: OrderContent) {
   return { name: lines[0]?.name ?? 'Chưa có hạng mục', more: Math.max(0, lines.length - 1) }
 }
 
-/** Trạng thái thanh toán tính từ các khoản đã thu (BE tính; mock dùng hàm này). */
+/** Trạng thái thanh toán tính từ các khoản đã thu (BE tính). */
 export function paymentStatusOf(o: Pick<ServiceOrder, 'status' | 'payments' | 'versions' | 'draft'>): OrderPaymentStatus {
   const paid = o.payments.reduce((s, p) => s + p.amount, 0)
   if (o.status !== 'CONFIRMED' && !paid) return 'UNPAID'

@@ -3,7 +3,7 @@ import { serviceOrdersApi } from '@/api/serviceOrders'
 import { vendorChatApi } from '@/api/vendorChat'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/store/auth'
-import type { CustomerSimulation, VendorMessage } from '@/types/vendorChat'
+import type { VendorMessage } from '@/types/vendorChat'
 import { vendorChatKeys } from './keys'
 
 // Chưa có websocket (docs/api/chat.md): hỏi lại định kỳ khi đang mở trang Tin nhắn, như phía cặp đôi
@@ -66,17 +66,6 @@ export function useSendVendorMessage(conversationId: string) {
       qc.setQueryData<VendorMessage[]>(vendorChatKeys.messages(uid, conversationId), (list = []) => [...list, msg])
       void qc.invalidateQueries({ queryKey: vendorChatKeys.conversations(uid) })
     },
-    onError: (e) => toast(e.message),
-  })
-}
-
-/** CHỈ KHI DÙNG MOCK: giả lập khách, xong tải lại hội thoại, tin, đơn. */
-export function useSimulateCustomer(conversationId: string) {
-  const uid = useVendorId()
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (action: CustomerSimulation) => vendorChatApi.simulate(conversationId, action),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: vendorChatKeys.all(uid) }),
     onError: (e) => toast(e.message),
   })
 }

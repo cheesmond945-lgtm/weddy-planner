@@ -1,6 +1,6 @@
 /*
  * CHỜ ĐỐI CHIẾU docs/database.md: giá trị role và tên trường người dùng đang suy từ prototype.
- * Khi database.md được chốt, sửa ở đây trước rồi sửa mocks/ và docs/api/auth.md theo.
+ * Khi database.md được chốt, sửa ở đây trước rồi sửa docs/api/auth.md theo.
  */
 export const ROLES = ['COUPLE', 'VENDOR', 'ADMIN'] as const
 export type Role = (typeof ROLES)[number]
@@ -21,7 +21,7 @@ export interface Session {
 // ---- Request / response theo docs/api/auth.md ----
 
 export interface LoginRequest {
-  /** Email hoặc số điện thoại */
+  /** Email */
   identifier: string
   password: string
 }

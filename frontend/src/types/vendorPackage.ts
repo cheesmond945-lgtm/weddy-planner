@@ -9,7 +9,7 @@ import type { CategoryRef, ServicePackage } from './catalog'
 import type { VendorFile } from './vendor'
 
 /** Trạng thái gói. Nhãn tiếng Việt ở features/vendorPackages/constants.ts. */
-export const PACKAGE_STATUSES = ['DRAFT', 'PENDING', 'PUBLISHED', 'HIDDEN'] as const
+export const PACKAGE_STATUSES = ['DRAFT', 'PENDING', 'NEEDS_REVISION', 'PUBLISHED', 'HIDDEN'] as const
 export type PackageStatus = (typeof PACKAGE_STATUSES)[number]
 
 /** Mọi gói (kể cả bản nháp) đều có giá: price là giá "từ", đơn vị đồng. */
@@ -17,6 +17,8 @@ export interface VendorPackage extends ServicePackage {
   /** Lĩnh vực của gói, lấy từ hồ sơ NCC lúc tạo, không đổi sau đó */
   category: CategoryRef
   status: PackageStatus
+  /** Lý do Admin yêu cầu chỉnh sửa (khi NEEDS_REVISION) */
+  reviewNote: string | null
   tags: string[]
   /** Sức chứa tối đa (khách), chỉ dùng cho nhà hàng */
   capacity: number | null

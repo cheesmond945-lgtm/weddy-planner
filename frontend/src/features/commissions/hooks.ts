@@ -49,14 +49,12 @@ export function useSubmitCommissionPayment(id: string) {
   })
 }
 
-/** CHỈ KHI DÙNG MOCK */
-export function useSimulateReview(id: string) {
-  const sync = useSync()
+/** Bấm "Thanh toán": lấy URL VNPay rồi chuyển trình duyệt sang đó. */
+export function usePayCommission() {
   return useMutation({
-    mutationFn: (decision: 'CONFIRMED' | 'REJECTED') => commissionsApi.simulateReview(id, decision),
-    onSuccess: (s, decision) => {
-      sync(s)
-      toast(decision === 'CONFIRMED' ? 'Giả lập: Admin đã xác nhận khoản thanh toán.' : 'Giả lập: Admin đã từ chối minh chứng.')
+    mutationFn: (id: string) => commissionsApi.pay(id),
+    onSuccess: ({ paymentUrl }) => {
+      window.location.href = paymentUrl
     },
     onError: (e) => toast(e.message),
   })

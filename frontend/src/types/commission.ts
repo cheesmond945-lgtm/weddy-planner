@@ -113,3 +113,12 @@ export interface SubmitCommissionPaymentBody {
   proofFile: VendorFile
   note: string | null
 }
+
+/** Kết quả ghi nhận sau khi quay về từ VNPay. */
+export interface CommissionPaymentResult {
+  status: 'PAID' | 'FAILED'
+  /** Mã bảng kê (DSMMYYYY) khi PAID */
+  statementId?: string
+  transactionCode?: string | null
+  message: string
+}

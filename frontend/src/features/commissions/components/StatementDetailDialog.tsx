@@ -1,7 +1,6 @@
-import { Check, Copy, FlaskConical } from 'lucide-react'
+import { Check, Copy, CreditCard, LoaderCircle } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { isMock } from '@/api'
 import { Button } from '@/components/ui/button'
 import { formatDay, formatStamp } from '@/features/serviceOrders/calc'
 import { StatusBadge } from '@/features/serviceOrders/components/OrderBadges'
@@ -14,7 +13,7 @@ import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { CommissionStatement } from '@/types/commission'
 import { COMMISSION_PAYMENT_STATUS, COMMISSION_STATUS, formatPeriod, remainingOf } from '../constants'
-import { useCommissionStatement, useSimulateReview } from '../hooks'
+import { useCommissionStatement, usePayCommission } from '../hooks'
 
 const H = ({ children }: { children: ReactNode }) => (
   <h4 className="mt-[22px] mb-2.5 font-sans text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase first:mt-0">{children}</h4>
@@ -61,27 +60,10 @@ function TransferCard({ statement: s }: { statement: CommissionStatement }) {
   )
 }
 
-/** CHỈ CÓ KHI DÙNG MOCK: giả lập Admin xác nhận / từ chối minh chứng đang chờ. */
-function MockReview({ id }: { id: string }) {
-  const review = useSimulateReview(id)
-  if (!isMock('commissions')) return null
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-sm border border-dashed border-info/50 bg-info-soft px-3 py-2 text-[12.5px] text-info">
-      <FlaskConical className="size-4" />
-      Dữ liệu giả, giả lập Admin:
-      <Button size="sm" variant="outline" className="border-info/40" disabled={review.isPending} onClick={() => review.mutate('CONFIRMED')}>
-        Xác nhận
-      </Button>
-      <Button size="sm" variant="outline" className="border-info/40" disabled={review.isPending} onClick={() => review.mutate('REJECTED')}>
-        Từ chối
-      </Button>
-    </div>
-  )
-}
-
 /** Chi tiết một kỳ đối soát (prototype NCC: popup "Đối soát MM/YYYY"). */
 export function StatementDetailDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const { data: s, isPending, isError, error } = useCommissionStatement(id)
+  const pay = usePayCommission()
   if (isPending) return null
   if (isError || !s) {
     return (
@@ -98,7 +80,19 @@ export function StatementDetailDialog({ id, onClose }: { id: string; onClose: ()
       onRequestClose={onClose}
       title={`Đối soát ${formatPeriod(s.period)}`}
       subtitle={`${s.code} · ${s.orderCount} đơn hoàn thành${s.supplementCount ? ` + ${s.supplementCount} khoản bổ sung` : ''} · chốt ${formatDate(s.closingDate)} · hạn ${formatDate(s.dueDate)}`}
-      footer={<Button onClick={onClose}>Đóng</Button>}
+      footer={
+        <>
+          <Button variant="outline" className="border-line-strong" onClick={onClose} disabled={pay.isPending}>
+            Đóng
+          </Button>
+          {s.status === 'UNPAID' && s.commissionAmount > 0 && (
+            <Button onClick={() => pay.mutate(s.id)} disabled={pay.isPending}>
+              {pay.isPending ? <LoaderCircle className="animate-spin" /> : <CreditCard />}
+              Thanh toán {formatMoney(s.commissionAmount)}
+            </Button>
+          )}
+        </>
+      }
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <StatusBadge tone={COMMISSION_STATUS[s.status].tone}>{COMMISSION_STATUS[s.status].label}</StatusBadge>
@@ -218,13 +212,12 @@ export function StatementDetailDialog({ id, onClose }: { id: string; onClose: ()
               </li>
             ))}
           </ul>
-          {s.pendingAmount > 0 && <MockReview id={s.id} />}
         </>
       )}
 
       {s.status !== 'OPEN' && s.status !== 'PAID' && (
         <div className="mt-4">
-          <Notice tone="info" title="Chuyển khoản theo thông tin ở trên. WebPlan (Admin) ghi nhận khi nhận được tiền, bảng kê sẽ chuyển sang Đã thanh toán." />
+          <Notice tone="info" title="Bấm “Thanh toán” để chuyển sang cổng VNPay. Thanh toán xong, bảng kê tự chuyển sang Đã thanh toán và có mã giao dịch. Quá hạn mà cố tình không thanh toán có thể bị khóa tài khoản theo điều khoản nhà cung cấp." />
         </div>
       )}
     </PanelDialog>

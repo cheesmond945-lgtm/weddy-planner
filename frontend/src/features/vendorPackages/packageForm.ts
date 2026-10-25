@@ -9,7 +9,6 @@ export interface PackageFormValues {
   price: number
   capacity: string
   photos: VendorFile[]
-  coverPublicId: string | null
 }
 
 export type PackageErrorKey = 'name' | 'description' | 'price' | 'capacity' | 'photos' | 'permission'
@@ -22,7 +21,6 @@ export const EMPTY_PACKAGE: PackageFormValues = {
   price: 0,
   capacity: '',
   photos: [],
-  coverPublicId: null,
 }
 
 export function toFormValues(p: VendorPackage): PackageFormValues {
@@ -33,12 +31,10 @@ export function toFormValues(p: VendorPackage): PackageFormValues {
     price: p.price,
     capacity: p.capacity ? String(p.capacity) : '',
     photos: p.photos,
-    coverPublicId: p.coverPublicId,
   }
 }
 
 export function toRequest(v: PackageFormValues, venue: boolean): SavePackageRequest {
-  const cover = v.photos.some((p) => p.publicId === v.coverPublicId) ? v.coverPublicId : (v.photos[0]?.publicId ?? null)
   return {
     name: v.name.trim(),
     description: v.description.trim() || null,
@@ -46,13 +42,17 @@ export function toRequest(v: PackageFormValues, venue: boolean): SavePackageRequ
     tags: v.tags,
     capacity: venue && v.capacity.trim() ? Number(v.capacity) : null,
     photos: v.photos,
-    coverPublicId: cover,
+    // Ảnh đầu tiên là ảnh đại diện của gói
+    coverPublicId: v.photos[0]?.publicId ?? null,
   }
 }
 
-/** Thêm tag (bỏ khoảng trắng thừa, không trùng không phân biệt hoa thường). */
+/** Viết hoa chữ cái đầu của tag, phần còn lại giữ nguyên ("tiệc cưới" -> "Tiệc cưới"). */
+export const capitalizeTag = (t: string) => t.charAt(0).toLocaleUpperCase('vi') + t.slice(1)
+
+/** Thêm tag (bỏ khoảng trắng thừa, viết hoa chữ cái đầu, không trùng không phân biệt hoa thường). */
 export function addTag(tags: string[], raw: string) {
-  const t = raw.replace(/\s+/g, ' ').trim()
+  const t = capitalizeTag(raw.replace(/\s+/g, ' ').trim())
   return !t || tags.some((x) => x.toLowerCase() === t.toLowerCase()) ? tags : [...tags, t]
 }
 
@@ -70,8 +70,8 @@ export function validatePackage(v: PackageFormValues, opts: { mode: 'draft' | 's
   }
   if (opts.mode === 'draft') return errors
 
-  if (!opts.canSubmit) errors.permission = 'Hồ sơ nhà cung cấp chưa được xác minh cho lĩnh vực này. Bạn vẫn có thể lưu nháp.'
-  if (!v.description.trim()) errors.description = 'Nhập mô tả ngắn.'
+  if (!opts.canSubmit) errors.permission = 'Hồ sơ nhà cung cấp chưa được duyệt nên chưa gửi duyệt được gói.'
+  if (!v.description.trim()) errors.description = 'Nhập mô tả.'
   if (!v.photos.length) errors.photos = 'Cần ít nhất một ảnh dịch vụ.'
   return errors
 }

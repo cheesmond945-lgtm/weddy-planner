@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 /*
- * Thông báo ngắn ở giữa đáy màn hình, theo .toast trong prototype.
+ * Thông báo ngắn ở góc phải dưới màn hình, theo .toast trong prototype.
  * Gọi toast('Đã lưu') ở bất cứ đâu; <Toaster /> đặt một lần trong App.
  */
 let current: { id: number; message: string } | null = null
@@ -27,7 +27,7 @@ function subscribe(listener: () => void) {
 export function Toaster() {
   const item = useSyncExternalStore(subscribe, () => current)
   return (
-    <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-5 z-[80] flex justify-center px-4">
+    <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-5 z-[80] flex justify-end px-5">
       {item && (
         <div
           key={item.id}

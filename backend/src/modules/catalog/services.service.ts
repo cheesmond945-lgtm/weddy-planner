@@ -17,6 +17,7 @@ export interface ServiceQuery {
 const CATEGORY_SLUGS: Record<string, string> = {
   'Chụp ảnh': 'chup-anh',
   'Hoa cưới': 'hoa-cuoi',
+  'Trang điểm': 'makeup',
   Makeup: 'makeup',
   'Trang phục': 'trang-phuc',
   'Trang trí': 'decor',

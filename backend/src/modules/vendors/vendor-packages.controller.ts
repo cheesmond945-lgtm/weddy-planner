@@ -15,6 +15,11 @@ export class VendorPackagesController {
     return this.packages.list(req.user.sub);
   }
 
+  @Post('suggest-description')
+  suggestDescription(@Req() req: any, @Body() body: { name?: string | null; tags?: string[]; price?: number | null; capacity?: number | null }) {
+    return this.packages.suggestDescription(req.user.sub, body ?? {});
+  }
+
   @Get(':id')
   get(@Req() req: any, @Param('id') id: string) {
     return this.packages.get(req.user.sub, id);

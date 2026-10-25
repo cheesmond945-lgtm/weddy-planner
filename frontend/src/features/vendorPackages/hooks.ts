@@ -97,3 +97,8 @@ export function usePackageAction() {
     onError: (err) => toast(err.message),
   })
 }
+
+/** "Tạo với AI": gợi ý đoạn mô tả gói từ tên, tags, giá, sức chứa. */
+export function useSuggestPackageDescription() {
+  return useMutation({ mutationFn: vendorPackagesApi.suggestDescription, onError: (err) => toast(err.message) })
+}

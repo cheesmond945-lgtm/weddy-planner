@@ -10,8 +10,11 @@ import AdminCommissionsPage from '@/pages/admin/AdminCommissionsPage'
 import AdminConsultationRequestsPage from '@/pages/admin/AdminConsultationRequestsPage'
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage'
 import AdminOrdersPage from '@/pages/admin/AdminOrdersPage'
+import AdminPackageDetailPage from '@/pages/admin/AdminPackageDetailPage'
+import AdminPaymentDetailPage from '@/pages/admin/AdminPaymentDetailPage'
 import AdminPaymentsPage from '@/pages/admin/AdminPaymentsPage'
 import AdminUsersPage from '@/pages/admin/AdminUsersPage'
+import AdminVendorDetailPage from '@/pages/admin/AdminVendorDetailPage'
 import AdminVendorsPage from '@/pages/admin/AdminVendorsPage'
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
@@ -27,6 +30,8 @@ import TimelinePage from '@/pages/couple/TimelinePage'
 import VendorCatalogPage from '@/pages/vendor/VendorCatalogPage'
 import VendorChatPage from '@/pages/vendor/VendorChatPage'
 import VendorCommissionsPage from '@/pages/vendor/VendorCommissionsPage'
+import VendorVnpayReturnPage from '@/pages/vendor/VendorVnpayReturnPage'
+import VendorVnpaySandboxPage from '@/pages/vendor/VendorVnpaySandboxPage'
 import VendorDashboardPage from '@/pages/vendor/VendorDashboardPage'
 import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
 import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
@@ -82,6 +87,8 @@ export const router = createBrowserRouter([
           { path: paths.vendor.orders, element: <VendorOrdersPage /> },
           { path: paths.vendor.chat, element: <VendorChatPage /> },
           { path: paths.vendor.commissions, element: <VendorCommissionsPage /> },
+          { path: '/vendor/commissions/vnpay-sandbox', element: <VendorVnpaySandboxPage /> },
+          { path: '/vendor/commissions/vnpay-return', element: <VendorVnpayReturnPage /> },
         ],
       },
     ],
@@ -97,9 +104,12 @@ export const router = createBrowserRouter([
           { path: paths.admin.dashboard, element: <AdminDashboardPage /> },
           { path: paths.admin.consultationRequests, element: <AdminConsultationRequestsPage /> },
           { path: paths.admin.vendors, element: <AdminVendorsPage /> },
+          { path: '/admin/vendors/:id', element: <AdminVendorDetailPage /> },
           { path: paths.admin.catalog, element: <AdminCatalogPage /> },
+          { path: '/admin/catalog/:id', element: <AdminPackageDetailPage /> },
           { path: paths.admin.orders, element: <AdminOrdersPage /> },
           { path: paths.admin.payments, element: <AdminPaymentsPage /> },
+          { path: '/admin/payments/:id', element: <AdminPaymentDetailPage /> },
           { path: paths.admin.commissions, element: <AdminCommissionsPage /> },
           { path: paths.admin.users, element: <AdminUsersPage /> },
         ],

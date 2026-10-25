@@ -55,7 +55,7 @@ export class AuthService {
   /** Đăng nhập bằng username, email hoặc số điện thoại. Mật khẩu dữ liệu mẫu: Everly@2026 */
   async login(identifier: string, password: string) {
     const user = await this.prisma.users.findFirst({
-      where: { OR: [{ username: identifier }, { email: identifier.toLowerCase() }, { phone_number: identifier }] },
+      where: { email: identifier.trim().toLowerCase() },
     });
     // Hash trong CSDL tạo bằng pgcrypto crypt(..., gen_salt('bf')) => tương thích bcryptjs
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
@@ -138,7 +138,7 @@ export class AuthService {
     // Tên đăng nhập sinh từ email, thêm số nếu trùng
     const base = (email.split('@')[0].replace(/[^a-z0-9._-]/g, '') || 'user').slice(0, 40);
     let username = base;
-    for (let i = 1; await this.prisma.users.findUnique({ where: { username } }); i++) username = `${base}${i}`;
+    for (let i = 1; await this.prisma.users.findFirst({ where: { username } }); i++) username = `${base}${i}`;
 
     const user = await this.prisma.users.create({
       data: { username, email, full_name: p.name, phone_number: p.phone, password_hash: p.passwordHash, role: 'Couple', status: 'Active' },

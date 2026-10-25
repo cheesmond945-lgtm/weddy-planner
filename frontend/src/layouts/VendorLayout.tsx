@@ -1,9 +1,10 @@
 import type { LucideIcon } from 'lucide-react'
-import { Building2, ChevronRight, ClipboardList, ExternalLink, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Wallet } from 'lucide-react'
+import { Building2, ChevronRight, ClipboardList, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Wallet } from 'lucide-react'
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, matchPath, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
-import { Button } from '@/components/ui/button'
+import { applySavedTheme, ThemeToggle } from '@/components/ThemeToggle'
 import { toast } from '@/components/ui/toast'
+import { VendorNotificationBell } from '@/features/vendorNotifications/components/VendorNotificationBell'
 import { useUnreadCount } from '@/features/vendorChat/hooks'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
@@ -21,7 +22,7 @@ const NAV: VendorNavItem[] = [
   { to: paths.vendor.dashboard, label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: paths.vendor.orders, label: 'Quản lý đơn hàng', icon: ClipboardList },
   { to: paths.vendor.chat, label: 'Tin nhắn', icon: MessageSquare },
-  { to: paths.vendor.catalog, label: 'Quản lý dịch vụ', icon: Package },
+  { to: paths.vendor.catalog, label: 'Quản lý gói dịch vụ', icon: Package },
   { to: paths.vendor.commissions, label: 'Tài chính & đối soát', icon: Wallet },
   { to: paths.vendor.profile, label: 'Hồ sơ nhà cung cấp', icon: Building2 },
 ]
@@ -31,8 +32,10 @@ function useVendorPortalTheme() {
   useLayoutEffect(() => {
     const root = document.documentElement
     root.dataset.portal = 'vendor'
+    applySavedTheme()
     return () => {
       delete root.dataset.portal
+      delete root.dataset.theme
     }
   }, [])
 }
@@ -148,9 +151,11 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { user } = useAuth()
   const { pathname } = useLocation()
   const current = NAV.find(({ to, end }) => matchPath({ path: to, end: !!end }, pathname))
+  // Trang con của mục menu (VD gói dịch vụ): "Quản lý gói dịch vụ > Chi tiết gói dịch vụ"
+  const detail = current && current.to === paths.vendor.catalog && pathname !== current.to ? (pathname === paths.vendor.packageNew ? 'Thêm gói dịch vụ' : 'Chi tiết gói dịch vụ') : null
 
   return (
-    <header className="sticky top-0 z-30 flex h-[62px] items-center gap-3.5 border-b border-line bg-header px-4 backdrop-blur-[10px] min-[901px]:px-7">
+    <header className="sticky top-0 z-30 flex h-[62px] items-center gap-3.5 bg-header px-4 backdrop-blur-[10px] min-[901px]:px-7">
       <button
         type="button"
         onClick={onOpenMenu}
@@ -160,19 +165,27 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
         <Menu className="size-[18px]" />
       </button>
 
-      <div className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
-        {user && <span className="truncate max-sm:hidden">{user.name}</span>}
-        <ChevronRight className="size-3.5 flex-none max-sm:hidden" />
-        <strong className="truncate font-medium text-ink">{current?.label ?? 'Tổng quan'}</strong>
-      </div>
+      <nav aria-label="Đường dẫn" className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
+        {detail && current ? (
+          <>
+            <Link to={current.to} className="truncate transition-colors hover:text-ink">
+              {current.label}
+            </Link>
+            <ChevronRight aria-hidden className="size-3.5 flex-none" />
+            <strong aria-current="page" className="truncate font-medium text-ink">
+              {detail}
+            </strong>
+          </>
+        ) : (
+          <strong aria-current="page" className="truncate font-medium text-ink">
+            {current?.label ?? 'Tổng quan'}
+          </strong>
+        )}
+      </nav>
 
       <div className="ml-auto flex items-center gap-3">
-        <Button asChild variant="outline" size="sm" className="border-line-strong hover:border-gold hover:text-gold-ink max-sm:hidden">
-          <Link to={paths.services}>
-            <ExternalLink />
-            Về website
-          </Link>
-        </Button>
+        <ThemeToggle />
+        <VendorNotificationBell />
         <span aria-hidden className="h-6 w-px bg-line max-sm:hidden" />
         {user && <StudioLogo name={user.name} />}
       </div>

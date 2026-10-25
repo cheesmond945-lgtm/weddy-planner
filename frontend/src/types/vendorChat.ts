@@ -58,13 +58,3 @@ export interface VendorConversation {
   /** Mã các đơn trong hội thoại, để tìm theo mã đơn */
   orderCodes: string[]
 }
-
-/** CHỈ DÙNG KHI VITE_USE_MOCK=true: giả lập việc khách làm trên đơn mới nhất của hội thoại (BE không có). */
-export type CustomerSimulation =
-  | 'MESSAGE'
-  | 'CONFIRM_ORDER'
-  | 'REQUEST_REVISION'
-  | 'PAY_DEPOSIT'
-  | 'REQUEST_ADJUSTMENT'
-  | 'ACCEPT_ADJUSTMENT'
-  | 'REVISE_ADJUSTMENT'

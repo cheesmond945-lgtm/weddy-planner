@@ -1,8 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { isMock } from '@/api'
 import { FormError, FormField } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
-import { MOCK_PASSWORD } from '@/mocks/auth'
 import type { Session } from '@/types/auth'
 import { useLogin } from '../hooks'
 import { loginSchema, validate, type FieldErrors } from '../schemas'
@@ -35,8 +33,9 @@ export function LoginForm({ onSuccess, onCancel }: LoginFormProps) {
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       <FormField
-        label="Email hoặc số điện thoại"
-        autoComplete="username"
+        label="Email"
+        type="email"
+        autoComplete="email"
         value={values.identifier}
         onChange={change('identifier')}
         error={errors.identifier}
@@ -51,13 +50,6 @@ export function LoginForm({ onSuccess, onCancel }: LoginFormProps) {
         error={errors.password}
       />
       <FormError message={login.error?.message} />
-
-      {isMock('auth') && (
-        <p className="rounded-md bg-accent-soft px-3.5 py-2.5 text-[13px]">
-          Dữ liệu giả: <b>minh.anh@example.com</b> (cặp đôi), <b>vendor@example.com</b>, <b>admin@example.com</b>. Mật khẩu{' '}
-          <b>{MOCK_PASSWORD}</b>.
-        </p>
-      )}
 
       <div className="mt-1 flex flex-wrap justify-end gap-2.5">
         {onCancel && (
