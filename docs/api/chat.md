@@ -109,7 +109,8 @@ Cùng bảng hội thoại / tin nhắn với phía cặp đôi. Mỗi hội tho
 
 | Trường | Ghi chú |
 |---|---|
-| `customer.phone` | Số điện thoại tài khoản cặp đôi, NCC thấy để liên hệ |
+| `customer.phone` | Số điện thoại tài khoản cặp đôi, NCC thấy để liên hệ; rỗng nếu khách chưa nhập. FE điền sẵn vào đơn |
+| `customer.name` | "Chú rể & Cô dâu" từ thông tin đám cưới của khách; chưa có thì họ tên tài khoản. FE điền sẵn vào đơn |
 | `interestPackage` | Gói (đã đăng) khách mở chat từ đó; `null` nếu không có. Gói: xem [catalog.md](catalog.md) phần Nhà cung cấp |
 | `latestOrder` | Đơn đã gửi mới nhất của hội thoại (bỏ qua bản nháp chưa gửi) |
 | `needsAction` | Có ít nhất một đơn: có bản nháp, `status = REVISION_REQUESTED`, có `adjustmentRequest`, hoặc có phương án điều chỉnh `REVISION_REQUESTED`. Dùng cho tab "Cần xử lý" |
@@ -190,3 +191,4 @@ Như phía cặp đôi: FE hỏi lại mỗi 2,5 giây `GET /vendors/me/conversa
 
 1. Gửi ảnh / tệp trong chat (prototype có nút đính kèm): có làm không, dùng upload Cloudinary như hồ sơ NCC.
 2. `customer.phone`: có cho NCC thấy số điện thoại cặp đôi trước khi có đơn không.
+3. Trạng thái trực tuyến của khách: giao diện NCC đã có chỗ hiện chấm xanh và pill "Trực tuyến" nhưng chỉ hiện khi `customer.online = true`. BE hiện chưa trả trường này nên giao diện đang ẩn, không hiện giả. Cần chốt có làm trạng thái online (websocket/presence) không.

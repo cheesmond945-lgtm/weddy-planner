@@ -245,7 +245,7 @@ Lỗi: 404 `ORDER_NOT_FOUND`
 ### POST /vendors/me/orders
 Role: VENDOR
 
-Tạo đơn trong hội thoại. `send = false`: lưu nháp (`DRAFT`, `draft.kind = NEW`). `send = true`: kiểm tra và gửi luôn v1 (`AWAITING_CONFIRMATION`), thêm tin `ORDER` vào hội thoại.
+Tạo đơn trong hội thoại. Đơn gắn với đám cưới của khách suy từ `conversationId` (FE không gửi `weddingId`); khách chưa có thông tin đám cưới thì `409 WEDDING_NOT_SET` (FE báo "Khách chưa điền thông tin đám cưới nên chưa tạo đơn được" kèm nút "Nhắc khách"). FE điền sẵn tên và số điện thoại của khách (NCC vẫn sửa được, không đổi hồ sơ khách); ngày diễn ra sự kiện do NCC tự nhập và bắt buộc cả khi lưu nháp. `send = false`: lưu nháp (`DRAFT`, `draft.kind = NEW`). `send = true`: kiểm tra và gửi luôn v1 (`AWAITING_CONFIRMATION`), thêm tin `ORDER` vào hội thoại.
 
 Request
 
@@ -358,7 +358,7 @@ Lỗi: 400 `VALIDATION_ERROR` (thiếu lý do), 404 `ORDER_NOT_FOUND`, 409 `ORDE
 
 - Đợt 1 (đặt cọc) luôn qua VNPay theo quyết định thanh toán kết hợp; prototype cho chọn Chuyển khoản / Tiền mặt cho mọi đợt.
 - Bỏ nút đính kèm tệp trong ô soạn tin (prototype chỉ ghi tên tệp vào tin, chưa có upload).
-- Bỏ ô chọn khách khi tạo đơn ngoài chat ("Thêm đơn hàng" ở trang đơn hàng): đơn luôn tạo trong một hội thoại.
+- Bỏ ô chọn khách khi tạo đơn ngoài chat ("Tạo đơn" ở trang đơn hàng): đơn luôn tạo trong một hội thoại.
 - Tỷ lệ đợt là số nguyên (prototype cho số lẻ, có nút "Dồn vào đợt cuối"); đợt cuối tự nhận phần tiền lẻ.
 - Ghi nhận thanh toán có thêm tệp minh chứng và hình thức thanh toán; cọc mặc định qua VNPay (hệ thống ghi nhận), NCC chỉ ghi nhận cọc khi khách trả trực tiếp.
 - Thêm luồng hủy đơn (prototype chỉ có nhãn "Đã hủy").
