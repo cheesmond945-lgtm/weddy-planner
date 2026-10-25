@@ -72,4 +72,5 @@
 
 - Khách hủy đơn có bắt nhập lý do không (nếu có thì cần thêm `Orders.CancelReason`).
 - Bắt buộc SĐT khi đăng ký tài khoản khách (việc của phía khách).
+- **Quy tắc làm tròn tiền cọc đến 100.000đ** (`database.md` mục 15.5): tạm làm tròn **gần nhất** (form hiện "Tiền cọc ước tính ≈ …"). Chờ nhóm chốt làm tròn lên, xuống hay gần nhất; backend là nơi tính chính thức.
 - CSDL mục 9.6 cần sửa câu "NCC phải gửi lại để có hạn mới" thành "NCC tạo đơn mới (mã mới)".

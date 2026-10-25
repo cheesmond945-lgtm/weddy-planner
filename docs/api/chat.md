@@ -80,115 +80,95 @@ NCC trong dữ liệu giả tự trả lời theo câu mẫu của prototype; nh
 
 # Phía Nhà cung cấp: tin nhắn
 
-> **Bản nháp** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/vendorChat.ts`). Phần này bổ sung, không đổi các endpoint phía cặp đôi ở trên.
-> **Chờ đối chiếu `docs/database.md`**: tên trường và loại tin đang suy từ prototype NCC (`docs/prototype/prototype_vendor`, màn Tin nhắn).
+> **Hợp đồng theo CSDL** (`docs/database.md` mục 4.17, 4.18, 9.4) và `docs/CHOT_NGHIEP_VU_NCC.md` mục 3 và 5. Thẻ đơn và các tin liên quan đơn: [THE_DON_HANG.md](THE_DON_HANG.md) và [orders.md](orders.md) (phần NCC).
+> Quy ước chung: [README.md](README.md). Role: **VENDOR**.
 
-Phạm vi: NCC xem hội thoại với các cặp đôi, nhắn tin, xem các sự kiện của đơn trong khung chat. Tạo, sửa, gửi lại đơn: xem [orders.md](orders.md) (phần Nhà cung cấp).
+Cùng bảng `Conversations` / `Messages` với phía cặp đôi: mỗi cặp (khách, NCC) một hội thoại. Phía NCC nhìn thấy khách (`customer`).
 
-Role: **VENDOR**, chỉ hội thoại của NCC mình (của người khác trả `404`).
+## Kiểu dữ liệu
 
-## Hội thoại và tin nhắn
-
-Cùng bảng hội thoại / tin nhắn với phía cặp đôi. Mỗi hội thoại phía cặp đôi gắn với một dịch vụ (`service`); phía NCC nhìn thấy khách (`customer`).
-
-`VendorConversation`
+### `VendorConversation`
 
 ```json
 {
-  "id": "vc-4",
+  "id": "fb9cffdf-…",
   "customer": { "name": "Minh Anh & Quốc Huy", "phone": "0901 234 567" },
-  "interestPackage": { "id": "DV101", "name": "Tiệc cưới – Menu A", "price": 3500000, "maxPrice": 4500000 },
   "unreadCount": 2,
-  "lastMessage": { "sender": "COUPLE", "type": "TEXT", "text": "Bên mình cập nhật giúp…", "orderVersion": null, "orderCode": null, "createdAt": "2026-10-18T00:51:00.000Z" },
-  "latestOrder": { "id": "so-1025", "code": "#WP1025", "status": "REVISION_REQUESTED", "paymentStatus": "UNPAID" },
+  "lastMessage": { "sender": "COUPLE", "type": "Text", "content": "Bên mình cập nhật giúp…", "orderCode": null, "sentDate": "2026-10-18T00:51:00.000Z" },
+  "latestOrder": { "id": "5d1c8b1e-…", "orderCode": "DH26100003", "status": "NeedRevision" },
   "hasDraftOrder": false,
   "needsAction": true,
-  "orderCodes": ["#WP1025"]
+  "orderCodes": ["DH26100003"]
 }
 ```
 
 | Trường | Ghi chú |
 |---|---|
-| `customer.phone` | Số điện thoại tài khoản cặp đôi, NCC thấy để liên hệ; rỗng nếu khách chưa nhập. FE điền sẵn vào đơn |
-| `customer.name` | "Chú rể & Cô dâu" từ thông tin đám cưới của khách; chưa có thì họ tên tài khoản. FE điền sẵn vào đơn |
-| `interestPackage` | Gói (đã đăng) khách mở chat từ đó; `null` nếu không có. Gói: xem [catalog.md](catalog.md) phần Nhà cung cấp |
-| `latestOrder` | Đơn đã gửi mới nhất của hội thoại (bỏ qua bản nháp chưa gửi) |
-| `needsAction` | Có ít nhất một đơn: có bản nháp, `status = REVISION_REQUESTED`, có `adjustmentRequest`, hoặc có phương án điều chỉnh `REVISION_REQUESTED`. Dùng cho tab "Cần xử lý" |
-| `orderCodes` | Để FE tìm hội thoại theo mã đơn |
+| `customer.name` | "Chú rể & Cô dâu" (`Weddings.GroomName` & `BrideName`); khách chưa có thông tin đám cưới thì `Users.FullName`. FE điền sẵn vào đơn |
+| `customer.phone` | `Users.PhoneNumber`, chuỗi rỗng nếu khách chưa nhập. FE điền sẵn vào đơn, NCC sửa hoặc tự nhập được |
+| `customer.online` | **Tùy chọn.** Chỉ có khi backend có dữ liệu trạng thái trực tuyến thật; không có thì FE không hiện chấm xanh và "Trực tuyến" |
+| `lastMessage` | Tin gần nhất (kể cả tin hệ thống); `orderCode` có với tin liên quan đơn |
+| `latestOrder` | Đơn **đã gửi** mới nhất của hội thoại (bỏ qua bản nháp): mọi trạng thái trừ `Draft`. Dùng cho nhãn trạng thái và nút "Xem đơn" |
+| `hasDraftOrder` | Có đơn `Draft` |
+| `needsAction` | Cần NCC xử lý: có đơn `Draft`, `NeedRevision`, đơn `Deposited` có yêu cầu sửa sau cọc đang `Requested`, hoặc đơn `Deposited` đã qua `eventDate` (chờ đánh dấu hoàn thành) |
+| `orderCodes` | Mã mọi đơn của hội thoại, để tìm theo mã đơn |
 
-`VendorMessage`: như `Message` phía cặp đôi, thêm:
+Nhãn trạng thái trong danh sách hội thoại (FE suy từ `latestOrder.status`): `Pending` Chờ khách xác nhận (hạn cọc còn), `NeedRevision` Cần sửa, `Deposited` Đã cọc, `Completed` Hoàn thành, `Expired` Hết hạn, `Cancelled` Đã hủy; chỉ có bản nháp thì "Bản nháp".
+
+### `VendorMessage`
 
 ```json
 {
-  "id": "m-9",
-  "conversationId": "vc-5",
-  "sender": "SYSTEM",
-  "type": "ORDER_RESENT",
-  "text": "",
-  "orderId": "so-1024",
-  "orderVersion": 2,
-  "adjustmentId": null,
-  "changes": ["Tiệc cưới – Menu A: số lượng 25 → 22 Bàn", "Tổng tiền: 100.000.000đ → 92.200.000đ"],
-  "createdAt": "2026-10-13T02:10:00.000Z"
+  "id": "…",
+  "conversationId": "fb9cffdf-…",
+  "sender": "VENDOR",
+  "type": "Order",
+  "orderId": "5d1c8b1e-…",
+  "content": "Đơn dịch vụ DH26100004",
+  "isRead": true,
+  "sentDate": "2026-10-25T07:30:00.000Z"
 }
 ```
 
-| `type` | `sender` | Ý nghĩa | Trường kèm theo |
-|---|---|---|---|
-| `TEXT` | `COUPLE`, `VENDOR` | Tin chữ | `text` |
-| `ORDER` | `VENDOR` | Thẻ đơn một phiên bản | `orderId`, `orderVersion` |
-| `ORDER_RESENT` | `SYSTEM` | NCC cập nhật và gửi lại đơn | `orderId`, `orderVersion` (mới), `changes` |
-| `ORDER_REVISION_REQUESTED` | `COUPLE` | Khách yêu cầu chỉnh sửa đơn | `orderId`, `orderVersion`, `text` (nội dung yêu cầu) |
-| `ORDER_CONFIRMED` | `COUPLE` | Khách xác nhận đơn | `orderId`, `orderVersion` |
-| `PAYMENT_RECORDED` | `SYSTEM` | Ghi nhận một khoản đã thu (cọc VNPay hoặc NCC ghi nhận) | `orderId`, `text` (câu hiển thị sẵn) |
-| `ADJUSTMENT_PROPOSED` | `VENDOR` | NCC gửi phương án điều chỉnh | `orderId`, `adjustmentId` |
-| `ADJUSTMENT_REQUESTED` | `COUPLE` | Khách đề nghị điều chỉnh đơn đã xác nhận | `orderId`, `text` |
-| `ADJUSTMENT_REVISION_REQUESTED` | `COUPLE` | Khách yêu cầu sửa phương án điều chỉnh | `orderId`, `adjustmentId`, `text` |
-| `ADJUSTMENT_ACCEPTED` | `COUPLE` | Khách đồng ý phương án, phiên bản mới có hiệu lực | `orderId`, `orderVersion` (mới) |
-| `ORDER_CANCELLED` | `SYSTEM` | NCC hủy đơn (chỉ khi chưa có khoản thu); chỉ thêm khi đơn đã gửi khách | `orderId`, `text` (lý do hủy) |
+- `sender`: `COUPLE`, `VENDOR`, `SYSTEM` (`Messages.SenderId` rỗng).
+- `type` (`Messages.Type`) **chỉ có 4 giá trị**:
 
-Trường không dùng thì `null` (`text` thì chuỗi rỗng). Phía cặp đôi hiện chỉ hiểu `TEXT` và `ORDER`; khi phía cặp đôi chuyển sang đơn mới ([orders.md](orders.md)) thì dùng chung các loại tin này.
+| `type` | Khi nào | Hiển thị |
+|---|---|---|
+| `Text` | Tin nhắn thường, và tin hệ thống | Bong bóng (tin hệ thống: dòng nhỏ ở giữa, nền xanh nhạt) |
+| `Order` | NCC gửi hoặc gửi lại đơn, hoặc sửa đơn sau cọc | Thẻ đơn (đọc dữ liệu trực tiếp từ `Orders`, không phải bản chụp). `orderId` bắt buộc |
+| `DepositReceipt` | Cọc thành công | Thẻ "Giấy xác nhận cọc {mã}: đã nhận … cho đơn …" kèm nút Xem. `orderId` bắt buộc |
+| `FinalInvoice` | NCC xuất hóa đơn cuối | Thẻ "Hóa đơn {mã} cho đơn …" kèm nút Xem. `orderId` bắt buộc |
 
----
+- Các tin hệ thống (`sender = SYSTEM`, `type = Text`): khách yêu cầu chỉnh sửa đơn (kèm nội dung và lời nhắn), đơn hết hạn đặt cọc, khách hủy đơn, đơn hoàn thành.
+- Bản nháp đơn **không** tạo tin; khách không thấy.
+- Gửi lại đơn tạo thêm một thẻ `Order` mới; FE thu gọn các thẻ cũ của cùng đơn thành "Đơn … đã được cập nhật, xem bản mới nhất bên dưới".
+- Để vẽ thẻ, FE lấy đơn qua `GET /vendors/me/orders?conversationId=…`.
+
+## Endpoint
 
 ### GET /vendors/me/conversations
-Role: VENDOR
-
-Hội thoại của NCC, tin cuối mới nhất trước. Không phân trang (bản nháp; khi nhiều thì thêm `page`, `pageSize`). Tìm theo tên, số điện thoại, mã đơn và lọc tab làm ở FE.
-
-Response 200: `{ "data": VendorConversation[] }`
+Hội thoại của NCC, mới nhất trước (`Conversations.LastMessageDate`). Response 200: `{ "data": VendorConversation[] }`
 
 ### GET /vendors/me/conversations/:id/messages
-Role: VENDOR
-
-Toàn bộ tin, cũ trước. Response 200: `{ "data": VendorMessage[] }`
-
-Lỗi: 404 `CONVERSATION_NOT_FOUND`
+Tin nhắn của hội thoại, cũ nhất trước. Response 200: `{ "data": VendorMessage[] }`. Lỗi: 404 `CONVERSATION_NOT_FOUND`.
 
 ### POST /vendors/me/conversations/:id/messages
-Role: VENDOR
-
-Body `{ "text": "Dạ bên em đã nhận được ạ." }`. Response 200: `{ "data": VendorMessage }` (`type = TEXT`, `sender = VENDOR`)
-
-Lỗi: 400 `VALIDATION_ERROR` (tin rỗng), 404 `CONVERSATION_NOT_FOUND`
+NCC gửi tin nhắn văn bản. Request: `{ "text": "…" }` (không rỗng). Response 201: `{ "data": VendorMessage }`. Lỗi: 400 `VALIDATION_ERROR`, 404.
 
 ### POST /vendors/me/conversations/:id/read
-Role: VENDOR
+Đánh dấu đã đọc mọi tin của khách (`unreadCount` về 0). Response 204.
 
-Đánh dấu đã đọc (`unreadCount = 0`). FE gọi khi mở hội thoại và khi có tin mới lúc đang mở. Response 200: `{ "data": null }`
+## Cập nhật tin mới
 
-Lỗi: 404 `CONVERSATION_NOT_FOUND`
+Chưa có websocket: FE hỏi lại định kỳ (2,5 giây khi đang mở trang Tin nhắn, 15 giây cho số chưa đọc trên sidebar).
 
-## Cập nhật tin mới (phía NCC)
+## Ghi chú về dữ liệu giả
 
-Như phía cặp đôi: FE hỏi lại mỗi 2,5 giây `GET /vendors/me/conversations`, tin của hội thoại đang mở và `GET /vendors/me/orders?conversationId=` khi đang ở trang Tin nhắn.
-
-## Ghi chú về dữ liệu giả (phía NCC)
-
-`mocks/vendorChat.ts` tách riêng với `mocks/chat.ts` của phía cặp đôi (hai bên chưa thấy tin của nhau khi dùng mock). Khi `VITE_USE_MOCK=true`, khung chat có nút **Giả lập khách** (nhắn tin, xác nhận đơn, yêu cầu chỉnh sửa, đặt cọc VNPay, yêu cầu điều chỉnh, đồng ý / yêu cầu sửa phương án) trên đơn mới nhất của hội thoại. Nút này **chỉ có trong mock**; BE không làm.
+`frontend/src/mocks/vendorOrders.ts` mô phỏng đúng các quy tắc trên (tính tiền, hạn cọc, hết hạn, tự hoàn thành, hoa hồng, hóa đơn). Nút **"Giả lập khách"** (đặt cọc, yêu cầu chỉnh sửa trước hoặc sau cọc, hủy sau cọc, nhắn tin) và **"Giả lập thời gian"** (tua nhanh để thử hết hạn, hoàn thành) **chỉ có khi dùng dữ liệu giả**, không nằm trong hợp đồng.
 
 ## Cần chốt (phía NCC)
 
-1. Gửi ảnh / tệp trong chat (prototype có nút đính kèm): có làm không, dùng upload Cloudinary như hồ sơ NCC.
-2. `customer.phone`: có cho NCC thấy số điện thoại cặp đôi trước khi có đơn không.
-3. Trạng thái trực tuyến của khách: giao diện NCC đã có chỗ hiện chấm xanh và pill "Trực tuyến" nhưng chỉ hiện khi `customer.online = true`. BE hiện chưa trả trường này nên giao diện đang ẩn, không hiện giả. Cần chốt có làm trạng thái online (websocket/presence) không.
+1. Gửi ảnh / tệp trong chat (prototype có nút đính kèm): có làm không.
+2. Trạng thái trực tuyến của khách: chưa có dữ liệu, nên giao diện đang ẩn. Cần chốt có làm (websocket / presence) không.
+3. `OrderRevisionChanges.ChangeType`: danh sách đầy đủ (hiện: `Item`, `Quantity`, `EventDate`, `Other`).

@@ -70,295 +70,211 @@ Lỗi: 400 `VALIDATION_ERROR` (note rỗng), 404 `ORDER_NOT_FOUND`, 409 `ORDER_N
 
 # Phía Nhà cung cấp: đơn dịch vụ
 
-> **Bản nháp** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/vendorChat.ts`; kiểu ở `frontend/src/types/serviceOrder.ts`). Phần này bổ sung, không đổi các endpoint phía cặp đôi ở trên.
-> **Chờ đối chiếu `docs/database.md` và `docs/state-diagrams.md`**: tên trường, trạng thái đơn, trạng thái thanh toán, phương án điều chỉnh đang suy từ prototype NCC (`docs/prototype/prototype_vendor`, màn Tin nhắn và Quản lý đơn hàng).
+> **Hợp đồng theo CSDL** (`docs/database.md`, mục 4.19 đến 4.24 và 9.5 đến 9.8), `docs/CHOT_NGHIEP_VU_NCC.md` mục 4, và `docs/api/THE_DON_HANG.md` (nội dung thẻ, nút). Khi mâu thuẫn, theo thứ tự đó.
+> Bản này **thay thế hoàn toàn** bản cũ có phiên bản đơn v1/v2, đợt thanh toán tùy chỉnh, "ghi nhận thanh toán", phương án điều chỉnh và NCC hủy đơn. Frontend (`frontend/src/mocks/vendorOrders.ts`) làm đúng theo tài liệu này, backend làm theo tài liệu này.
+> Quy ước chung: [README.md](README.md). Role: **VENDOR**, chỉ thấy đơn của mình. JSON dùng camelCase, giá trị enum viết đúng như CSDL (`Pending`, `Deposited`…).
 
-Phạm vi: NCC tạo đơn trong hội thoại, lưu nháp, gửi đơn (v1), sửa và gửi lại theo phiên bản (v2, v3…) (trang Tin nhắn); xem danh sách đơn, ghi nhận khoản thu, lập / sửa phương án điều chỉnh, hủy đơn (trang Quản lý đơn hàng). Mọi thao tác đều thêm tin tương ứng vào hội thoại ([chat.md](chat.md) phần Nhà cung cấp).
+## Quy tắc nghiệp vụ (tóm tắt)
 
-## Khác với `Order` phía cặp đôi ở trên
-
-Theo quyết định của nhóm, đơn phía NCC theo prototype NCC và đặt ở kiểu mới `ServiceOrder`. `Order` cũ (`frontend/src/types/order.ts`) **giữ nguyên**, phía cặp đôi chuyển dần.
-
-| `Order` (cặp đôi, ở trên) | `ServiceOrder` (NCC) |
-|---|---|
-| Một `packageName`, `totalAmount`, `depositAmount` | Nhiều `lines` (hạng mục, ĐVT, SL, đơn giá) + nhiều `installments` (đợt thanh toán) |
-| Một trạng thái gộp `SENT` / `REVISION_REQUESTED` / `PAID` | `status` (trạng thái đơn) **tách** `paymentStatus` (trạng thái thanh toán) |
-| Không có bước khách xác nhận | Khách xác nhận đơn (`CONFIRMED`) trước khi đặt cọc |
-| Gửi lại giữ nguyên `id`, không lưu bản cũ | `versions[]`: v1, v2… kèm `changes` |
-| | Phương án điều chỉnh sau khi đã xác nhận |
-
-Ánh xạ đề xuất khi phía cặp đôi chuyển sang `ServiceOrder`:
-
-| `Order.status` cũ | `ServiceOrder` |
-|---|---|
-| `SENT` | `status = AWAITING_CONFIRMATION`, hoặc `CONFIRMED` + `paymentStatus = AWAITING_DEPOSIT` |
-| `REVISION_REQUESTED` | `status = REVISION_REQUESTED` |
-| `PAID` | `status = CONFIRMED`, `paymentStatus` ∈ `DEPOSIT_PAID`, `PARTIALLY_PAID`, `PAID` |
-| `depositAmount` | `installments[0].amount` (đợt đặt cọc) |
-| `packageName` | tên dòng đầu (`lines[0].name`) |
-| `serviceDate` | `eventDate` của phiên bản hiện hành |
-
-**Thanh toán (kết hợp, theo quyết định của nhóm):** đợt 1 (đặt cọc) khách trả qua VNPay như [payments.md](payments.md), BE tự ghi nhận khi IPN thành công; các đợt sau trả ngoài hệ thống (chuyển khoản, tiền mặt), NCC tự ghi nhận. `POST /payments` của cặp đôi khi chuyển sang đơn mới lấy số tiền từ `installments[0].amount` và chỉ cho khi `status = CONFIRMED`, đợt cọc chưa thu. **Cần sửa `payments.md` cùng bạn làm phần cặp đôi.**
+- **7 trạng thái:** `Draft` → `Pending` → (`NeedRevision` ↔ `Pending`) → `Deposited` → `Completed`; `Pending` quá hạn thành `Expired`; `Deposited` bị khách hủy thành `Cancelled`.
+- **Chỉ một khoản trong hệ thống: tiền cọc qua VNPay** (`Payments`). Phần còn lại khách trả **tiền mặt trực tiếp cho NCC, ngoài hệ thống, không ghi nhận**. Không có nhiều đợt, không có "ghi nhận thanh toán", không có "đã thu / còn phải thu".
+- **NCC không hủy được đơn.** Chỉ khách hủy, chỉ khi `Deposited`. Đơn `Pending` không cọc thì tự `Expired`.
+- Đơn `Expired` và `Cancelled` bị khóa. Muốn tiếp tục: NCC tạo **đơn mới** (mã mới) bằng cách chép hạng mục và ghi chú (FE gọi `POST /vendors/me/orders`, không có endpoint riêng).
+- **Backend tính tiền**, không tin số tiền từ giao diện:
+  - `OrderItems.amount = quantity × unitPrice`; `totalAmount = SUM(amount)`.
+  - `depositAmount = totalAmount × depositPercent / 100`, **làm tròn đến 100.000đ** (tạm làm tròn gần nhất, xem mục "Chưa chốt" của CHOT), không vượt `totalAmount`.
+  - `depositDueDate` = thời điểm gửi đơn + 1 ngày (24 giờ).
+  - NCC chỉ nhập: hạng mục, `depositPercent`, `eventDate`, `note` (cùng tên và số điện thoại khách, điền sẵn từ tài khoản khách).
+- `depositPercent`: lớn hơn 0 và nhỏ hơn 100 (FE chỉ cho nhập số nguyên 1 đến 99).
+- Đơn vị tính (`unit`): `Gói` (số lượng mặc định 1) hoặc `Bàn` (số lượng tùy chỉnh).
+- Mã đơn `orderCode` dạng `DH<yyMM><số 4 chữ số>` (ví dụ `DH26100001`), không đổi dù sửa nhiều lần.
 
 ## Kiểu dữ liệu
 
-`ServiceOrder`
+### `Order`
 
 ```json
 {
-  "id": "so-1024",
-  "code": "#WP1024",
-  "conversationId": "vc-5",
-  "status": "AWAITING_CONFIRMATION",
-  "paymentStatus": "UNPAID",
-  "versions": [
-    { "version": 1, "sentAt": "2026-10-12T07:00:00.000Z", "content": "OrderContent", "changes": [], "fromAdjustmentId": null },
-    { "version": 2, "sentAt": "2026-10-13T02:10:00.000Z", "content": "OrderContent", "changes": ["Tiệc cưới – Menu A: số lượng 25 → 22 Bàn"], "fromAdjustmentId": null }
+  "id": "5d1c8b1e-…",
+  "orderCode": "DH26100004",
+  "conversationId": "fb9cffdf-…",
+  "status": "Pending",
+  "customerName": "Thu Hà & Đức Minh",
+  "customerPhone": "0938 221 904",
+  "eventDate": "2026-12-13",
+  "items": [
+    { "id": "…", "itemName": "Tiệc cưới – Menu A", "unit": "Bàn", "quantity": 18, "unitPrice": 3200000, "amount": 57600000 }
   ],
-  "draft": null,
-  "revisionRequest": null,
-  "adjustmentRequest": null,
-  "payments": [],
-  "adjustments": [],
-  "totalAmount": 92200000,
-  "paidAmount": 0,
-  "history": [{ "at": "2026-10-12T07:00:00.000Z", "text": "Gửi đơn v1 cho khách" }],
-  "createdAt": "2026-10-12T07:00:00.000Z",
-  "updatedAt": "2026-10-13T02:10:00.000Z"
-}
-```
-
-`OrderContent` (nội dung một phiên bản, bản nháp, phương án điều chỉnh)
-
-```json
-{
-  "customerName": "Ngọc Mai & Hoàng Nam",
-  "customerPhone": "0923 456 789",
-  "eventDate": "2026-12-06",
-  "note": "Giữ sảnh Mây tầng 2.",
-  "lines": [
-    { "id": "l-1", "packageId": "DV101", "name": "Tiệc cưới – Menu A", "unit": "Bàn", "quantity": 22, "unitPrice": 4000000, "isPolicyFee": false }
-  ],
-  "installments": [
-    { "id": "i-1", "name": "Đợt 1 – Đặt cọc", "rate": 20, "amount": 18440000, "dueDate": "2026-10-25", "method": "VNPAY", "note": null },
-    { "id": "i-2", "name": "Đợt 2 – Thanh toán còn lại", "rate": 80, "amount": 73760000, "dueDate": "2026-12-06", "method": "CASH", "note": "Thanh toán trong ngày tiệc" }
-  ]
+  "totalAmount": 57600000,
+  "depositPercent": 30,
+  "depositAmount": 17300000,
+  "depositDueDate": "2026-10-26T07:30:00.000Z",
+  "note": "Giữ sảnh tầng 2.",
+  "payment": { "status": "Unpaid", "paidDate": null, "transactionCode": null },
+  "revisions": [],
+  "invoices": [],
+  "completedDate": null,
+  "cancelledDate": null,
+  "createdDate": "2026-10-25T07:30:00.000Z"
 }
 ```
 
 | Trường | Ghi chú |
 |---|---|
-| `code` | Mã hiển thị, tăng dần toàn hệ thống (`#WP1021`, `#WP1022`…) |
-| `lines[].packageId` | Gói đã đăng dùng để điền nhanh (nếu có), xem [catalog.md](catalog.md) phần Nhà cung cấp |
-| `lines[].quantity` | Số > 0, có thể lẻ |
-| `lines[].isPolicyFee` | Phí theo chính sách (thêm khi điều chỉnh) |
-| `installments[0]` | Luôn là đặt cọc, `method = VNPAY` |
-| `installments[].rate` | **Số nguyên phần trăm** (0–100, theo README mục 4, nhóm đã chốt); `null` khi nhập số tiền trực tiếp. Số tiền = làm tròn `total × rate / 100`; khi mọi đợt có tỷ lệ và cộng đủ 100%, **đợt cuối nhận phần tiền lẻ còn lại** để tổng các đợt bằng tổng đơn |
-| `installments[].method` | `VNPAY` (chỉ đợt 1), `BANK_TRANSFER`, `CASH` |
-| `totalAmount`, `paidAmount`, `paymentStatus` | BE tính |
-| `draft` | Chỉ NCC thấy. `kind = NEW`: đơn chưa gửi lần nào; `EDIT`: bản sửa của đơn đã gửi, phiên bản đang gửi giữ nguyên |
-| `history` | Câu hiển thị sẵn, mới nhất cuối |
+| `payment` | `null` khi `Draft` (dòng `Payments` được tạo lúc gửi đơn). `status`: `Unpaid` hoặc `Paid`; khi `Paid` thì `paidDate`, `transactionCode` có giá trị |
+| `depositDueDate` | `null` khi `Draft` |
+| `revisions` | Lịch sử `OrderRevisions`, mới nhất trước |
+| `invoices` | `Invoices` của đơn: tối đa một `DepositReceipt` và một `FinalInvoice` |
+| `completedDate` | Ngày hoàn thành, mốc tính hoa hồng |
+| `cancelledDate` | Ngày khách hủy |
+| (không có) | Không có phiên bản v1/v2, không có đợt, không có "đã thu". Hạn trả nốt (`eventDate`, trả muộn tới +7 ngày) FE suy từ `eventDate` |
 
-`OrderPayment`: `{ id, installmentId, installmentName, amount, paidAt, method, plannedMethod, recordedBy: "SYSTEM" | "VENDOR", proofFile: VendorFile | null, note }`. `method` là **hình thức thanh toán thực tế**: `VNPAY` (khách trả trực tuyến, `recordedBy = SYSTEM`), `BANK_TRANSFER` hoặc `CASH` (khách trả trực tiếp, `recordedBy = VENDOR`). `plannedMethod`: phương thức dự kiến của đợt, để đối chiếu. `proofFile`: ảnh / PDF minh chứng ([vendors.md](vendors.md), upload với `purpose = PAYMENT_PROOF`).
-`OrderAdjustment`: `{ id, status, reason, proposedAt, before, after, beforeTotal, afterTotal, paidAmount, customerNote, customerNoteAt, resultVersion, revisionOf, forRequest }` (`before`, `after` là `OrderContent`; `forRequest`: yêu cầu điều chỉnh của khách mà phương án đáp ứng).
-`ServiceOrder.cancellation`: `{ reason, cancelledAt }` khi `CANCELLED`, ngược lại `null`.
-
-### Trạng thái đơn (`ServiceOrderStatus`)
-
-| Giá trị | Nhãn FE |
-|---|---|
-| `DRAFT` | Bản nháp (chưa gửi lần nào) |
-| `AWAITING_CONFIRMATION` | Chờ khách xác nhận |
-| `REVISION_REQUESTED` | Khách yêu cầu chỉnh sửa |
-| `CONFIRMED` | Đã xác nhận |
-| `CANCELLED` | Đã hủy |
-
-```
-DRAFT ──send──▶ AWAITING_CONFIRMATION ──khách xác nhận──▶ CONFIRMED
-                   ▲            │
-          send (vN+1)           └──khách yêu cầu sửa──▶ REVISION_REQUESTED
-                   └────────────────────────────────────────────┘
-```
-
-- Gửi lại (phiên bản mới) chỉ khi `AWAITING_CONFIRMATION` hoặc `REVISION_REQUESTED` và chưa có khoản thu. Đơn `CONFIRMED` thay đổi bằng phương án điều chỉnh.
-- Hủy (`CANCELLED`): từ mọi trạng thái khác, **chỉ khi chưa có khoản thu nào** (chưa nhận cọc), cần lý do. Sau khi hủy không sửa, gửi lại, nhận thanh toán, điều chỉnh được nữa.
-
-### Trạng thái thanh toán (`OrderPaymentStatus`)
-
-BE tính từ `payments` (tổng đã thu `paid`, tổng đơn `total`, đợt cọc `installments[0]`):
-
-| Giá trị | Nhãn FE | Khi |
-|---|---|---|
-| `UNPAID` | Chưa thu tiền | Đơn chưa `CONFIRMED` và chưa thu khoản nào |
-| `AWAITING_DEPOSIT` | Chờ thanh toán cọc | `CONFIRMED`, chưa thu |
-| `PARTIALLY_PAID` | Đã thu một phần | Đã thu nhưng chưa đủ đợt cọc |
-| `DEPOSIT_PAID` | Đã nhận cọc | Đã thu đủ đợt cọc, chưa đủ tổng |
-| `PAID` | Đã thu đủ | `paid = total` |
-| `OVERPAID` | Thu thừa · cần xử lý hoàn | `paid > total` (sau điều chỉnh giảm) |
-
-### Trạng thái phương án điều chỉnh (`AdjustmentStatus`)
-
-`AWAITING_CONFIRMATION` (Chờ khách xác nhận), `REVISION_REQUESTED` (Khách yêu cầu sửa phương án), `ACCEPTED` (Khách đồng ý, sinh phiên bản mới `fromAdjustmentId`), `SUPERSEDED` (Đã thay thế bởi phương án mới).
-
-## Kiểm tra khi gửi
-
-Lưu nháp không kiểm tra. Gửi (`send`) kiểm tra như prototype, lỗi trả `400 VALIDATION_ERROR` với `details[].field`:
-
-- `customerName` bắt buộc; `customerPhone` 9–15 ký tự số, khoảng trắng, `+().-`; `eventDate` bắt buộc.
-- Ít nhất một dòng; mỗi dòng có tên, `quantity > 0`, `unitPrice >= 0`; tổng > 0. Dòng trống hoàn toàn bị bỏ.
-- Mỗi đợt: có tên, `amount > 0` và ≤ tổng, `rate` là số nguyên 0–100, có `dueDate`.
-- Tổng các đợt **bằng** tổng đơn.
-- Gửi lại: phải có ít nhất một thay đổi so với phiên bản đang gửi (`400 ORDER_NO_CHANGES`).
-
----
-
-### GET /vendors/me/orders
-Role: VENDOR
-
-Danh sách đơn của NCC (gồm bản nháp và đơn đã hủy), mã đơn giảm dần. Có phân trang.
-
-| Query | Ghi chú |
-|---|---|
-| `conversationId` | Đơn của một hội thoại (trang Tin nhắn dùng, lấy hết một trang) |
-| `q` | Tìm trong mã đơn, tên khách; từ 3 chữ số thì tìm cả số điện thoại |
-| `status` | `ServiceOrderStatus` |
-| `paymentStatus` | `OrderPaymentStatus` |
-| `from`, `to` | Ngày sự kiện của phiên bản hiện hành (bản nháp: nội dung nháp), `YYYY-MM-DD`, gồm cả hai đầu |
-| `page`, `pageSize` | Mặc định 1, 20 |
-
-Response 200: `{ "data": ServiceOrder[], "meta": { … } }`
-
-### GET /vendors/me/orders/counts
-Role: VENDOR
-
-Số đơn theo từng trạng thái, không theo bộ lọc (dải đếm đầu trang Quản lý đơn hàng).
-
-Response 200: `{ "data": { "DRAFT": 1, "AWAITING_CONFIRMATION": 2, "REVISION_REQUESTED": 1, "CONFIRMED": 5, "CANCELLED": 1 } }`
-
-### GET /vendors/me/orders/:id
-Role: VENDOR
-
-Response 200: `{ "data": ServiceOrder }`
-
-Lỗi: 404 `ORDER_NOT_FOUND`
-
-### POST /vendors/me/orders
-Role: VENDOR
-
-Tạo đơn trong hội thoại. Đơn gắn với đám cưới của khách suy từ `conversationId` (FE không gửi `weddingId`); khách chưa có thông tin đám cưới thì `409 WEDDING_NOT_SET` (FE báo "Khách chưa điền thông tin đám cưới nên chưa tạo đơn được" kèm nút "Nhắc khách"). FE điền sẵn tên và số điện thoại của khách (NCC vẫn sửa được, không đổi hồ sơ khách); ngày diễn ra sự kiện do NCC tự nhập và bắt buộc cả khi lưu nháp. `send = false`: lưu nháp (`DRAFT`, `draft.kind = NEW`). `send = true`: kiểm tra và gửi luôn v1 (`AWAITING_CONFIRMATION`), thêm tin `ORDER` vào hội thoại.
-
-Request
-
-```json
-{ "conversationId": "vc-1", "content": "OrderContent", "send": true }
-```
-
-Response 201: `{ "data": ServiceOrder }`
-
-Lỗi: 400 `VALIDATION_ERROR`, 404 `CONVERSATION_NOT_FOUND`
-
-### PUT /vendors/me/orders/:id/draft
-Role: VENDOR
-
-Lưu nháp. Đơn chưa gửi: `draft.kind = NEW`; đơn đã gửi: `draft.kind = EDIT`, phiên bản đang gửi và trạng thái giữ nguyên.
-
-Request `{ "content": OrderContent }`. Response 200: `{ "data": ServiceOrder }`
-
-Lỗi: 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_REVISABLE` (đơn `CONFIRMED`)
-
-### POST /vendors/me/orders/:id/send
-Role: VENDOR
-
-Gửi đơn. Chưa có phiên bản: gửi v1 (như `POST` với `send = true`). Đã có: tạo phiên bản mới, tính `changes`, xóa `revisionRequest` và `draft`, `status = AWAITING_CONFIRMATION`; thêm tin `ORDER_RESENT` (SYSTEM) và `ORDER` (phiên bản mới).
-
-Request
-
-```json
-{ "content": "OrderContent", "baseVersion": 1 }
-```
-
-`baseVersion`: phiên bản hiện hành lúc NCC mở form. Khác phiên bản hiện hành của BE thì từ chối (tránh ghi đè khi đơn vừa đổi).
-
-Response 200: `{ "data": ServiceOrder }`
-
-Lỗi: 400 `VALIDATION_ERROR`, 400 `ORDER_NO_CHANGES`, 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_REVISABLE` (`CONFIRMED`), 409 `ORDER_VERSION_CONFLICT`, 409 `ORDER_HAS_PAYMENTS`
-
-### POST /vendors/me/orders/:id/payments
-Role: VENDOR
-
-NCC ghi nhận một khoản khách **trả trực tiếp** (chuyển khoản, tiền mặt) cho một đợt bất kỳ, **kể cả đợt đặt cọc** khi khách không trả qua VNPay. Cọc trả qua VNPay vẫn là cách mặc định và do hệ thống tự ghi nhận ([payments.md](payments.md)), NCC không ghi nhận lại. Chỉ khi `status = CONFIRMED`. Được ghi nhận nhiều lần cho một đợt; vượt số còn phải thu thì đơn thành `OVERPAID`, hệ thống không tự đánh dấu đã hoàn.
-
-Request
+### `OrderRevision`
 
 ```json
 {
-  "installmentId": "i-2",
-  "amount": 64000000,
-  "paidAt": "2026-11-22T10:15:00.000Z",
-  "method": "CASH",
-  "proofFile": { "url": "https://…", "publicId": "…", "fileName": "phieu-thu.jpg", "size": 210000, "mimeType": "image/jpeg" },
-  "note": "Người nhận: Thu Mây"
+  "id": "…",
+  "revisionType": "BeforeDeposit",
+  "requestNote": "Giảm xuống 15 bàn, đổi sang ngày 20/12 nhé.",
+  "changes": ["Quantity", "EventDate"],
+  "oldTotalAmount": 64000000,
+  "newTotalAmount": null,
+  "status": "Requested",
+  "createdDate": "2026-10-24T03:10:00.000Z",
+  "appliedDate": null
 }
 ```
 
-`method` (hình thức thanh toán): `BANK_TRANSFER` hoặc `CASH`; `VNPAY` chỉ do hệ thống ghi. `proofFile`, `note` tùy chọn (`null`). BE tính lại `paidAmount`, `paymentStatus`, thêm lịch sử và tin `PAYMENT_RECORDED` (SYSTEM) "Đã ghi nhận 64.000.000đ · Đợt 2 – Thanh toán còn lại · Tiền mặt".
+- `revisionType`: `BeforeDeposit`, `AfterDeposit`. `status`: `Requested` (khách yêu cầu, đang chờ NCC sửa) hoặc `Applied` (NCC đã sửa; `newTotalAmount` và `appliedDate` có giá trị).
+- `changes` là các `ChangeType` khách chọn (`OrderRevisionChanges`): `Item` (đổi hạng mục), `Quantity` (đổi số lượng), `EventDate` (đổi ngày thực hiện), `Other` (khác). **Danh sách đầy đủ chưa chốt** (CSDL mục 15).
+- NCC tự sửa vì nhập sai (không có yêu cầu của khách): backend tạo luôn dòng `Applied` với `requestNote = null`, `changes = []`.
 
-Response 200: `{ "data": ServiceOrder }`
-
-Lỗi: 400 `VALIDATION_ERROR` (đợt không có trong phiên bản hiện hành, số tiền ≤ 0, phương thức VNPay), 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_PAYABLE` (chưa `CONFIRMED`)
-
-### POST /vendors/me/orders/:id/adjustments
-Role: VENDOR
-
-Lập phương án điều chỉnh đơn đã xác nhận và gửi khách qua chat. Đơn hiện hành giữ nguyên tới khi khách đồng ý (khi đó sinh phiên bản mới `fromAdjustmentId`). Khi đơn đang có `adjustmentRequest` của khách, phương án lưu vào `forRequest` và `adjustmentRequest` về `null`.
-
-Request
+### `Invoice`
 
 ```json
-{ "reason": "Khách tăng từ 20 lên 22 bàn.", "after": "OrderContent", "revisionOf": null }
+{ "id": "…", "invoiceCode": "XNC26100001", "type": "DepositReceipt", "createdDate": "2026-10-24T05:00:00.000Z" }
 ```
 
-- `after`: nội dung đơn sau điều chỉnh. Các đợt đã có khoản thu giữ nguyên; phí theo chính sách là một dòng `isPolicyFee = true`.
-- `revisionOf`: id phương án khách yêu cầu sửa (`REVISION_REQUESTED`); phương án cũ thành `SUPERSEDED`. `null`: phương án mới, khi đơn chưa có phương án đang chờ.
-- Kiểm tra: `reason` bắt buộc; các dòng hợp lệ như khi gửi đơn; nếu tổng mới ≥ số đã thu thì các đợt cộng đủ tổng mới; phải khác đơn hiện hành.
+`type`: `DepositReceipt` (giấy xác nhận cọc, tự động khi cọc thành công), `FinalInvoice` (hóa đơn cuối, NCC xuất). Mã: giấy xác nhận cọc `XNC<yyMM><số>`, hóa đơn cuối `HD<yyMM><số>`.
 
-Thêm tin `ADJUSTMENT_PROPOSED` (VENDOR) vào hội thoại.
+### `OrderContent` (body khi tạo, lưu nháp, gửi, sửa)
 
-Response 200: `{ "data": ServiceOrder }`
+```json
+{
+  "customerName": "Thu Hà & Đức Minh",
+  "customerPhone": "0938 221 904",
+  "eventDate": "2026-12-13",
+  "note": "Giữ sảnh tầng 2.",
+  "depositPercent": 30,
+  "items": [{ "itemName": "Tiệc cưới – Menu A", "unit": "Bàn", "quantity": 18, "unitPrice": 3200000 }]
+}
+```
 
-Lỗi: 400 `VALIDATION_ERROR`, 400 `ORDER_NO_CHANGES`, 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_ADJUSTABLE` (chưa `CONFIRMED`), 409 `ADJUSTMENT_PENDING` (đã có phương án đang chờ khách), 409 `CONFLICT` (phương án `revisionOf` không còn ở `REVISION_REQUESTED`)
+Không có `totalAmount`, `depositAmount`, `amount`: backend tính.
 
-### POST /vendors/me/orders/:id/cancel
-Role: VENDOR
+## Kiểm tra
 
-Hủy đơn khi chưa có khoản thu nào. Body `{ "reason": "Khách chọn nhà hàng khác." }`. BE đặt `status = CANCELLED`, `cancellation`, xóa `draft`, `revisionRequest`, `adjustmentRequest`, phương án đang chờ thành `SUPERSEDED`. Đơn đã gửi khách (có phiên bản) thì thêm tin `ORDER_CANCELLED` (SYSTEM, `text` = lý do).
+| Khi | Quy tắc |
+|---|---|
+| Lưu nháp (tạo, `PUT draft`) | **Bắt buộc `eventDate`** (cột `NOT NULL`, backend không tự đặt ngày hôm nay). Các trường khác được để trống; `depositPercent` trống thì mặc định 30; `customerPhone` trống thì lưu chuỗi rỗng |
+| Gửi đơn (`send`) | Đủ `customerName`, `customerPhone` (9 đến 15 ký tự gồm số, khoảng trắng, `+ ( ) . -`), `eventDate`, ít nhất một hạng mục (`itemName` không rỗng, `quantity` nguyên > 0, `unitPrice` ≥ 0), `totalAmount` > 0, `depositPercent` lớn hơn 0 và nhỏ hơn 100 |
+| Sửa và gửi lại / sửa sau cọc | Như gửi đơn, và phải có thay đổi so với nội dung hiện tại |
 
-Response 200: `{ "data": ServiceOrder }`
+Lỗi kiểm tra trả `400 VALIDATION_ERROR` với `details` theo trường: `customerName`, `customerPhone`, `eventDate`, `depositPercent`, `items`, `items.<i>.itemName`, `items.<i>.quantity`, `items.<i>.unitPrice`.
 
-Lỗi: 400 `VALIDATION_ERROR` (thiếu lý do), 404 `ORDER_NOT_FOUND`, 409 `ORDER_HAS_PAYMENTS`, 409 `CONFLICT` (đã hủy)
+## Endpoint
 
-## Mã lỗi riêng (phía NCC)
+### GET /vendors/me/orders
+
+Query: `q` (mã đơn, tên khách, số điện thoại), `status` (một trong 7 trạng thái), `from`, `to` (ngày sự kiện `YYYY-MM-DD`, gồm hai đầu), `conversationId`, `page`, `pageSize` (mặc định 20, tối đa 100). Sắp xếp `createdDate` giảm dần. Gồm cả bản nháp.
+
+Response 200: `{ "data": Order[], "meta": { page, pageSize, total, totalPages } }`
+
+### GET /vendors/me/orders/counts
+
+Số đơn theo từng trạng thái, không phụ thuộc bộ lọc.
+
+Response 200: `{ "data": { "Draft": 1, "Pending": 2, "NeedRevision": 1, "Deposited": 3, "Completed": 4, "Expired": 1, "Cancelled": 1 } }`
+
+### GET /vendors/me/orders/:id
+
+Response 200: `{ "data": Order }`. Lỗi: 404 `ORDER_NOT_FOUND`.
+
+### POST /vendors/me/orders
+
+Tạo đơn trong hội thoại. Backend suy `weddingId` từ hội thoại (`Weddings.UserId` = `Conversations.CoupleId`); FE không gửi `weddingId`.
+
+```json
+{ "conversationId": "fb9cffdf-…", "content": "OrderContent", "send": false }
+```
+
+- `send = false`: lưu nháp (`Draft`, không tạo tin nhắn, khách không thấy).
+- `send = true`: kiểm tra đủ rồi gửi luôn: `Draft` → `Pending`, tạo `Payments` (`Unpaid`), `depositDueDate` = +1 ngày, thêm tin `Order` vào hội thoại.
+
+Response 201: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR`, 404 `CONVERSATION_NOT_FOUND`, 409 `WEDDING_NOT_SET` (khách chưa điền thông tin đám cưới).
+
+### PUT /vendors/me/orders/:id/draft
+
+Lưu bản nháp của đơn `Draft`. Body: `{ "content": OrderContent }`. Response 200: `{ "data": Order }`. Lỗi: 400, 404, 409 `ORDER_NOT_DRAFT`.
+
+### POST /vendors/me/orders/:id/send
+
+Body: `{ "content": OrderContent }`. Chấp nhận đơn `Draft`, `Pending`, `NeedRevision`.
+
+- `Draft`: gửi lần đầu (như `send = true` ở trên).
+- `Pending` / `NeedRevision` ("Sửa và gửi lại"): lưu nội dung mới; nếu có `OrderRevisions` `Requested` thì thành `Applied` (ghi `newTotalAmount`, `appliedDate`), nếu NCC tự sửa thì tạo luôn dòng `Applied`; tính lại `totalAmount`, `depositAmount`; đơn về `Pending`; **đặt lại `depositDueDate` = +1 ngày**; thêm một tin `Order` mới (thẻ mới).
+- Phải có thay đổi so với nội dung hiện tại (trừ `Draft`).
+
+Response 200: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR`, 400 `ORDER_NO_CHANGES`, 404, 409 `ORDER_NOT_SENDABLE` (đơn `Deposited`, `Completed`, `Expired`, `Cancelled`).
+
+### PATCH /vendors/me/orders/:id
+
+**Sửa đơn sau cọc** (`Deposited`). Body: `{ "content": OrderContent }`.
+
+- Sửa được: hạng mục, `eventDate`, `note`. **Khóa** `depositPercent` và `depositAmount` (giá trị gửi lên bị bỏ qua); `customerName`, `customerPhone` giữ nguyên.
+- `totalAmount` mới phải lớn hơn hoặc bằng `depositAmount` đã cọc.
+- Ghi `OrderRevisions` loại `AfterDeposit`: nếu có yêu cầu `Requested` của khách thì thành `Applied`, nếu không thì tạo dòng `Applied`. Thêm một tin `Order` (thẻ cập nhật). Đơn **vẫn** `Deposited`.
+- Tiền còn phải trả = `totalAmount` mới trừ `depositAmount` (ví dụ đơn 10 triệu, cọc 1 triệu, sửa lên 12 triệu thì còn 11 triệu).
+
+Response 200: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR`, 400 `ORDER_NO_CHANGES`, 400 `ORDER_TOTAL_BELOW_DEPOSIT`, 404, 409 `ORDER_NOT_EDITABLE` (không phải `Deposited`).
+
+### POST /vendors/me/orders/:id/complete
+
+**Đánh dấu hoàn thành.** Chỉ khi `Deposited` và `eventDate` **đã qua** (hôm nay theo giờ Việt Nam lớn hơn `eventDate`). Thành công: `Completed`, ghi `completedDate`, tạo `Commissions` gắn vào bảng kê của tháng chứa `completedDate` (xem [commissions.md](commissions.md)), thêm tin hệ thống "Đơn … đã hoàn thành".
+
+Response 200: `{ "data": Order }`. Lỗi: 404, 409 `ORDER_NOT_COMPLETABLE` (không phải `Deposited`), 409 `ORDER_EVENT_NOT_PASSED`.
+
+### POST /vendors/me/orders/:id/final-invoice
+
+**Xuất hóa đơn cuối** khi khách yêu cầu, mỗi đơn một lần. Chỉ khi `Deposited` hoặc `Completed`. Tạo `Invoices` loại `FinalInvoice`, thêm tin `FinalInvoice` vào hội thoại.
+
+Response 200: `{ "data": Order }` (đã có hóa đơn trong `invoices`). Lỗi: 404, 409 `INVOICE_NOT_AVAILABLE` (đơn chưa cọc, hết hạn hoặc đã hủy), 409 `INVOICE_EXISTS`.
+
+## Mã lỗi riêng
 
 | HTTP | `code` | Khi nào |
 |---|---|---|
-| 400 | `ORDER_NO_CHANGES` | Gửi lại mà nội dung không đổi |
-| 404 | `ORDER_NOT_FOUND` | Không có hoặc của NCC khác |
-| 409 | `ORDER_NOT_REVISABLE` | Sửa / gửi lại đơn đã `CONFIRMED` |
-| 409 | `ORDER_VERSION_CONFLICT` | `baseVersion` không còn là phiên bản hiện hành |
-| 409 | `ORDER_HAS_PAYMENTS` | Gửi lại hoặc hủy đơn đã có khoản thu |
-| 409 | `ORDER_NOT_PAYABLE` | Ghi nhận thanh toán cho đơn chưa `CONFIRMED` |
-| 409 | `ORDER_NOT_ADJUSTABLE` | Điều chỉnh đơn chưa `CONFIRMED` |
-| 409 | `ADJUSTMENT_PENDING` | Lập phương án mới khi đã có phương án đang chờ khách |
+| 400 | `VALIDATION_ERROR` | Nội dung đơn không hợp lệ (`details` theo trường) |
+| 400 | `ORDER_NO_CHANGES` | Gửi lại hoặc sửa mà không có thay đổi |
+| 400 | `ORDER_TOTAL_BELOW_DEPOSIT` | Sửa sau cọc làm tổng mới nhỏ hơn tiền đã cọc |
+| 404 | `ORDER_NOT_FOUND`, `CONVERSATION_NOT_FOUND` | Không có hoặc không thuộc NCC |
+| 409 | `WEDDING_NOT_SET` | Khách chưa có thông tin đám cưới, chưa tạo được đơn |
+| 409 | `ORDER_NOT_DRAFT` | Lưu nháp đơn không còn là `Draft` |
+| 409 | `ORDER_NOT_SENDABLE` | Gửi đơn không ở `Draft`, `Pending`, `NeedRevision` |
+| 409 | `ORDER_NOT_EDITABLE` | Sửa sau cọc nhưng đơn không phải `Deposited` |
+| 409 | `ORDER_NOT_COMPLETABLE`, `ORDER_EVENT_NOT_PASSED` | Hoàn thành sai trạng thái, hoặc chưa qua `eventDate` |
+| 409 | `INVOICE_NOT_AVAILABLE`, `INVOICE_EXISTS` | Xuất hóa đơn cuối sai trạng thái, hoặc đã xuất |
 
-## Chưa có
+## Việc backend tự chạy hằng ngày
 
-- Phía cặp đôi: xác nhận đơn, yêu cầu chỉnh sửa theo phiên bản (thay `POST /orders/:id/revision-requests` ở trên), đề nghị điều chỉnh, đồng ý / yêu cầu sửa phương án. Trong mock, các việc này giả lập bằng nút "Giả lập khách" ở trang Tin nhắn NCC.
+Theo CSDL mục 9.12 (múi giờ Việt Nam):
 
-## Khác biệt với prototype NCC
+1. **Hết hạn đơn:** `Pending` có `depositDueDate` đã qua thì thành `Expired`, thêm tin hệ thống "Đơn … đã hết hạn đặt cọc". (`NeedRevision` không hết hạn vì đang chờ NCC.)
+2. **Tự hoàn thành:** `Deposited` mà `eventDate` + 7 ngày đã qua thì thành `Completed`, ghi `completedDate`, tạo hoa hồng, thêm tin hệ thống.
+3. Nhắc hoa hồng (xem [commissions.md](commissions.md)).
 
-- Đợt 1 (đặt cọc) luôn qua VNPay theo quyết định thanh toán kết hợp; prototype cho chọn Chuyển khoản / Tiền mặt cho mọi đợt.
-- Bỏ nút đính kèm tệp trong ô soạn tin (prototype chỉ ghi tên tệp vào tin, chưa có upload).
-- Bỏ ô chọn khách khi tạo đơn ngoài chat ("Tạo đơn" ở trang đơn hàng): đơn luôn tạo trong một hội thoại.
-- Tỷ lệ đợt là số nguyên (prototype cho số lẻ, có nút "Dồn vào đợt cuối"); đợt cuối tự nhận phần tiền lẻ.
-- Ghi nhận thanh toán có thêm tệp minh chứng và hình thức thanh toán; cọc mặc định qua VNPay (hệ thống ghi nhận), NCC chỉ ghi nhận cọc khi khách trả trực tiếp.
-- Thêm luồng hủy đơn (prototype chỉ có nhãn "Đã hủy").
+Mock của FE chạy các việc này mỗi lần đọc dữ liệu, có nút "giả lập thời gian" để thử.
+
+## Không còn trong hợp đồng NCC
+
+Phiên bản đơn (`versions`, v1/v2), đợt thanh toán tùy chỉnh (`installments`), `POST .../payments` (ghi nhận thanh toán), `POST .../adjustments` (phương án điều chỉnh), `POST .../cancel` (NCC hủy), `paymentStatus` 6 giá trị, `paidAmount`, "phí theo chính sách", liên kết dòng báo giá với gói.
