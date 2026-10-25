@@ -113,7 +113,7 @@ Cùng bảng `Conversations` / `Messages` với phía cặp đôi: mỗi cặp (
 | `needsAction` | Cần NCC xử lý: có đơn `Draft`, `NeedRevision`, đơn `Deposited` có yêu cầu sửa sau cọc đang `Requested`, hoặc đơn `Deposited` đã qua `eventDate` (chờ đánh dấu hoàn thành) |
 | `orderCodes` | Mã mọi đơn của hội thoại, để tìm theo mã đơn |
 
-Nhãn trạng thái trong danh sách hội thoại (FE suy từ `latestOrder.status`): `Pending` Chờ khách xác nhận (hạn cọc còn), `NeedRevision` Cần sửa, `Deposited` Đã cọc, `Completed` Hoàn thành, `Expired` Hết hạn, `Cancelled` Đã hủy; chỉ có bản nháp thì "Bản nháp".
+Nhãn trạng thái trong danh sách hội thoại (FE suy từ `latestOrder.status`): `Pending` Chờ cọc, `NeedRevision` Cần sửa, `Deposited` Đã cọc, `Completed` Hoàn thành, `Expired` Hết hạn, `Cancelled` Đã hủy; chỉ có bản nháp thì "Bản nháp".
 
 ### `VendorMessage`
 

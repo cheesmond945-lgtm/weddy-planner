@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { serviceOrdersApi } from '@/api/serviceOrders'
-import { vendorChatApi } from '@/api/vendorChat'
+import { vendorConversationsApi } from '@/api/vendorConversations'
 import { toast } from '@/components/ui/toast'
+import { vendorKeys } from '@/features/vendorOrders/keys'
+import { advanceClock, resetClock } from '@/lib/clock'
 import { useAuth } from '@/store/auth'
-import type { CustomerSimulation, VendorMessage } from '@/types/vendorChat'
-import { vendorChatKeys } from './keys'
+import type { CustomerSimulation, VendorMessage } from '@/types/vendorConversation'
 
 // Chưa có websocket (docs/api/chat.md): hỏi lại định kỳ khi đang mở trang Tin nhắn, như phía cặp đôi
 const POLL_MS = 2500
@@ -17,7 +17,7 @@ function useVendorId() {
 /** pollMs: trang Tin nhắn hỏi lại mỗi 2,5 giây; sidebar (số chưa đọc) thưa hơn. */
 export function useVendorConversations(pollMs = POLL_MS) {
   const uid = useVendorId()
-  return useQuery({ queryKey: vendorChatKeys.conversations(uid), queryFn: vendorChatApi.listConversations, enabled: !!uid, refetchInterval: pollMs })
+  return useQuery({ queryKey: vendorKeys.conversations(uid), queryFn: vendorConversationsApi.list, enabled: !!uid, refetchInterval: pollMs })
 }
 
 /** Tổng số tin chưa đọc (mục "Tin nhắn" trên sidebar). */
@@ -29,19 +29,8 @@ export function useUnreadCount() {
 export function useVendorMessages(conversationId: string | null) {
   const uid = useVendorId()
   return useQuery({
-    queryKey: vendorChatKeys.messages(uid, conversationId ?? ''),
-    queryFn: () => vendorChatApi.listMessages(conversationId!),
-    enabled: !!uid && !!conversationId,
-    refetchInterval: POLL_MS,
-  })
-}
-
-/** Đơn của hội thoại (gồm bản nháp), để vẽ thẻ đơn và dải "bản nháp chưa gửi". */
-export function useConversationOrders(conversationId: string | null) {
-  const uid = useVendorId()
-  return useQuery({
-    queryKey: vendorChatKeys.orders(uid, conversationId ?? ''),
-    queryFn: () => serviceOrdersApi.listByConversation(conversationId!),
+    queryKey: vendorKeys.messages(uid, conversationId ?? ''),
+    queryFn: () => vendorConversationsApi.listMessages(conversationId!),
     enabled: !!uid && !!conversationId,
     refetchInterval: POLL_MS,
   })
@@ -52,8 +41,8 @@ export function useMarkRead() {
   const uid = useVendorId()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: vendorChatApi.markRead,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: vendorChatKeys.conversations(uid) }),
+    mutationFn: vendorConversationsApi.markRead,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: vendorKeys.conversations(uid) }),
   })
 }
 
@@ -61,10 +50,10 @@ export function useSendVendorMessage(conversationId: string) {
   const uid = useVendorId()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (text: string) => vendorChatApi.send(conversationId, text),
+    mutationFn: (text: string) => vendorConversationsApi.send(conversationId, text),
     onSuccess: (msg) => {
-      qc.setQueryData<VendorMessage[]>(vendorChatKeys.messages(uid, conversationId), (list = []) => [...list, msg])
-      void qc.invalidateQueries({ queryKey: vendorChatKeys.conversations(uid) })
+      qc.setQueryData<VendorMessage[]>(vendorKeys.messages(uid, conversationId), (list = []) => [...list, msg])
+      void qc.invalidateQueries({ queryKey: vendorKeys.conversations(uid) })
     },
     onError: (e) => toast(e.message),
   })
@@ -78,7 +67,7 @@ export const WEDDING_REMINDER =
 export function useWeddingReminder(conversationId: string) {
   const { data: messages } = useVendorMessages(conversationId)
   const send = useSendVendorMessage(conversationId)
-  const reminded = !!messages?.some((m) => m.sender === 'VENDOR' && m.type === 'TEXT' && m.text === WEDDING_REMINDER)
+  const reminded = !!messages?.some((m) => m.sender === 'VENDOR' && m.type === 'Text' && m.content === WEDDING_REMINDER)
   return {
     reminded,
     isPending: send.isPending,
@@ -86,13 +75,24 @@ export function useWeddingReminder(conversationId: string) {
   }
 }
 
-/** CHỈ KHI DÙNG MOCK: giả lập khách, xong tải lại hội thoại, tin, đơn. */
+/** CHỈ KHI DÙNG DỮ LIỆU GIẢ: giả lập khách, xong tải lại hội thoại, tin, đơn. */
 export function useSimulateCustomer(conversationId: string) {
   const uid = useVendorId()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (action: CustomerSimulation) => vendorChatApi.simulate(conversationId, action),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: vendorChatKeys.all(uid) }),
+    mutationFn: (sim: CustomerSimulation) => vendorConversationsApi.simulate(conversationId, sim),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: vendorKeys.all(uid) }),
     onError: (e) => toast(e.message),
   })
+}
+
+/** CHỈ KHI DÙNG DỮ LIỆU GIẢ: tua đồng hồ (giờ) để thử đơn hết hạn cọc, tự hoàn thành. hours = 0: về giờ thật. */
+export function useAdvanceTime() {
+  const uid = useVendorId()
+  const qc = useQueryClient()
+  return (hours: number) => {
+    if (hours === 0) resetClock()
+    else advanceClock(hours)
+    void qc.invalidateQueries({ queryKey: vendorKeys.all(uid) })
+  }
 }

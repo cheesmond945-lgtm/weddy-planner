@@ -6,7 +6,7 @@ import { formatDate } from '@/lib/date'
 import { paths } from '@/routes/paths'
 import type { CommissionStatementSummary } from '@/types/commission'
 import type { ServiceOrder } from '@/types/serviceOrder'
-import type { VendorConversation } from '@/types/vendorChat'
+import type { VendorConversation } from '@/types/vendorConversation'
 import type { VendorPackage } from '@/types/vendorPackage'
 
 /*

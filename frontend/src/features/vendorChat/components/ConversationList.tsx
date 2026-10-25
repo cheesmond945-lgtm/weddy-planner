@@ -4,7 +4,7 @@ import { Badge } from '@/components/Badge'
 import { EmptyState } from '@/components/EmptyState'
 import { formatMessageTime } from '@/lib/date'
 import { cn } from '@/lib/utils'
-import type { VendorConversation } from '@/types/vendorChat'
+import type { VendorConversation } from '@/types/vendorConversation'
 import { conversationBadge, lastMessagePreview, PersonAvatar } from '../preview'
 
 type Tab = 'all' | 'unread' | 'todo'
@@ -133,7 +133,7 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
                 </Badge>
               )}
             </span>
-            <span className="text-[11px] whitespace-nowrap text-muted-foreground">{c.lastMessage ? formatMessageTime(c.lastMessage.createdAt) : ''}</span>
+            <span className="text-[11px] whitespace-nowrap text-muted-foreground">{c.lastMessage ? formatMessageTime(c.lastMessage.sentDate) : ''}</span>
             <span className="col-span-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
               <span className="truncate">{lastMessagePreview(c.lastMessage)}</span>
               {c.unreadCount > 0 && (

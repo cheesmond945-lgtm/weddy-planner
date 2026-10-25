@@ -29,7 +29,7 @@ import { mockVendors } from './vendors'
  *
  * Dữ liệu lưu trong localStorage theo từng tài khoản NCC. Muốn làm lại từ đầu thì xóa khóa bên dưới.
  */
-const STORAGE_KEY = 'weddy.mock.vendorOrders.v2'
+const STORAGE_KEY = 'weddy.mock.vendorOrders.v3'
 
 /** Tỷ lệ hoa hồng theo loại dịch vụ (ServiceCategories.CommissionRate): chỉ để dữ liệu giả có số; BE đọc từ CSDL. */
 const COMMISSION_RATE: Record<string, number> = { 'nha-hang': 5, decor: 7, 'hoa-cuoi': 8, 'trang-phuc': 8, 'chup-anh': 8, makeup: 10 }
@@ -423,6 +423,18 @@ function seed(userId: string, n: Date): Data {
     return o
   }
 
+  /** Tin khách gửi trước tin cuối của NCC/hệ thống coi như đã đọc; chỉ còn chưa đọc các tin khách gửi sau cùng. */
+  const settle = () => {
+    for (const c of d.conversations) {
+      const msgs = d.messages.filter((m) => m.conversationId === c.id).sort(bySent)
+      const lastOther = msgs.map((m) => m.sender !== 'COUPLE').lastIndexOf(true)
+      msgs.forEach((m, i) => {
+        if (m.sender === 'COUPLE' && i < lastOther) m.isRead = true
+      })
+    }
+    return d
+  }
+
   if (userId === 'u-vendor-2') {
     const s1 = conv('vc-s1', 'Minh Anh', '0901 234 567')
     couple(s1, 50, 'Chào studio, mình muốn chụp pre-wedding ở Đà Lạt vào tháng 11.')
@@ -433,7 +445,7 @@ function seed(userId: string, n: Date): Data {
     const c2 = content('Hà My & Tuấn Anh', '0904 337 615', dayIn(12), [['Pre-wedding Đà Lạt 2 ngày', 'Gói', 1, 22_000_000]])
     const o2 = order(s2, c2, ago(120), ago(120))
     payDeposit(d, o2, ago(115))
-    return d
+    return settle()
   }
 
   // c1: chỉ có tin nhắn
@@ -524,7 +536,7 @@ function seed(userId: string, n: Date): Data {
   const c20 = conv('vc-20', 'Phạm Ngọc Lan', '0933 400 500', true)
   couple(c20, 28, 'Mình đang tìm nhà hàng, cho mình hỏi bên mình còn lịch cuối năm không ạ?')
 
-  return d
+  return settle()
 }
 
 // ---- Lưu trữ ----

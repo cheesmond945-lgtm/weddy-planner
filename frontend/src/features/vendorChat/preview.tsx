@@ -1,6 +1,6 @@
 import type { BadgeTone } from '@/components/Badge'
 import { cn } from '@/lib/utils'
-import type { VendorConversation } from '@/types/vendorChat'
+import type { VendorConversation } from '@/types/vendorConversation'
 
 /** Chữ viết tắt của cặp đôi: "Hồng Nhung & Tuấn Kiệt" -> "HN" (như prototype NCC). */
 export function PersonAvatar({ name, className }: { name: string; className?: string }) {
@@ -20,53 +20,40 @@ export function PersonAvatar({ name, className }: { name: string; className?: st
 
 /**
  * Nhãn ngắn trạng thái đơn mới nhất của hội thoại (pill cạnh tên khách):
- * Chờ khách xác nhận, Cần sửa, Chờ cọc, Đã cọc, Đã hủy; chưa có đơn đã gửi mà có bản nháp thì "Bản nháp".
+ * Chờ cọc, Cần sửa, Đã cọc, Hoàn thành, Hết hạn, Đã hủy; chưa gửi đơn nào mà có nháp thì "Bản nháp".
  */
 export function conversationBadge(c: Pick<VendorConversation, 'latestOrder' | 'hasDraftOrder'>): { label: string; tone: BadgeTone } | null {
   const o = c.latestOrder
   if (!o) return c.hasDraftOrder ? { label: 'Bản nháp', tone: 'neutral' } : null
   switch (o.status) {
-    case 'AWAITING_CONFIRMATION':
-      return { label: 'Chờ khách xác nhận', tone: 'wait' }
-    case 'REVISION_REQUESTED':
+    case 'Pending':
+      return { label: 'Chờ cọc', tone: 'wait' }
+    case 'NeedRevision':
       return { label: 'Cần sửa', tone: 'warn' }
-    case 'CANCELLED':
+    case 'Deposited':
+      return { label: 'Đã cọc', tone: 'done' }
+    case 'Completed':
+      return { label: 'Hoàn thành', tone: 'info' }
+    case 'Expired':
+      return { label: 'Hết hạn', tone: 'neutral' }
+    case 'Cancelled':
       return { label: 'Đã hủy', tone: 'warn' }
-    case 'CONFIRMED':
-      if (o.paymentStatus === 'OVERPAID') return { label: 'Thu thừa', tone: 'warn' }
-      return o.paymentStatus === 'UNPAID' || o.paymentStatus === 'AWAITING_DEPOSIT' ? { label: 'Chờ cọc', tone: 'wait' } : { label: 'Đã cọc', tone: 'done' }
     default:
       return c.hasDraftOrder ? { label: 'Bản nháp', tone: 'neutral' } : null
   }
 }
 
-/** Dòng tóm tắt tin cuối trong danh sách hội thoại (như prototype NCC). */
+/** Dòng tóm tắt tin cuối trong danh sách hội thoại. */
 export function lastMessagePreview(m: VendorConversation['lastMessage']) {
   if (!m) return ''
   const mine = m.sender === 'VENDOR' ? 'Bạn: ' : ''
-  const code = m.orderCode ?? ''
   switch (m.type) {
-    case 'ORDER':
-      return `${mine}Đơn dịch vụ ${code} · v${m.orderVersion}`
-    case 'ORDER_RESENT':
-      return `Đã gửi lại ${code} · v${m.orderVersion}`
-    case 'ORDER_REVISION_REQUESTED':
-      return `Yêu cầu chỉnh sửa ${code}`
-    case 'ORDER_CONFIRMED':
-      return `Khách xác nhận ${code}`
-    case 'PAYMENT_RECORDED':
-      return m.text
-    case 'ADJUSTMENT_PROPOSED':
-      return `Phương án điều chỉnh ${code}`
-    case 'ADJUSTMENT_REQUESTED':
-      return `Khách yêu cầu điều chỉnh ${code}`
-    case 'ADJUSTMENT_REVISION_REQUESTED':
-      return `Khách yêu cầu sửa phương án ${code}`
-    case 'ADJUSTMENT_ACCEPTED':
-      return `Khách đồng ý điều chỉnh ${code}`
-    case 'ORDER_CANCELLED':
-      return `Đã hủy đơn ${code}`
+    case 'Order':
+      return `${mine}Đơn dịch vụ ${m.orderCode ?? ''}`
+    case 'DepositReceipt':
+    case 'FinalInvoice':
+      return m.content
     default:
-      return `${mine}${m.text}`
+      return `${mine}${m.content}`
   }
 }

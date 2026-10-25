@@ -3,19 +3,12 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
-import { AdjustmentView, OrderDetailDialog } from '@/features/serviceOrders/components/OrderDetailDialog'
-import { OrderFormDialog } from '@/features/serviceOrders/components/OrderFormDialog'
-import { PanelDialog } from '@/features/serviceOrders/components/PanelDialog'
+import { OrderFormDialog, type OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
 import { cn } from '@/lib/utils'
-import type { ServiceOrder } from '@/types/serviceOrder'
+import type { Order } from '@/types/vendorOrder'
 import { useVendorConversations } from '../hooks'
 import { ChatThread } from './ChatThread'
 import { ConversationList } from './ConversationList'
-
-type Panel =
-  | { type: 'form'; order?: ServiceOrder }
-  | { type: 'detail'; order: ServiceOrder; version: number }
-  | { type: 'adjustment'; order: ServiceOrder; adjustmentId: string }
 
 /**
  * Trang Tin nhắn của NCC: danh sách hội thoại trái, khung chat phải; tạo, sửa, gửi lại đơn ngay trong chat.
@@ -24,7 +17,7 @@ type Panel =
 export function VendorChatView() {
   const { data: conversations, isPending, isError, error, refetch } = useVendorConversations()
   const [params, setParams] = useSearchParams()
-  const [panel, setPanel] = useState<Panel | null>(null)
+  const [form, setForm] = useState<OrderFormMode | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
 
   const picked = params.get('c')
@@ -39,7 +32,7 @@ export function VendorChatView() {
   }, [highlight])
 
   const select = (id: string | null) => {
-    setPanel(null)
+    setForm(null)
     setParams(id ? { c: id } : {}, { replace: !id })
   }
 
@@ -60,16 +53,7 @@ export function VendorChatView() {
         </div>
         <div className={cn('flex min-h-0 min-w-0 flex-col', !showChat && 'max-[900px]:hidden')}>
           {active ? (
-            <ChatThread
-              key={active.id}
-              conversation={active}
-              highlightOrderId={highlight}
-              onBack={() => select(null)}
-              onOpenForm={(order) => setPanel({ type: 'form', order })}
-              onEditOrder={(order) => setPanel({ type: 'form', order })}
-              onViewOrder={(order, version) => setPanel({ type: 'detail', order, version })}
-              onViewAdjustment={(order, adjustmentId) => setPanel({ type: 'adjustment', order, adjustmentId })}
-            />
+            <ChatThread key={active.id} conversation={active} highlightOrderId={highlight} onBack={() => select(null)} onOpenForm={setForm} />
           ) : (
             <EmptyState
               className="m-auto border-0 bg-transparent"
@@ -81,32 +65,17 @@ export function VendorChatView() {
         </div>
       </section>
 
-      {panel?.type === 'form' && active && (
+      {form && active && (
         <OrderFormDialog
+          // Key theo chế độ và đơn để form nạp lại giá trị khi mở đơn khác
+          key={`${form.kind}-${'order' in form ? form.order.id : 'from' in form ? form.from.id : 'new'}`}
           conversationId={active.id}
           customer={active.customer}
-          order={panel.order}
-          onClose={() => setPanel(null)}
-          onSent={(o) => setHighlight(o.id)}
+          mode={form}
+          onClose={() => setForm(null)}
+          onSent={(o: Order) => setHighlight(o.id)}
         />
       )}
-      {panel?.type === 'detail' && <OrderDetailDialog order={panel.order} version={panel.version} onClose={() => setPanel(null)} />}
-      {panel?.type === 'adjustment' &&
-        (() => {
-          const a = panel.order.adjustments.find((x) => x.id === panel.adjustmentId)
-          return (
-            <PanelDialog
-              open
-              size="md"
-              onRequestClose={() => setPanel(null)}
-              title={`Phương án điều chỉnh ${panel.order.code}`}
-              subtitle="Đơn hiện hành giữ nguyên tới khi khách đồng ý. Lập, sửa phương án ở Quản lý đơn hàng."
-              footer={<Button onClick={() => setPanel(null)}>Đóng</Button>}
-            >
-              {a ? <AdjustmentView adjustment={a} /> : <p className="text-muted-foreground">Không tìm thấy phương án.</p>}
-            </PanelDialog>
-          )
-        })()}
     </>
   )
 }

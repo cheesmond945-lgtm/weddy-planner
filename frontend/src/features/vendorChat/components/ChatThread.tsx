@@ -1,37 +1,31 @@
-import { ChevronLeft, FilePen, Phone, Plus, Send, Tag } from 'lucide-react'
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ChevronLeft, FilePen, Phone, Plus, Send } from 'lucide-react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
-import { formatStamp } from '@/features/serviceOrders/calc'
-import { orderPageHref } from '@/features/serviceOrders/components/OrderCard'
+import { formatStamp, orderPageHref } from '@/features/vendorOrders/calc'
+import type { OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
+import { useConversationOrders } from '@/features/vendorOrders/hooks'
 import { formatDate, toISODate } from '@/lib/date'
-import { formatMoney } from '@/lib/format'
-import type { ServiceOrder } from '@/types/serviceOrder'
-import type { VendorConversation } from '@/types/vendorChat'
-import { useConversationOrders, useMarkRead, useSendVendorMessage, useVendorMessages } from '../hooks'
+import type { VendorConversation } from '@/types/vendorConversation'
+import { useMarkRead, useSendVendorMessage, useVendorMessages } from '../hooks'
 import { PersonAvatar } from '../preview'
 import { CustomerSimulator } from './CustomerSimulator'
-import { MessageItem, type MessageActions } from './MessageItem'
+import { MessageItem } from './MessageItem'
 
-interface ChatThreadProps extends MessageActions {
+interface ChatThreadProps {
   conversation: VendorConversation
   onBack: () => void
-  /** Thêm đơn mới, hoặc mở lại bản nháp */
-  onOpenForm: (order?: ServiceOrder) => void
+  /** Mở form đơn (tạo mới, mở lại bản nháp, sửa và gửi lại, sửa sau cọc, tạo đơn mới từ đơn hết hạn) */
+  onOpenForm: (mode: OrderFormMode) => void
   /** Đơn vừa gửi: cuộn tới và làm nổi thẻ */
   highlightOrderId: string | null
 }
 
 const dayOf = (iso: string) => formatDate(toISODate(new Date(iso)))
 
-function priceRange(p: NonNullable<VendorConversation['interestPackage']>) {
-  if (p.price !== null && p.maxPrice !== null) return `${formatMoney(p.price)} – ${formatMoney(p.maxPrice)}`
-  return p.price !== null ? `Từ ${formatMoney(p.price)}` : 'Chưa có giá'
-}
-
 /** Khung chat với một khách (chat-main trong prototype NCC), cùng kiểu khung chat phía cặp đôi. */
-export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrderId, ...actions }: ChatThreadProps) {
+export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrderId }: ChatThreadProps) {
   const { data: messages, isPending } = useVendorMessages(c.id)
   const { data: orders = [] } = useConversationOrders(c.id)
   const send = useSendVendorMessage(c.id)
@@ -39,9 +33,15 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
   const [text, setText] = useState('')
   const historyRef = useRef<HTMLDivElement>(null)
 
-  const sentOrders = orders.filter((o) => o.versions.length)
-  const drafts = orders.filter((o) => o.draft)
-  const latestOrder = [...sentOrders].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).pop()
+  const sentOrders = orders.filter((o) => o.status !== 'Draft')
+  const drafts = orders.filter((o) => o.status === 'Draft')
+  const latestOrder = [...sentOrders].sort((a, b) => b.createdDate.localeCompare(a.createdDate))[0]
+  // Thẻ mới nhất của từng đơn: gửi lại thì các thẻ cũ thu gọn
+  const latestCard = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const m of messages ?? []) if (m.type === 'Order' && m.orderId) map.set(m.orderId, m.id)
+    return map
+  }, [messages])
 
   // Mở hội thoại hoặc có tin mới khi đang mở: đánh dấu đã đọc
   const { mutate: read } = markRead
@@ -80,7 +80,7 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
           </div>
           <div className="mt-[3px] flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
             <Phone className="size-3" aria-hidden />
-            <span className="select-all">{c.customer.phone}</span>
+            <span className="select-all">{c.customer.phone || 'Chưa có số điện thoại'}</span>
             {sentOrders.length > 0 && (
               <>
                 <span className="px-1">•</span>
@@ -92,26 +92,17 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
             )}
           </div>
         </div>
-        <CustomerSimulator conversationId={c.id} latestOrder={latestOrder} />
+        <CustomerSimulator conversationId={c.id} orders={orders} />
         {latestOrder && (
           <Button asChild variant="outline" className="rounded-pill whitespace-nowrap max-[640px]:hidden">
-            <Link to={orderPageHref(latestOrder)}>Xem đơn ›</Link>
+            <Link to={orderPageHref(latestOrder.id)}>Xem đơn ›</Link>
           </Button>
         )}
-        <Button aria-label="Tạo đơn" className="rounded-pill whitespace-nowrap max-sm:size-[42px] max-sm:p-0" onClick={() => onOpenForm()}>
+        <Button aria-label="Tạo đơn" className="rounded-pill whitespace-nowrap max-sm:size-[42px] max-sm:p-0" onClick={() => onOpenForm({ kind: 'new' })}>
           <Plus />
           <span className="max-sm:hidden">Tạo đơn</span>
         </Button>
       </header>
-
-      {c.interestPackage && (
-        <div className="flex items-center gap-2 border-b border-line-soft bg-accent-soft px-6 py-[9px] text-[13px] text-gold-ink max-[900px]:px-3.5">
-          <Tag className="size-[15px] flex-none" />
-          <span>
-            Khách quan tâm: <b>{c.interestPackage.name}</b> · {priceRange(c.interestPackage)}
-          </span>
-        </div>
-      )}
 
       {drafts.map((o) => (
         <div
@@ -120,19 +111,10 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
         >
           <FilePen className="size-4 flex-none text-gold-ink" />
           <span className="min-w-[200px] flex-1">
-            {o.draft!.kind === 'EDIT' ? (
-              <>
-                Bản sửa nháp <b>{o.code}</b> chưa gửi lại
-              </>
-            ) : (
-              <>
-                Bản nháp <b>{o.code}</b> chưa gửi khách
-              </>
-            )}{' '}
-            · chỉ bạn nhìn thấy · lưu {formatStamp(o.draft!.savedAt)}
+            Bản nháp <b>{o.orderCode}</b> chưa gửi khách · chỉ bạn nhìn thấy · tạo {formatStamp(o.createdDate)}
           </span>
-          <Button size="sm" variant="outline" className="border-line-strong" onClick={() => (o.versions.length ? actions.onEditOrder(o) : onOpenForm(o))}>
-            {o.draft!.kind === 'EDIT' ? 'Tiếp tục chỉnh sửa' : 'Mở lại bản nháp'}
+          <Button size="sm" variant="outline" className="border-line-strong" onClick={() => onOpenForm({ kind: 'draft', order: o })}>
+            Mở lại bản nháp
           </Button>
         </div>
       ))}
@@ -140,21 +122,25 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
       <div ref={historyRef} className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-surface px-7 py-6 max-[900px]:p-4">
         {isPending && <div aria-busy="true" aria-label="Đang tải tin nhắn" className="m-auto h-24 w-2/3 animate-pulse rounded-lg bg-muted" />}
         {messages?.map((m, i) => {
-          const newDay = i === 0 || dayOf(messages[i - 1].createdAt) !== dayOf(m.createdAt)
+          const newDay = i === 0 || dayOf(messages[i - 1].sentDate) !== dayOf(m.sentDate)
           return (
             <Fragment key={m.id}>
               {newDay && (
                 <p className="text-center text-[11.5px] text-muted-foreground">
-                  <span className="rounded-pill bg-bg px-2.5 py-[3px]">{dayOf(m.createdAt)}</span>
+                  <span className="rounded-pill bg-bg px-2.5 py-[3px]">{dayOf(m.sentDate)}</span>
                 </p>
               )}
-              <MessageItem message={m} order={orders.find((o) => o.id === m.orderId)} highlightOrderId={highlightOrderId} {...actions} />
+              <MessageItem
+                message={m}
+                order={orders.find((o) => o.id === m.orderId)}
+                isLatestCard={!m.orderId || latestCard.get(m.orderId) === m.id}
+                highlight={!!m.orderId && highlightOrderId === m.orderId}
+                onOpenForm={onOpenForm}
+              />
             </Fragment>
           )
         })}
-        {messages && !messages.length && (
-          <EmptyState className="m-auto border-0 bg-transparent" title="Chưa có tin nhắn" description="Bắt đầu trò chuyện với khách." />
-        )}
+        {messages && !messages.length && <EmptyState className="m-auto border-0 bg-transparent" title="Chưa có tin nhắn" description="Bắt đầu trò chuyện với khách." />}
       </div>
 
       <form
