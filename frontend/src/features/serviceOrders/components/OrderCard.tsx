@@ -18,7 +18,7 @@ const Card = ({ old, highlight, children, ...rest }: { old?: boolean; highlight?
   <div
     {...rest}
     className={cn(
-      'w-full overflow-hidden rounded-[14px] border border-gold/30 bg-surface text-left shadow-portal transition-shadow',
+      'w-full overflow-hidden rounded-[22px] rounded-br-[5px] border border-line bg-surface text-left shadow-bubble transition-shadow',
       old && 'bg-surface-2 opacity-75',
       highlight && 'border-gold ring-4 ring-gold/25',
     )}
@@ -29,7 +29,7 @@ const Card = ({ old, highlight, children, ...rest }: { old?: boolean; highlight?
 
 function Head({ icon, title, chip, adjust }: { icon: ReactNode; title: ReactNode; chip?: ReactNode; adjust?: boolean }) {
   return (
-    <div className={cn('flex items-center gap-2.5 px-3.5 py-3', adjust ? 'bg-info-soft' : 'bg-linear-to-br from-gold-soft to-surface')}>
+    <div className={cn('flex items-center gap-2.5 px-3.5 py-3', adjust ? 'bg-info-soft' : 'bg-surface')}>
       <span className={cn('grid size-[30px] flex-none place-items-center rounded-sm [&_svg]:size-4', adjust ? 'bg-surface text-info' : 'bg-(image:--gold-grad) text-gold-on')}>{icon}</span>
       <div className="min-w-0 text-sm">
         <strong className="font-semibold">{title}</strong>

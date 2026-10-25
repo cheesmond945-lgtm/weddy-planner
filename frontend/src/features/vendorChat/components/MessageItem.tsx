@@ -24,7 +24,7 @@ const Time = ({ at }: { at: string }) => <time className="mt-1 text-[11px] text-
 /** Khung tin: của NCC bên phải, của khách bên trái; thẻ đơn rộng tối đa 440px. */
 function Bubble({ mine, wide, at, children }: { mine: boolean; wide?: boolean; at: string; children: ReactNode }) {
   return (
-    <div className={cn('grid max-w-[72%] max-sm:max-w-[88%]', mine ? 'self-end justify-items-end' : 'self-start', wide && 'w-full max-w-[min(440px,92%)] max-sm:max-w-full')}>
+    <div className={cn('grid max-w-[78%] max-[640px]:max-w-[94%]', mine ? 'self-end justify-items-end' : 'self-start', wide && 'w-full max-w-[min(440px,92%)] max-[640px]:max-w-full')}>
       {children}
       <Time at={at} />
     </div>
@@ -34,7 +34,7 @@ function Bubble({ mine, wide, at, children }: { mine: boolean; wide?: boolean; a
 /** Ô yêu cầu của khách (req-card): viền đỏ khi còn chờ NCC xử lý. */
 function RequestCard({ active, title, text, note }: { active: boolean; title: ReactNode; text: string; note?: string }) {
   return (
-    <div className={cn('grid gap-2 rounded-lg border border-l-[3px] border-line bg-surface px-3.5 py-3', active ? 'border-l-warn' : 'border-l-line-strong')}>
+    <div className={cn('grid gap-2 rounded-[18px] border border-l-[3px] border-line bg-surface px-4 py-3', active ? 'border-l-warn' : 'border-l-line-strong')}>
       <p className={cn('flex items-center gap-1.5 text-[12.5px]', active ? 'text-warn' : 'text-muted-foreground')}>
         <MessageSquare className="size-3.5" />
         {title}
@@ -50,8 +50,8 @@ function Event({ tone, icon, children, at }: { tone: 'ok' | 'pay' | 'stop'; icon
   return (
     <div
       className={cn(
-        'flex max-w-[94%] flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center rounded-2xl border px-3.5 py-[7px] text-center text-[12.5px] [&>svg]:size-3.5',
-        tone === 'ok' ? 'border-transparent bg-sage-soft text-sage' : tone === 'stop' ? 'border-transparent bg-warn-soft text-warn' : 'border-line bg-surface text-sage',
+        'flex max-w-[94%] flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center rounded-[20px] px-[15px] py-[9px] text-center text-[13px] [&>svg]:size-3.5',
+        tone === 'stop' ? 'bg-warn-soft text-warn' : 'bg-sage-soft text-sage',
       )}
     >
       {icon}
@@ -155,7 +155,7 @@ export function MessageItem({ message: m, order, highlightOrderId, onViewOrder, 
       )
     case 'ORDER_RESENT':
       return (
-        <div className="self-stretch rounded-lg bg-info-soft px-3.5 py-2.5 text-left text-[12.5px] text-ink">
+        <div className="self-stretch rounded-[18px] bg-info-soft px-4 py-2.5 text-left text-[12.5px] text-ink">
           <p className="flex flex-wrap items-center gap-1.5 text-info">
             <RefreshCw className="size-3.5" />
             Bạn đã cập nhật và gửi lại đơn {code} · v{m.orderVersion}
@@ -176,8 +176,8 @@ export function MessageItem({ message: m, order, highlightOrderId, onViewOrder, 
     <Bubble mine={mine} at={m.createdAt}>
       <div
         className={cn(
-          'rounded-[14px] border px-[15px] py-[11px] text-[13.5px] leading-relaxed whitespace-pre-wrap',
-          mine ? 'rounded-br-[4px] border-side-border bg-(image:--side-grad) text-side-ink' : 'rounded-bl-[4px] border-line bg-surface',
+          'rounded-[20px] px-[15px] py-[11px] text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]',
+          mine ? 'rounded-br-[5px] bg-primary text-primary-foreground' : 'rounded-bl-[5px] bg-bg text-ink',
         )}
       >
         {m.text}

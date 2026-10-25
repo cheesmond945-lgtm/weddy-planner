@@ -43,7 +43,9 @@ export function VendorChatView() {
     setParams(id ? { c: id } : {}, { replace: !id })
   }
 
-  const frame = 'grid h-[calc(100dvh-62px-150px)] min-h-[600px] overflow-hidden rounded-md border border-line bg-surface shadow-portal max-[900px]:min-h-[520px] max-sm:h-[calc(100dvh-62px-130px)]'
+  // 62px header + 90px đệm trên/dưới của VendorLayout (mobile 70px)
+  const frame =
+    'grid h-[calc(100dvh-152px)] max-h-[900px] min-h-[610px] overflow-hidden rounded-[26px] bg-surface shadow-panel max-[900px]:h-[calc(100dvh-132px)] max-[900px]:min-h-[520px]'
 
   if (isPending) return <div aria-busy="true" aria-label="Đang tải tin nhắn" className={cn(frame, 'animate-pulse bg-muted')} />
   if (isError) {
@@ -52,7 +54,7 @@ export function VendorChatView() {
 
   return (
     <>
-      <section className={cn(frame, 'grid-cols-[320px_minmax(0,1fr)] max-[900px]:grid-cols-1')}>
+      <section className={cn(frame, 'grid-cols-[340px_minmax(0,1fr)] max-[900px]:grid-cols-1')}>
         <div className={cn('flex min-h-0 flex-col', showChat && 'max-[900px]:hidden')}>
           <ConversationList conversations={conversations} selectedId={active?.id ?? null} onSelect={select} />
         </div>

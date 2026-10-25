@@ -20,9 +20,10 @@ import type { ChatMessageType, CustomerSimulation, VendorConversation, VendorMes
  */
 // .v2: thêm hủy đơn, minh chứng thanh toán, tỷ lệ nguyên (dữ liệu cũ trong trình duyệt được bỏ qua)
 // .v3: thêm đơn đã hoàn thành (căn cứ hoa hồng)
-const STORAGE_KEY = 'weddy.mock.vendorChat.v3'
+const STORAGE_KEY = 'weddy.mock.vendorChat.v5'
 
-type StoredConversation = Pick<VendorConversation, 'id' | 'customer' | 'interestPackage' | 'unreadCount'>
+/** noWedding: chỉ có trong mock, khách chưa có thông tin đám cưới (BE thật trả 409 WEDDING_NOT_SET khi tạo đơn). */
+type StoredConversation = Pick<VendorConversation, 'id' | 'customer' | 'interestPackage' | 'unreadCount'> & { noWedding?: boolean }
 
 interface VendorChatData {
   conversations: StoredConversation[]
@@ -77,9 +78,10 @@ function finalize(o: ServiceOrder): ServiceOrder {
 
 function seed(userId: string): VendorChatData {
   const data: VendorChatData = { conversations: [], messages: [], orders: [] }
-  const conv = (id: string, name: string, phone: string, unreadCount = 0, interest = false) => {
+  const conv = (id: string, name: string, phone: string, unreadCount = 0, interest = false, noWedding = false) => {
     data.conversations.push({
       id,
+      noWedding,
       customer: { name, phone },
       interestPackage: interest ? { id: 'DV101', name: 'Tiệc cưới – Menu A', price: 3_500_000, maxPrice: 4_500_000 } : null,
       unreadCount,
@@ -385,6 +387,14 @@ function seed(userId: string): VendorChatData {
     [38_400_000, at('2026-10-11', '15:00'), 'BANK_TRANSFER'],
   ])
 
+  // c19: khách thiếu số điện thoại (tài khoản chưa nhập), đã có thông tin đám cưới
+  const c19 = conv('vc-19', 'Thu Trang & Quốc Anh', '', 1)
+  text(c19, 'COUPLE', at('2026-10-23', '09:10'), 'Chào Mây Palace, nhà mình cưới ngày 17/01/2027, khoảng 20 bàn. Cho mình xin báo giá với ạ.')
+
+  // c20: khách chưa có thông tin đám cưới (tên lấy từ họ tên tài khoản): bấm Gửi/Lưu nháp thì nhận 409 WEDDING_NOT_SET
+  const c20 = conv('vc-20', 'Phạm Ngọc Lan', '0933 400 500', 1, false, true)
+  text(c20, 'COUPLE', at('2026-10-23', '10:05'), 'Mình đang tìm nhà hàng, cho mình hỏi bên mình còn lịch cuối năm không ạ?')
+
   data.orders.forEach(finalize)
   return data
 }
@@ -534,7 +544,11 @@ export const mockVendorChat = {
   /** Tạo đơn trong hội thoại: send = false lưu nháp, true gửi luôn v1. */
   createOrder(userId: string, body: { conversationId: string; content: OrderContent; send: boolean }): ServiceOrder {
     return withData(userId, (d) => {
-      findConversation(d, body.conversationId)
+      const conv = findConversation(d, body.conversationId)
+      // Như BE: đơn gắn với đám cưới của khách (suy từ hội thoại), chưa có thì không tạo được
+      if (conv.noWedding) {
+        throw new ApiError(409, 'WEDDING_NOT_SET', 'Khách chưa thiết lập thông tin đám cưới nên chưa tạo được đơn.')
+      }
       const content = cleanContent(body.content)
       if (body.send) assertSendable(content)
       const now = new Date().toISOString()

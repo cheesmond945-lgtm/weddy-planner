@@ -74,6 +74,7 @@ export function rebalance(insts: OrderInstallment[], total: number, locked: stri
   return out
 }
 
+/** Đơn trống, điền sẵn tên và số điện thoại của khách (NCC vẫn sửa được, sửa không đổi hồ sơ khách). Ngày sự kiện NCC tự nhập. */
 export function emptyContent(customer?: { name: string; phone: string }): OrderContent {
   return {
     customerName: customer?.name ?? '',

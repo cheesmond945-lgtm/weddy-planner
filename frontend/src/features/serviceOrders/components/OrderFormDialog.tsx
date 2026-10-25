@@ -1,14 +1,17 @@
-import { AlertCircle, ChevronDown, LoaderCircle, MessageSquare } from 'lucide-react'
+import { AlertCircle, BellRing, ChevronDown, LoaderCircle, MessageSquare } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { ApiError } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { isVenue } from '@/features/vendorPackages/constants'
 import { usePackages } from '@/features/vendorPackages/hooks'
 import { controlClass, Field } from '@/features/vendors/components/FormParts'
+import { useWeddingReminder } from '@/features/vendorChat/hooks'
 import { UnsavedChangesGuard } from '@/features/vendors/components/UnsavedChangesGuard'
 import { formatMessageTime } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import type { OrderContent, ServiceOrder } from '@/types/serviceOrder'
+import type { VendorConversation } from '@/types/vendorChat'
 import { cleanContent, currentVersion, diffContent, emptyContent, rebalance, totalOf } from '../calc'
 import { useSaveOrder } from '../hooks'
 import { validateOrder, type OrderErrors } from '../validation'
@@ -18,7 +21,7 @@ import { PanelDialog } from './PanelDialog'
 
 interface OrderFormDialogProps {
   conversationId: string
-  customer: { name: string; phone: string }
+  customer: VendorConversation['customer']
   /** Không có: thêm đơn mới. Có: mở lại bản nháp, hoặc sửa đơn đã gửi */
   order?: ServiceOrder
   onClose: () => void
@@ -44,6 +47,7 @@ function Section({ title, hint, children }: { title: string; hint?: ReactNode; c
  */
 export function OrderFormDialog({ conversationId, customer, order, onClose, onSent }: OrderFormDialogProps) {
   const save = useSaveOrder()
+  const reminder = useWeddingReminder(conversationId)
   const { data: packages } = usePackages()
   const sent = currentVersion(order ?? { versions: [] })
   // Lấy giá trị lúc mở form: bản nháp (nếu có) hoặc phiên bản đang gửi; gửi lại dựa trên phiên bản lúc mở
@@ -54,13 +58,17 @@ export function OrderFormDialog({ conversationId, customer, order, onClose, onSe
   const [content, setContent] = useState(initial)
   const [checked, setChecked] = useState(false)
   const [formError, setFormError] = useState('')
+  // BE trả WEDDING_NOT_SET: khách chưa điền thông tin đám cưới, chưa tạo được đơn
+  const [noWedding, setNoWedding] = useState(false)
+  // Lưu nháp bắt nhập ngày sự kiện (để BE không tự đặt thành ngày hôm nay)
+  const [needDate, setNeedDate] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
   const [showRequest, setShowRequest] = useState(true)
 
   const busy = save.isPending
   const dirty = JSON.stringify(content) !== JSON.stringify(initial)
   const total = totalOf(content.lines)
-  const errors: OrderErrors = checked ? validateOrder(content) : {}
+  const errors: OrderErrors = checked ? validateOrder(content) : needDate && !content.eventDate ? { eventDate: 'Chọn ngày diễn ra sự kiện để lưu nháp.' } : {}
 
   const quickFill: QuickFillPackage[] = (packages ?? [])
     .filter((p) => p.status === 'PUBLISHED')
@@ -70,6 +78,12 @@ export function OrderFormDialog({ conversationId, customer, order, onClose, onSe
 
   function persist(send: boolean) {
     setFormError('')
+    setNoWedding(false)
+    if (!send && !content.eventDate) {
+      setNeedDate(true)
+      requestAnimationFrame(() => document.querySelector('[role=dialog] [data-field-error], [role=dialog] [aria-invalid="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+      return
+    }
     if (send) {
       setChecked(true)
       const found = validateOrder(content)
@@ -89,7 +103,12 @@ export function OrderFormDialog({ conversationId, customer, order, onClose, onSe
           if (send) onSent?.(o)
           onClose()
         },
-        onError: (e) => setFormError(e.message || 'Không gửi được đơn. Dữ liệu vẫn được giữ, vui lòng thử lại.'),
+        onError: (e) => {
+          if (e instanceof ApiError && e.code === 'WEDDING_NOT_SET') {
+            setNoWedding(true)
+            setFormError('Khách chưa điền thông tin đám cưới nên chưa tạo đơn được.')
+          } else setFormError(e.message || 'Không gửi được đơn. Dữ liệu vẫn được giữ, vui lòng thử lại.')
+        },
       },
     )
   }
@@ -100,7 +119,7 @@ export function OrderFormDialog({ conversationId, customer, order, onClose, onSe
     else onClose()
   }
 
-  const title = sent ? `Chỉnh sửa đơn hàng ${order!.code}` : 'Thêm đơn hàng'
+  const title = sent ? `Chỉnh sửa đơn hàng ${order!.code}` : 'Tạo đơn'
   const subtitle = sent
     ? 'Sửa nội dung rồi gửi lại cho khách (chưa gửi lại thì đơn hiện tại giữ nguyên)'
     : order
@@ -121,6 +140,19 @@ export function OrderFormDialog({ conversationId, customer, order, onClose, onSe
               <p role="alert" className="mr-auto flex max-w-[56%] items-center gap-1.5 text-[13px] text-destructive max-sm:max-w-full max-sm:basis-full">
                 <AlertCircle className="size-[15px] flex-none" />
                 {formError}
+                {noWedding && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="ml-1 flex-none rounded-pill border-line-strong text-ink"
+                    disabled={reminder.reminded || reminder.isPending}
+                    onClick={reminder.remind}
+                  >
+                    <BellRing />
+                    {reminder.reminded ? 'Đã nhắc khách' : 'Nhắc khách'}
+                  </Button>
+                )}
               </p>
             )}
             <Button type="button" variant="ghost" onClick={requestClose} disabled={busy}>

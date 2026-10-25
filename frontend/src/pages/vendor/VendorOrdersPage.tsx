@@ -21,7 +21,7 @@ export default function VendorOrdersPage() {
     <Button asChild>
       <Link to={paths.vendor.chat}>
         <Plus />
-        Thêm đơn hàng
+        Tạo đơn
       </Link>
     </Button>
   )
@@ -48,7 +48,7 @@ export default function VendorOrdersPage() {
           <EmptyState
             className="border-0"
             title={noOrders ? 'Chưa có đơn hàng' : 'Không có đơn phù hợp bộ lọc'}
-            description={noOrders ? 'Đơn hàng luôn tạo trong cuộc trò chuyện với khách. Mở Tin nhắn, chọn khách rồi bấm “Thêm đơn hàng”.' : 'Thử bỏ bớt điều kiện lọc.'}
+            description={noOrders ? 'Đơn hàng luôn tạo trong cuộc trò chuyện với khách. Mở Tin nhắn, chọn khách rồi bấm “Tạo đơn”.' : 'Thử bỏ bớt điều kiện lọc.'}
             action={
               noOrders ? (
                 toChat

@@ -44,7 +44,12 @@ export interface ConversationOrderSummary {
 
 export interface VendorConversation {
   id: string
-  customer: { name: string; phone: string }
+  /**
+   * name: "Chú rể & Cô dâu" từ thông tin đám cưới của khách, chưa có thì họ tên tài khoản (điền sẵn vào đơn).
+   * phone: số điện thoại tài khoản, rỗng nếu khách chưa nhập (điền sẵn vào đơn).
+   * online: chỉ có khi BE trả trạng thái trực tuyến thật; không có thì giao diện không hiện chấm xanh.
+   */
+  customer: { name: string; phone: string; online?: boolean }
   /** Gói khách đang quan tâm (mở chat từ trang gói) */
   interestPackage: { id: string; name: string; price: number | null; maxPrice: number | null } | null
   unreadCount: number

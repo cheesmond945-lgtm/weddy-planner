@@ -70,6 +70,22 @@ export function useSendVendorMessage(conversationId: string) {
   })
 }
 
+/** Tin mẫu nhờ khách điền thông tin đám cưới (nút "Nhắc khách"). */
+export const WEDDING_REMINDER =
+  'Chào anh/chị, để lên đơn dịch vụ cho nhà mình, anh/chị vui lòng điền thông tin đám cưới (ngày cưới, ngân sách, số khách…) ở mục Kế hoạch của tôi giúp bên em nhé. Em cảm ơn!'
+
+/** "Nhắc khách": gửi tin mẫu nhờ khách điền thông tin đám cưới. Chỉ gửi một lần cho mỗi hội thoại. */
+export function useWeddingReminder(conversationId: string) {
+  const { data: messages } = useVendorMessages(conversationId)
+  const send = useSendVendorMessage(conversationId)
+  const reminded = !!messages?.some((m) => m.sender === 'VENDOR' && m.type === 'TEXT' && m.text === WEDDING_REMINDER)
+  return {
+    reminded,
+    isPending: send.isPending,
+    remind: () => send.mutate(WEDDING_REMINDER, { onSuccess: () => toast('Đã nhắc khách điền thông tin đám cưới.') }),
+  }
+}
+
 /** CHỈ KHI DÙNG MOCK: giả lập khách, xong tải lại hội thoại, tin, đơn. */
 export function useSimulateCustomer(conversationId: string) {
   const uid = useVendorId()

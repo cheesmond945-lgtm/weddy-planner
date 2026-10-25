@@ -1,8 +1,10 @@
-import { ChevronLeft, FilePen, MessageSquare, Phone, Plus, Send, Tag } from 'lucide-react'
+import { ChevronLeft, FilePen, Phone, Plus, Send, Tag } from 'lucide-react'
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { formatStamp } from '@/features/serviceOrders/calc'
+import { orderPageHref } from '@/features/serviceOrders/components/OrderCard'
 import { formatDate, toISODate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import type { ServiceOrder } from '@/types/serviceOrder'
@@ -28,7 +30,7 @@ function priceRange(p: NonNullable<VendorConversation['interestPackage']>) {
   return p.price !== null ? `Từ ${formatMoney(p.price)}` : 'Chưa có giá'
 }
 
-/** Khung chat với một khách (chat-main trong prototype NCC). */
+/** Khung chat với một khách (chat-main trong prototype NCC), cùng kiểu khung chat phía cặp đôi. */
 export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrderId, ...actions }: ChatThreadProps) {
   const { data: messages, isPending } = useVendorMessages(c.id)
   const { data: orders = [] } = useConversationOrders(c.id)
@@ -65,29 +67,45 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col">
-      <header className="flex items-center gap-3 border-b border-line px-5 py-3.5 max-sm:px-3.5">
-        <button type="button" aria-label="Quay lại danh sách" onClick={onBack} className="grid size-9 place-items-center rounded-sm text-muted-foreground hover:bg-surface-2 min-[901px]:hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="flex min-h-[82px] items-center gap-3 border-b border-line-soft px-6 py-4 max-[900px]:p-3">
+        <button type="button" aria-label="Quay lại danh sách" onClick={onBack} className="grid size-9 flex-none place-items-center rounded-full text-muted-foreground hover:bg-bg min-[901px]:hidden">
           <ChevronLeft className="size-[18px]" />
         </button>
         <PersonAvatar name={c.customer.name} />
         <div className="min-w-0 flex-1">
-          <strong className="block truncate text-sm font-semibold">{c.customer.name}</strong>
-          <p className="text-[12.5px] text-muted-foreground">
-            <Phone className="mr-1 inline size-3 align-[-1px]" />
+          <div className="truncate font-semibold">
+            {c.customer.name}
+            {c.customer.online && <span aria-label="Đang trực tuyến" className="ml-1.5 text-sage">●</span>}
+          </div>
+          <div className="mt-[3px] flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
+            <Phone className="size-3" aria-hidden />
             <span className="select-all">{c.customer.phone}</span>
-            {sentOrders.length > 0 && ` · ${sentOrders.length} đơn`}
-          </p>
+            {sentOrders.length > 0 && (
+              <>
+                <span className="px-1">•</span>
+                {sentOrders.length} đơn
+              </>
+            )}
+            {c.customer.online && (
+              <span className="ml-1 inline-flex items-center gap-[5px] rounded-pill border border-sage/30 bg-sage-soft px-[9px] py-0.5 text-[11px] text-sage">● Trực tuyến</span>
+            )}
+          </div>
         </div>
         <CustomerSimulator conversationId={c.id} latestOrder={latestOrder} />
-        <Button size="sm" aria-label="Thêm đơn hàng" onClick={() => onOpenForm()}>
+        {latestOrder && (
+          <Button asChild variant="outline" className="rounded-pill whitespace-nowrap max-[640px]:hidden">
+            <Link to={orderPageHref(latestOrder)}>Xem đơn ›</Link>
+          </Button>
+        )}
+        <Button aria-label="Tạo đơn" className="rounded-pill whitespace-nowrap max-sm:size-[42px] max-sm:p-0" onClick={() => onOpenForm()}>
           <Plus />
-          <span className="max-sm:hidden">Thêm đơn hàng</span>
+          <span className="max-sm:hidden">Tạo đơn</span>
         </Button>
       </header>
 
       {c.interestPackage && (
-        <div className="flex items-center gap-2 border-b border-line bg-gold-soft px-5 py-[9px] text-[13px] text-gold-ink max-sm:px-3.5">
+        <div className="flex items-center gap-2 border-b border-line-soft bg-accent-soft px-6 py-[9px] text-[13px] text-gold-ink max-[900px]:px-3.5">
           <Tag className="size-[15px] flex-none" />
           <span>
             Khách quan tâm: <b>{c.interestPackage.name}</b> · {priceRange(c.interestPackage)}
@@ -98,7 +116,7 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
       {drafts.map((o) => (
         <div
           key={o.id}
-          className="flex flex-wrap items-center gap-2.5 border-b border-line bg-[repeating-linear-gradient(135deg,var(--surface)_0_10px,var(--surface-2)_10px_20px)] py-[9px] pr-3.5 pl-5 text-[13px]"
+          className="flex flex-wrap items-center gap-2.5 border-b border-line-soft bg-[repeating-linear-gradient(135deg,var(--surface)_0_10px,var(--bg)_10px_20px)] py-[9px] pr-3.5 pl-6 text-[13px]"
         >
           <FilePen className="size-4 flex-none text-gold-ink" />
           <span className="min-w-[200px] flex-1">
@@ -119,7 +137,7 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
         </div>
       ))}
 
-      <div ref={historyRef} className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-surface-2 px-[26px] py-[22px] max-sm:p-4">
+      <div ref={historyRef} className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-surface px-7 py-6 max-[900px]:p-4">
         {isPending && <div aria-busy="true" aria-label="Đang tải tin nhắn" className="m-auto h-24 w-2/3 animate-pulse rounded-lg bg-muted" />}
         {messages?.map((m, i) => {
           const newDay = i === 0 || dayOf(messages[i - 1].createdAt) !== dayOf(m.createdAt)
@@ -127,7 +145,7 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
             <Fragment key={m.id}>
               {newDay && (
                 <p className="text-center text-[11.5px] text-muted-foreground">
-                  <span className="rounded-pill border border-line bg-surface px-2.5 py-[3px]">{dayOf(m.createdAt)}</span>
+                  <span className="rounded-pill bg-bg px-2.5 py-[3px]">{dayOf(m.createdAt)}</span>
                 </p>
               )}
               <MessageItem message={m} order={orders.find((o) => o.id === m.orderId)} highlightOrderId={highlightOrderId} {...actions} />
@@ -140,26 +158,22 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
       </div>
 
       <form
-        className="border-t border-line px-[18px] pt-3 pb-4 max-sm:px-3"
+        className="flex items-center gap-2.5 border-t border-line-soft bg-surface px-6 pt-3.5 pb-[18px] max-[900px]:px-3 max-[900px]:pb-3"
         onSubmit={(e) => {
           e.preventDefault()
           submit()
         }}
       >
-        <div className="flex items-center gap-1.5 rounded-md border border-line-strong bg-surface py-1 pr-1 pl-3 focus-within:border-gold">
-          <MessageSquare className="size-4 flex-none text-muted-foreground" />
-          <input
-            aria-label="Nhập tin nhắn"
-            placeholder={`Nhắn cho ${c.customer.name}…`}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="min-w-0 flex-1 bg-transparent py-1.5 text-[13.5px] outline-none"
-          />
-          <Button type="submit" size="sm" disabled={!text.trim() || send.isPending}>
-            Gửi
-            <Send />
-          </Button>
-        </div>
+        <input
+          aria-label="Nhập tin nhắn"
+          placeholder="Nhập tin nhắn..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          className="min-w-0 flex-1 rounded-pill border-0 bg-bg px-[18px] py-[15px] text-[15px] text-ink outline-none focus:outline-1 focus:outline-primary"
+        />
+        <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending} className="size-12 rounded-full">
+          <Send className="size-[19px]" />
+        </Button>
       </form>
     </div>
   )

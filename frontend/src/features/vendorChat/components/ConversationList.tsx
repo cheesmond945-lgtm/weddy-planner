@@ -1,11 +1,11 @@
-import { Search, X } from 'lucide-react'
-import { useState } from 'react'
+import { Filter, Search, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Badge } from '@/components/Badge'
 import { EmptyState } from '@/components/EmptyState'
-import { OrderStatusBadge, StatusBadge } from '@/features/serviceOrders/components/OrderBadges'
 import { formatMessageTime } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import type { VendorConversation } from '@/types/vendorChat'
-import { lastMessagePreview, PersonAvatar } from '../preview'
+import { conversationBadge, lastMessagePreview, PersonAvatar } from '../preview'
 
 type Tab = 'all' | 'unread' | 'todo'
 
@@ -15,10 +15,28 @@ interface ConversationListProps {
   onSelect: (id: string) => void
 }
 
-/** Danh sách hội thoại: tìm theo tên, số điện thoại, mã đơn; lọc Tất cả / Chưa đọc / Cần xử lý (như prototype NCC). */
+/**
+ * Danh sách hội thoại, cùng kiểu hộp thư phía cặp đôi (ô tìm pill + nút lọc tròn, dòng "N hội thoại").
+ * Tìm theo tên, số điện thoại, mã đơn; lọc Tất cả / Chưa đọc / Cần xử lý (như prototype NCC).
+ */
 export function ConversationList({ conversations, selectedId, onSelect }: ConversationListProps) {
   const [q, setQ] = useState('')
   const [tab, setTab] = useState<Tab>('all')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const filterRef = useRef<HTMLDivElement>(null)
+
+  // Bấm ra ngoài hoặc Esc thì đóng menu lọc
+  useEffect(() => {
+    if (!filterOpen) return
+    const onDown = (e: MouseEvent) => !filterRef.current?.contains(e.target as Node) && setFilterOpen(false)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setFilterOpen(false)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [filterOpen])
 
   const k = q.trim().toLowerCase()
   const digits = k.replace(/\s/g, '')
@@ -30,102 +48,110 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
         c.orderCodes.some((code) => code.toLowerCase().includes(k))) &&
       (tab === 'all' || (tab === 'unread' && c.unreadCount > 0) || (tab === 'todo' && c.needsAction)),
   )
-  const counts = { unread: conversations.filter((c) => c.unreadCount > 0).length, todo: conversations.filter((c) => c.needsAction).length }
+  const filters: { value: Tab; label: string; count: number }[] = [
+    { value: 'all', label: 'Tất cả', count: conversations.length },
+    { value: 'unread', label: 'Chưa đọc', count: conversations.filter((c) => c.unreadCount > 0).length },
+    { value: 'todo', label: 'Cần xử lý', count: conversations.filter((c) => c.needsAction).length },
+  ]
+  const needAttention = filters[2].count + filters[1].count > 0
 
   return (
-    <aside className="flex min-h-0 flex-col border-r border-line max-[900px]:border-r-0">
-      <div className="px-3.5 pt-3.5 pb-2.5">
-        <div className="flex h-10 items-center rounded-sm border border-line-strong bg-surface focus-within:border-gold">
-          <Search className="ml-3 size-4 flex-none text-muted-foreground" />
+    <aside aria-label="Danh sách hội thoại" className="min-h-0 flex-1 overflow-auto border-r border-line px-3 py-4 max-[900px]:border-r-0">
+      <div ref={filterRef} className="relative mb-4 flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Tìm tên, số điện thoại, mã đơn"
+            placeholder="Tìm khách, SĐT, mã đơn..."
             aria-label="Tìm tên, số điện thoại, mã đơn"
-            className="h-full min-w-0 flex-1 bg-transparent px-2 text-[13.5px] outline-none"
+            className="w-full rounded-pill border-0 bg-bg py-3 pr-9 pl-9 text-sm text-ink outline-none focus:outline-1 focus:outline-primary"
           />
           {q && (
-            <button type="button" aria-label="Xóa tìm kiếm" onClick={() => setQ('')} className="mr-1 grid size-7 place-items-center rounded-sm text-muted-foreground hover:bg-surface-2">
+            <button type="button" aria-label="Xóa tìm kiếm" onClick={() => setQ('')} className="absolute top-1/2 right-2 grid size-6 -translate-y-1/2 place-items-center rounded-full text-muted-foreground hover:bg-surface-2">
               <X className="size-3.5" />
             </button>
           )}
         </div>
-      </div>
-      <div role="tablist" aria-label="Lọc cuộc trò chuyện" className="flex gap-1.5 overflow-x-auto border-b border-line px-3.5 pb-3 [scrollbar-width:thin]">
-        {(
-          [
-            ['all', 'Tất cả', 0],
-            ['unread', 'Chưa đọc', counts.unread],
-            ['todo', 'Cần xử lý', counts.todo],
-          ] as const
-        ).map(([key, label, n]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            onClick={() => setTab(key)}
-            className={cn(
-              'inline-flex h-[34px] flex-none items-center gap-1.5 rounded-pill border border-line bg-surface px-3 text-[13px] text-muted-foreground hover:border-line-strong hover:text-ink',
-              tab === key && 'border-gold/45 bg-gold-soft font-semibold text-gold-ink',
-            )}
-          >
-            {label}
-            {n > 0 && <span className="grid h-[18px] min-w-[18px] place-items-center rounded-pill bg-(image:--gold-grad) px-[5px] text-[11px] font-semibold text-gold-on">{n}</span>}
-          </button>
-        ))}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {shown.map((c) => {
-          const selected = c.id === selectedId
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onSelect(c.id)}
-              aria-current={selected || undefined}
-              className={cn(
-                'relative flex w-full gap-3 border-b border-line p-4 text-left transition-colors hover:bg-surface-2',
-                selected && 'bg-gold-soft before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-(image:--gold-grad)',
-              )}
-            >
-              <PersonAvatar name={c.customer.name} />
-              <div className="min-w-0 flex-1">
-                <div className="flex justify-between gap-2 text-[13.5px]">
-                  <strong className="truncate font-semibold">{c.customer.name}</strong>
-                  {c.lastMessage && <time className="flex-none text-[11.5px] text-muted-foreground">{formatMessageTime(c.lastMessage.createdAt)}</time>}
-                </div>
-                <div className="flex items-center justify-between gap-2.5">
-                  <p className="mt-[3px] truncate text-[12.5px] text-muted-foreground">{lastMessagePreview(c.lastMessage)}</p>
-                  {c.unreadCount > 0 && (
-                    <span className="grid h-5 min-w-5 flex-none place-items-center rounded-pill bg-(image:--gold-grad) px-1 text-[11px] font-semibold text-gold-on">{c.unreadCount}</span>
-                  )}
-                </div>
-                {c.latestOrder ? (
-                  <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11.5px] text-muted-foreground tabular-nums">
-                    {c.latestOrder.code}
-                    <OrderStatusBadge order={c.latestOrder} />
-                  </span>
-                ) : (
-                  c.hasDraftOrder && (
-                    <span className="mt-1.5 inline-flex">
-                      <StatusBadge tone="neutral">Có bản nháp</StatusBadge>
-                    </span>
-                  )
-                )}
-              </div>
-            </button>
-          )
-        })}
-        {!shown.length && (
-          <EmptyState
-            className="border-0 bg-transparent"
-            title="Không có cuộc trò chuyện"
-            description={q ? 'Thử từ khóa khác.' : tab === 'todo' ? 'Không có đơn cần xử lý.' : 'Chưa có tin nhắn.'}
-          />
+        <button
+          type="button"
+          aria-label="Lọc hội thoại"
+          title="Lọc hội thoại"
+          aria-expanded={filterOpen}
+          onClick={() => setFilterOpen((o) => !o)}
+          className={cn('relative grid size-[42px] shrink-0 place-items-center rounded-full border border-line bg-surface text-muted-foreground', tab !== 'all' && 'border-primary text-primary')}
+        >
+          <Filter className="size-[18px]" />
+          {tab === 'all' && needAttention && <span aria-hidden className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary" />}
+        </button>
+        {filterOpen && (
+          <div role="menu" className="absolute top-full right-0 z-10 mt-1 w-52 rounded-md border border-line bg-surface p-1 shadow-card">
+            {filters.map(({ value, label, count }) => (
+              <button
+                key={value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={tab === value}
+                onClick={() => {
+                  setTab(value)
+                  setFilterOpen(false)
+                }}
+                className={cn('flex w-full justify-between gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent-soft', tab === value && 'font-semibold text-gold')}
+              >
+                {label}
+                <span className="text-xs text-muted-foreground">{count}</span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
+      <div className="flex justify-between gap-2 px-2 pb-3 text-xs text-muted-foreground">
+        <span>{shown.length} hội thoại</span>
+        <span>{filters.find((f) => f.value === tab)!.label}</span>
+      </div>
+
+      {shown.map((c) => {
+        const selected = c.id === selectedId
+        const badge = conversationBadge(c)
+        return (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => onSelect(c.id)}
+            aria-current={selected || undefined}
+            className={cn(
+              'mb-[5px] grid w-full grid-cols-[48px_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2.5 gap-y-[3px] rounded-[18px] px-2.5 py-[13px] text-left text-ink',
+              selected ? 'bg-accent-soft shadow-[inset_4px_0_var(--accent)]' : 'hover:bg-bg',
+            )}
+          >
+            <PersonAvatar name={c.customer.name} className="row-span-2" />
+            <span className="flex min-w-0 items-center gap-1.5">
+              <b className={cn('truncate text-[13px]', c.unreadCount > 0 ? 'font-bold' : 'font-semibold')}>{c.customer.name}</b>
+              {badge && (
+                <Badge tone={badge.tone} className="shrink-0 px-2 py-px text-[10px]">
+                  {badge.label}
+                </Badge>
+              )}
+            </span>
+            <span className="text-[11px] whitespace-nowrap text-muted-foreground">{c.lastMessage ? formatMessageTime(c.lastMessage.createdAt) : ''}</span>
+            <span className="col-span-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+              <span className="truncate">{lastMessagePreview(c.lastMessage)}</span>
+              {c.unreadCount > 0 && (
+                <span aria-label={`${c.unreadCount} tin chưa đọc`} className="grid h-[18px] min-w-[18px] flex-none place-items-center rounded-pill bg-primary px-1 text-[10.5px] font-semibold text-primary-foreground">
+                  {c.unreadCount}
+                </span>
+              )}
+            </span>
+          </button>
+        )
+      })}
+      {!shown.length && (
+        <EmptyState
+          className="border-0 bg-transparent"
+          title="Không có cuộc trò chuyện"
+          description={q ? 'Thử từ khóa khác.' : tab === 'todo' ? 'Không có đơn cần xử lý.' : tab === 'unread' ? 'Không có tin chưa đọc.' : 'Chưa có tin nhắn.'}
+        />
+      )}
     </aside>
   )
 }
