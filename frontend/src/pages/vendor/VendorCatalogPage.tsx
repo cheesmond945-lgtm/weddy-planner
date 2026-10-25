@@ -1,3 +1,5 @@
+import { Plus } from 'lucide-react'
+import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
 import { Button } from '@/components/ui/button'
@@ -7,6 +9,7 @@ import { PackageTable } from '@/features/vendorPackages/components/PackageTable'
 import { allTagsOf, matchPackages, sortPackages, usePackageFilters } from '@/features/vendorPackages/filters'
 import { usePackages } from '@/features/vendorPackages/hooks'
 import { useVendorProfile } from '@/features/vendors/hooks'
+import { paths } from '@/routes/paths'
 
 /** Quản lý dịch vụ: danh sách gói theo trạng thái, tìm, lọc tag, sắp xếp, thao tác nhanh. */
 export default function VendorCatalogPage() {
@@ -19,9 +22,18 @@ export default function VendorCatalogPage() {
   const shown = sortPackages(matched, filters)
   const hasFilter = !!filters.q || filters.tags.length > 0
 
+  const addButton = (
+    <Button asChild>
+      <Link to={paths.vendor.packageNew}>
+        <Plus />
+        Thêm gói dịch vụ
+      </Link>
+    </Button>
+  )
+
   return (
     <>
-      <PageTitle title="Quản lý dịch vụ" description={profile && <PackageStatusSummary profile={profile} />} />
+      <PageTitle title="Quản lý dịch vụ" description={profile && <PackageStatusSummary profile={profile} />} actions={addButton} />
       {profile && <PackageStatusSummary profile={profile} notice />}
 
       <StatusTabs value={filters.status} onChange={(status) => update({ status })} matched={matched} />

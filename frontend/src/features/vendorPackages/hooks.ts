@@ -24,12 +24,18 @@ export function usePackage(id: string | undefined) {
   })
 }
 
-/** Cập nhật cache sau khi gói đổi: thay bản chi tiết, tải lại danh sách. */
+/**
+ * Cập nhật cache sau khi gói đổi: thay bản chi tiết, đưa gói vào danh sách ngay (gói mới lên đầu)
+ * để quay lại danh sách là thấy, rồi tải lại danh sách từ BE.
+ */
 function useSync() {
   const { user } = useAuth()
   const qc = useQueryClient()
   return (pkg: VendorPackage) => {
     qc.setQueryData(keys.detail(user?.id, pkg.id), pkg)
+    qc.setQueryData<VendorPackage[]>(keys.all(user?.id), (list) =>
+      list && (list.some((p) => p.id === pkg.id) ? list.map((p) => (p.id === pkg.id ? pkg : p)) : [pkg, ...list]),
+    )
     void qc.invalidateQueries({ queryKey: keys.all(user?.id), exact: true })
   }
 }
@@ -41,13 +47,15 @@ function useSync() {
 export function useSavePackage() {
   const sync = useSync()
   return useMutation({
+    // Mất mạng thì báo lỗi ngay, không treo "Đang lưu…" chờ có mạng lại
+    networkMode: 'always',
     mutationFn: async ({ id, body, submit }: { id?: string; body: SavePackageRequest; submit: boolean }) => {
       const saved = id ? await vendorPackagesApi.update(id, body) : await vendorPackagesApi.create(body)
       if (!submit) return { pkg: saved, submitted: false }
       try {
         return { pkg: await vendorPackagesApi.submit(saved.id), submitted: true }
       } catch (e) {
-        toast(`Đã lưu nháp ${saved.id} nhưng chưa gửi duyệt được: ${(e as Error).message}`)
+        toast(`Đã lưu nháp gói “${saved.name}” nhưng chưa gửi duyệt được: ${(e as Error).message}`)
         return { pkg: saved, submitted: false, submitFailed: true }
       }
     },
@@ -57,7 +65,7 @@ export function useSavePackage() {
       toast(
         submitted
           ? `Đã gửi duyệt ${pkg.id}. Dịch vụ chưa công khai cho tới khi Admin duyệt.`
-          : `Đã lưu nháp ${pkg.id} cùng ${pkg.photos.length} ảnh.`,
+          : `Đã lưu nháp gói “${pkg.name}”.`,
       )
     },
     onError: (err) => toast(err.message),

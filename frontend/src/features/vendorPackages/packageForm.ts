@@ -58,13 +58,12 @@ export function addTag(tags: string[], raw: string) {
 
 /**
  * Kiểm tra gói (như prototype NCC).
- * - 'draft' (Lưu nháp): cần tên gói và giá; sức chứa nếu đã nhập thì phải hợp lệ.
- * - 'submit' (Gửi duyệt): thêm mô tả, ít nhất một ảnh, và hồ sơ đã xác minh đúng lĩnh vực.
+ * - 'draft' (Lưu nháp): chỉ cần tên gói; sức chứa nếu đã nhập thì phải hợp lệ.
+ * - 'submit' (Gửi duyệt): thêm mô tả, giá, ít nhất một ảnh, và hồ sơ đã xác minh đúng lĩnh vực.
  */
 export function validatePackage(v: PackageFormValues, opts: { mode: 'draft' | 'submit'; venue: boolean; canSubmit: boolean }): PackageErrors {
   const errors: PackageErrors = {}
   if (!v.name.trim()) errors.name = 'Nhập tên gói.'
-  if (!v.price) errors.price = 'Nhập giá.'
   if (opts.venue && v.capacity.trim() && !(Number.isInteger(Number(v.capacity)) && Number(v.capacity) > 0)) {
     errors.capacity = 'Sức chứa là số nguyên dương.'
   }
@@ -72,6 +71,7 @@ export function validatePackage(v: PackageFormValues, opts: { mode: 'draft' | 's
 
   if (!opts.canSubmit) errors.permission = 'Hồ sơ nhà cung cấp chưa được xác minh cho lĩnh vực này. Bạn vẫn có thể lưu nháp.'
   if (!v.description.trim()) errors.description = 'Nhập mô tả ngắn.'
+  if (!v.price) errors.price = 'Nhập giá.'
   if (!v.photos.length) errors.photos = 'Cần ít nhất một ảnh dịch vụ.'
   return errors
 }

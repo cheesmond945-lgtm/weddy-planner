@@ -170,7 +170,7 @@ function changeStatus(p: VendorPackage, from: PackageStatus, to: PackageStatus) 
 /** Ghi các trường của request, kiểm tra như BE. */
 function apply(p: VendorPackage, req: SavePackageRequest) {
   if (!req.name.trim()) throw new ApiError(400, 'VALIDATION_ERROR', 'Nhập tên gói.')
-  if (!(req.price > 0)) throw new ApiError(400, 'VALIDATION_ERROR', 'Nhập giá.')
+  if (req.price < 0) throw new ApiError(400, 'VALIDATION_ERROR', 'Giá không âm.')
   Object.assign(p, {
     ...req,
     description: req.description ?? '',
@@ -228,7 +228,7 @@ export const mockVendorPackages = {
       if (!canSubmitPackage(profile, p.category)) {
         throw new ApiError(409, 'VENDOR_NOT_VERIFIED', 'Hồ sơ nhà cung cấp chưa được xác minh cho lĩnh vực này.')
       }
-      if (!p.description || !p.photos.length) {
+      if (!p.description || !(p.price > 0) || !p.photos.length) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Gói còn thiếu mô tả, giá hoặc ảnh.')
       }
       return changeStatus(p, 'DRAFT', 'PENDING')

@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, Images, LoaderCircle, Plus, Star, Trash2, X } from 'lucide-react'
-import { useState, type DragEvent, type ReactNode } from 'react'
+import { useEffect, useState, type DragEvent, type ReactNode } from 'react'
 import { EmptyState } from '@/components/EmptyState'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { PhotoViewerDialog } from '@/features/vendors/components/PhotoViewerDialog'
@@ -19,6 +19,8 @@ interface PackagePhotoSetProps extends PhotoSetValue {
   onChange?: (update: (prev: PhotoSetValue) => PhotoSetValue) => void
   readOnly?: boolean
   error?: string
+  /** Số ảnh đang tải lên (form chặn lưu khi còn ảnh chưa tải xong) */
+  onUploadingChange?: (count: number) => void
 }
 
 interface UploadRow {
@@ -35,13 +37,15 @@ const COLLAGE: Record<number, string> = {
 }
 
 /** Bộ ảnh của gói: ảnh ghép, thêm ảnh (chọn hoặc kéo thả), quản lý ảnh bìa và thứ tự (PhotoSet trong prototype NCC). */
-export function PackagePhotoSet({ photos, coverPublicId, onChange, readOnly, error }: PackagePhotoSetProps) {
+export function PackagePhotoSet({ photos, coverPublicId, onChange, readOnly, error, onUploadingChange }: PackagePhotoSetProps) {
   const upload = useUploadVendorFile('PACKAGE_PHOTO')
   const [uploads, setUploads] = useState<UploadRow[]>([])
   const [drag, setDrag] = useState(false)
   const [manage, setManage] = useState(false)
   const [viewing, setViewing] = useState<number | null>(null)
   const editable = !readOnly && !!onChange
+  const uploading = uploads.filter((u) => !u.error).length
+  useEffect(() => onUploadingChange?.(uploading), [uploading, onUploadingChange])
 
   const cover = coverOf({ photos, coverPublicId })
   const collage = cover ? [cover, ...photos.filter((p) => p !== cover)].slice(0, 4) : []

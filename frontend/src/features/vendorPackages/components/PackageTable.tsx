@@ -121,7 +121,7 @@ export function PackageTable({ packages, profile }: PackageTableProps) {
                       </div>
                     </div>
                   </td>
-                  <td className={`${td} text-right whitespace-nowrap tabular-nums`}>{formatMoney(pkg.price)}</td>
+                  <td className={`${td} text-right whitespace-nowrap tabular-nums`}>{pkg.price ? formatMoney(pkg.price) : '—'}</td>
                   <td className={`${td} w-[230px]`}>
                     <div className="flex max-w-[230px] items-center gap-1 overflow-hidden">
                       {pkg.tags.slice(0, 2).map((t) => (
