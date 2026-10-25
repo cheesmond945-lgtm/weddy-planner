@@ -1,7 +1,8 @@
-import { now } from '@/lib/clock'
+import { now, todayVN } from '@/lib/clock'
+import { formatDate, toISODate } from '@/lib/date'
 import { paths } from '@/routes/paths'
-import type { Order, OrderContent, OrderItemInput, OrderUnit } from '@/types/vendorOrder'
-import { DEPOSIT_ROUNDING } from './constants'
+import type { Order, OrderContent, OrderItemInput, OrderRevision, OrderUnit } from '@/types/vendorOrder'
+import { CHANGE_LABEL, DEPOSIT_ROUNDING } from './constants'
 
 /** Hạng mục đang nhập trong form: có thêm `key` để React theo dõi dòng. */
 export interface FormItem extends OrderItemInput {
@@ -90,4 +91,55 @@ export function depositDeadline(iso: string) {
   const hours = Math.floor(left / 3_600_000)
   const minutes = Math.floor((left % 3_600_000) / 60_000)
   return `Hạn cọc: ${when} · còn ${hours > 0 ? `${hours} giờ` : `${Math.max(1, minutes)} phút`}`
+}
+
+/** ISO -> "dd/MM/yyyy" (giờ máy người dùng). */
+export const formatDay = (iso: string) => formatDate(toISODate(new Date(iso)))
+
+/** ISO -> "14:32 18/10/2026". */
+export function formatDayTime(iso: string) {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())} ${formatDay(iso)}`
+}
+
+/** Yêu cầu chỉnh sửa của khách đang chờ NCC (trước cọc, hoặc sau cọc). */
+export const openRevision = (o: Pick<Order, 'revisions'>): OrderRevision | undefined => o.revisions.find((r) => r.status === 'Requested')
+
+/** "Đổi số lượng, Đổi ngày thực hiện" */
+export const changesLabel = (r: Pick<OrderRevision, 'changes'>) => r.changes.map((c) => CHANGE_LABEL[c]).join(', ')
+
+/** Đã qua ngày diễn ra sự kiện (giờ Việt Nam): được đánh dấu hoàn thành. */
+export const eventPassed = (o: Pick<Order, 'eventDate'>) => todayVN() > o.eventDate
+
+/** Mốc hệ thống tự hoàn thành: hết ngày EventDate + 7. */
+export const autoCompleteDay = (o: Pick<Order, 'eventDate'>) => {
+  const [y, m, d] = o.eventDate.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + 7)).toISOString().slice(0, 10)
+}
+
+/** Dòng gợi ý việc cần làm cho NCC (docs/api/THE_DON_HANG.md mục 4). */
+export function orderHint(o: Order): { text: string; tone: 'info' | 'warn' | 'ok' } {
+  const req = openRevision(o)
+  switch (o.status) {
+    case 'Draft':
+      return { text: 'Bản nháp, khách chưa thấy.', tone: 'info' }
+    case 'Pending':
+      return { text: 'Chờ khách thanh toán cọc.', tone: 'info' }
+    case 'NeedRevision':
+      return { text: `Khách yêu cầu: ${req ? [changesLabel(req), req.requestNote].filter(Boolean).join(' · ') : 'chỉnh sửa đơn'}`, tone: 'warn' }
+    case 'Expired':
+      return { text: 'Đơn hết hạn vì khách chưa cọc.', tone: 'info' }
+    case 'Deposited':
+      return {
+        text: req
+          ? `Khách yêu cầu chỉnh sửa: ${[changesLabel(req), req.requestNote].filter(Boolean).join(' · ')}`
+          : `Đã nhận cọc. Thực hiện ngày ${formatDate(o.eventDate)}.`,
+        tone: req ? 'warn' : 'ok',
+      }
+    case 'Completed':
+      return { text: `Đã hoàn thành ngày ${o.completedDate ? formatDay(o.completedDate) : ''}. Đã tính hoa hồng.`, tone: 'ok' }
+    case 'Cancelled':
+      return { text: `Khách đã hủy đơn ngày ${o.cancelledDate ? formatDay(o.cancelledDate) : ''}.`, tone: 'warn' }
+  }
 }

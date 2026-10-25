@@ -1,15 +1,12 @@
 import { Receipt } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import { OrderStatusBadge } from '@/features/vendorOrders/components/OrderBadges'
+import { formatStamp } from '@/features/vendorOrders/calc'
+import { OrderCard } from '@/features/vendorOrders/components/OrderCard'
 import type { OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
-import { CHANGE_LABEL } from '@/features/vendorOrders/constants'
-import { depositDeadline, formatStamp } from '@/features/vendorOrders/calc'
-import { formatDate } from '@/lib/date'
-import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { VendorMessage } from '@/types/vendorConversation'
-import type { Order } from '@/types/vendorOrder'
+import type { InvoiceType, Order } from '@/types/vendorOrder'
 
 interface MessageItemProps {
   message: VendorMessage
@@ -19,92 +16,28 @@ interface MessageItemProps {
   /** Đơn vừa gửi: làm nổi thẻ */
   highlight: boolean
   onOpenForm: (mode: OrderFormMode) => void
+  onViewOrder: (order: Order) => void
+  onViewInvoice: (order: Order, type: InvoiceType) => void
 }
 
 const Time = ({ at }: { at: string }) => <time className="mt-1 text-[11px] text-muted-foreground">{formatStamp(at)}</time>
 
-/** Khung tin: của NCC bên phải, của khách bên trái; thẻ đơn rộng tối đa 440px. */
+/** Khung tin: của NCC bên phải, của khách bên trái, chứng từ ở bên trái (hệ thống gửi). */
 function Bubble({ mine, wide, at, children }: { mine: boolean; wide?: boolean; at: string; children: ReactNode }) {
   return (
-    <div className={cn('grid max-w-[78%] max-[640px]:max-w-[94%]', mine ? 'self-end justify-items-end' : 'self-start', wide && 'w-full max-w-[min(440px,92%)] max-[640px]:max-w-full')}>
+    <div className={cn('grid max-w-[78%] max-[640px]:max-w-[94%]', mine ? 'self-end justify-items-end' : 'self-start', wide && 'w-full max-w-[min(420px,92%)] max-[640px]:max-w-full')}>
       {children}
       <Time at={at} />
     </div>
   )
 }
 
-const row = (label: string, value: ReactNode) => (
-  <div className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px]">
-    <span className="whitespace-nowrap text-muted-foreground">{label}</span>
-    <b className="text-right font-semibold">{value}</b>
-  </div>
-)
-
-/**
- * Thẻ đơn trong chat (bản cơ bản của bước 1b: có nút mở form sửa theo trạng thái).
- * Nội dung đầy đủ theo docs/api/THE_DON_HANG.md và nút xem chi tiết, hoàn thành, hóa đơn làm ở bước 1c.
- */
-function OrderCard({ order: o, highlight, onOpenForm }: { order: Order; highlight: boolean; onOpenForm: (mode: OrderFormMode) => void }) {
-  const request = o.revisions.find((r) => r.status === 'Requested')
-  return (
-    <div
-      data-order={o.id}
-      className={cn('w-full overflow-hidden rounded-[22px] rounded-br-[5px] border border-line bg-surface text-left shadow-bubble transition-shadow', highlight && 'border-gold ring-4 ring-gold/25')}
-    >
-      <div className="px-5 py-[18px]">
-        <div className="mb-1 flex items-center justify-between gap-2.5 font-semibold">
-          <span>Đơn dịch vụ {o.orderCode}</span>
-          <OrderStatusBadge status={o.status} />
-        </div>
-        <p className="mb-2 text-[12.5px] text-muted-foreground">{o.customerName}</p>
-        {o.items.slice(0, 2).map((i) => (
-          <div key={i.id}>{row(i.itemName, `${i.quantity} ${i.unit} × ${formatMoney(i.unitPrice)}`)}</div>
-        ))}
-        {o.items.length > 2 && <p className="py-1.5 text-[12.5px] text-muted-foreground">và {o.items.length - 2} hạng mục khác</p>}
-        {row('Ngày thực hiện', formatDate(o.eventDate))}
-        {row('Tổng giá trị', formatMoney(o.totalAmount))}
-        {row(`Đặt cọc (${o.depositPercent}%)`, <span className="text-primary">{formatMoney(o.depositAmount)}</span>)}
-        {row('Còn lại', `${formatMoney(o.totalAmount - o.depositAmount)} (tiền mặt, trực tiếp)`)}
-        {o.status === 'Pending' && o.depositDueDate && <p className="mt-2 text-[12.5px] font-medium text-gold-ink">{depositDeadline(o.depositDueDate)}</p>}
-        {o.payment?.status === 'Paid' && o.payment.paidDate && (
-          <p className="mt-2 text-[13px] font-semibold text-sage">
-            Đã thanh toán cọc {formatMoney(o.depositAmount)} · {formatStamp(o.payment.paidDate)}
-          </p>
-        )}
-        {o.note && <p className="mt-2 text-[13px] text-muted-foreground">Ghi chú: {o.note}</p>}
-        {request && (
-          <p className="mt-2 rounded-md border-l-[3px] border-warn bg-warn-soft px-3 py-2 text-[13px] text-ink">
-            Khách yêu cầu: {request.changes.map((c) => CHANGE_LABEL[c]).join(', ') || 'chỉnh sửa'}
-            {request.requestNote ? ` · ${request.requestNote}` : ''}
-          </p>
-        )}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(o.status === 'Pending' || o.status === 'NeedRevision') && (
-            <Button size="sm" variant={o.status === 'NeedRevision' ? 'default' : 'outline'} className={o.status === 'NeedRevision' ? '' : 'border-line-strong'} onClick={() => onOpenForm({ kind: 'resend', order: o })}>
-              Sửa và gửi lại
-            </Button>
-          )}
-          {o.status === 'Deposited' && (
-            <Button size="sm" variant="outline" className="border-line-strong" onClick={() => onOpenForm({ kind: 'edit', order: o })}>
-              Sửa đơn
-            </Button>
-          )}
-          {o.status === 'Expired' && (
-            <Button size="sm" onClick={() => onOpenForm({ kind: 'again', from: o })}>
-              Tạo đơn mới từ đơn này
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** Một tin trong khung chat, theo Messages.Type. */
-export function MessageItem({ message: m, order, isLatestCard, highlight, onOpenForm }: MessageItemProps) {
+/** Một tin trong khung chat, theo Messages.Type (Text, Order, DepositReceipt, FinalInvoice) và tin hệ thống (SenderId rỗng). */
+export function MessageItem({ message: m, order, isLatestCard, highlight, onOpenForm, onViewOrder, onViewInvoice }: MessageItemProps) {
   switch (m.type) {
     case 'Order': {
       if (!order) break
+      // Gửi lại: các thẻ cũ của cùng đơn thu gọn thành một dòng
       if (!isLatestCard) {
         return (
           <p className="self-center rounded-pill bg-bg px-3.5 py-1.5 text-center text-[12.5px] text-muted-foreground">
@@ -114,7 +47,7 @@ export function MessageItem({ message: m, order, isLatestCard, highlight, onOpen
       }
       return (
         <Bubble mine wide at={m.sentDate}>
-          <OrderCard order={order} highlight={highlight} onOpenForm={onOpenForm} />
+          <OrderCard order={order} highlight={highlight} onOpenForm={onOpenForm} onView={onViewOrder} onViewInvoice={onViewInvoice} />
         </Bubble>
       )
     }
@@ -122,9 +55,16 @@ export function MessageItem({ message: m, order, isLatestCard, highlight, onOpen
     case 'FinalInvoice':
       return (
         <Bubble mine={false} wide at={m.sentDate}>
-          <div className="flex items-start gap-2.5 rounded-[18px] border border-line bg-surface px-4 py-3 text-[13.5px] leading-relaxed">
-            <Receipt className="mt-0.5 size-4 flex-none text-sage" />
-            <span>{m.content}</span>
+          <div className="w-full rounded-[22px] rounded-bl-[5px] border border-line bg-surface px-4 py-3 shadow-bubble">
+            <div className="flex items-start gap-2.5 text-[13.5px] leading-relaxed">
+              <Receipt className="mt-0.5 size-4 flex-none text-sage" />
+              <span>{m.content}</span>
+            </div>
+            {order && (
+              <Button size="sm" variant="outline" className="mt-2.5 border-line-strong" onClick={() => onViewInvoice(order, m.type as InvoiceType)}>
+                Xem
+              </Button>
+            )}
           </div>
         </Bubble>
       )

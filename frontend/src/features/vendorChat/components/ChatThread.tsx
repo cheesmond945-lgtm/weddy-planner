@@ -8,6 +8,7 @@ import type { OrderFormMode } from '@/features/vendorOrders/components/OrderForm
 import { useConversationOrders } from '@/features/vendorOrders/hooks'
 import { formatDate, toISODate } from '@/lib/date'
 import type { VendorConversation } from '@/types/vendorConversation'
+import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { useMarkRead, useSendVendorMessage, useVendorMessages } from '../hooks'
 import { PersonAvatar } from '../preview'
 import { CustomerSimulator } from './CustomerSimulator'
@@ -20,12 +21,14 @@ interface ChatThreadProps {
   onOpenForm: (mode: OrderFormMode) => void
   /** Đơn vừa gửi: cuộn tới và làm nổi thẻ */
   highlightOrderId: string | null
+  onViewOrder: (order: Order) => void
+  onViewInvoice: (order: Order, type: InvoiceType) => void
 }
 
 const dayOf = (iso: string) => formatDate(toISODate(new Date(iso)))
 
 /** Khung chat với một khách (chat-main trong prototype NCC), cùng kiểu khung chat phía cặp đôi. */
-export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrderId }: ChatThreadProps) {
+export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrderId, onViewOrder, onViewInvoice }: ChatThreadProps) {
   const { data: messages, isPending } = useVendorMessages(c.id)
   const { data: orders = [] } = useConversationOrders(c.id)
   const send = useSendVendorMessage(c.id)
@@ -136,6 +139,8 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
                 isLatestCard={!m.orderId || latestCard.get(m.orderId) === m.id}
                 highlight={!!m.orderId && highlightOrderId === m.orderId}
                 onOpenForm={onOpenForm}
+                onViewOrder={onViewOrder}
+                onViewInvoice={onViewInvoice}
               />
             </Fragment>
           )

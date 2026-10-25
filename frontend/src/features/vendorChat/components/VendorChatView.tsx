@@ -3,9 +3,12 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
+import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
+import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
 import { OrderFormDialog, type OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
+import { useConversationOrders } from '@/features/vendorOrders/hooks'
 import { cn } from '@/lib/utils'
-import type { Order } from '@/types/vendorOrder'
+import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { useVendorConversations } from '../hooks'
 import { ChatThread } from './ChatThread'
 import { ConversationList } from './ConversationList'
@@ -18,11 +21,17 @@ export function VendorChatView() {
   const { data: conversations, isPending, isError, error, refetch } = useVendorConversations()
   const [params, setParams] = useSearchParams()
   const [form, setForm] = useState<OrderFormMode | null>(null)
+  // Xem chi tiết đơn, xem chứng từ: lưu mã đơn để luôn hiện dữ liệu mới nhất
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [invoice, setInvoice] = useState<{ orderId: string; type: InvoiceType } | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
 
   const picked = params.get('c')
   const active = conversations?.find((c) => c.id === picked) ?? (picked ? undefined : conversations?.[0])
   const showChat = !!picked
+  const { data: orders = [] } = useConversationOrders(active?.id ?? null)
+  const detail = orders.find((o) => o.id === detailId)
+  const invoiceOrder = orders.find((o) => o.id === invoice?.orderId)
 
   // Làm nổi thẻ đơn vừa gửi trong 2,4 giây (như prototype)
   useEffect(() => {
@@ -33,6 +42,8 @@ export function VendorChatView() {
 
   const select = (id: string | null) => {
     setForm(null)
+    setDetailId(null)
+    setInvoice(null)
     setParams(id ? { c: id } : {}, { replace: !id })
   }
 
@@ -53,7 +64,15 @@ export function VendorChatView() {
         </div>
         <div className={cn('flex min-h-0 min-w-0 flex-col', !showChat && 'max-[900px]:hidden')}>
           {active ? (
-            <ChatThread key={active.id} conversation={active} highlightOrderId={highlight} onBack={() => select(null)} onOpenForm={setForm} />
+            <ChatThread
+              key={active.id}
+              conversation={active}
+              highlightOrderId={highlight}
+              onBack={() => select(null)}
+              onOpenForm={setForm}
+              onViewOrder={(o) => setDetailId(o.id)}
+              onViewInvoice={(o, type) => setInvoice({ orderId: o.id, type })}
+            />
           ) : (
             <EmptyState
               className="m-auto border-0 bg-transparent"
@@ -64,6 +83,9 @@ export function VendorChatView() {
           )}
         </div>
       </section>
+
+      {detail && <OrderDetailDialog order={detail} onClose={() => setDetailId(null)} onOpenForm={setForm} onViewInvoice={(o, type) => setInvoice({ orderId: o.id, type })} />}
+      {invoice && invoiceOrder && <InvoiceDialog order={invoiceOrder} type={invoice.type} onClose={() => setInvoice(null)} />}
 
       {form && active && (
         <OrderFormDialog
