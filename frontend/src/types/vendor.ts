@@ -90,7 +90,7 @@ export interface UpdateVendorProfileRequest {
 }
 
 /** Mục đích upload, quyết định thư mục và định dạng được nhận. */
-export type VendorUploadPurpose = 'VENDOR_DOCUMENT' | 'VENDOR_PHOTO' | 'PACKAGE_PHOTO' | 'PAYMENT_PROOF'
+export type VendorUploadPurpose = 'VENDOR_DOCUMENT' | 'VENDOR_PHOTO' | 'PACKAGE_PHOTO'
 
 /** Response của POST /vendors/me/uploads/signature: tham số để FE upload thẳng lên Cloudinary. */
 export interface UploadSignature {

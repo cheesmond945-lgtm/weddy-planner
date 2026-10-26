@@ -32,7 +32,7 @@ import { mockVendors } from './vendors'
 const STORAGE_KEY = 'weddy.mock.vendorOrders.v4'
 
 /** Tỷ lệ hoa hồng theo loại dịch vụ (ServiceCategories.CommissionRate): chỉ để dữ liệu giả có số; BE đọc từ CSDL. */
-const COMMISSION_RATE: Record<string, number> = { 'nha-hang': 5, decor: 7, 'hoa-cuoi': 8, 'trang-phuc': 8, 'chup-anh': 8, makeup: 10 }
+export const COMMISSION_RATE: Record<string, number> = { 'nha-hang': 5, decor: 7, 'hoa-cuoi': 8, 'trang-phuc': 8, 'chup-anh': 8, makeup: 10 }
 
 const HOUR = 3_600_000
 const PHONE_RE = /^[0-9 +().-]{9,15}$/
@@ -723,6 +723,20 @@ export const mockVendorOrders = {
   // ---- Dữ liệu cho hoa hồng (API hoa hồng đọc từ đây) ----
   commissionData(userId: string): { statements: StoredStatement[]; commissions: StoredCommission[]; orders: Order[] } {
     return withData(userId, (d) => ({ statements: d.statements, commissions: d.commissions, orders: d.orders }))
+  },
+
+  /** Nộp hoa hồng cả bảng kê qua VNPay (mô phỏng thành công). Kỳ đang tạm tính chưa nộp được. */
+  payStatement(userId: string, statementId: string): StoredStatement {
+    return withData(userId, (d, at) => {
+      const st = d.statements.find((x) => x.id === statementId)
+      if (!st) throw new ApiError(404, 'COMMISSION_STATEMENT_NOT_FOUND', 'Không tìm thấy bảng kê.')
+      if (st.status === 'Paid') throw new ApiError(409, 'COMMISSION_ALREADY_PAID', 'Bảng kê này đã nộp.')
+      if (st.periodMonth.slice(0, 7) >= todayVN(at).slice(0, 7)) throw new ApiError(409, 'COMMISSION_NOT_PAYABLE', 'Kỳ hiện tại đang tạm tính, chưa nộp được.')
+      st.status = 'Paid'
+      st.paidDate = iso(at)
+      st.transactionCode = `VNP${yymm(at)}${String(++d.counter).padStart(6, '0')}`
+      return st
+    })
   },
 
   // ---- Chỉ có ở dữ liệu giả ----

@@ -1,10 +1,10 @@
-import { formatPeriod, remainingOf } from '@/features/commissions/constants'
+import { canPay, daysToDue, formatPeriod, stateOf } from '@/features/commissions/calc'
 import { eventPassed, openRevision } from '@/features/vendorOrders/calc'
 import { msToDeadline, URGENT_HOURS } from '@/features/vendorOrders/summary'
 import { addDaysYmd, todayVN } from '@/lib/clock'
 import { formatDate } from '@/lib/date'
 import { paths } from '@/routes/paths'
-import type { CommissionStatementSummary } from '@/types/commission'
+import type { CommissionStatement } from '@/types/commission'
 import type { VendorConversation } from '@/types/vendorConversation'
 import type { Order } from '@/types/vendorOrder'
 import type { VendorPackage } from '@/types/vendorPackage'
@@ -57,7 +57,7 @@ interface TodoInput {
   orders: Order[]
   conversations: VendorConversation[]
   packages: VendorPackage[]
-  statements: CommissionStatementSummary[]
+  statements: CommissionStatement[]
 }
 
 /** Việc cần làm, mục nào cũng dẫn tới đúng chỗ xử lý (một việc thì mở thẳng, nhiều việc thì mở danh sách đã lọc). */
@@ -112,16 +112,17 @@ export function todoItems({ orders, conversations, packages, statements }: TodoI
   }
 
   // Hoa hồng của kỳ đã chốt còn phải trả, hạn gần nhất trước
-  const dues = statements.filter((s) => s.status !== 'OPEN' && remainingOf(s) > 0 && s.pendingAmount === 0).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  const dues = statements.filter((s) => canPay(s)).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
   for (const s of dues) {
-    const days = Math.round((Date.parse(s.dueDate) - Date.parse(today)) / 86_400_000)
+    const days = daysToDue(s, today)
+    const overdue = stateOf(s, today) === 'overdue'
     items.push({
       key: `commission-${s.id}`,
       count: 1,
-      label: `hoa hồng kỳ ${formatPeriod(s.period)} cần thanh toán`,
-      hint: s.isOverdue ? `Quá hạn từ ${formatDate(s.dueDate)}` : `Hạn ${formatDate(s.dueDate)}${days <= 7 ? ` · còn ${days} ngày` : ''}`,
-      href: `${paths.vendor.commissions}?ky=${s.id}&ds=${s.id}`,
-      urgent: s.isOverdue || days <= 7,
+      label: `hoa hồng kỳ ${formatPeriod(s.periodMonth)} cần nộp`,
+      hint: overdue ? `Quá hạn từ ${formatDate(s.dueDate)}` : `Hạn ${formatDate(s.dueDate)}${days <= 7 ? ` · còn ${days} ngày` : ''}`,
+      href: `${paths.vendor.commissions}?ds=${s.id}`,
+      urgent: overdue || days <= 7,
     })
   }
   return items

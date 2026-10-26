@@ -3,9 +3,11 @@
  * "Giả lập thời gian" đặt (để thử đơn hết hạn cọc, tự hoàn thành sau EventDate + 7 ngày).
  * Mọi chỗ cần "bây giờ" trong phần NCC (hạn cọc, đơn đã qua ngày sự kiện, hoa hồng) dùng now() ở đây, không dùng new Date().
  */
+import { useSyncExternalStore } from 'react'
 import { isMock } from '@/api/mock'
 
 const KEY = 'weddy.mock.clockOffset'
+const EVENT = 'weddy-clock'
 const HOUR = 3_600_000
 
 function offsetMs() {
@@ -27,6 +29,7 @@ export function advanceClock(hours: number) {
   } catch {
     // bỏ qua
   }
+  window.dispatchEvent(new Event(EVENT))
 }
 
 export function resetClock() {
@@ -35,6 +38,18 @@ export function resetClock() {
   } catch {
     // bỏ qua
   }
+  window.dispatchEvent(new Event(EVENT))
+}
+
+/** Cho màn hình đang mở dựng lại khi tua đồng hồ giả lập (trạng thái phụ thuộc ngày hiện tại, ví dụ Quá hạn). Trả về độ lệch hiện tại (ms). */
+export function useClock() {
+  return useSyncExternalStore(
+    (cb) => {
+      window.addEventListener(EVENT, cb)
+      return () => window.removeEventListener(EVENT, cb)
+    },
+    offsetMs,
+  )
 }
 
 /** Đã tua đồng hồ giả lập bao nhiêu giờ. */

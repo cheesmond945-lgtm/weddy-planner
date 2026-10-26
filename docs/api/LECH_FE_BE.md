@@ -27,11 +27,13 @@
 3. `VendorConversation`: `latestOrder.status` dùng 7 trạng thái thô; `needsAction` thêm trường hợp đơn `Deposited` đã qua `EventDate` và có yêu cầu sửa sau cọc đang `Requested`.
 4. Chưa có trạng thái trực tuyến (`customer.online`): giao diện đang ẩn.
 
-### Hoa hồng (`commissions`) — hợp đồng viết lại ở bước sau (commissions.md)
+### Hoa hồng (`commissions`) — hợp đồng: [commissions.md](commissions.md)
 
-1. `POST /vendors/me/commissions/:id/payments` đang trả 409 ("do Admin ghi nhận"). Theo CHOT: NCC **nộp một lần cho cả bảng kê qua VNPay**.
-2. Phản hồi đang giả các trường `supplementCount`, `pendingAmount`, `paidAmount`, `transfer` (thông tin chuyển khoản), trạng thái `OPEN`/`UNPAID`/`PAID`. Theo CSDL chỉ có `Unpaid`/`Paid` (quá hạn tính khi truy vấn).
-3. Hoa hồng phải phát sinh khi đơn `Completed` (đúng tại mốc hoàn thành), không từ "ghi nhận thanh toán".
+1. `POST /vendors/me/commissions/:id/payments` (minh chứng) đang trả 409 "do Admin ghi nhận". Cần bỏ, thay bằng `POST /vendors/me/commissions/:id/pay`: NCC **nộp một lần cho cả bảng kê qua VNPay**, trả `paymentUrl`; thành công thì `Paid`, ghi `PaidDate`, `TransactionCode`.
+2. Phản hồi đang giả các trường `supplementCount`, `pendingAmount`, `paidAmount`, `transfer` (thông tin chuyển khoản), trạng thái `OPEN`/`UNPAID`/`PAID`. Cần trả đúng `CommissionStatement` thô (`periodMonth`, `totalOrders`, `totalAmount`, `dueDate`, `status` `Unpaid`/`Paid`, `paidDate`, `transactionCode`). "Đang tạm tính" và "Quá hạn" không lưu, giao diện tính.
+3. Đổi dạng `GET /vendors/me/commissions` thành `{ rate, statements }`; thêm `GET /vendors/me/commissions/:id/lines` (hoa hồng từng đơn kèm `orderCode`, `customerName`, `completedDate`).
+4. Hoa hồng phải phát sinh khi đơn `Completed` (đúng tại mốc hoàn thành), không từ "ghi nhận thanh toán"; cộng dồn `TotalOrders`, `TotalAmount` của bảng kê tháng `CompletedDate`.
+5. Tỷ lệ theo loại dịch vụ lấy từ `service_categories.commission_rate` (Nhà hàng 5, Decor 7, Hoa cưới 8, Trang phục 8, Chụp ảnh 8, Makeup 10); bỏ tỷ lệ cố định 8/10/12 và hạn ngày 20 trong code cũ (nếu còn).
 
 ### Hồ sơ NCC (`vendors`) — hợp đồng viết lại ở bước sau (vendors.md)
 

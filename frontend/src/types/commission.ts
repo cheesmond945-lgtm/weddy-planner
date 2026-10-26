@@ -1,118 +1,58 @@
 /*
- * Hoa hồng NCC trả WebPlan theo kỳ tháng. Hợp đồng: docs/api/commissions.md (bản nháp).
- * CHỜ ĐỐI CHIẾU docs/database.md và docs/state-diagrams.md: tên trường, trạng thái đang suy từ prototype NCC
- * (màn Tài chính & đối soát) và các quyết định của nhóm (tỷ lệ theo lĩnh vực, tính theo đơn hoàn thành).
+ * Hoa hồng NCC trả WebPlan, đúng theo docs/database.md (Commissions, CommissionStatements, mục 9.8) và hợp đồng
+ * docs/api/commissions.md. Tên trường như CSDL.
  *
- * Bảng kê dựng từ Commissions và CommissionStatements (đơn Completed). GIAI ĐOẠN TẠM: giao diện hoa hồng còn theo mô hình cũ
- * (minh chứng, một phần, bổ sung); bước 2 viết lại theo CSDL (Unpaid/Paid, nộp một lần qua VNPay).
+ * Hoa hồng chỉ phát sinh khi đơn Completed. Mỗi NCC mỗi tháng một bảng kê, nộp một lần (VNPay) trước ngày 25 tháng sau.
+ * "Đang tạm tính" (kỳ của tháng hiện tại) và "Quá hạn" không lưu trong CSDL, giao diện tính từ ngày hiện tại (features/commissions/calc.ts).
  */
-import type { CategoryRef } from './catalog'
-import type { VendorFile } from './vendor'
 
-/** Phương thức của một khoản thu: cọc qua VNPay, phần còn lại tiền mặt ngoài hệ thống. */
-export type OrderPaymentMethod = 'VNPAY' | 'BANK_TRANSFER' | 'CASH'
+/** CommissionStatements.Status */
+export type StatementStatus = 'Unpaid' | 'Paid'
 
-/**
- * Trạng thái bảng kê. Nhãn ở features/commissions/constants.ts.
- * OPEN: kỳ hiện tại, chưa chốt (tạm tính). Các trạng thái còn lại: kỳ đã chốt.
- */
-export const COMMISSION_STATUSES = ['OPEN', 'UNPAID', 'PARTIALLY_PAID', 'PENDING_CONFIRMATION', 'PAID'] as const
-export type CommissionStatus = (typeof COMMISSION_STATUSES)[number]
-
-/** Một khoản thu của đơn được tính trong dòng hoa hồng. */
-export interface CommissionPaymentRef {
-  paymentId: string
-  installmentName: string
-  paidAt: string
-  method: OrderPaymentMethod
-  amount: number
+/** Bảng kê hoa hồng của một tháng (CommissionStatements). */
+export interface CommissionStatement {
+  id: string
+  /** Tháng đối soát "YYYY-MM" (CSDL lưu ngày đầu tháng) */
+  periodMonth: string
+  /** Số đơn Completed trong tháng, cộng dồn */
+  totalOrders: number
+  /** Tổng hoa hồng phải nộp, cộng dồn */
+  totalAmount: number
+  /** Hạn nộp "YYYY-MM-DD": ngày 25 tháng sau */
+  dueDate: string
+  status: StatementStatus
+  /** Chỉ có khi đã nộp */
+  paidDate: string | null
+  /** Mã giao dịch VNPay, chỉ có khi đã nộp */
+  transactionCode: string | null
+  createdDate: string
 }
 
-/**
- * Một dòng bảng kê.
- * ORDER: đơn hoàn thành (ngày sự kiện trong kỳ), tính trên tổng đã thu tới ngày chốt.
- * SUPPLEMENT: khoản thu sau ngày chốt của một đơn đã tính ở kỳ trước, cộng vào kỳ của tháng thu.
- */
+/** Hoa hồng của một đơn (Commissions) kèm thông tin đơn để hiển thị. */
 export interface CommissionLine {
   id: string
-  kind: 'ORDER' | 'SUPPLEMENT'
   orderId: string
   orderCode: string
   customerName: string
-  eventDate: string
-  category: CategoryRef
-  /** Tỷ lệ áp dụng, số nguyên phần trăm (lưu lại để đổi tỷ lệ sau không ảnh hưởng kỳ cũ) */
+  /** Lúc đơn hoàn thành (ISO) */
+  completedDate: string
+  /** Giá trị đơn lúc hoàn thành (Commissions.OrderAmount) */
+  orderAmount: number
+  /** Tỷ lệ áp dụng (%), chụp từ loại dịch vụ lúc đó (Commissions.Rate) */
   rate: number
-  /** Số tiền làm căn cứ: tổng các khoản thu của dòng */
-  baseAmount: number
-  commissionAmount: number
-  payments: CommissionPaymentRef[]
-  /** SUPPLEMENT: kỳ đã tính đơn này */
-  originPeriod: string | null
-}
-
-export const COMMISSION_PAYMENT_STATUSES = ['PENDING', 'CONFIRMED', 'REJECTED'] as const
-export type CommissionPaymentStatus = (typeof COMMISSION_PAYMENT_STATUSES)[number]
-
-/** Một lần NCC gửi minh chứng đã chuyển tiền hoa hồng; Admin xác nhận thì số còn trả mới giảm. */
-export interface CommissionPayment {
-  id: string
+  /** Commissions.Amount = OrderAmount × Rate / 100 */
   amount: number
-  /** null khi Admin ghi nhận thanh toán (hệ thống không lưu minh chứng NCC gửi) */
-  proofFile: VendorFile | null
-  /** Ghi chú đối chiếu của NCC (mã giao dịch, ngân hàng…) */
-  note: string | null
-  submittedAt: string
-  status: CommissionPaymentStatus
-  reviewedAt: string | null
-  /** Ghi chú của Admin khi xác nhận / từ chối */
-  reviewNote: string | null
 }
 
-/** Thông tin chuyển khoản cho WebPlan (BE cấu hình). */
-export interface CommissionTransferInfo {
-  accountName: string
-  bankName: string
-  accountNumber: string
-  /** Nội dung chuyển khoản: "<mã bảng kê> — <tên NCC>" */
-  content: string
+/** Phản hồi của GET /vendors/me/commissions: tỷ lệ hiện tại của NCC và các bảng kê, mới nhất trước. */
+export interface CommissionOverview {
+  /** Tỷ lệ hiện hành theo loại dịch vụ của NCC; null khi NCC chưa chọn loại dịch vụ */
+  rate: { percent: number; categoryName: string } | null
+  statements: CommissionStatement[]
 }
 
-/** Tóm tắt bảng kê (danh sách đối soát). */
-export interface CommissionStatementSummary {
-  id: string
-  /** Mã bảng kê, ví dụ "DS092026" */
-  code: string
-  /** Kỳ "YYYY-MM" */
-  period: string
-  status: CommissionStatus
-  /** Số đơn hoàn thành trong kỳ (không gồm dòng bổ sung) */
-  orderCount: number
-  supplementCount: number
-  /** Tổng khoản thu làm căn cứ */
-  baseAmount: number
-  commissionAmount: number
-  /** Đã được Admin xác nhận */
-  paidAmount: number
-  /** Đang chờ Admin xác nhận */
-  pendingAmount: number
-  /** Ngày chốt kỳ "YYYY-MM-DD" (cuối tháng) */
-  closingDate: string
-  /** Hạn thanh toán "YYYY-MM-DD" (ngày 20 tháng sau) */
-  dueDate: string
-  /** Đã quá hạn mà còn phải trả */
-  isOverdue: boolean
-}
-
-export interface CommissionStatement extends CommissionStatementSummary {
-  lines: CommissionLine[]
-  payments: CommissionPayment[]
-  transfer: CommissionTransferInfo
-}
-
-/** Body của POST /vendors/me/commissions/:id/payments. */
-export interface SubmitCommissionPaymentBody {
-  amount: number
-  proofFile: VendorFile
-  note: string | null
+/** Kết quả bắt đầu nộp. Dữ liệu thật: trả paymentUrl để chuyển sang VNPay. Dữ liệu giả: nộp xong ngay, trả bảng kê đã Paid. */
+export interface PayStatementResult {
+  paymentUrl: string | null
+  statement: CommissionStatement | null
 }

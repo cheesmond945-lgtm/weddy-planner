@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { useCommissionStatements } from '@/features/commissions/hooks'
+import { currentPeriod, withCurrentPeriod } from '@/features/commissions/calc'
+import { useCommissions } from '@/features/commissions/hooks'
 import { useVendorConversations } from '@/features/vendorChat/hooks'
 import { useOrders } from '@/features/vendorOrders/hooks'
 import { usePackages } from '@/features/vendorPackages/hooks'
@@ -18,19 +19,19 @@ export function useVendorDashboard() {
   const orders = useOrders(ALL_ORDERS)
   const conversations = useVendorConversations(15_000)
   const packages = usePackages()
-  const statements = useCommissionStatements()
+  const commissions = useCommissions()
 
   const data = useMemo(() => {
     const o = orders.data?.data ?? []
-    const st = statements.data ?? []
+    const st = commissions.data ? withCurrentPeriod(commissions.data.statements) : []
     return {
       stats: orderStats(o),
-      currentCommission: st.find((s) => s.status === 'OPEN'),
+      currentCommission: st.find((s) => s.periodMonth === currentPeriod()),
       todos: todoItems({ orders: o, conversations: conversations.data ?? [], packages: packages.data ?? [], statements: st }),
       upcoming: upcomingOrders(o),
       recent: recentOrders(o),
     }
-  }, [orders.data, conversations.data, packages.data, statements.data])
+  }, [orders.data, conversations.data, packages.data, commissions.data])
 
   return {
     profile: profile.data,

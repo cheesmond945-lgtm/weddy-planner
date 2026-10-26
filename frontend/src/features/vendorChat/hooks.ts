@@ -94,5 +94,7 @@ export function useAdvanceTime() {
     if (hours === 0) resetClock()
     else advanceClock(hours)
     void qc.invalidateQueries({ queryKey: vendorKeys.all(uid) })
+    // Hoa hồng đổi theo đồng hồ: đơn tự hoàn tất, kỳ chuyển Chưa nộp / Quá hạn
+    void qc.invalidateQueries({ queryKey: ['vendor-commissions'] })
   }
 }

@@ -3,11 +3,12 @@ import { commissionsApi } from '@/api/commissions'
 import { toast } from '@/components/ui/toast'
 import { formatMoney } from '@/lib/format'
 import { useAuth } from '@/store/auth'
-import type { CommissionStatement, SubmitCommissionPaymentBody } from '@/types/commission'
+import type { CommissionStatement } from '@/types/commission'
+import { formatPeriod } from './calc'
 
 const keys = {
   all: (uid: string | undefined) => ['vendor-commissions', uid] as const,
-  detail: (uid: string | undefined, id: string) => ['vendor-commissions', uid, id] as const,
+  lines: (uid: string | undefined, id: string) => ['vendor-commissions', uid, 'lines', id] as const,
 }
 
 function useVendorId() {
@@ -15,48 +16,34 @@ function useVendorId() {
   return user?.role === 'VENDOR' ? user.id : undefined
 }
 
-// Bảng kê tính từ khoản thu của đơn (đổi ở Tin nhắn, Quản lý đơn hàng): mở trang là tải lại
-const fresh = { refetchOnMount: 'always' as const }
-
-/** Danh sách bảng kê, mới nhất trước (kỳ hiện tại đang tạm tính ở đầu). */
-export function useCommissionStatements() {
+/**
+ * Tỷ lệ hiện tại và các bảng kê, mới nhất trước. Bảng kê cộng dồn khi đơn hoàn tất (ở Tin nhắn, Quản lý đơn hàng),
+ * nên mở trang là tải lại.
+ */
+export function useCommissions() {
   const uid = useVendorId()
-  return useQuery({ queryKey: keys.all(uid), queryFn: commissionsApi.list, enabled: !!uid, ...fresh })
+  return useQuery({ queryKey: keys.all(uid), queryFn: commissionsApi.list, enabled: !!uid, refetchOnMount: 'always' })
 }
 
-export function useCommissionStatement(id: string | null) {
+/** Hoa hồng từng đơn của một bảng kê (bảng kê 0 đơn thì không cần tải). */
+export function useCommissionLines(statementId: string | null, enabled = true) {
   const uid = useVendorId()
-  return useQuery({ queryKey: keys.detail(uid, id ?? ''), queryFn: () => commissionsApi.get(id!), enabled: !!uid && !!id, ...fresh })
+  return useQuery({ queryKey: keys.lines(uid, statementId ?? ''), queryFn: () => commissionsApi.lines(statementId!), enabled: !!uid && !!statementId && enabled })
 }
 
-function useSync() {
+/** Nộp hoa hồng cả bảng kê. Dữ liệu thật: chuyển sang VNPay; dữ liệu giả: nộp xong ngay. */
+export function usePayStatement() {
   const uid = useVendorId()
   const qc = useQueryClient()
-  return (s: CommissionStatement) => {
-    qc.setQueryData(keys.detail(uid, s.id), s)
-    void qc.invalidateQueries({ queryKey: keys.all(uid), exact: true })
-  }
-}
-
-export function useSubmitCommissionPayment(id: string) {
-  const sync = useSync()
   return useMutation({
-    mutationFn: (body: SubmitCommissionPaymentBody) => commissionsApi.submitPayment(id, body),
-    onSuccess: (s, body) => {
-      sync(s)
-      toast(`Đã gửi minh chứng ${formatMoney(body.amount)} cho kỳ ${s.code}. Chờ WebPlan xác nhận.`)
-    },
-  })
-}
-
-/** CHỈ KHI DÙNG MOCK */
-export function useSimulateReview(id: string) {
-  const sync = useSync()
-  return useMutation({
-    mutationFn: (decision: 'CONFIRMED' | 'REJECTED') => commissionsApi.simulateReview(id, decision),
-    onSuccess: (s, decision) => {
-      sync(s)
-      toast(decision === 'CONFIRMED' ? 'Giả lập: Admin đã xác nhận khoản thanh toán.' : 'Giả lập: Admin đã từ chối minh chứng.')
+    mutationFn: (s: CommissionStatement) => commissionsApi.pay(s.id).then((r) => ({ ...r, source: s })),
+    onSuccess: ({ paymentUrl, statement, source }) => {
+      if (paymentUrl) {
+        window.location.href = paymentUrl
+        return
+      }
+      void qc.invalidateQueries({ queryKey: keys.all(uid) })
+      toast(`Đã nộp ${formatMoney((statement ?? source).totalAmount)} hoa hồng kỳ ${formatPeriod(source.periodMonth)}.`)
     },
     onError: (e) => toast(e.message),
   })

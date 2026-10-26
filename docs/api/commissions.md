@@ -1,170 +1,116 @@
 # API: commissions (hoa hồng NCC trả WebPlan)
 
-> **Bản nháp** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/vendorCommissions.ts`; cách tính ở `frontend/src/features/commissions/calc.ts`).
-> Quy ước chung: [README.md](README.md). Khoản thu: xem [orders.md](orders.md) phần Nhà cung cấp (`OrderPayment`).
-> **Chờ đối chiếu `docs/database.md` và `docs/state-diagrams.md`**: tên trường, trạng thái suy từ prototype NCC (`docs/prototype/prototype_vendor`, màn Tài chính & đối soát) và quyết định của nhóm.
+> **Hợp đồng đúng theo CSDL** (`docs/database.md` mục 9.8, bảng `CommissionStatements`, `Commissions`). Frontend (`frontend/src/mocks/vendorCommissions.ts` và `mocks/vendorOrders.ts`) làm đúng theo tài liệu này; backend làm theo tài liệu này.
+> Bản này **thay thế hoàn toàn** bản cũ có minh chứng thanh toán, nộp từng phần, dòng bổ sung, thông tin chuyển khoản, Admin xác nhận.
+> Quy ước chung: [README.md](README.md). Đơn hàng: [orders.md](orders.md).
 
-> **Triển khai thật (khớp CSDL):** bảng kê theo tháng hoàn thành đơn, tỷ lệ lấy từ `service_categories.commission_rate`, hạn ngày 25 tháng sau, chỉ có `Unpaid`/`Paid` do Admin ghi nhận. NCC không gửi minh chứng qua hệ thống (`POST .../payments` trả 409 `COMMISSION_NOT_PAYABLE`).
+Phạm vi: NCC xem tỷ lệ hoa hồng của mình, các bảng kê theo tháng, hoa hồng từng đơn, và **nộp một lần cho cả bảng kê qua VNPay**.
+Không có: nộp từng phần, upload minh chứng, Admin xác nhận. (Phía Admin xem và đối soát làm sau.)
 
-Phạm vi: NCC xem bảng kê hoa hồng theo kỳ tháng, chi tiết đơn / khoản thu tính hoa hồng, gửi minh chứng đã chuyển tiền cho WebPlan.
-Chưa có: Admin xác nhận / từ chối minh chứng, cấu hình tỷ lệ (làm khi tới phần Admin, bổ sung vào đây).
-
-## Cách tính (theo quyết định của nhóm)
+## Quy tắc nghiệp vụ
 
 | Mục | Quy tắc |
 |---|---|
-| Kỳ | Tháng dương lịch theo giờ Việt Nam (`Asia/Ho_Chi_Minh`). Mã bảng kê `DS<MM><YYYY>`, ví dụ `DS092026` |
-| Đơn vào kỳ | **Đơn hoàn thành**: `ServiceOrder` có `status = CONFIRMED` và `eventDate` (phiên bản hiện hành) trong tháng của kỳ. Đơn hủy, chưa xác nhận không tính |
-| Căn cứ | Tổng các khoản đã thu thực tế của đơn (`payments`, cả VNPay lẫn NCC tự ghi nhận) có `paidAt` **trước thời điểm chốt kỳ** (00:00 ngày 1 tháng sau, giờ VN) |
-| Thu sau chốt | Khoản thu của đơn đã tính, `paidAt` sau thời điểm chốt: thành **dòng bổ sung** (`SUPPLEMENT`) ở kỳ của tháng thu. Bảng kê đã chốt không đổi |
-| Tỷ lệ | Theo lĩnh vực của NCC (danh mục `GET /categories`), số nguyên phần trăm: **Nhà hàng 8%, Chụp ảnh 12%, Trang phục 12%, lĩnh vực khác 10%**. Lưu vào từng dòng (`rate`) để đổi tỷ lệ sau không ảnh hưởng kỳ cũ |
-| Hoa hồng | Mỗi dòng: `round(baseAmount × rate / 100)` tới đồng; kỳ = tổng các dòng |
-| Chốt kỳ | Cuối tháng. BE có job chốt (ARCHITECTURE: `backend/src/jobs`, bảng kê hoa hồng tháng) chụp lại số liệu kỳ vừa hết |
-| Hạn thanh toán | **Ngày 20 tháng sau** (prototype: kỳ 09/2026 hạn 20/10/2026) |
-| Kỳ hiện tại | Luôn có, `status = OPEN` (tạm tính), số liệu đổi khi có đơn hoàn thành / khoản thu mới; chưa thanh toán được |
+| Khi nào phát sinh | **Chỉ khi đơn chuyển sang `Completed`** (NCC bấm Hoàn tất, hoặc hệ thống tự hoàn tất sau `EventDate` + 7 ngày). Không phát sinh ở bất kỳ mốc nào khác (kể cả khi khách cọc) |
+| Một dòng `Commissions` | `OrderId` (duy nhất), `StatementId`, `OrderAmount` = `TotalAmount` cuối cùng của đơn lúc hoàn thành, `Rate` = `CommissionRate` của loại dịch vụ của NCC **lúc đó** (chụp lại, đổi tỷ lệ sau không ảnh hưởng dòng cũ), `Amount` = làm tròn từ `OrderAmount × Rate / 100`, `CreatedDate` = lúc hoàn thành |
+| Bảng kê | Mỗi NCC mỗi tháng **một** bảng (`UNIQUE (VendorId, PeriodMonth)`). `PeriodMonth` = tháng của `CompletedDate` (giờ Việt Nam). Tạo khi có hoa hồng đầu tiên của tháng; `TotalOrders` và `TotalAmount` **cộng dồn** mỗi khi thêm một `Commissions` |
+| Hạn nộp | `DueDate` = **ngày 25 của tháng sau** `PeriodMonth` |
+| Trạng thái lưu | Chỉ `Unpaid` / `Paid` |
+| "Đang tạm tính" | **Không lưu.** Là bảng kê của tháng hiện tại (giờ Việt Nam): vẫn cộng dồn, **chưa cho nộp** |
+| "Quá hạn" | **Không lưu**, tính khi truy vấn: `Unpaid` và ngày hiện tại (giờ Việt Nam) lớn hơn `DueDate` |
+| Cho nộp | `Unpaid`, kỳ đã kết thúc (tháng hiện tại > `PeriodMonth`), `TotalAmount` > 0 |
+| Nộp | Một lần, đúng `TotalAmount`, qua VNPay. Thành công: `Status` = `Paid`, ghi `PaidDate`, `TransactionCode` (duy nhất) |
+| Tỷ lệ | Theo loại dịch vụ (`ServiceCategories.CommissionRate`): Nhà hàng 5%, Decor 7%, Hoa cưới 8%, Trang phục 8%, Chụp ảnh 8%, Makeup 10%. Backend đọc từ CSDL, giao diện không tự tính |
 
-Lĩnh vực của dòng: lĩnh vực đã xác minh của NCC (`verifiedCategory`, chưa có thì `category`) vì đơn không gắn danh mục riêng. **Cần chốt** nếu sau này một NCC có nhiều lĩnh vực.
+Hiển thị trạng thái (giao diện tính từ dữ liệu trên, không do backend trả):
 
-## Trạng thái bảng kê (`CommissionStatus`)
-
-| Giá trị | Nhãn FE | Khi |
-|---|---|---|
-| `OPEN` | Đang tạm tính | Kỳ hiện tại, chưa chốt |
-| `UNPAID` | Chưa thanh toán | Đã chốt, chưa có khoản nào được xác nhận, không có minh chứng chờ |
-| `PARTIALLY_PAID` | Chưa thanh toán đủ | Đã xác nhận một phần, không có minh chứng chờ |
-| `PENDING_CONFIRMATION` | Chờ xác nhận | Có minh chứng `PENDING` |
-| `PAID` | Đã thanh toán | `paidAmount ≥ commissionAmount` |
-
-`isOverdue`: đã chốt, chưa `PAID`, quá `dueDate` (giờ VN). FE hiện thêm nhãn "Quá hạn".
-
-Minh chứng (`CommissionPaymentStatus`): `PENDING` (Chờ xác nhận), `CONFIRMED` (Đã xác nhận, cộng vào `paidAmount`), `REJECTED` (Bị từ chối, kèm `reviewNote`).
-
-## Đối tượng
-
-`CommissionStatementSummary`
-
-```json
-{
-  "id": "DS092026",
-  "code": "DS092026",
-  "period": "2026-09",
-  "status": "PARTIALLY_PAID",
-  "orderCount": 2,
-  "supplementCount": 0,
-  "baseAmount": 150000000,
-  "commissionAmount": 12000000,
-  "paidAmount": 5000000,
-  "pendingAmount": 0,
-  "closingDate": "2026-09-30",
-  "dueDate": "2026-10-20",
-  "isOverdue": false
-}
-```
-
-`CommissionStatement` = `CommissionStatementSummary` + `lines`, `payments`, `transfer`:
-
-```json
-{
-  "lines": [
-    {
-      "id": "so-1015-2026-09",
-      "kind": "ORDER",
-      "orderId": "so-1015",
-      "orderCode": "#WP1015",
-      "customerName": "Bích Ngọc & Thành Công",
-      "eventDate": "2026-09-12",
-      "category": { "id": "cat-1", "slug": "nha-hang", "name": "Nhà hàng" },
-      "rate": 8,
-      "baseAmount": 90000000,
-      "commissionAmount": 7200000,
-      "payments": [
-        { "paymentId": "p-1", "installmentName": "Đợt 1 – Đặt cọc", "paidAt": "2026-08-05T04:30:00.000Z", "method": "VNPAY", "amount": 20000000 },
-        { "paymentId": "p-2", "installmentName": "Đợt 2 – Thanh toán còn lại", "paidAt": "2026-09-12T14:30:00.000Z", "method": "CASH", "amount": 70000000 }
-      ],
-      "originPeriod": null
-    }
-  ],
-  "payments": [
-    {
-      "id": "cp-3",
-      "amount": 5000000,
-      "proofFile": { "url": "https://…", "publicId": "…", "fileName": "uy-nhiem-chi.jpg", "size": 180000, "mimeType": "image/jpeg" },
-      "note": "Trả trước một phần",
-      "submittedAt": "2026-10-07T09:00:00.000Z",
-      "status": "CONFIRMED",
-      "reviewedAt": "2026-10-08T03:40:00.000Z",
-      "reviewNote": null
-    }
-  ],
-  "transfer": { "accountName": "WEBPLAN", "bankName": "…", "accountNumber": "…", "content": "DS092026 — Công ty TNHH Mây Palace" }
-}
-```
-
-| Trường | Ghi chú |
+| Hiển thị | Điều kiện |
 |---|---|
-| `lines[].kind` | `ORDER`: đơn hoàn thành của kỳ; `SUPPLEMENT`: khoản thu sau chốt của đơn kỳ `originPeriod` |
-| `lines[].payments` | Các khoản thu làm căn cứ (đợt, thời điểm, hình thức thanh toán, số tiền) |
-| `transfer` | Tài khoản nhận của WebPlan (BE cấu hình); `content` là nội dung chuyển khoản để đối chiếu |
-| `payments` | Các lần NCC gửi minh chứng, mới nhất trước |
+| Đang tạm tính | `periodMonth` = tháng hiện tại |
+| Chưa nộp | `Unpaid`, kỳ đã kết thúc, chưa quá `dueDate` |
+| Quá hạn | `Unpaid`, kỳ đã kết thúc, đã qua `dueDate` |
+| Đã nộp | `Paid` |
 
----
+Tháng hiện tại chưa có bảng kê (chưa đơn nào hoàn tất) thì giao diện tự dựng một dòng 0 đồng "Đang tạm tính"; backend **không** cần tạo bảng kê rỗng.
 
-### GET /vendors/me/commissions
-Role: VENDOR
+## Kiểu dữ liệu
 
-Bảng kê mọi kỳ có phát sinh của NCC, mới nhất trước; luôn có kỳ hiện tại (`OPEN`). Không phân trang (mỗi tháng một dòng).
-
-Response 200: `{ "data": CommissionStatementSummary[] }`
-
-### GET /vendors/me/commissions/:id
-Role: VENDOR
-
-`:id` là mã bảng kê (`DS092026`).
-
-Response 200: `{ "data": CommissionStatement }`
-
-Lỗi: 404 `COMMISSION_STATEMENT_NOT_FOUND`
-
-### POST /vendors/me/commissions/:id/payments
-Role: VENDOR
-
-Gửi minh chứng đã chuyển tiền hoa hồng. Tệp upload trước bằng `POST /vendors/me/uploads/signature` với `purpose = PAYMENT_PROOF` ([vendors.md](vendors.md)).
-
-Request
+`CommissionStatement`
 
 ```json
-{ "amount": 7000000, "proofFile": { "url": "…", "publicId": "…", "fileName": "…", "size": 180000, "mimeType": "image/jpeg" }, "note": "VCB, mã GD 1019-88213" }
+{
+  "id": "…",
+  "periodMonth": "2026-09",
+  "totalOrders": 1,
+  "totalAmount": 2880000,
+  "dueDate": "2026-10-25",
+  "status": "Unpaid",
+  "paidDate": null,
+  "transactionCode": null,
+  "createdDate": "2026-09-24T03:00:00.000Z"
+}
 ```
 
-- Chỉ kỳ đã chốt (không `OPEN`), còn phải trả, và không có minh chứng đang `PENDING`.
-- `0 < amount ≤ commissionAmount − paidAmount`. `proofFile` bắt buộc, `note` tùy chọn.
-- Tạo minh chứng `PENDING`; số còn trả **chỉ giảm khi Admin xác nhận**.
+`CommissionLine` (hoa hồng của một đơn)
 
-Response 200: `{ "data": CommissionStatement }`
+```json
+{
+  "id": "…",
+  "orderId": "…",
+  "orderCode": "DH26080012",
+  "customerName": "Lan Hương & Minh Đức",
+  "completedDate": "2026-09-24T03:00:00.000Z",
+  "orderAmount": 57600000,
+  "rate": 5,
+  "amount": 2880000
+}
+```
 
-Lỗi: 400 `VALIDATION_ERROR`, 404 `COMMISSION_STATEMENT_NOT_FOUND`, 409 `COMMISSION_PERIOD_OPEN`, 409 `COMMISSION_NOT_PAYABLE` (đã đủ hoặc đang có minh chứng chờ)
+`completedDate` lấy từ `Orders.CompletedDate`; `customerName`, `orderCode` lấy từ đơn.
 
-## Mã lỗi riêng
+## Endpoint (vai trò VENDOR)
 
-| HTTP | `code` | Khi nào |
+### `GET /vendors/me/commissions`
+
+Trả tỷ lệ hiện tại và mọi bảng kê của NCC, mới nhất trước (theo `periodMonth`).
+
+```json
+{
+  "rate": { "percent": 5, "categoryName": "Nhà hàng" },
+  "statements": [ { "…CommissionStatement…" } ]
+}
+```
+
+- `rate`: tỷ lệ **hiện hành** của loại dịch vụ NCC (để hiển thị "Tỷ lệ hoa hồng của bạn: 5% (Nhà hàng)"); `null` nếu NCC chưa có loại dịch vụ.
+- Không phân trang (mỗi tháng một bảng kê, nhiều nhất vài chục dòng).
+
+### `GET /vendors/me/commissions/:id/lines`
+
+Hoa hồng từng đơn của một bảng kê (`CommissionLine[]`), mới hoàn tất trước. Không phải bảng kê của NCC: `404 COMMISSION_STATEMENT_NOT_FOUND`.
+
+### `POST /vendors/me/commissions/:id/pay`
+
+Bắt đầu nộp một lần cho cả bảng kê. Body rỗng.
+
+- Điều kiện: bảng kê `Unpaid`, kỳ đã kết thúc, `totalAmount` > 0.
+- Tạo giao dịch VNPay với số tiền = `totalAmount`; trả `{ "paymentUrl": "https://sandbox.vnpayment.vn/…", "statement": null }`. Frontend chuyển trình duyệt sang `paymentUrl`.
+- Khi VNPay báo thành công (IPN và/hoặc trang trả về), backend đặt `Status` = `Paid`, `PaidDate`, `TransactionCode`; frontend quay về trang Tài chính & đối soát và tải lại danh sách.
+- Dữ liệu giả của frontend: nộp thành công ngay, trả `{ "paymentUrl": null, "statement": <bảng kê đã Paid> }`.
+
+Lỗi:
+
+| HTTP | `code` | Khi |
 |---|---|---|
-| 404 | `COMMISSION_STATEMENT_NOT_FOUND` | Không có bảng kê hoặc của NCC khác |
-| 409 | `COMMISSION_PERIOD_OPEN` | Thanh toán kỳ chưa chốt |
-| 409 | `COMMISSION_NOT_PAYABLE` | Kỳ đã thanh toán đủ, hoặc đang có minh chứng chờ xác nhận |
+| 404 | `COMMISSION_STATEMENT_NOT_FOUND` | Bảng kê không tồn tại hoặc không của NCC này |
+| 409 | `COMMISSION_NOT_PAYABLE` | Kỳ hiện tại (đang tạm tính), hoặc `totalAmount` = 0 |
+| 409 | `COMMISSION_ALREADY_PAID` | Bảng kê đã `Paid` |
 
-## Ghi chú về dữ liệu giả
+## Việc backend tự chạy
 
-Mock không lưu bảng kê: mỗi lần gọi tính lại từ khoản thu của các đơn trong `mocks/vendorChat.ts` (Mây Palace có 5 đơn hoàn thành tháng 07–10/2026, một khoản thu sau chốt). Chỉ lưu các lần gửi minh chứng (`localStorage` khóa `weddy.mock.vendorCommissions`). Khi có minh chứng chờ, hộp chi tiết có nút **Giả lập Admin xác nhận / từ chối**, chỉ có trong mock.
+- **Khi đơn thành `Completed`** (NCC bấm Hoàn tất hoặc tự hoàn tất): tạo `Commissions`, tạo bảng kê của tháng `CompletedDate` nếu chưa có, cộng dồn `TotalOrders`, `TotalAmount` (trong cùng một giao dịch).
+- **Nhắc nộp** (thông báo, làm cùng phần Notifications): trước hạn và khi quá hạn. Chưa có API đọc `Notifications` cho NCC.
+- Mock của frontend chạy các việc này mỗi lần đọc dữ liệu, có nút "Giả lập thời gian" (tua giờ/ngày/30 ngày) để thử kỳ chuyển Chưa nộp, Quá hạn.
 
-## Khác biệt với prototype NCC
+## Không còn trong hợp đồng NCC
 
-- Prototype ghi cứng số liệu 3 kỳ, không có tỷ lệ; ở đây tính từ khoản thu thật theo các quy tắc trên.
-- Thêm cột "Đã thu (căn cứ)", chi tiết từng đơn / khoản thu, dòng bổ sung, trạng thái "Đang tạm tính", "Chưa thanh toán", nhãn "Quá hạn".
-- Gửi minh chứng thêm ghi chú đối chiếu; lịch sử các lần gửi kèm trạng thái và ghi chú của Admin.
-- Tài khoản WebPlan trong mock giữ như prototype ("WEBPLAN DEMO", không dùng chuyển tiền).
-
-## Cần chốt
-
-1. NCC có nhiều lĩnh vực thì lấy tỷ lệ theo đâu (gói của đơn, hay lĩnh vực chính).
-2. Đơn có thu thừa / hoàn tiền sau khi chốt: có trừ lại hoa hồng ở kỳ sau không.
-3. Quá hạn thanh toán hoa hồng: có hạn chế gì với NCC (ẩn dịch vụ, khóa gửi duyệt…) không.
+Minh chứng thanh toán (`POST …/payments`, `PAYMENT_PROOF`, `reviewNote`), nộp từng phần (`paidAmount`, `pendingAmount`, `PARTIALLY_PAID`), `PENDING_CONFIRMATION`, `OPEN`, dòng bổ sung (`SUPPLEMENT`, `supplementCount`), thông tin chuyển khoản (`transfer`), tỷ lệ cố định 8/10/12%, hạn ngày 20, căn cứ "khoản đã thu thực tế".

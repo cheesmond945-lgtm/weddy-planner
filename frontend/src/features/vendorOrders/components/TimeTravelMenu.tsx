@@ -10,6 +10,7 @@ const STEPS = [
   { label: 'Tua 6 giờ', hours: 6 },
   { label: 'Tua 1 ngày', hours: 24 },
   { label: 'Tua 8 ngày', hours: 24 * 8 },
+  { label: 'Tua 30 ngày', hours: 24 * 30 },
 ]
 
 /** CHỈ CÓ KHI DÙNG DỮ LIỆU GIẢ: nút nhỏ "giả lập thời gian" để thử đơn hết hạn cọc, tự hoàn thành. */
