@@ -45,8 +45,8 @@ export interface ConversationOrderSummary {
 export interface VendorConversation {
   id: string
   customer: { name: string; phone: string }
-  /** Gói khách đang quan tâm (mở chat từ trang gói) */
-  interestPackage: { id: string; name: string; price: number | null; maxPrice: number | null } | null
+  /** Gói khách đang quan tâm: gói của NCC trong kế hoạch của khách (thẻ gói ở đầu hội thoại) */
+  interestPackage: { id: string; name: string; price: number | null; maxPrice: number | null; imageUrl?: string | null } | null
   unreadCount: number
   lastMessage: Pick<VendorMessage, 'sender' | 'type' | 'text' | 'orderVersion' | 'createdAt'> & { orderCode: string | null } | null
   /** Đơn đã gửi mới nhất */

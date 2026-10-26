@@ -24,5 +24,7 @@ export interface Conversation {
   service: ServiceSummary
   /** Trạng thái dịch vụ trong kế hoạch; CONFIRMED thì hiện nhãn "Đã cọc" trong danh sách hội thoại */
   planStatus: PlanItemStatus | null
+  /** Số tin NCC gửi mà khách chưa đọc */
+  unreadCount: number
   lastMessage: Pick<Message, 'type' | 'text' | 'createdAt'> | null
 }

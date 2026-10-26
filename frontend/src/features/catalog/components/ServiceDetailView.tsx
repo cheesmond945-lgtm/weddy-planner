@@ -2,7 +2,7 @@ import { Check, ExternalLink, Info, Lock, MapPin, Star } from 'lucide-react'
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { formatNumber } from '@/lib/format'
-import type { ServiceAlbum, ServiceDetail } from '@/types/catalog'
+import type { ServiceDetail } from '@/types/catalog'
 import { GalleryDialog } from './GalleryDialog'
 import { ServiceGallery } from './ServiceGallery'
 import { ServiceInfoPanel } from './ServiceInfoPanel'
@@ -32,13 +32,8 @@ interface ServiceDetailViewProps {
 export function ServiceDetailView({ service, headActions, sidebarActions, sidebarTip }: ServiceDetailViewProps) {
   const [tab, setTab] = useState<Tab>('info')
   const [galleryOpen, setGalleryOpen] = useState(false)
-  const [galleryAlbum, setGalleryAlbum] = useState<ServiceAlbum | null>(null)
   const tabsRef = useRef<HTMLDivElement>(null)
 
-  function openGallery(album?: ServiceAlbum) {
-    setGalleryAlbum(album?.imageUrls?.length ? album : null)
-    setGalleryOpen(true)
-  }
 
   function showReviews() {
     setTab('reviews')
@@ -64,7 +59,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
         {service.isGuaranteed && (
           <span className="inline-flex items-center gap-1.5 rounded-pill bg-sage-soft px-3 py-[5px] text-xs font-semibold text-sage">
             <Lock className="size-3.5" strokeWidth={2} aria-hidden />
-            Weddy đảm bảo
+            WebPlan đảm bảo
           </span>
         )}
       </div>
@@ -81,7 +76,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
           target="_blank"
           rel="noopener noreferrer"
           title="Xem trên Google Maps"
-          className="inline-flex items-center gap-1.5 font-medium text-primary underline underline-offset-[3px] hover:text-gold"
+          className="inline-flex items-center gap-1.5 font-medium text-gold-700 underline underline-offset-[3px] hover:text-gold"
         >
           <MapPin className="size-4" aria-hidden />
           {service.address}
@@ -98,7 +93,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
         ))}
       </div>
 
-      <ServiceGallery name={service.name} images={service.images} onOpenAll={() => openGallery()} />
+      <ServiceGallery name={service.name} images={service.images} onOpenAll={() => setGalleryOpen(true)} />
 
       <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-7 max-[900px]:grid-cols-1">
         <div className="min-w-0">
@@ -130,9 +125,10 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
               </button>
             ))}
           </div>
-          <div id="service-tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+          {/* @container/content: lưới gói đo theo bề rộng cột nội dung này (2 cột khi từ 700px) */}
+          <div id="service-tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="@container/content">
             {tab === 'info' ? (
-              <ServiceInfoPanel service={service} onOpenGallery={openGallery} />
+              <ServiceInfoPanel service={service} />
             ) : (
               <GoogleReviewsPanel vendorId={service.id} mapsUrl={service.googleMapsUrl} />
             )}
@@ -142,8 +138,8 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
       </div>
 
       <GalleryDialog
-        title={galleryAlbum?.title ?? service.name}
-        images={galleryAlbum?.imageUrls ?? service.images}
+        title={service.name}
+        images={service.images}
         open={galleryOpen}
         onOpenChange={setGalleryOpen}
       />
@@ -161,7 +157,7 @@ function HeaderRating({ vendorId, onShowReviews }: { vendorId: string; onShowRev
     <span className="inline-flex items-center gap-1.5">
       <Star className="size-[17px] fill-gold text-gold" aria-hidden />
       <b className="text-base font-semibold text-ink">{data.rating.toFixed(1)}</b>
-      <button type="button" onClick={onShowReviews} className="text-sm font-medium text-primary underline underline-offset-[3px]">
+      <button type="button" onClick={onShowReviews} className="text-sm font-medium text-gold-700 underline underline-offset-[3px]">
         ({formatNumber(data.userRatingCount)} đánh giá)
       </button>
       <GoogleAttribution compact className="rounded-sm border border-line px-1 leading-4" />

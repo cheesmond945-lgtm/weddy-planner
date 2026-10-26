@@ -70,7 +70,7 @@ export function AuthSubmit({ children, ...props }: ComponentProps<'button'>) {
   return (
     <button
       type="submit"
-      className="mt-2 h-12 w-full rounded-lg bg-primary text-sm font-semibold tracking-[0.08em] text-primary-foreground uppercase shadow-pill transition-[filter,box-shadow] hover:brightness-105 hover:shadow-card disabled:cursor-not-allowed disabled:opacity-60"
+      className="mt-2 h-12 w-full rounded-lg btn-gold font-serif text-[15px] font-semibold tracking-[0.2em] uppercase disabled:cursor-not-allowed disabled:opacity-60"
       {...props}
     >
       {children}

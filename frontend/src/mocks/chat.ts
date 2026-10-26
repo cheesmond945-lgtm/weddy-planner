@@ -35,6 +35,8 @@ function toConversation(data: UserData, c: UserData['conversations'][number]): C
     id: c.id,
     service: mockCatalog.getSummary(c.serviceId),
     planStatus: data.planItems.find((p) => p.serviceId === c.serviceId)?.status ?? null,
+    // Dữ liệu giả không theo dõi đã đọc: NCC giả trả lời ngay khi khách đang mở khung chat
+    unreadCount: 0,
     lastMessage: last ? { type: last.type, text: last.text, createdAt: last.createdAt } : null,
   }
 }
@@ -129,6 +131,11 @@ export const mockChat = {
       }, userId)
     }, 900)
     return msg
+  },
+
+  markRead: (conversationId: string): null => {
+    findConversation(read(), conversationId)
+    return null
   },
 
   getOrder: (id: string): Order => findOrder(read(), id),

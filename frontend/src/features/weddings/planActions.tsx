@@ -1,16 +1,18 @@
 import { Check, MessageCircle, Plus } from 'lucide-react'
-import { useState, useSyncExternalStore } from 'react'
-import { useNavigate } from 'react-router'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useSearchParams } from 'react-router'
 import { ApiError } from '@/api'
+import { catalogApi } from '@/api/catalog'
 import { chatApi } from '@/api/chat'
 import { weddingsApi } from '@/api/weddings'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
 import { useRequireCouple } from '@/features/auth/useRequireCouple'
+import { CHAT_MODE, CHAT_PARAM, chatPanel } from '@/features/chat/chatPanel'
 import { cn } from '@/lib/utils'
-import { paths } from '@/routes/paths'
-import type { ServiceSummary } from '@/types/catalog'
+import { useAuth } from '@/store/auth'
+import type { ServiceDetail, ServiceSummary } from '@/types/catalog'
 import { usePlan, useRefreshPlanning } from './hooks'
 
 // ---- Hộp hỏi thay dịch vụ (addPlan trong prototype) ----
@@ -79,7 +81,6 @@ export function ReplacePlanDialog() {
 export function usePlanActions() {
   const requireCouple = useRequireCouple()
   const refresh = useRefreshPlanning()
-  const navigate = useNavigate()
 
   async function withReplace<T>(service: ServiceSummary, call: (replace: boolean) => Promise<T>, done: (result: T, replaced: boolean) => void) {
     try {
@@ -113,16 +114,78 @@ export function usePlanActions() {
         }),
       ),
 
-    /** openChat trong prototype: chưa có trong kế hoạch thì thêm vào, chuyển sang Đang trao đổi, mở khung chat. */
-    openChat: (service: ServiceSummary) =>
-      requireCouple(() =>
-        withReplace(service, (replace) => chatApi.start(service.id, replace), (conv, replaced) => {
-          if (replaced) toast('Đã thay dịch vụ trong kế hoạch')
-          void refresh()
-          navigate(`${paths.chat}?c=${conv.id}`)
-        }),
-      ),
+    /**
+     * openChat trong prototype: chưa có trong kế hoạch thì thêm vào, chuyển sang Đang trao đổi, mở khung chat bên phải.
+     * Chưa đăng nhập: đăng nhập xong quay lại trang với ?chat=<id> để tự mở lại khung chat (ChatPanelResume).
+     * VITE_CHAT_MODE=zalo: mở Zalo của NCC thay vì chat trong WebPlan (xem features/chat/chatPanel.ts).
+     */
+    openChat: (service: ServiceSummary & Partial<Pick<ServiceDetail, 'workingHours' | 'contactPhone'>>) => {
+      if (CHAT_MODE === 'zalo' && service.contactPhone) {
+        openZalo(service.contactPhone, `Chào ${service.name}, mình xem dịch vụ trên WebPlan và muốn được tư vấn thêm.`)
+        return
+      }
+      return requireCouple(
+        async () => {
+          // Xem kế hoạch trước khi mở chat (mở chat sẽ tự thêm vào kế hoạch): đã thêm gói của NCC này thì soạn sẵn câu hỏi giá chốt
+          const before = await weddingsApi
+            .getPlan()
+            .then((p) => p.items.find((i) => i.service.id === service.id) ?? null)
+            .catch(() => null)
+          const packageName = before?.packageName || null
+          await withReplace(service, (replace) => chatApi.start(service.id, replace), (conv, replaced) => {
+            if (replaced) toast('Đã thay dịch vụ trong kế hoạch')
+            void refresh()
+            chatPanel.open({
+              conversation: conv,
+              draft: packageName ? `Mình muốn hỏi giá chốt cho gói ${packageName} ạ.` : '',
+              packageName,
+              workingHours: service.workingHours,
+            })
+          })
+        },
+        { [CHAT_PARAM]: service.id },
+      )
+    },
   }
+}
+
+/** Phương án B: mở Zalo theo số điện thoại NCC. Zalo không nhận nội dung qua link nên chép tin vào bộ nhớ tạm để khách dán. */
+function openZalo(phone: string, message: string) {
+  const digits = phone.replace(/\D/g, '').replace(/^0/, '84')
+  void navigator.clipboard?.writeText(message).then(
+    () => toast('Đã chép tin nhắn soạn sẵn, dán vào Zalo để gửi'),
+    () => undefined,
+  )
+  window.open(`https://zalo.me/${encodeURIComponent(digits)}`, '_blank', 'noopener,noreferrer')
+}
+
+/**
+ * Đăng nhập xong quay lại trang có ?chat=<id dịch vụ>: tự mở lại khung chat rồi bỏ tham số khỏi URL.
+ * Đặt một lần trong CoupleLayout.
+ */
+export function ChatPanelResume() {
+  const { user } = useAuth()
+  const [params, setParams] = useSearchParams()
+  const serviceId = params.get(CHAT_PARAM)
+  const { openChat } = usePlanActions()
+  const openRef = useRef(openChat)
+  openRef.current = openChat
+
+  useEffect(() => {
+    if (!serviceId || user?.role !== 'COUPLE') return
+    setParams(
+      (p) => {
+        p.delete(CHAT_PARAM)
+        return p
+      },
+      { replace: true },
+    )
+    catalogApi.getService(serviceId).then(
+      (service) => openRef.current(service),
+      () => toast('Không mở được khung chat với nhà cung cấp'),
+    )
+  }, [serviceId, user, setParams])
+  return null
 }
 
 /** Dịch vụ đã có trong kế hoạch chưa (và trạng thái). */
@@ -150,16 +213,17 @@ export function AddToPlanButton({ service, variant = 'button', addedLabel = 'Tro
 
   if (variant === 'icon') {
     return (
+      // aria-disabled thay cho disabled để rê chuột vẫn hiện chú thích "Đã trong kế hoạch"; vùng bấm 44×44
       <Button
         variant="outline"
         size="icon"
-        className={cn('rounded-[9px]', className)}
-        disabled={inPlan}
+        className={cn('size-11 rounded-md', inPlan && 'cursor-default border-moss-700 bg-moss-700 text-white hover:border-moss-700', className)}
+        aria-disabled={inPlan}
         aria-label={inPlan ? `${service.name} đã trong kế hoạch` : `Thêm ${service.name} vào kế hoạch`}
         title={inPlan ? 'Đã trong kế hoạch' : 'Thêm vào kế hoạch'}
-        onClick={() => addToPlan(service)}
+        onClick={() => !inPlan && addToPlan(service)}
       >
-        {inPlan ? <Check className="size-4" /> : <Plus className="size-4" />}
+        {inPlan ? <Check className="size-5" /> : <Plus className="size-5" />}
       </Button>
     )
   }
@@ -171,15 +235,36 @@ export function AddToPlanButton({ service, variant = 'button', addedLabel = 'Tro
   )
 }
 
-/** Nút "Nhắn tin với nhà cung cấp" / "Tiếp tục trao đổi". */
-export function OpenChatButton({ service, className, size = 'sm', label }: { service: ServiceSummary; className?: string; size?: 'sm' | 'default' | 'lg'; label?: string }) {
-  const item = usePlanItemOf(service.id)
+interface OpenChatButtonProps {
+  service: ServiceSummary & Partial<Pick<ServiceDetail, 'workingHours' | 'contactPhone'>>
+  className?: string
+  label?: string
+}
+
+/** Nút "Nhắn tin với NCC": viền vàng đậm 1.5px, nền trong suốt, cao 44px; nút chính của trang vẫn là "Thêm vào kế hoạch". */
+export function OpenChatButton({ service, className, label = 'Nhắn tin với NCC' }: OpenChatButtonProps) {
   const { openChat } = usePlanActions()
-  const text = label ?? (item && item.status !== 'PLANNED' ? 'Tiếp tục trao đổi' : 'Nhắn tin với nhà cung cấp')
+  const [busy, setBusy] = useState(false)
   return (
-    <Button size={size} className={className} onClick={() => openChat(service)}>
-      <MessageCircle />
-      {text}
-    </Button>
+    <button
+      type="button"
+      disabled={busy}
+      aria-busy={busy || undefined}
+      onClick={async () => {
+        setBusy(true)
+        try {
+          await openChat(service)
+        } finally {
+          setBusy(false)
+        }
+      }}
+      className={cn(
+        'inline-flex h-11 items-center justify-center gap-2 rounded-md border-[1.5px] border-gold-700 bg-transparent px-4 text-sm font-semibold whitespace-nowrap text-gold-700 transition-colors hover:bg-gold-100 disabled:cursor-wait disabled:opacity-70',
+        className,
+      )}
+    >
+      <MessageCircle className="size-5" strokeWidth={1.5} aria-hidden />
+      {label}
+    </button>
   )
 }

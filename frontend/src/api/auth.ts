@@ -4,6 +4,7 @@ import type {
   LoginRequest,
   OtpSent,
   RegisterRequest,
+  ResetPasswordRequest,
   Session,
   SessionUser,
   UpdateProfileRequest,
@@ -25,6 +26,15 @@ export const authApi = {
 
   verifyRegisterOtp: (body: VerifyRegisterOtpRequest): Promise<Session> =>
     isMock('auth') ? mockDelay(null).then(() => mockAuth.verifyRegisterOtp(body)) : http.post('/auth/register/verify-otp', body),
+
+  forgotPassword: (email: string): Promise<OtpSent> =>
+    isMock('auth') ? mockDelay(null).then(() => mockAuth.forgotPassword(email)) : http.post('/auth/forgot-password', { email }),
+
+  resendResetOtp: (email: string): Promise<OtpSent> =>
+    isMock('auth') ? mockDelay(null).then(() => mockAuth.resendResetOtp(email)) : http.post('/auth/forgot-password/resend-otp', { email }),
+
+  resetPassword: (body: ResetPasswordRequest): Promise<Session> =>
+    isMock('auth') ? mockDelay(null).then(() => mockAuth.resetPassword(body)) : http.post('/auth/reset-password', body),
 
   me: (): Promise<SessionUser> =>
     isMock('auth') ? mockDelay(null).then(() => mockAuth.me(authStore.getToken())) : http.get('/auth/me'),

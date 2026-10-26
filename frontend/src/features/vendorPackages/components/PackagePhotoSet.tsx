@@ -191,6 +191,11 @@ export function PackagePhotoSet({ photos, coverPublicId, onChange, readOnly, err
         )
       )}
       {uploadList}
+      {/* Chưa có nhận diện chữ trong ảnh (OCR): nhắc NCC tự kiểm tra. Giá, tên gói hiện bằng chữ trên web nên ảnh cần sạch */}
+      <p className="mt-2 text-[12.5px] leading-normal text-muted-foreground">
+        Nên dùng ảnh gốc không chèn chữ hay giá: ảnh có chữ có thể không hiển thị đẹp khi web đặt tên và giá gói lên ảnh. Ảnh quảng cáo có chữ nên đưa vào
+        mục ảnh thực tế.
+      </p>
       {error && (
         <p role="alert" data-field-error className="mt-1.5 text-[13px] text-destructive">
           {error}

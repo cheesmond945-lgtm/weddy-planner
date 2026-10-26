@@ -28,6 +28,23 @@ const slugify = (s: string) =>
 
 export const categorySlug = (name: string) => CATEGORY_SLUGS[name] ?? slugify(name);
 
+/** Bỏ dấu tiếng Việt và viết thường để so khớp từ khóa: "Cầu Giấy" -> "cau giay". */
+const foldText = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+
+/**
+ * Cách hiện mục "Gói dịch vụ" ở trang chi tiết: "tiles" = mỗi gói một ô ảnh (biến thể của cùng dịch vụ:
+ * chụp ảnh, váy cưới, trang điểm), "album" = card ảnh ghép theo album gói (mặc định).
+ * CSDL chưa có cột service_categories.package_layout / lựa chọn riêng của NCC nên tạm cấu hình theo danh mục ở đây.
+ */
+const TILE_CATEGORIES = new Set(['chup-anh', 'trang-phuc', 'trang-diem']);
+export const packageLayoutOf = (slug: string): 'tiles' | 'album' => (TILE_CATEGORIES.has(slug) ? 'tiles' : 'album');
+
 /** Thứ tự hiển thị danh mục (như prototype): các slug lạ xếp cuối. */
 export const CATEGORY_ORDER = ['nha-hang', 'decor', 'trang-phuc', 'makeup', 'chup-anh', 'co-cuoi', 'hoa-cuoi'];
 export const categoryRank = (slug: string) => {
@@ -61,6 +78,16 @@ export class ServicesService {
 
   private img(path: string) {
     return this.storage.publicAlbumUrl(path);
+  }
+
+  /** Gói đã duyệt của một NCC (rẻ nhất trước) kèm ảnh bìa: dùng làm "thẻ gói" đầu hội thoại phía NCC. */
+  async packageCards(vendorId: string) {
+    const pkgs = await this.prisma.service_packages.findMany({
+      where: { vendor_id: vendorId, status: 'Approved' },
+      orderBy: [{ price: 'asc' }, { id: 'asc' }],
+      include: { package_albums: { orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }], take: 1 } },
+    });
+    return pkgs.map((p) => ({ id: p.id, name: p.name, price: Number(p.price), imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null }));
   }
 
   private summarize(v: Awaited<ReturnType<ServicesService['loadVisible']>>[number]) {
@@ -131,7 +158,8 @@ export class ServicesService {
   async list(query: ServiceQuery) {
     const page = Math.max(1, Math.trunc(query.page ?? 1) || 1);
     const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize ?? 20) || 20));
-    const q = query.q?.trim().toLowerCase();
+    // Từ khóa khớp tên dịch vụ / NCC, danh mục và địa chỉ (đường, phường, quận...), không phân biệt dấu và hoa thường
+    const q = foldText(query.q?.trim() ?? '');
 
     const items = (await this.loadVisible())
       .map((v) => this.summarize(v))
@@ -141,7 +169,7 @@ export class ServicesService {
           (!query.location || s.location === query.location) &&
           (query.priceMin === undefined || s.priceFrom >= query.priceMin) &&
           (query.priceMax === undefined || s.priceFrom < query.priceMax) &&
-          (!q || s.name.toLowerCase().includes(q) || s.category.name.toLowerCase().includes(q)),
+          (!q || foldText(`${s.name} ${s.category.name} ${s.address}`).includes(q)),
       );
 
     const rows = items.slice((page - 1) * pageSize, page * pageSize);
@@ -166,10 +194,24 @@ export class ServicesService {
       capacity: capacities.length ? Math.max(...capacities) : null,
       styles: tags,
       workingHours: v.working_hours ?? '',
+      packageLayout: packageLayoutOf(categorySlug(v.service_categories.name)),
+      // Số điện thoại NCC: dùng khi FE chọn nhắn qua Zalo (VITE_CHAT_MODE=zalo)
+      contactPhone: (await this.prisma.users.findUnique({ where: { id: v.user_id }, select: { phone_number: true } }))?.phone_number ?? null,
       isVerified: true,
       isGuaranteed: false,
       images: [...covers, ...others].slice(0, 60).map((a) => this.img(a.url)),
-      packages: v.service_packages.map((p) => ({ id: p.id, name: p.name, description: p.description, price: Number(p.price), capacity: p.capacity })),
+      packages: v.service_packages.map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        price: Number(p.price),
+        capacity: p.capacity,
+        // CSDL chưa có cột đơn vị tính: đọc từ mô tả của NCC ("…4.500.000đ/mâm"), không có thì là gói
+        unit: p.description.match(/đ\s*\/\s*(mâm|bàn|khách|người|set|bộ)/i)?.[1].toLowerCase() ?? 'gói',
+        // Ảnh bìa và thẻ phong cách của gói
+        imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null,
+        tags: p.package_tags.map((t) => t.tag),
+      })),
       albums: v.service_packages.map((p) => ({
         id: p.id,
         title: p.name,

@@ -9,8 +9,8 @@ const TABS: { mode: AuthDialogMode; label: string }[] = [
 
 const tabClass = (active: boolean) =>
   cn(
-    '-mb-px flex-1 border-b-2 py-3 text-center text-sm font-semibold tracking-[0.06em] uppercase transition-colors',
-    active ? 'border-primary text-gold' : 'border-transparent text-muted-foreground hover:text-ink',
+    '-mb-px flex-1 border-b-2 py-3 text-center font-serif text-[15px] font-semibold tracking-[0.2em] uppercase transition-colors',
+    active ? 'border-gold-500 text-gold-700' : 'border-transparent text-ink-2 hover:text-ink',
   )
 
 interface AuthTabsProps {
@@ -25,7 +25,7 @@ interface AuthTabsProps {
 /** Tab Đăng nhập / Đăng ký dạng gạch chân. */
 export function AuthTabs({ mode, onChange, hrefs, linkState }: AuthTabsProps) {
   return (
-    <div role="tablist" aria-label="Đăng nhập hoặc đăng ký" className="mb-6 flex border-b border-line">
+    <div role="tablist" aria-label="Đăng nhập hoặc đăng ký" className="mb-6 flex border-b border-line [@media(max-height:820px)]:mb-4">
       {TABS.map((t) =>
         hrefs ? (
           <Link key={t.mode} to={hrefs[t.mode]} state={linkState} replace role="tab" aria-selected={mode === t.mode} className={tabClass(mode === t.mode)}>

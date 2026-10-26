@@ -47,6 +47,13 @@ export interface VerifyRegisterOtpRequest {
   otp: string
 }
 
+/** Bước 2 quên mật khẩu: OTP gửi về email kèm mật khẩu mới. */
+export interface ResetPasswordRequest {
+  email: string
+  otp: string
+  password: string
+}
+
 export interface UpdateProfileRequest {
   name: string
   email: string | null

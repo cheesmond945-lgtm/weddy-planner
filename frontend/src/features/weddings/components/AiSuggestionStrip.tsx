@@ -21,14 +21,14 @@ export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSug
   const head = (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="flex items-center gap-2 text-[19px]">
-        <Sparkles className="size-5 text-primary" aria-hidden />
+        <Sparkles className="size-5 text-gold-700" aria-hidden />
         Gợi ý bằng AI cho hạng mục {cat}
       </h2>
       <div className="flex flex-wrap items-center gap-2">
         <Button asChild variant="outline" size="sm">
           <Link to={paths.timeline}>Quay lại timeline</Link>
         </Button>
-        <button type="button" onClick={onClose} className="text-sm font-medium text-primary underline underline-offset-[3px]">
+        <button type="button" onClick={onClose} className="text-sm font-medium text-gold-700 underline underline-offset-[3px]">
           Đóng gợi ý
         </button>
       </div>

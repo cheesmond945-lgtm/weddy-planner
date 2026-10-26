@@ -24,6 +24,9 @@ export function ServiceSidebar({ service, actions, tip }: ServiceSidebarProps) {
       </div>
       <p className="mb-4 text-center text-[13px] text-muted-foreground">Nhà cung cấp xác nhận giá cuối cùng khi trao đổi.</p>
 
+      {/* Nút ngay dưới khoảng giá: nhắn tin NCC, thêm vào kế hoạch */}
+      {actions && <div className="mb-4 grid gap-2.5">{actions}</div>}
+
       <InfoRow
         icon={<MapPin className="size-[18px]" />}
         label="Địa chỉ"
@@ -33,7 +36,7 @@ export function ServiceSidebar({ service, actions, tip }: ServiceSidebarProps) {
             target="_blank"
             rel="noopener noreferrer"
             title="Xem trên Google Maps"
-            className="text-primary underline underline-offset-[3px] hover:text-gold"
+            className="text-gold-700 underline underline-offset-[3px] hover:text-gold"
           >
             {service.address}
             <ExternalLink className="ml-1 inline size-3.5 align-[-2px]" aria-hidden />
@@ -43,8 +46,7 @@ export function ServiceSidebar({ service, actions, tip }: ServiceSidebarProps) {
       />
       <InfoRow icon={<Clock className="size-[18px]" />} label="Giờ làm việc" value={service.workingHours} />
 
-      {actions && <div className="mt-4 mb-3 grid gap-2.5">{actions}</div>}
-      {tip && <div className="rounded-xl bg-accent-soft px-3.5 py-3 text-[12.5px] leading-[1.55] text-ink">{tip}</div>}
+      {tip && <div className="mt-1.5 rounded-xl bg-accent-soft px-3.5 py-3 text-[12.5px] leading-[1.55] text-ink">{tip}</div>}
     </aside>
   )
 }

@@ -122,7 +122,7 @@ export default function ComparePage() {
         recommendedId={recommendation && !recommendation.isTie ? recommendation.serviceId : null}
         isTie={!!recommendation?.isTie}
         renderActions={(s, primary) => <AddToPlanButton service={s} primary={recommendation ? primary : false} />}
-        renderQuote={(s) => <OpenChatButton service={s} label="Yêu cầu báo giá" />}
+        renderQuote={(s) => <OpenChatButton service={s} />}
       />
     </>
   )

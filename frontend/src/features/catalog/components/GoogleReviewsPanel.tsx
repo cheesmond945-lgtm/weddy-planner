@@ -76,7 +76,7 @@ function GoogleReviewsContent({ vendorId, mapsUrl }: { vendorId: string; mapsUrl
       href={data.googleMapsUri}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline underline-offset-[3px]"
+      className="inline-flex items-center gap-1.5 text-sm font-medium text-gold-700 underline underline-offset-[3px]"
     >
       Xem tất cả đánh giá trên Google Maps
       <ExternalLink className="size-3.5" aria-hidden />
@@ -162,7 +162,7 @@ function ReviewItem({ review }: { review: GoogleReview }) {
             aria-expanded={expanded}
             aria-controls={textId}
             onClick={() => setExpanded((e) => !e)}
-            className="mt-1 text-sm font-medium text-primary underline underline-offset-[3px]"
+            className="mt-1 text-sm font-medium text-gold-700 underline underline-offset-[3px]"
           >
             {expanded ? 'Thu gọn' : 'Xem thêm'}
           </button>

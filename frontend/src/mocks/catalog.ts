@@ -166,10 +166,12 @@ export const mockCatalog = {
   },
 
   listServices({ q, category, location, priceMin, priceMax, page = 1, pageSize = 24 }: ServiceListQuery): Paginated<ServiceSummary> {
-    const keyword = q?.trim().toLowerCase()
+    // Như BE: khớp tên, danh mục, địa chỉ; không phân biệt dấu và hoa thường ("cau giay" khớp "Cầu Giấy")
+    const fold = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase()
+    const keyword = q?.trim() ? fold(q.trim()) : ''
     const matched = services.filter(
       (s) =>
-        (!keyword || `${s.name} ${s.category.name}`.toLowerCase().includes(keyword)) &&
+        (!keyword || fold(`${s.name} ${s.category.name} ${s.address ?? ''} ${s.location}`).includes(keyword)) &&
         (!category || s.category.slug === category) &&
         (!location || s.location === location) &&
         (priceMin === undefined || s.priceFrom >= priceMin) &&

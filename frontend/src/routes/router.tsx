@@ -13,6 +13,7 @@ import AdminOrdersPage from '@/pages/admin/AdminOrdersPage'
 import AdminPaymentsPage from '@/pages/admin/AdminPaymentsPage'
 import AdminUsersPage from '@/pages/admin/AdminUsersPage'
 import AdminVendorsPage from '@/pages/admin/AdminVendorsPage'
+import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import SetPasswordPage from '@/pages/auth/SetPasswordPage'
@@ -44,7 +45,7 @@ export const router = createBrowserRouter([
       { path: '/services/:serviceId', element: <ServiceDetailPage /> },
       // Cần đăng nhập với role cặp đôi
       {
-        element: <RequireRole roles={['COUPLE']} unauthenticated="dialog" />,
+        element: <RequireRole roles={['COUPLE']} />,
         children: [
           { path: paths.timeline, element: <TimelinePage /> },
           { path: paths.favorites, element: <FavoritesPage /> },
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
     children: [
       { path: paths.login, element: <LoginPage /> },
       { path: paths.register, element: <RegisterPage /> },
+      { path: paths.forgotPassword, element: <ForgotPasswordPage /> },
       { path: paths.setPassword, element: <SetPasswordPage /> },
     ],
   },

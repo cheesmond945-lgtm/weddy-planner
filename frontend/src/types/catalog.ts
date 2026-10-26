@@ -40,6 +40,18 @@ export interface ServicePackage {
   price: number
   /** Sức chứa tối đa của gói (khách), null khi gói không ghi */
   capacity?: number | null
+  /** Ảnh bìa của gói; dữ liệu giả có thể không có (khi đó lấy ảnh album cùng id hoặc ảnh dịch vụ) */
+  imageUrl?: string | null
+  /** Thẻ phong cách của gói (Hiện đại, Pha lê...) */
+  tags?: string[]
+  /** Đơn vị tính giá: "gói" (mặc định), "mâm"... */
+  unit?: string
+  /** Nhãn ưu đãi trên ảnh gói (CSDL chưa có, để sẵn cho sau) */
+  promotion?: string | null
+  /** Gói nổi bật: ô lớn ở layout tiles (CSDL chưa có: mặc định gói đầu tiên) */
+  featured?: boolean
+  /** Danh sách "Bao gồm" trong drawer chi tiết gói (CSDL chưa có) */
+  includes?: string[]
 }
 
 export interface ServiceAlbum {
@@ -61,6 +73,10 @@ export interface ServiceDetail extends ServiceSummary {
   capacity: number | null
   styles: string[]
   workingHours: string
+  /** Cách hiện gói: "tiles" mỗi gói một ô ảnh (chụp ảnh, váy, trang điểm), "album" card ảnh ghép (mặc định) */
+  packageLayout?: 'tiles' | 'album'
+  /** Số điện thoại NCC (dùng khi nhắn qua Zalo, VITE_CHAT_MODE=zalo) */
+  contactPhone?: string | null
   isVerified: boolean
   isGuaranteed: boolean
   images: string[]

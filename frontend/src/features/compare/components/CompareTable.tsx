@@ -23,7 +23,7 @@ interface CompareTableProps {
   budget: number | null
   /** Nút thêm vào kế hoạch cho từng cột; primary = nút chính */
   renderActions?: (s: ServiceDetail, primary: boolean) => ReactNode
-  /** Nút cho NCC chưa có gói (yêu cầu báo giá) */
+  /** Nút cho NCC chưa có gói (nhắn tin với NCC) */
   renderQuote?: (s: ServiceDetail) => ReactNode
 }
 
@@ -176,7 +176,7 @@ export function CompareTable({ services, recommendedId, isTie, ratings, budget, 
           label: 'Giá',
           cell: (s) => {
             const p = pkgOf(s)
-            if (!p) return <Muted>Liên hệ báo giá</Muted>
+            if (!p) return <Muted>Chưa có gói đăng giá</Muted>
             return (
               <>
                 <b className="font-semibold">{formatMoney(p.price)}</b>

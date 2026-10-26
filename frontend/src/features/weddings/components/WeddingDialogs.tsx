@@ -71,7 +71,7 @@ export function WeddingSetupDialog() {
             secondaryAction={
               <button
                 type="button"
-                className="mr-auto text-sm font-medium text-primary underline underline-offset-[3px]"
+                className="mr-auto text-sm font-medium text-gold-700 underline underline-offset-[3px]"
                 onClick={() => {
                   closeSetup()
                   logout()

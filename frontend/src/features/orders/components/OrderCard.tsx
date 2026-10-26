@@ -39,7 +39,7 @@ export function OrderCard({ orderId, categorySlug, onRevise }: OrderCardProps) {
       {row('Gói dịch vụ', o.packageName)}
       {row('Ngày thực hiện', formatDate(o.serviceDate))}
       {row('Tổng giá trị', formatMoney(o.totalAmount))}
-      {row('Cần cọc trước', <span className="text-primary">{formatMoney(o.depositAmount)}</span>)}
+      {row('Cần cọc trước', <span className="text-gold-700">{formatMoney(o.depositAmount)}</span>)}
       {row(
         'Còn lại',
         <>

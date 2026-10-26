@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { chatApi } from '@/api/chat'
 import { toast } from '@/components/ui/toast'
 import { planningKeys } from '@/features/weddings/hooks'
@@ -47,4 +48,31 @@ export function useSendMessage(conversationId: string) {
     },
     onError: (e) => toast(e.message),
   })
+}
+
+// Badge tin chưa đọc trên nút chat nổi và menu tài khoản: hỏi lại thưa hơn khung chat
+const UNREAD_POLL_MS = 30_000
+
+/** Tổng số tin NCC gửi mà khách chưa đọc (badge trên nút chat / mục Tin nhắn). */
+export function useUnreadMessages() {
+  const uid = useCoupleId()
+  const { data } = useQuery({
+    queryKey: planningKeys.conversations(uid),
+    queryFn: chatApi.listConversations,
+    enabled: !!uid,
+    refetchInterval: UNREAD_POLL_MS,
+  })
+  return data?.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0) ?? 0
+}
+
+/** Đánh dấu đã đọc khi khách đang xem hội thoại và có tin mới của NCC. */
+export function useMarkReadOnView(conversationId: string, messages: Message[]) {
+  const uid = useCoupleId()
+  const qc = useQueryClient()
+  const last = messages.at(-1)
+  const lastVendorId = last && last.sender !== 'COUPLE' ? last.id : null
+  useEffect(() => {
+    if (!uid || !conversationId || !lastVendorId) return
+    void chatApi.markRead(conversationId).then(() => qc.invalidateQueries({ queryKey: planningKeys.conversations(uid) }))
+  }, [uid, qc, conversationId, lastVendorId])
 }

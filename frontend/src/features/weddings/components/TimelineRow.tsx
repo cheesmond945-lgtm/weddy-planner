@@ -21,7 +21,7 @@ const rowBase = 'flex items-start gap-3.5 border-t border-line px-4 py-3.5 first
 export function WeddingDayRow({ date }: { date: string }) {
   return (
     <div className={rowBase}>
-      <Flag className="mt-px size-5 shrink-0 text-primary" aria-hidden />
+      <Flag className="mt-px size-5 shrink-0 text-gold-700" aria-hidden />
       <div className="min-w-0 flex-1 font-medium">Ngày đám cưới</div>
       <div className="text-[13px] whitespace-nowrap text-muted-foreground">{formatDate(date)}</div>
     </div>
@@ -33,7 +33,7 @@ export function TimelineRow({ item, onToggle, onEdit, onAiSuggest, onOpenChat }:
   if (item.kind === 'SERVICE_DATE') {
     return (
       <div className={rowBase}>
-        <Flag className="mt-px size-5 shrink-0 text-primary" aria-hidden />
+        <Flag className="mt-px size-5 shrink-0 text-gold-700" aria-hidden />
         <div className="min-w-0 flex-1">
           <div className="font-medium">{item.title}</div>
           <div className="text-[13px] text-muted-foreground">Ngày đã thống nhất với nhà cung cấp</div>

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { Conversation, Message } from '@/types/chat'
 import type { Order } from '@/types/order'
-import { useMessages, useSendMessage } from '../hooks'
+import { useMarkReadOnView, useMessages, useSendMessage } from '../hooks'
 
 interface ChatViewProps {
   conversations: Conversation[]
@@ -80,7 +80,7 @@ function Inbox({ conversations, activeId, onSelect }: ChatViewProps) {
           title="Lọc theo dịch vụ"
           aria-expanded={filterOpen}
           onClick={() => setFilterOpen((o) => !o)}
-          className={cn('grid size-[42px] shrink-0 place-items-center rounded-full border border-line bg-surface text-muted-foreground', category && 'border-primary text-primary')}
+          className={cn('grid size-[42px] shrink-0 place-items-center rounded-full border border-line bg-surface text-muted-foreground', category && 'border-primary text-gold-700')}
         >
           <Filter className="size-[18px]" />
         </button>
@@ -130,7 +130,12 @@ function Inbox({ conversations, activeId, onSelect }: ChatViewProps) {
             )}
           </span>
           <span className="text-[11px] whitespace-nowrap text-muted-foreground">{c.lastMessage ? formatMessageTime(c.lastMessage.createdAt) : ''}</span>
-          <span className="col-span-2 truncate text-[11px] text-muted-foreground">{preview(c)}</span>
+          <span className={cn('truncate text-[11px] text-muted-foreground', c.unreadCount > 0 && c.id !== activeId ? 'font-semibold text-ink' : 'col-span-2')}>{preview(c)}</span>
+          {c.unreadCount > 0 && c.id !== activeId && (
+            <span aria-label={`${c.unreadCount} tin chưa đọc`} className="grid h-[18px] min-w-[18px] place-items-center justify-self-end rounded-pill bg-notify px-1 text-[10px] font-bold text-white">
+              {c.unreadCount}
+            </span>
+          )}
         </button>
       ))}
     </aside>
@@ -139,6 +144,7 @@ function Inbox({ conversations, activeId, onSelect }: ChatViewProps) {
 
 function Thread({ conversation }: { conversation: Conversation }) {
   const { data: messages = [] } = useMessages(conversation.id)
+  useMarkReadOnView(conversation.id, messages)
   const send = useSendMessage(conversation.id)
   const [text, setText] = useState('')
   const [revising, setRevising] = useState<Order | null>(null)

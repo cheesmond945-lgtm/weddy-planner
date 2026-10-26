@@ -84,9 +84,9 @@ Tìm và lọc dịch vụ (2.1). Có phân trang.
 
 | Query | Kiểu | Ghi chú |
 |---|---|---|
-| `q` | string | Tìm trong tên dịch vụ và tên danh mục, không phân biệt hoa thường |
+| `q` | string | Tìm trong tên dịch vụ (tên NCC), tên danh mục và địa chỉ (đường, phường, quận, tỉnh); không phân biệt dấu và hoa thường ("cau giay" khớp "Cầu Giấy") |
 | `category` | string | `slug` danh mục |
-| `location` | string | Một giá trị trong `/services/locations` |
+| `location` | string | Một giá trị trong `/services/locations` (trang Dịch vụ cưới không còn bộ lọc khu vực, tìm địa điểm bằng `q`) |
 | `priceMin` | int | `priceFrom >= priceMin` |
 | `priceMax` | int | `priceFrom < priceMax` (không bao gồm) |
 | `page`, `pageSize` | int | Mặc định 1, 20; FE đang gửi `pageSize=24` |

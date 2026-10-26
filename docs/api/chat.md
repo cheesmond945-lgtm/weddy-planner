@@ -15,6 +15,7 @@ Role: **COUPLE** (phía NCC: VENDOR, chỉ hội thoại của NCC mình).
   "id": "cv-1",
   "service": { "id": "sv-11", "name": "Lumi Wedding Studio", "…": "ServiceSummary" },
   "planStatus": "AWAITING_DEPOSIT",
+  "unreadCount": 2,
   "lastMessage": { "type": "ORDER", "text": "Nhà cung cấp đã gửi đơn dịch vụ", "createdAt": "2026-10-17T08:10:00.000Z" }
 }
 ```
@@ -64,7 +65,16 @@ Lỗi: 404 `CONVERSATION_NOT_FOUND`
 ### POST /conversations/:id/messages
 Body `{ "text": "Cho mình hỏi giá bao nhiêu?" }`. Response 200: `{ "data": Message }`
 
+Tin đầu tiên NCC chưa đọc tạo một thông báo cho NCC (bảng `notifications`, loại `NewMessage`); các tin tiếp theo khi NCC chưa đọc không báo thêm.
+
 Lỗi: 400 `VALIDATION_ERROR` (tin rỗng), 404 `CONVERSATION_NOT_FOUND`
+
+### POST /conversations/:id/read
+Khách đã xem hội thoại: các tin của NCC thành đã đọc (`unreadCount = 0`). FE gọi khi mở khung chat hoặc trang Tin nhắn và khi có tin mới của NCC lúc đang mở. Response 200: `{ "data": null }`
+
+`unreadCount` (tin NCC gửi mà khách chưa đọc) là số trên nút chat nổi và mục Tin nhắn trong menu tài khoản.
+
+Lỗi: 404 `CONVERSATION_NOT_FOUND`
 
 ---
 
@@ -110,7 +120,7 @@ Cùng bảng hội thoại / tin nhắn với phía cặp đôi. Mỗi hội tho
 | Trường | Ghi chú |
 |---|---|
 | `customer.phone` | Số điện thoại tài khoản cặp đôi, NCC thấy để liên hệ |
-| `interestPackage` | Gói (đã đăng) khách mở chat từ đó; `null` nếu không có. Gói: xem [catalog.md](catalog.md) phần Nhà cung cấp |
+| `interestPackage` | Gói của NCC trong kế hoạch của khách (gói trong đơn mới nhất, chưa có đơn thì gói rẻ nhất), kèm `imageUrl` ảnh bìa gói để hiện thẻ gói đầu hội thoại; `null` nếu NCC chưa có trong kế hoạch. Gói: xem [catalog.md](catalog.md) phần Nhà cung cấp |
 | `latestOrder` | Đơn đã gửi mới nhất của hội thoại (bỏ qua bản nháp chưa gửi) |
 | `needsAction` | Có ít nhất một đơn: có bản nháp, `status = REVISION_REQUESTED`, có `adjustmentRequest`, hoặc có phương án điều chỉnh `REVISION_REQUESTED`. Dùng cho tab "Cần xử lý" |
 | `orderCodes` | Để FE tìm hội thoại theo mã đơn |

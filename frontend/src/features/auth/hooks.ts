@@ -32,3 +32,20 @@ export function useUpdateProfile() {
     onSuccess: (user) => authStore.updateUser(user),
   })
 }
+
+/** Quên mật khẩu bước 1: BE gửi OTP về email đã đăng ký. */
+export function useForgotPassword() {
+  return useMutation({ mutationFn: authApi.forgotPassword })
+}
+
+export function useResendResetOtp() {
+  return useMutation({ mutationFn: authApi.resendResetOtp })
+}
+
+/** Quên mật khẩu bước 2: OTP đúng thì đổi mật khẩu và đăng nhập luôn. */
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: authApi.resetPassword,
+    onSuccess: (session) => authStore.setSession(session),
+  })
+}

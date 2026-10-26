@@ -102,6 +102,43 @@ Response 200
 
 Lỗi: 400 `OTP_INVALID`, 400 `OTP_EXPIRED`, 404 `REGISTRATION_NOT_FOUND`, 429 `OTP_TOO_MANY_ATTEMPTS`
 
+### POST /auth/forgot-password
+Role: Public
+
+Quên mật khẩu bước 1: gửi OTP (6 số, hiệu lực 5 phút) về email đã đăng ký.
+
+Request
+
+```json
+{ "email": "ngoc@example.com" }
+```
+
+Response 200: `{ "data": OtpSent }`
+
+Lỗi: 400 `VALIDATION_ERROR`, 404 `EMAIL_NOT_FOUND`, 403 `ACCOUNT_DISABLED`, 429 `OTP_RESEND_TOO_SOON`
+
+### POST /auth/forgot-password/resend-otp
+Role: Public
+
+Request `{ "email": "ngoc@example.com" }`. Response 200: `{ "data": OtpSent }`. Mã cũ hết hiệu lực, đặt lại số lần nhập sai.
+
+Lỗi: 404 `RESET_NOT_FOUND`, 429 `OTP_RESEND_TOO_SOON`
+
+### POST /auth/reset-password
+Role: Public
+
+Quên mật khẩu bước 2: OTP đúng thì đổi mật khẩu và đăng nhập luôn.
+
+Request
+
+```json
+{ "email": "ngoc@example.com", "otp": "123456", "password": "matkhaumoi" }
+```
+
+Response 200: `{ "data": Session }`
+
+Lỗi: 400 `VALIDATION_ERROR`, 400 `OTP_INVALID`, 400 `OTP_EXPIRED`, 404 `RESET_NOT_FOUND`, 429 `OTP_TOO_MANY_ATTEMPTS`
+
 ### POST /auth/login
 Role: Public
 

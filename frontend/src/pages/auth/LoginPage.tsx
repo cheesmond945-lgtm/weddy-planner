@@ -1,11 +1,11 @@
 import { AlertTriangle } from 'lucide-react'
-import { Link, useLocation } from 'react-router'
+import { useLocation } from 'react-router'
 import { AuthTabs } from '@/features/auth/components/AuthTabs'
 import { LoginForm } from '@/features/auth/components/LoginForm'
 import { useAfterAuth } from '@/features/auth/useAfterAuth'
 import { paths } from '@/routes/paths'
 
-/** Trang đăng nhập riêng (vào thẳng khu vực NCC/Admin, hoặc bị chuyển về khi chưa đăng nhập). */
+/** Trang đăng nhập riêng (vào thẳng khu vực NCC/Admin, hoặc bị chuyển về khi chưa đăng nhập). Chuyển sang đăng ký chỉ bằng tab. */
 export default function LoginPage() {
   const location = useLocation()
   const state = location.state as { from?: string } | null
@@ -21,13 +21,7 @@ export default function LoginPage() {
         </div>
       )}
       <AuthTabs mode="login" hrefs={{ login: paths.login, register: paths.register }} linkState={state} />
-      <LoginForm onSuccess={(session) => void afterAuth(session, 'Đăng nhập thành công', state?.from)} />
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        Chưa có tài khoản?{' '}
-        <Link to={paths.register} state={state} replace className="font-semibold text-gold hover:underline">
-          Đăng ký ngay
-        </Link>
-      </p>
+      <LoginForm from={state?.from} onSuccess={(session) => void afterAuth(session, 'Đăng nhập thành công', state?.from)} />
     </>
   )
 }

@@ -87,10 +87,17 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
       </header>
 
       {c.interestPackage && (
-        <div className="flex items-center gap-2 border-b border-line bg-gold-soft px-5 py-[9px] text-[13px] text-gold-ink max-sm:px-3.5">
-          <Tag className="size-[15px] flex-none" />
-          <span>
-            Khách quan tâm: <b>{c.interestPackage.name}</b> · {priceRange(c.interestPackage)}
+        // Thẻ gói: gói của NCC mà khách đã thêm vào kế hoạch (ngữ cảnh khi khách nhắn từ trang dịch vụ)
+        <div className="flex items-center gap-3 border-b border-line bg-gold-soft px-5 py-2.5 text-[13px] text-gold-ink max-sm:px-3.5">
+          {c.interestPackage.imageUrl ? (
+            <img src={c.interestPackage.imageUrl} alt="" className="size-11 flex-none rounded-md object-cover" />
+          ) : (
+            <Tag className="size-[15px] flex-none" />
+          )}
+          <span className="min-w-0">
+            <span className="block text-xs opacity-80">Khách quan tâm</span>
+            <b className="block truncate">{c.interestPackage.name}</b>
+            <span className="block">{priceRange(c.interestPackage)}</span>
           </span>
         </div>
       )}

@@ -18,7 +18,7 @@ export function GoogleMapsLink({ url, label = 'Xem đánh giá trên Google Maps
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn('inline-flex items-center gap-1 font-medium text-primary underline-offset-[3px] hover:underline', className)}
+      className={cn('inline-flex items-center gap-1 font-medium text-gold-700 underline-offset-[3px] hover:underline', className)}
     >
       {label}
       <ExternalLink className="size-[0.95em]" aria-hidden />

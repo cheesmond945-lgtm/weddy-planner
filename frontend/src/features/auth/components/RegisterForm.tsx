@@ -14,17 +14,37 @@ interface RegisterFormProps {
 
 type Values = { name: string; email: string; password: string; confirmPassword: string }
 const EMPTY: Values = { name: '', email: '', password: '', confirmPassword: '' }
+const ALL_TOUCHED: Touched = { name: true, email: true, password: true, confirmPassword: true }
+type Touched = Partial<Record<keyof Values, boolean>>
+
+/** Lỗi của từng ô. Tự so khớp mật khẩu vì refine của schema chỉ chạy khi các ô khác đã hợp lệ. */
+function fieldErrors(values: Values): FieldErrors<Values> {
+  const { errors } = validate(registerSchema, values)
+  if (values.confirmPassword && values.password !== values.confirmPassword) {
+    errors.confirmPassword ??= 'Mật khẩu nhập lại chưa khớp.'
+  }
+  return errors
+}
 
 /** Đăng ký (1.1): bước 1 nhập họ tên, email, mật khẩu; bước 2 nhập OTP gửi về email. Không còn ô số điện thoại. */
 export function RegisterForm({ onSuccess, onStepChange }: RegisterFormProps) {
   const [values, setValues] = useState<Values>(EMPTY)
-  const [errors, setErrors] = useState<FieldErrors<Values>>({})
+  // Ô nào đã nhập rồi rời đi (hoặc đã bấm Đăng ký) mới hiện lỗi; từ đó lỗi cập nhật ngay khi gõ
+  const [touched, setTouched] = useState<Touched>({})
   const [sent, setSent] = useState<OtpSent | null>(null)
   const register = useRegister()
 
+  const allErrors = fieldErrors(values)
+  const errors: FieldErrors<Values> = {}
+  for (const key of Object.keys(allErrors) as (keyof Values)[]) {
+    if (touched[key]) errors[key] = allErrors[key]
+  }
+
   const change = (key: keyof Values) => (e: ChangeEvent<HTMLInputElement>) => {
     setValues((v) => ({ ...v, [key]: e.target.value }))
-    setErrors((er) => ({ ...er, [key]: undefined }))
+  }
+  const blur = (key: keyof Values) => () => {
+    if (values[key]) setTouched((t) => ({ ...t, [key]: true }))
   }
 
   function goTo(next: OtpSent | null) {
@@ -34,8 +54,8 @@ export function RegisterForm({ onSuccess, onStepChange }: RegisterFormProps) {
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    const { data, errors } = validate(registerSchema, values)
-    setErrors(errors)
+    setTouched(ALL_TOUCHED)
+    const { data } = validate(registerSchema, values)
     if (!data) return
     const { confirmPassword: _c, ...body } = data
     register.mutate(body, { onSuccess: goTo })
@@ -46,13 +66,14 @@ export function RegisterForm({ onSuccess, onStepChange }: RegisterFormProps) {
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+    <form onSubmit={submit} noValidate className="flex flex-col gap-4 [@media(max-height:820px)]:gap-3">
       <AuthField
         label="Họ và tên"
         autoComplete="name"
         placeholder="Nhập họ và tên..."
         value={values.name}
         onChange={change('name')}
+        onBlur={blur('name')}
         error={errors.name}
         autoFocus
       />
@@ -63,6 +84,7 @@ export function RegisterForm({ onSuccess, onStepChange }: RegisterFormProps) {
         placeholder="Nhập email của bạn..."
         value={values.email}
         onChange={change('email')}
+        onBlur={blur('email')}
         error={errors.email}
         hint="Mã OTP sẽ gửi về email này"
       />
@@ -73,6 +95,7 @@ export function RegisterForm({ onSuccess, onStepChange }: RegisterFormProps) {
         placeholder={`Tối thiểu ${MIN_PASSWORD} ký tự`}
         value={values.password}
         onChange={change('password')}
+        onBlur={blur('password')}
         error={errors.password}
       />
       <AuthField
@@ -82,6 +105,7 @@ export function RegisterForm({ onSuccess, onStepChange }: RegisterFormProps) {
         placeholder="Nhập lại mật khẩu..."
         value={values.confirmPassword}
         onChange={change('confirmPassword')}
+        onBlur={blur('confirmPassword')}
         error={errors.confirmPassword}
       />
       <FormError message={register.error?.message} />
