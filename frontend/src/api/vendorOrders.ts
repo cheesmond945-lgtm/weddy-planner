@@ -44,7 +44,7 @@ export const vendorOrdersApi = {
   saveDraft: (orderId: string, content: OrderContent): Promise<Order> =>
     isMock('orders') ? mock((u) => mockVendorOrders.saveDraft(u, orderId, content)) : http.put(`/vendors/me/orders/${orderId}/draft`, { content }),
 
-  /** Gửi đơn Draft lần đầu, hoặc "Sửa và gửi lại" đơn Pending / NeedRevision (đặt lại hạn cọc 1 ngày). */
+  /** Gửi đơn Draft lần đầu, hoặc "Cập nhật đơn" đơn Pending / NeedRevision (đặt lại hạn cọc 1 ngày). */
   send: (orderId: string, content: OrderContent): Promise<Order> =>
     isMock('orders') ? mock((u) => mockVendorOrders.sendOrder(u, orderId, content), 600) : http.post(`/vendors/me/orders/${orderId}/send`, { content }),
 
@@ -52,11 +52,11 @@ export const vendorOrdersApi = {
   edit: (orderId: string, content: OrderContent): Promise<Order> =>
     isMock('orders') ? mock((u) => mockVendorOrders.editDeposited(u, orderId, content), 500) : http.patch(`/vendors/me/orders/${orderId}`, { content }),
 
-  /** Đánh dấu hoàn thành (chỉ khi đã qua ngày sự kiện). */
+  /** Hoàn tất đơn (chỉ khi đã qua ngày sự kiện). */
   complete: (orderId: string): Promise<Order> =>
     isMock('orders') ? mock((u) => mockVendorOrders.completeOrder(u, orderId), 400) : http.post(`/vendors/me/orders/${orderId}/complete`),
 
-  /** Xuất hóa đơn cuối (mỗi đơn một lần). */
+  /** Xuất hóa đơn (mỗi đơn một lần). */
   issueFinalInvoice: (orderId: string): Promise<Order> =>
     isMock('orders') ? mock((u) => mockVendorOrders.issueFinalInvoice(u, orderId), 400) : http.post(`/vendors/me/orders/${orderId}/final-invoice`),
 }

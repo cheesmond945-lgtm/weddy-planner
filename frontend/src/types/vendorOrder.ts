@@ -2,7 +2,7 @@
  * Đơn dịch vụ phía NCC, đúng theo docs/database.md (Orders, OrderItems, OrderRevisions, OrderRevisionChanges,
  * Payments, Invoices) và hợp đồng docs/api/orders.md (phần NCC). Tên trường, giá trị enum viết đúng như CSDL.
  *
- * Thay cho types/serviceOrder.ts (mô hình cũ: phiên bản v1/v2, đợt thanh toán, phương án điều chỉnh).
+ * Thay mô hình cũ (phiên bản v1/v2, đợt thanh toán tùy chỉnh, phương án điều chỉnh) đã bỏ.
  * Kiểu Order phía cặp đôi ở types/order.ts giữ nguyên.
  */
 

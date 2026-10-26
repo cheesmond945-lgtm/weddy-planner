@@ -75,7 +75,7 @@ export function MessageItem({ message: m, order, isLatestCard, highlight, onOpen
       <p
         className={cn(
           'flex max-w-[94%] flex-wrap items-center justify-center gap-x-2 self-center rounded-[20px] px-[15px] py-[9px] text-center text-[13px]',
-          /hủy|hết hạn/i.test(m.content) ? 'bg-warn-soft text-warn' : 'bg-sage-soft text-sage',
+          /hủy|hết hạn|yêu cầu chỉnh sửa/i.test(m.content) ? 'bg-warn-soft text-warn' : 'bg-sage-soft text-sage',
         )}
       >
         {m.content}

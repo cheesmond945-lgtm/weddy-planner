@@ -178,7 +178,7 @@ Không có `totalAmount`, `depositAmount`, `amount`: backend tính.
 |---|---|
 | Lưu nháp (tạo, `PUT draft`) | **Bắt buộc `eventDate`** (cột `NOT NULL`, backend không tự đặt ngày hôm nay). Các trường khác được để trống; `depositPercent` trống thì mặc định 30; `customerPhone` trống thì lưu chuỗi rỗng |
 | Gửi đơn (`send`) | Đủ `customerName`, `customerPhone` (9 đến 15 ký tự gồm số, khoảng trắng, `+ ( ) . -`), `eventDate`, ít nhất một hạng mục (`itemName` không rỗng, `quantity` nguyên > 0, `unitPrice` ≥ 0), `totalAmount` > 0, `depositPercent` lớn hơn 0 và nhỏ hơn 100 |
-| Sửa và gửi lại / sửa sau cọc | Như gửi đơn, và phải có thay đổi so với nội dung hiện tại |
+| Cập nhật đơn / Chỉnh sửa sau cọc | Như gửi đơn, và phải có thay đổi so với nội dung hiện tại |
 
 Lỗi kiểm tra trả `400 VALIDATION_ERROR` với `details` theo trường: `customerName`, `customerPhone`, `eventDate`, `depositPercent`, `items`, `items.<i>.itemName`, `items.<i>.quantity`, `items.<i>.unitPrice`.
 
@@ -222,7 +222,7 @@ Lưu bản nháp của đơn `Draft`. Body: `{ "content": OrderContent }`. Respo
 Body: `{ "content": OrderContent }`. Chấp nhận đơn `Draft`, `Pending`, `NeedRevision`.
 
 - `Draft`: gửi lần đầu (như `send = true` ở trên).
-- `Pending` / `NeedRevision` ("Sửa và gửi lại"): lưu nội dung mới; nếu có `OrderRevisions` `Requested` thì thành `Applied` (ghi `newTotalAmount`, `appliedDate`), nếu NCC tự sửa thì tạo luôn dòng `Applied`; tính lại `totalAmount`, `depositAmount`; đơn về `Pending`; **đặt lại `depositDueDate` = +1 ngày**; thêm một tin `Order` mới (thẻ mới).
+- `Pending` / `NeedRevision` ("Cập nhật đơn"): lưu nội dung mới; nếu có `OrderRevisions` `Requested` thì thành `Applied` (ghi `newTotalAmount`, `appliedDate`), nếu NCC tự sửa thì tạo luôn dòng `Applied`; tính lại `totalAmount`, `depositAmount`; đơn về `Pending`; **đặt lại `depositDueDate` = +1 ngày**; thêm một tin `Order` mới (thẻ mới).
 - Phải có thay đổi so với nội dung hiện tại (trừ `Draft`).
 
 Response 200: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR`, 400 `ORDER_NO_CHANGES`, 404, 409 `ORDER_NOT_SENDABLE` (đơn `Deposited`, `Completed`, `Expired`, `Cancelled`).
@@ -240,7 +240,7 @@ Response 200: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR`, 400 `ORDER_NO_
 
 ### POST /vendors/me/orders/:id/complete
 
-**Đánh dấu hoàn thành.** Chỉ khi `Deposited` và `eventDate` **đã qua** (hôm nay theo giờ Việt Nam lớn hơn `eventDate`). Thành công: `Completed`, ghi `completedDate`, tạo `Commissions` gắn vào bảng kê của tháng chứa `completedDate` (xem [commissions.md](commissions.md)), thêm tin hệ thống "Đơn … đã hoàn thành".
+**Hoàn tất.** Chỉ khi `Deposited` và `eventDate` **đã qua** (hôm nay theo giờ Việt Nam lớn hơn `eventDate`). Thành công: `Completed`, ghi `completedDate`, tạo `Commissions` gắn vào bảng kê của tháng chứa `completedDate` (xem [commissions.md](commissions.md)), thêm tin hệ thống "Đơn … đã hoàn thành".
 
 Response 200: `{ "data": Order }`. Lỗi: 404, 409 `ORDER_NOT_COMPLETABLE` (không phải `Deposited`), 409 `ORDER_EVENT_NOT_PASSED`.
 
@@ -278,3 +278,8 @@ Mock của FE chạy các việc này mỗi lần đọc dữ liệu, có nút "
 ## Không còn trong hợp đồng NCC
 
 Phiên bản đơn (`versions`, v1/v2), đợt thanh toán tùy chỉnh (`installments`), `POST .../payments` (ghi nhận thanh toán), `POST .../adjustments` (phương án điều chỉnh), `POST .../cancel` (NCC hủy), `paymentStatus` 6 giá trị, `paidAmount`, "phí theo chính sách", liên kết dòng báo giá với gói.
+
+## Việc backend cần thêm cho trang Quản lý đơn hàng
+
+- **Endpoint tổng hợp (summary) cho 4 thẻ số liệu** (ví dụ `GET /vendors/me/orders/summary`). FE hiện tự tính từ danh sách đơn (tối đa 100 đơn mỗi trang), sẽ thiếu số khi NCC có hơn 100 đơn. Trả về: số đơn `Pending` và số đơn sắp hết hạn trong 24 giờ; số đơn `Deposited` có `eventDate` trong 30 ngày tới và tổng giá trị; số đơn `Deposited` đã qua `eventDate` (cần Hoàn tất); số đơn và tổng giá trị đơn có `Payments` `Paid` trong tháng hiện tại (giờ Việt Nam).
+- Bảng đơn lọc được theo `status`, khoảng `eventDate` (`from`, `to`), và tìm `q` theo mã đơn, tên khách, số điện thoại (đã có ở danh sách đơn). `GET /vendors/me/orders/counts` trả số đơn theo từng trạng thái cho các tab.

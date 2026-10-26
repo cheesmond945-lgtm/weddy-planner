@@ -2,7 +2,7 @@
  * Hội thoại và tin nhắn phía NCC, đúng theo docs/database.md (Conversations, Messages) và hợp đồng
  * docs/api/chat.md (phần NCC). Messages.Type chỉ có Text, Order, DepositReceipt, FinalInvoice.
  *
- * Thay cho types/vendorChat.ts (mô hình cũ). Kiểu chat phía cặp đôi ở types/chat.ts giữ nguyên.
+ * Kiểu chat phía cặp đôi ở types/chat.ts giữ nguyên.
  */
 import type { OrderStatus, RevisionChangeType } from './vendorOrder'
 

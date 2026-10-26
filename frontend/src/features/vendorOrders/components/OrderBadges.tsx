@@ -14,8 +14,12 @@ export function StatusBadge({ tone, children, className }: { tone: BadgeTone; ch
   )
 }
 
-/** "Chờ thanh toán cọc", "Đã đặt cọc"… theo 7 trạng thái của CSDL. */
-export function OrderStatusBadge({ status }: { status: OrderStatus }) {
+/** "Chờ thanh toán cọc", "Đã đặt cọc"… theo 7 trạng thái của CSDL. `compact` (trong bảng): "Chờ thanh toán cọc" rút gọn thành "Chờ cọc". */
+export function OrderStatusBadge({ status, className, compact }: { status: OrderStatus; className?: string; compact?: boolean }) {
   const { label, tone } = ORDER_STATUS[status]
-  return <StatusBadge tone={tone}>{label}</StatusBadge>
+  return (
+    <StatusBadge tone={tone} className={className}>
+      {compact && status === 'Pending' ? 'Chờ cọc' : label}
+    </StatusBadge>
+  )
 }

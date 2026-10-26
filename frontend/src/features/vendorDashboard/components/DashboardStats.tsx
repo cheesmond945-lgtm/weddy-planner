@@ -1,4 +1,4 @@
-import { ClipboardList, Percent, Receipt, Wallet } from 'lucide-react'
+import { CalendarCheck, CheckCheck, ClipboardList, Percent } from 'lucide-react'
 import { StatCard } from '@/features/commissions/components/StatCard'
 import { formatPeriod } from '@/features/commissions/constants'
 import { formatMoney } from '@/lib/format'
@@ -20,15 +20,21 @@ export function DashboardStats({ stats: s, currentCommission: c }: DashboardStat
         label="Đơn đang xử lý"
         value={s.inProgress}
         tone={s.revision ? 'text-warn' : ''}
-        foot={`${s.awaiting} chờ khách xác nhận · ${s.revision} cần sửa · ${s.awaitingDeposit} chờ cọc`}
+        foot={`${s.pending} chờ cọc · ${s.revision} cần sửa · ${s.deposited} đã cọc`}
       />
-      <StatCard icon={Wallet} label="Đã thu thực tế trong tháng" value={formatMoney(s.collectedThisMonth)} tone="text-sage" foot={`Tổng đã thu: ${formatMoney(s.collectedTotal)}`} />
       <StatCard
-        icon={Receipt}
-        label="Còn phải thu"
-        value={formatMoney(s.receivable)}
-        tone={s.receivable ? 'text-gold-ink' : ''}
-        foot={s.receivableOrders ? `trên ${s.receivableOrders} đơn đã xác nhận` : 'không còn khoản phải thu'}
+        icon={CalendarCheck}
+        label="Đã cọc, sắp thực hiện"
+        value={s.upcoming}
+        tone="text-sage"
+        foot={s.upcoming ? `Tổng giá trị ${formatMoney(s.upcomingValue)}` : 'Chưa có đơn sắp thực hiện'}
+      />
+      <StatCard
+        icon={CheckCheck}
+        label="Cần đánh dấu hoàn thành"
+        value={s.toComplete}
+        tone={s.toComplete ? 'text-gold-ink' : ''}
+        foot={s.toComplete ? 'Đã qua ngày thực hiện, chưa hoàn thành' : 'Không có đơn chờ hoàn thành'}
       />
       <StatCard
         icon={Percent}

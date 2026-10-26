@@ -1,22 +1,11 @@
 import type { BadgeTone } from '@/components/Badge'
 import type { CommissionPaymentStatus, CommissionStatus } from '@/types/commission'
 
-/**
- * Tỷ lệ hoa hồng theo lĩnh vực (slug danh mục), số nguyên phần trăm, theo quyết định của nhóm.
- * Lĩnh vực không có trong bảng dùng DEFAULT_COMMISSION_RATE. Sau này Admin cấu hình, BE trả về.
- */
-export const COMMISSION_RATES: Record<string, number> = {
-  'nha-hang': 8,
-  'chup-anh': 12,
-  'trang-phuc': 12,
-}
-export const DEFAULT_COMMISSION_RATE = 10
+/** Hạn thanh toán: ngày 25 của tháng sau kỳ (CSDL mục 9.8). Tỷ lệ hoa hồng do backend trả, giao diện không tự tính. */
+export const COMMISSION_DUE_DAY = 25
 
-export const commissionRateOf = (categorySlug: string | null | undefined) =>
-  (categorySlug && COMMISSION_RATES[categorySlug]) || DEFAULT_COMMISSION_RATE
-
-/** Hạn thanh toán: ngày 20 của tháng sau kỳ (như prototype NCC: kỳ 09/2026 hạn 20/10/2026). */
-export const COMMISSION_DUE_DAY = 20
+/** Phương thức của một khoản thu (dòng chi tiết bảng kê). */
+export const PAYMENT_METHOD_LABEL = { VNPAY: 'VNPay (trực tuyến)', BANK_TRANSFER: 'Chuyển khoản', CASH: 'Tiền mặt' } as const
 
 export const COMMISSION_STATUS: Record<CommissionStatus, { label: string; tone: BadgeTone }> = {
   OPEN: { label: 'Đang tạm tính', tone: 'info' },

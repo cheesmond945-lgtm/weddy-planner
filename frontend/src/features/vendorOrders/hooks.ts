@@ -59,10 +59,19 @@ export function useOrderCounts() {
 /** Một đơn (mở thẳng qua /vendor/orders?order=…). */
 export function useOrder(orderId: string | null) {
   const uid = useVendorId()
+  const qc = useQueryClient()
   return useQuery({
     queryKey: vendorKeys.order(uid, orderId ?? ''),
     queryFn: () => vendorOrdersApi.get(orderId!),
     enabled: !!uid && !!orderId,
+    // Đơn đã có trong danh sách thì mở ngay, bản mới tải ngầm sau
+    initialData: () => {
+      for (const [, page] of qc.getQueriesData<{ data: Order[] }>({ queryKey: vendorKeys.orderLists(uid) })) {
+        const hit = page?.data?.find((o) => o.id === orderId)
+        if (hit) return hit
+      }
+      return undefined
+    },
   })
 }
 
@@ -73,7 +82,7 @@ export type SaveOrderInput =
   | { kind: 'edit'; orderId: string; content: OrderContent }
 
 /**
- * Lưu nháp, gửi đơn, "Sửa và gửi lại" hoặc sửa sau cọc từ form đơn trong chat.
+ * Lưu nháp, gửi đơn, "Cập nhật đơn" hoặc sửa sau cọc từ form đơn trong chat.
  * create: đơn mới (nháp hoặc gửi luôn). draft: lưu bản nháp. send: gửi bản nháp, hoặc sửa và gửi lại đơn đang chờ cọc / chờ chỉnh sửa.
  * edit: sửa đơn đã cọc.
  */
@@ -101,34 +110,34 @@ export function useSaveOrder() {
           : i.kind === 'edit'
             ? `Đã cập nhật đơn ${o.orderCode}.`
             : i.kind === 'send' && i.resend
-              ? `Đã gửi lại đơn ${o.orderCode}, hạn cọc mới là 1 ngày.`
-              : `Đã gửi đơn ${o.orderCode} cho khách, hạn cọc 1 ngày.`,
+              ? `Đã cập nhật đơn ${o.orderCode}, hạn cọc mới là 24 giờ.`
+              : `Đã gửi đơn ${o.orderCode} cho khách, hạn cọc 24 giờ.`,
       )
     },
   })
 }
 
-/** Đánh dấu hoàn thành. */
+/** Hoàn tất đơn. */
 export function useCompleteOrder() {
   const sync = useSyncOrder()
   return useMutation({
     mutationFn: (orderId: string) => vendorOrdersApi.complete(orderId),
     onSuccess: (o) => {
       sync(o)
-      toast(`Đã đánh dấu hoàn thành đơn ${o.orderCode}. Hoa hồng được tính vào bảng kê tháng này.`)
+      toast(`Đã hoàn tất đơn ${o.orderCode}. Hoa hồng được tính vào bảng kê tháng này.`)
     },
     onError: (e) => toast(e.message),
   })
 }
 
-/** Xuất hóa đơn cuối. */
+/** Xuất hóa đơn. */
 export function useIssueFinalInvoice() {
   const sync = useSyncOrder()
   return useMutation({
     mutationFn: (orderId: string) => vendorOrdersApi.issueFinalInvoice(orderId),
     onSuccess: (o) => {
       sync(o)
-      toast(`Đã xuất hóa đơn cuối cho đơn ${o.orderCode} và gửi vào cuộc trò chuyện.`)
+      toast(`Đã xuất hóa đơn cho đơn ${o.orderCode} và gửi vào cuộc trò chuyện.`)
     },
     onError: (e) => toast(e.message),
   })

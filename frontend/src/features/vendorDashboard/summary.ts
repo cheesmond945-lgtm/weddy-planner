@@ -1,12 +1,12 @@
-import { periodOfInstant } from '@/features/commissions/calc'
 import { formatPeriod, remainingOf } from '@/features/commissions/constants'
-import { currentContent, currentVersion } from '@/features/serviceOrders/calc'
-import { adjustmentStateOf } from '@/features/serviceOrders/constants'
+import { eventPassed, openRevision } from '@/features/vendorOrders/calc'
+import { msToDeadline, URGENT_HOURS } from '@/features/vendorOrders/summary'
+import { addDaysYmd, todayVN } from '@/lib/clock'
 import { formatDate } from '@/lib/date'
 import { paths } from '@/routes/paths'
 import type { CommissionStatementSummary } from '@/types/commission'
-import type { ServiceOrder } from '@/types/serviceOrder'
 import type { VendorConversation } from '@/types/vendorConversation'
+import type { Order } from '@/types/vendorOrder'
 import type { VendorPackage } from '@/types/vendorPackage'
 
 /*
@@ -14,36 +14,25 @@ import type { VendorPackage } from '@/types/vendorPackage'
  * Hàm thuần, không gọi API. Số liệu dùng cùng nguồn với trang tương ứng nên khớp nhau.
  */
 
-const VN_OFFSET = 7 * 3600_000
-/** Hôm nay "YYYY-MM-DD" theo giờ Việt Nam */
-export const todayVN = (now: Date) => new Date(now.getTime() + VN_OFFSET).toISOString().slice(0, 10)
+const HOUR = 3_600_000
 
-const sent = (orders: ServiceOrder[]) => orders.filter((o) => o.versions.length && o.status !== 'CANCELLED')
-
-/** Số liệu đơn và tiền (bốn thẻ đầu trang, phần đơn). */
-export function orderStats(orders: ServiceOrder[], now: Date) {
-  const list = sent(orders)
-  const today = todayVN(now)
-  const month = periodOfInstant(now.toISOString())
-  const awaiting = list.filter((o) => o.status === 'AWAITING_CONFIRMATION').length
-  const revision = list.filter((o) => o.status === 'REVISION_REQUESTED').length
-  const awaitingDeposit = list.filter((o) => o.paymentStatus === 'AWAITING_DEPOSIT').length
-  // Đã xác nhận mà chưa tới ngày sự kiện: vẫn đang thực hiện
-  const upcomingConfirmed = list.filter((o) => o.status === 'CONFIRMED' && (currentContent(o)?.eventDate ?? '') >= today).length
-  const payments = list.flatMap((o) => o.payments)
-  const confirmed = list.filter((o) => o.status === 'CONFIRMED')
+/** Số liệu đơn (ba thẻ đầu trang). */
+export function orderStats(orders: Order[]) {
+  const today = todayVN()
+  const pending = orders.filter((o) => o.status === 'Pending')
+  const revision = orders.filter((o) => o.status === 'NeedRevision')
+  const deposited = orders.filter((o) => o.status === 'Deposited')
+  const upcoming = deposited.filter((o) => o.eventDate >= today)
   return {
-    inProgress: awaiting + revision + upcomingConfirmed,
-    awaiting,
-    revision,
-    awaitingDeposit,
-    /** Đã thu thực tế trong tháng hiện tại (giờ VN), cả VNPay lẫn NCC ghi nhận */
-    collectedThisMonth: payments.filter((p) => periodOfInstant(p.paidAt) === month).reduce((s, p) => s + p.amount, 0),
-    /** Đã thu thực tế mọi thời điểm (thẻ "Đã thu thực tế" của prototype) */
-    collectedTotal: payments.reduce((s, p) => s + p.amount, 0),
-    /** Còn phải thu trên các đơn đã xác nhận (như cột "Còn phải thu" ở chi tiết đơn) */
-    receivable: confirmed.reduce((s, o) => s + Math.max(0, o.totalAmount - o.paidAmount), 0),
-    receivableOrders: confirmed.filter((o) => o.totalAmount > o.paidAmount).length,
+    inProgress: pending.length + revision.length + deposited.length,
+    pending: pending.length,
+    revision: revision.length,
+    deposited: deposited.length,
+    /** Đã cọc, chưa tới ngày thực hiện */
+    upcoming: upcoming.length,
+    upcomingValue: upcoming.reduce((s, o) => s + o.totalAmount, 0),
+    /** Đã cọc và đã qua ngày thực hiện: chờ NCC đánh dấu hoàn thành */
+    toComplete: deposited.filter((o) => eventPassed(o)).length,
   }
 }
 
@@ -60,62 +49,52 @@ export interface TodoItem {
 
 const one = <T,>(list: T[]) => (list.length === 1 ? list[0] : null)
 const ordersHref = (q: string) => `${paths.vendor.orders}?${q}`
+const orderHref = (o: Order) => ordersHref(`order=${encodeURIComponent(o.id)}`)
 const chatHref = (conversationId?: string) => (conversationId ? `${paths.vendor.chat}?c=${encodeURIComponent(conversationId)}` : paths.vendor.chat)
-const orderHref = (o: ServiceOrder, action?: 'adjust') => ordersHref(`order=${encodeURIComponent(o.id)}${action ? `&do=${action}` : ''}`)
-const codes = (list: ServiceOrder[]) => list.slice(0, 3).map((o) => o.code).join(', ') + (list.length > 3 ? '…' : '')
+const codes = (list: Order[]) => list.slice(0, 3).map((o) => o.orderCode).join(', ') + (list.length > 3 ? '…' : '')
 
 interface TodoInput {
-  orders: ServiceOrder[]
+  orders: Order[]
   conversations: VendorConversation[]
   packages: VendorPackage[]
   statements: CommissionStatementSummary[]
-  now: Date
 }
 
 /** Việc cần làm, mục nào cũng dẫn tới đúng chỗ xử lý (một việc thì mở thẳng, nhiều việc thì mở danh sách đã lọc). */
-export function todoItems({ orders, conversations, packages, statements, now }: TodoInput): TodoItem[] {
-  const today = todayVN(now)
+export function todoItems({ orders, conversations, packages, statements }: TodoInput): TodoItem[] {
+  const today = todayVN()
   const items: TodoItem[] = []
-  const list = sent(orders)
 
-  // Sửa đơn làm ở khung chat (form gửi lại phiên bản mới)
-  const revision = list.filter((o) => o.status === 'REVISION_REQUESTED')
+  // Khách yêu cầu chỉnh sửa (trước cọc): sửa và gửi lại
+  const revision = orders.filter((o) => o.status === 'NeedRevision')
   if (revision.length) {
     const o = one(revision)
-    items.push({
-      key: 'revision',
-      count: revision.length,
-      label: 'đơn khách yêu cầu chỉnh sửa',
-      hint: codes(revision),
-      href: o ? chatHref(o.conversationId) : ordersHref('status=REVISION_REQUESTED'),
-      urgent: true,
-    })
+    items.push({ key: 'revision', count: revision.length, label: 'đơn khách yêu cầu chỉnh sửa', hint: codes(revision), href: o ? chatHref(o.conversationId) : ordersHref('status=NeedRevision'), urgent: true })
   }
 
-  // Yêu cầu điều chỉnh / sửa phương án: làm ở Quản lý đơn hàng
-  const adjust = list.filter((o) => {
-    const st = o.status === 'CONFIRMED' ? adjustmentStateOf(o) : null
-    return st?.kind === 'REQUESTED' || st?.kind === 'REVISION_REQUESTED'
-  })
-  if (adjust.length) {
-    const o = one(adjust)
-    items.push({
-      key: 'adjust',
-      count: adjust.length,
-      label: 'yêu cầu điều chỉnh / sửa phương án',
-      hint: codes(adjust),
-      href: o ? orderHref(o, 'adjust') : ordersHref('status=CONFIRMED'),
-      urgent: true,
-    })
+  // Khách yêu cầu sửa đơn đã cọc
+  const afterDeposit = orders.filter((o) => o.status === 'Deposited' && openRevision(o))
+  if (afterDeposit.length) {
+    const o = one(afterDeposit)
+    items.push({ key: 'afterDeposit', count: afterDeposit.length, label: 'yêu cầu sửa đơn đã đặt cọc', hint: codes(afterDeposit), href: o ? orderHref(o) : ordersHref('status=Deposited'), urgent: true })
   }
 
-  const deposit = list.filter((o) => o.paymentStatus === 'AWAITING_DEPOSIT')
-  if (deposit.length) {
-    const o = one(deposit)
-    items.push({ key: 'deposit', count: deposit.length, label: 'đơn chờ thanh toán cọc', hint: codes(deposit), href: o ? orderHref(o) : ordersHref('payment=AWAITING_DEPOSIT') })
+  // Đơn đã qua ngày thực hiện: đánh dấu hoàn thành (hệ thống tự hoàn thành sau 7 ngày)
+  const toComplete = orders.filter((o) => o.status === 'Deposited' && eventPassed(o))
+  if (toComplete.length) {
+    const o = one(toComplete)
+    items.push({ key: 'complete', count: toComplete.length, label: 'đơn cần đánh dấu hoàn thành', hint: codes(toComplete), href: o ? orderHref(o) : ordersHref(`status=Deposited&to=${addDaysYmd(today, -1)}`) })
   }
 
-  const drafts = orders.filter((o) => o.draft && o.status !== 'CANCELLED')
+  // Đơn chờ khách cọc; gấp khi còn dưới 6 giờ
+  const pending = orders.filter((o) => o.status === 'Pending')
+  if (pending.length) {
+    const o = one(pending)
+    const urgent = pending.some((x) => (msToDeadline(x) ?? Infinity) < URGENT_HOURS * HOUR)
+    items.push({ key: 'pending', count: pending.length, label: 'đơn chờ khách đặt cọc', hint: codes(pending), href: o ? orderHref(o) : ordersHref('status=Pending'), urgent })
+  }
+
+  const drafts = orders.filter((o) => o.status === 'Draft')
   if (drafts.length) {
     const o = one(drafts)
     items.push({ key: 'drafts', count: drafts.length, label: 'bản nháp đơn chưa gửi', hint: codes(drafts), href: o ? chatHref(o.conversationId) : paths.vendor.chat })
@@ -124,21 +103,15 @@ export function todoItems({ orders, conversations, packages, statements, now }: 
   const unread = conversations.filter((c) => c.unreadCount > 0)
   if (unread.length) {
     const c = one(unread)
-    items.push({
-      key: 'unread',
-      count: unread.length,
-      label: 'hội thoại chưa đọc',
-      hint: `${unread.reduce((s, x) => s + x.unreadCount, 0)} tin mới`,
-      href: chatHref(c?.id),
-    })
+    items.push({ key: 'unread', count: unread.length, label: 'hội thoại chưa đọc', hint: `${unread.reduce((s, x) => s + x.unreadCount, 0)} tin mới`, href: chatHref(c?.id) })
   }
 
-  const pending = packages.filter((p) => p.status === 'PENDING')
-  if (pending.length) {
-    items.push({ key: 'packages', count: pending.length, label: 'gói dịch vụ đang chờ duyệt', hint: pending.slice(0, 2).map((p) => p.name).join(', '), href: `${paths.vendor.catalog}?status=PENDING` })
+  const waiting = packages.filter((p) => p.status === 'PENDING')
+  if (waiting.length) {
+    items.push({ key: 'packages', count: waiting.length, label: 'gói dịch vụ đang chờ duyệt', hint: waiting.slice(0, 2).map((p) => p.name).join(', '), href: `${paths.vendor.catalog}?status=PENDING` })
   }
 
-  // Hoa hồng của kỳ đã chốt còn phải trả (chưa có minh chứng chờ xác nhận), hạn gần nhất trước
+  // Hoa hồng của kỳ đã chốt còn phải trả, hạn gần nhất trước
   const dues = statements.filter((s) => s.status !== 'OPEN' && remainingOf(s) > 0 && s.pendingAmount === 0).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
   for (const s of dues) {
     const days = Math.round((Date.parse(s.dueDate) - Date.parse(today)) / 86_400_000)
@@ -154,19 +127,20 @@ export function todoItems({ orders, conversations, packages, statements, now }: 
   return items
 }
 
-/** Đơn đã xác nhận sắp diễn ra (ngày sự kiện từ hôm nay), gần nhất trước. */
-export function upcomingOrders(orders: ServiceOrder[], now: Date, limit = 5) {
-  const today = todayVN(now)
-  return sent(orders)
-    .filter((o) => o.status === 'CONFIRMED' && (currentContent(o)?.eventDate ?? '') >= today)
-    .sort((a, b) => currentContent(a)!.eventDate.localeCompare(currentContent(b)!.eventDate))
+/** Đơn đã cọc sắp diễn ra (ngày thực hiện từ hôm nay), gần nhất trước. */
+export function upcomingOrders(orders: Order[], limit = 5) {
+  const today = todayVN()
+  return orders
+    .filter((o) => o.status === 'Deposited' && o.eventDate >= today)
+    .sort((a, b) => a.eventDate.localeCompare(b.eventDate))
     .slice(0, limit)
-    .map((o) => ({ order: o, daysLeft: Math.round((Date.parse(currentContent(o)!.eventDate) - Date.parse(today)) / 86_400_000) }))
+    .map((o) => ({ order: o, daysLeft: Math.round((Date.parse(o.eventDate) - Date.parse(today)) / 86_400_000) }))
 }
 
-/** Đơn gửi gần đây (theo lần gửi phiên bản mới nhất), như prototype. */
-export function recentOrders(orders: ServiceOrder[], limit = 6) {
-  return sent(orders)
-    .sort((a, b) => (currentVersion(b)?.sentAt ?? '').localeCompare(currentVersion(a)?.sentAt ?? ''))
+/** Đơn gửi gần đây (theo ngày tạo, bỏ bản nháp). */
+export function recentOrders(orders: Order[], limit = 6) {
+  return orders
+    .filter((o) => o.status !== 'Draft')
+    .sort((a, b) => b.createdDate.localeCompare(a.createdDate))
     .slice(0, limit)
 }

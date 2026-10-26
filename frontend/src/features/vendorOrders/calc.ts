@@ -51,7 +51,7 @@ export function valuesOfOrder(o: Order): OrderFormValues {
   }
 }
 
-/** "Tạo đơn mới từ đơn này" (đơn hết hạn): chép hạng mục và ghi chú, mã đơn mới, ngày sự kiện nhập lại. */
+/** "Tạo lại đơn" (đơn hết hạn): chép hạng mục và ghi chú, mã đơn mới, ngày sự kiện nhập lại. */
 export function valuesFromOrder(o: Order): OrderFormValues {
   return { ...valuesOfOrder(o), eventDate: '' }
 }
@@ -91,6 +91,13 @@ export function depositDeadline(iso: string) {
   const hours = Math.floor(left / 3_600_000)
   const minutes = Math.floor((left % 3_600_000) / 60_000)
   return `Hạn cọc: ${when} · còn ${hours > 0 ? `${hours} giờ` : `${Math.max(1, minutes)} phút`}`
+}
+
+/** ISO -> "26/10" (giờ máy người dùng). */
+export function formatDM(iso: string) {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}`
 }
 
 /** ISO -> "dd/MM/yyyy" (giờ máy người dùng). */

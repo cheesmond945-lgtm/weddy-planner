@@ -1,10 +1,11 @@
+import { MessageSquareWarning } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '@/components/Badge'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
-import { depositDeadline, formatStamp, openRevision, orderHint } from '../calc'
+import { changesLabel, depositDeadline, formatStamp, openRevision, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
 import { OrderStatusBadge } from './OrderBadges'
 import type { OrderFormMode } from './OrderFormDialog'
@@ -37,7 +38,10 @@ const HINT_TONE = {
  */
 export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoice }: OrderCardProps) {
   const hint = orderHint(o)
-  const afterDepositRequest = o.status === 'Deposited' && !!openRevision(o)
+  const request = openRevision(o)
+  const afterDepositRequest = o.status === 'Deposited' && !!request
+  // Vừa cập nhật (trước hoặc sau cọc): ghi tổng cũ và mới
+  const updated = (o.status === 'Pending' || o.status === 'Deposited') && o.revisions[0]?.status === 'Applied' ? o.revisions[0] : undefined
   const shown = o.items.slice(0, 2)
 
   return (
@@ -72,6 +76,11 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
 
       {row('Ngày thực hiện', formatDate(o.eventDate))}
       {row('Tổng giá trị', formatMoney(o.totalAmount))}
+      {updated && updated.newTotalAmount !== null && (
+        <p className="border-b border-dashed border-line py-1.5 text-[12px] text-muted-foreground tabular-nums">
+          Đã cập nhật: tổng {formatMoney(updated.oldTotalAmount)} → {formatMoney(updated.newTotalAmount)}
+        </p>
+      )}
       {row(
         `Đặt cọc (${o.depositPercent}%)`,
         <>
@@ -94,9 +103,16 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
       )}
       {o.note && <p className="mt-2.5 text-[13px] whitespace-pre-wrap">Ghi chú của bạn: {o.note}</p>}
 
-      <p className={cn('mt-2.5 rounded-sm px-2.5 py-2 text-[13px]', HINT_TONE[hint.tone], hint.tone === 'warn' && 'bg-warn-soft', hint.tone === 'ok' && 'bg-sage-soft', hint.tone === 'info' && 'bg-bg')}>
-        {hint.text}
-      </p>
+      {request ? (
+        <div className="mt-2.5 rounded-md border border-warn/40 bg-warn-soft px-3 py-2.5 text-[13px] leading-relaxed text-ink">
+          <MessageSquareWarning className="mr-1.5 -mt-0.5 inline size-4 text-warn" aria-hidden />
+          <b className="font-semibold text-warn">Khách yêu cầu:</b> {[changesLabel(request), request.requestNote ? `"${request.requestNote}"` : ''].filter(Boolean).join(' · ')}
+        </div>
+      ) : (
+        <p className={cn('mt-2.5 rounded-sm px-2.5 py-2 text-[13px]', HINT_TONE[hint.tone], hint.tone === 'warn' && 'bg-warn-soft', hint.tone === 'ok' && 'bg-sage-soft', hint.tone === 'info' && 'bg-bg')}>
+          {hint.text}
+        </p>
+      )}
 
       <OrderActions order={o} onOpenForm={onOpenForm} onView={onView} onViewInvoice={onViewInvoice} />
     </div>

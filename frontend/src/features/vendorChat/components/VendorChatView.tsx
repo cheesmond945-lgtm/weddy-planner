@@ -23,7 +23,10 @@ export function VendorChatView() {
   const [form, setForm] = useState<OrderFormMode | null>(null)
   // Xem chi tiết đơn, xem chứng từ: lưu mã đơn để luôn hiện dữ liệu mới nhất
   const [detailId, setDetailId] = useState<string | null>(null)
-  const [invoice, setInvoice] = useState<{ orderId: string; type: InvoiceType } | null>(null)
+  const [invoice, setInvoice] = useState<{
+    orderId: string
+    type: InvoiceType
+  } | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
 
   const picked = params.get('c')
@@ -32,6 +35,14 @@ export function VendorChatView() {
   const { data: orders = [] } = useConversationOrders(active?.id ?? null)
   const detail = orders.find((o) => o.id === detailId)
   const invoiceOrder = orders.find((o) => o.id === invoice?.orderId)
+
+  // Từ trang Quản lý đơn hàng: "+ Tạo đơn" chọn khách rồi sang đây (?c=…&create=1) mở sẵn form tạo đơn
+  const wantCreate = params.get('create') === '1'
+  useEffect(() => {
+    if (!wantCreate || !active) return
+    setForm({ kind: 'new' })
+    setParams({ c: active.id }, { replace: true })
+  }, [wantCreate, active, setParams])
 
   // Làm nổi thẻ đơn vừa gửi trong 2,4 giây (như prototype)
   useEffect(() => {
@@ -48,8 +59,7 @@ export function VendorChatView() {
   }
 
   // 62px header + 90px đệm trên/dưới của VendorLayout (mobile 70px)
-  const frame =
-    'grid h-[calc(100dvh-152px)] max-h-[900px] min-h-[610px] overflow-hidden rounded-[26px] bg-surface shadow-panel max-[900px]:h-[calc(100dvh-132px)] max-[900px]:min-h-[520px]'
+  const frame = 'grid h-[calc(100dvh-152px)] max-h-[900px] min-h-[610px] overflow-hidden rounded-[26px] bg-surface shadow-panel max-[900px]:h-[calc(100dvh-132px)] max-[900px]:min-h-[520px]'
 
   if (isPending) return <div aria-busy="true" aria-label="Đang tải tin nhắn" className={cn(frame, 'animate-pulse bg-muted')} />
   if (isError) {

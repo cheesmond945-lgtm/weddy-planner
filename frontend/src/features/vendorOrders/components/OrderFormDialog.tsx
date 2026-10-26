@@ -7,6 +7,7 @@ import { useWeddingReminder } from '@/features/vendorChat/hooks'
 import { isVenue } from '@/features/vendorPackages/constants'
 import { usePackages } from '@/features/vendorPackages/hooks'
 import { controlClass, Field } from '@/features/vendors/components/FormParts'
+import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { UnsavedChangesGuard } from '@/features/vendors/components/UnsavedChangesGuard'
 import { formatDate, toISODate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
@@ -21,8 +22,8 @@ import { OrderItemsEditor, type QuickFillPackage } from './OrderItemsEditor'
 import { PanelDialog } from './PanelDialog'
 
 /**
- * new: đơn mới. draft: mở lại bản nháp. resend: "Sửa và gửi lại" (Pending, NeedRevision).
- * edit: sửa đơn đã cọc (khóa tỷ lệ và tiền cọc). again: "Tạo đơn mới từ đơn này" (đơn hết hạn).
+ * new: đơn mới. draft: mở lại bản nháp. resend: "Cập nhật đơn" (Pending, NeedRevision).
+ * edit: sửa đơn đã cọc (khóa tỷ lệ và tiền cọc). again: "Tạo lại đơn" (đơn hết hạn).
  */
 export type OrderFormMode =
   | { kind: 'new' }
@@ -164,6 +165,8 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   const [noWedding, setNoWedding] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
   const [showRequest, setShowRequest] = useState(true)
+  // Hộp xác nhận trước khi gửi đơn, gửi bản cập nhật hoặc lưu chỉnh sửa
+  const [confirmSend, setConfirmSend] = useState(false)
 
   const busy = save.isPending
   const dirty = !sameValues(values, initial)
@@ -223,6 +226,10 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
       setFormError(mode.kind === 'resend' ? 'Chưa có thay đổi nào so với đơn đang gửi.' : 'Chưa có thay đổi nào so với đơn hiện tại.')
       return
     }
+    setConfirmSend(true)
+  }
+
+  function doSend() {
     const content = toContent(values)
     if (mode.kind === 'edit') run({ kind: 'edit', orderId: mode.order.id, content }, true)
     else if (mode.kind === 'resend') run({ kind: 'send', orderId: mode.order.id, content, resend: true }, true)
@@ -238,15 +245,15 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
 
   const title =
     mode.kind === 'resend'
-      ? `Sửa và gửi lại đơn ${mode.order.orderCode}`
+      ? `Cập nhật đơn ${mode.order.orderCode}`
       : mode.kind === 'edit'
-        ? `Sửa đơn ${mode.order.orderCode}`
+        ? `Chỉnh sửa đơn ${mode.order.orderCode}`
         : mode.kind === 'again'
-          ? `Tạo đơn mới từ đơn ${mode.from.orderCode}`
+          ? `Tạo lại đơn từ đơn ${mode.from.orderCode}`
           : 'Tạo đơn'
   const subtitle =
     mode.kind === 'resend'
-      ? 'Gửi lại sẽ đặt lại hạn đặt cọc 1 ngày và gửi một thẻ đơn mới cho khách.'
+      ? 'Gửi bản cập nhật sẽ đặt lại hạn đặt cọc 24 giờ và gửi một thẻ đơn mới cho khách.'
       : mode.kind === 'edit'
         ? 'Đơn đã đặt cọc: sửa được hạng mục, ngày, ghi chú. Tỷ lệ và tiền cọc đã khóa, tổng mới không nhỏ hơn tiền đã cọc.'
         : mode.kind === 'again'
@@ -299,11 +306,11 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                   Đang lưu…
                 </>
               ) : mode.kind === 'edit' ? (
-                'Lưu thay đổi'
+                'Lưu chỉnh sửa'
               ) : mode.kind === 'resend' ? (
-                'Gửi lại cho khách'
+                'Cập nhật đơn'
               ) : (
-                'Gửi đơn cho khách hàng'
+                'Gửi đơn'
               )}
             </Button>
           </>
@@ -390,6 +397,22 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
           </Section>
         </fieldset>
       </PanelDialog>
+
+      <ConfirmDialog
+        open={confirmSend}
+        onOpenChange={setConfirmSend}
+        title={mode.kind === 'edit' ? 'Chỉnh sửa đơn?' : mode.kind === 'resend' ? 'Cập nhật đơn?' : 'Gửi đơn?'}
+        confirmLabel={mode.kind === 'edit' ? 'Lưu chỉnh sửa' : mode.kind === 'resend' ? 'Cập nhật đơn' : 'Gửi đơn'}
+        onConfirm={doSend}
+      >
+        <p>
+          {mode.kind === 'edit'
+            ? 'Lưu chỉnh sửa cho khách? Tiền cọc đã khóa, tổng mới không thấp hơn tiền cọc.'
+            : mode.kind === 'resend'
+              ? 'Gửi bản cập nhật cho khách? Hạn cọc được đặt lại 24 giờ.'
+              : 'Gửi đơn cho khách? Khách có 24 giờ để đặt cọc.'}
+        </p>
+      </ConfirmDialog>
 
       <PanelDialog
         open={confirmClose}

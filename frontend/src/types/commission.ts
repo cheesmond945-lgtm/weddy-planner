@@ -3,11 +3,14 @@
  * CHỜ ĐỐI CHIẾU docs/database.md và docs/state-diagrams.md: tên trường, trạng thái đang suy từ prototype NCC
  * (màn Tài chính & đối soát) và các quyết định của nhóm (tỷ lệ theo lĩnh vực, tính theo đơn hoàn thành).
  *
- * Bảng kê tính từ khoản đã thu thực tế của đơn (types/serviceOrder.ts: OrderPayment), không có dữ liệu đơn riêng.
+ * Bảng kê dựng từ Commissions và CommissionStatements (đơn Completed). GIAI ĐOẠN TẠM: giao diện hoa hồng còn theo mô hình cũ
+ * (minh chứng, một phần, bổ sung); bước 2 viết lại theo CSDL (Unpaid/Paid, nộp một lần qua VNPay).
  */
 import type { CategoryRef } from './catalog'
-import type { OrderPaymentMethod } from './serviceOrder'
 import type { VendorFile } from './vendor'
+
+/** Phương thức của một khoản thu: cọc qua VNPay, phần còn lại tiền mặt ngoài hệ thống. */
+export type OrderPaymentMethod = 'VNPAY' | 'BANK_TRANSFER' | 'CASH'
 
 /**
  * Trạng thái bảng kê. Nhãn ở features/commissions/constants.ts.

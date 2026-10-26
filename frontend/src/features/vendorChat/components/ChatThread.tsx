@@ -117,7 +117,7 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
             Bản nháp <b>{o.orderCode}</b> chưa gửi khách · chỉ bạn nhìn thấy · tạo {formatStamp(o.createdDate)}
           </span>
           <Button size="sm" variant="outline" className="border-line-strong" onClick={() => onOpenForm({ kind: 'draft', order: o })}>
-            Mở lại bản nháp
+            Tiếp tục soạn
           </Button>
         </div>
       ))}

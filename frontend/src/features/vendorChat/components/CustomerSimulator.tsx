@@ -1,16 +1,79 @@
 import { ChevronDown, FlaskConical } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { isMock } from '@/api'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { CHANGE_LABEL } from '@/features/vendorOrders/constants'
 import { clockOffsetHours } from '@/lib/clock'
 import { cn } from '@/lib/utils'
 import type { CustomerSimulation } from '@/types/vendorConversation'
-import type { Order } from '@/types/vendorOrder'
+import { REVISION_CHANGE_TYPES, type Order, type RevisionChangeType } from '@/types/vendorOrder'
 import { useAdvanceTime, useSimulateCustomer } from '../hooks'
 
 interface Item {
   label: string
   sim: CustomerSimulation
   when: (o: Order | undefined) => boolean
+  /** Cần nhập thêm (hộp "Yêu cầu chỉnh sửa") trước khi chạy */
+  dialog?: boolean
+}
+
+const canRequestRevision = (o: Order | undefined) =>
+  o?.status === 'Pending' || (o?.status === 'Deposited' && !o.revisions.some((r) => r.revisionType === 'AfterDeposit' && r.status === 'Requested'))
+
+/** Hộp giả lập khách "Yêu cầu chỉnh sửa": chọn nội dung muốn đổi và nhập lời nhắn (bắt buộc), như form phía khách. */
+function RevisionDialog({ order, busy, onClose, onSubmit }: { order: Order | undefined; busy: boolean; onClose: () => void; onSubmit: (changes: RevisionChangeType[], note: string) => void }) {
+  const [changes, setChanges] = useState<RevisionChangeType[]>([])
+  const [note, setNote] = useState('')
+  const [tried, setTried] = useState(false)
+  const missing = !note.trim()
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>Yêu cầu chỉnh sửa</DialogTitle>
+          <DialogDescription>
+            Giả lập khách yêu cầu chỉnh sửa đơn {order?.orderCode}. Đơn {order?.status === 'Pending' ? 'chuyển sang Chờ chỉnh sửa' : 'vẫn Đã đặt cọc, chờ bạn chỉnh sửa'}.
+          </DialogDescription>
+        </DialogHeader>
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-[13px] font-medium">Nội dung muốn thay đổi</legend>
+          {REVISION_CHANGE_TYPES.map((c) => (
+            <label key={c} className="flex items-center gap-2.5 text-sm">
+              <input type="checkbox" className="size-4 accent-[var(--gold)]" checked={changes.includes(c)} onChange={(e) => setChanges((cur) => (e.target.checked ? [...cur, c] : cur.filter((x) => x !== c)))} />
+              {CHANGE_LABEL[c]}
+            </label>
+          ))}
+        </fieldset>
+        <label className="grid gap-1 text-[13px] font-medium">
+          Lời nhắn *
+          <textarea
+            rows={3}
+            value={note}
+            aria-invalid={tried && missing ? true : undefined}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="VD: Giảm từ 20 xuống 15 bàn nhé."
+            className="rounded-md border border-line bg-surface px-3 py-2 text-sm font-normal leading-relaxed outline-none focus:border-gold aria-invalid:border-destructive"
+          />
+          {tried && missing && <span role="alert" className="text-xs font-normal text-destructive">Vui lòng nhập lời nhắn cho nhà cung cấp.</span>}
+        </label>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={() => {
+              setTried(true)
+              if (!missing) onSubmit(REVISION_CHANGE_TYPES.filter((c) => changes.includes(c)), note.trim())
+            }}
+          >
+            Gửi yêu cầu
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 const newest = (orders: Order[], status: Order['status'][]) =>
@@ -31,6 +94,7 @@ export function CustomerSimulator({ conversationId, orders }: { conversationId: 
   const simulate = useSimulateCustomer(conversationId)
   const advance = useAdvanceTime()
   const [open, setOpen] = useState(false)
+  const [revising, setRevising] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -50,11 +114,7 @@ export function CustomerSimulator({ conversationId, orders }: { conversationId: 
   const items: Item[] = [
     { label: 'Khách nhắn tin', sim: { action: 'MESSAGE' }, when: () => true },
     { label: 'Khách đặt cọc qua VNPay', sim: { action: 'PAY_DEPOSIT' }, when: (o) => o?.status === 'Pending' },
-    {
-      label: 'Khách yêu cầu chỉnh sửa đơn',
-      sim: { action: 'REQUEST_REVISION', changes: ['Quantity'], note: 'Cho nhà mình chỉnh lại số lượng một chút nhé.' },
-      when: (o) => o?.status === 'Pending' || (o?.status === 'Deposited' && !o.revisions.some((r) => r.revisionType === 'AfterDeposit' && r.status === 'Requested')),
-    },
+    { label: 'Khách yêu cầu chỉnh sửa đơn', sim: { action: 'REQUEST_REVISION', changes: [], note: '' }, when: canRequestRevision, dialog: true },
     { label: 'Khách hủy đơn (sau cọc, mất cọc)', sim: { action: 'CANCEL_ORDER' }, when: (o) => o?.status === 'Deposited' },
   ]
   const target = (sim: CustomerSimulation) => (sim.action === 'PAY_DEPOSIT' ? newest(orders, ['Pending']) : sim.action === 'CANCEL_ORDER' ? newest(orders, ['Deposited']) : newest(orders, ['Pending', 'Deposited']))
@@ -78,7 +138,7 @@ export function CustomerSimulator({ conversationId, orders }: { conversationId: 
       {open && (
         <div role="menu" className="absolute top-[calc(100%+4px)] right-0 z-30 grid w-[260px] gap-0.5 rounded-lg border border-line bg-surface p-1.5 shadow-portal-lift">
           <p className="px-2.5 pt-1 pb-1.5 text-[11.5px] text-muted-foreground">Giả lập khách (dữ liệu giả)</p>
-          {items.map(({ label, sim, when }) => {
+          {items.map(({ label, sim, when, dialog }) => {
             const t = target(sim)
             const enabled = when(t)
             return (
@@ -89,7 +149,8 @@ export function CustomerSimulator({ conversationId, orders }: { conversationId: 
                 disabled={!enabled}
                 onClick={() => {
                   setOpen(false)
-                  simulate.mutate(sim)
+                  if (dialog) setRevising(true)
+                  else simulate.mutate(sim)
                 }}
                 className={cn('rounded-sm px-2.5 py-2 text-left text-[13px]', enabled ? 'hover:bg-info-soft hover:text-info' : 'cursor-not-allowed opacity-45')}
               >
@@ -114,6 +175,14 @@ export function CustomerSimulator({ conversationId, orders }: { conversationId: 
             Về giờ thật
           </button>
         </div>
+      )}
+      {revising && (
+        <RevisionDialog
+          order={target({ action: 'REQUEST_REVISION', changes: [], note: '' })}
+          busy={simulate.isPending}
+          onClose={() => setRevising(false)}
+          onSubmit={(changes, note) => simulate.mutate({ action: 'REQUEST_REVISION', changes, note }, { onSuccess: () => setRevising(false) })}
+        />
       )}
     </div>
   )

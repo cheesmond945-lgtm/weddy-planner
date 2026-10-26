@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useCommissionStatements } from '@/features/commissions/hooks'
-import { useOrders } from '@/features/serviceOrders/hooks'
 import { useVendorConversations } from '@/features/vendorChat/hooks'
+import { useOrders } from '@/features/vendorOrders/hooks'
 import { usePackages } from '@/features/vendorPackages/hooks'
 import { useVendorProfile } from '@/features/vendors/hooks'
 import { orderStats, recentOrders, todoItems, upcomingOrders } from './summary'
@@ -21,14 +21,13 @@ export function useVendorDashboard() {
   const statements = useCommissionStatements()
 
   const data = useMemo(() => {
-    const now = new Date()
     const o = orders.data?.data ?? []
     const st = statements.data ?? []
     return {
-      stats: orderStats(o, now),
+      stats: orderStats(o),
       currentCommission: st.find((s) => s.status === 'OPEN'),
-      todos: todoItems({ orders: o, conversations: conversations.data ?? [], packages: packages.data ?? [], statements: st, now }),
-      upcoming: upcomingOrders(o, now),
+      todos: todoItems({ orders: o, conversations: conversations.data ?? [], packages: packages.data ?? [], statements: st }),
+      upcoming: upcomingOrders(o),
       recent: recentOrders(o),
     }
   }, [orders.data, conversations.data, packages.data, statements.data])

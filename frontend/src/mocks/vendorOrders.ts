@@ -29,7 +29,7 @@ import { mockVendors } from './vendors'
  *
  * Dữ liệu lưu trong localStorage theo từng tài khoản NCC. Muốn làm lại từ đầu thì xóa khóa bên dưới.
  */
-const STORAGE_KEY = 'weddy.mock.vendorOrders.v3'
+const STORAGE_KEY = 'weddy.mock.vendorOrders.v4'
 
 /** Tỷ lệ hoa hồng theo loại dịch vụ (ServiceCategories.CommissionRate): chỉ để dữ liệu giả có số; BE đọc từ CSDL. */
 const COMMISSION_RATE: Record<string, number> = { 'nha-hang': 5, decor: 7, 'hoa-cuoi': 8, 'trang-phuc': 8, 'chup-anh': 8, makeup: 10 }
@@ -216,7 +216,7 @@ function newDraft(d: Data, conversationId: string, c: OrderContent, at: Date): O
   return o
 }
 
-/** Gửi lần đầu (Draft), hoặc "Sửa và gửi lại" (Pending, NeedRevision). */
+/** Gửi lần đầu (Draft), hoặc "Cập nhật đơn" (Pending, NeedRevision). */
 function sendOrder(d: Data, o: Order, c: OrderContent, at: Date) {
   if (!['Draft', 'Pending', 'NeedRevision'].includes(o.status)) {
     throw new ApiError(409, 'ORDER_NOT_SENDABLE', 'Đơn đã đặt cọc, hết hạn hoặc đã hủy nên không gửi lại được.')
@@ -306,8 +306,6 @@ function payDeposit(d: Data, o: Order, at: Date) {
   )
 }
 
-const CHANGE_LABEL: Record<RevisionChangeType, string> = { Item: 'đổi hạng mục', Quantity: 'đổi số lượng', EventDate: 'đổi ngày thực hiện', Other: 'nội dung khác' }
-
 /** Khách yêu cầu chỉnh sửa: trước cọc thì đơn thành NeedRevision; sau cọc đơn vẫn Deposited. */
 function requestRevision(d: Data, o: Order, changes: RevisionChangeType[], note: string, at: Date) {
   if (o.status !== 'Pending' && o.status !== 'Deposited') throw new ApiError(409, 'ORDER_NOT_REVISABLE', 'Đơn không ở trạng thái khách yêu cầu chỉnh sửa được.')
@@ -328,8 +326,7 @@ function requestRevision(d: Data, o: Order, changes: RevisionChangeType[], note:
   }
   o.revisions.unshift(rv)
   if (type === 'BeforeDeposit') o.status = 'NeedRevision'
-  const what = changes.map((c) => CHANGE_LABEL[c]).join(', ')
-  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `Khách yêu cầu chỉnh sửa đơn ${o.orderCode}${what ? `: ${what}` : ''}${rv.requestNote ? ` · ${rv.requestNote}` : ''}`, o.id, at)
+  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `Khách đã yêu cầu chỉnh sửa đơn ${o.orderCode}`, o.id, at)
 }
 
 /** Khách hủy đơn sau khi cọc (mất cọc). */
@@ -687,7 +684,7 @@ export const mockVendorOrders = {
     })
   },
 
-  /** Gửi lần đầu, hoặc "Sửa và gửi lại" khi đang chờ cọc hoặc khách yêu cầu chỉnh sửa. */
+  /** Gửi lần đầu, hoặc "Cập nhật đơn" khi đang chờ cọc hoặc khách yêu cầu chỉnh sửa. */
   sendOrder(userId: string, orderId: string, content: OrderContent): Order {
     return withData(userId, (d, at) => {
       const o = findOrder(d, orderId)

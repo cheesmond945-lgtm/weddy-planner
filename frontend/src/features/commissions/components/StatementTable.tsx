@@ -1,4 +1,4 @@
-import { StatusBadge } from '@/features/serviceOrders/components/OrderBadges'
+import { StatusBadge } from '@/features/vendorOrders/components/OrderBadges'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { CommissionStatementSummary } from '@/types/commission'

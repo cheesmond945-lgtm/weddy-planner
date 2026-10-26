@@ -3,17 +3,15 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { isMock } from '@/api'
 import { Button } from '@/components/ui/button'
-import { formatDay, formatStamp } from '@/features/serviceOrders/calc'
-import { StatusBadge } from '@/features/serviceOrders/components/OrderBadges'
-import { orderPageHref } from '@/features/serviceOrders/components/OrderCard'
-import { PanelDialog } from '@/features/serviceOrders/components/PanelDialog'
-import { PAYMENT_METHOD_LABEL } from '@/features/serviceOrders/constants'
+import { formatStamp, orderPageHref } from '@/features/vendorOrders/calc'
+import { StatusBadge } from '@/features/vendorOrders/components/OrderBadges'
+import { PanelDialog } from '@/features/vendorOrders/components/PanelDialog'
 import { Notice } from '@/features/vendors/components/FormParts'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { CommissionStatement } from '@/types/commission'
-import { COMMISSION_PAYMENT_STATUS, COMMISSION_STATUS, formatPeriod, remainingOf } from '../constants'
+import { COMMISSION_PAYMENT_STATUS, COMMISSION_STATUS, formatPeriod, PAYMENT_METHOD_LABEL, remainingOf } from '../constants'
 import { useCommissionStatement, useSimulateReview } from '../hooks'
 
 const H = ({ children }: { children: ReactNode }) => (
@@ -140,7 +138,7 @@ export function StatementDetailDialog({ id, onClose }: { id: string; onClose: ()
               {s.lines.map((l) => (
                 <tr key={l.id} className="last:[&>td]:border-b-0">
                   <td className={td}>
-                    <Link to={orderPageHref({ id: l.orderId })} className="font-semibold text-gold-ink tabular-nums hover:underline">
+                    <Link to={orderPageHref(l.orderId)} className="font-semibold text-gold-ink tabular-nums hover:underline">
                       {l.orderCode}
                     </Link>
                     <span className="block">{l.customerName}</span>
@@ -148,7 +146,7 @@ export function StatementDetailDialog({ id, onClose }: { id: string; onClose: ()
                       <span className="mt-1 inline-block rounded-pill bg-info-soft px-2 text-[11px] text-info">Bổ sung · đơn kỳ {formatPeriod(l.originPeriod ?? '')}</span>
                     )}
                   </td>
-                  <td className={cn(td, 'whitespace-nowrap')}>{formatDay(l.eventDate)}</td>
+                  <td className={cn(td, 'whitespace-nowrap')}>{formatDate(l.eventDate)}</td>
                   <td className={cn(td, 'min-w-[200px]')}>
                     <ul className="grid gap-1">
                       {l.payments.map((p) => (

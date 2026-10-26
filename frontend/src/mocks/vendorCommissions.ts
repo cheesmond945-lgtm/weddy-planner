@@ -1,42 +1,24 @@
 import { ApiError } from '@/api/client'
 import { buildStatements } from '@/features/commissions/calc'
 import { canSubmitProof, remainingOf } from '@/features/commissions/constants'
+import { now } from '@/lib/clock'
 import { authStore } from '@/store/auth'
 import type { CommissionPayment, CommissionStatement, CommissionStatementSummary, SubmitCommissionPaymentBody } from '@/types/commission'
-import type { VendorFile } from '@/types/vendor'
-import { mockVendorChat } from './vendorChat'
+import { mockVendorOrders } from './vendorOrders'
 import { mockVendors } from './vendors'
 
 /*
- * Bảng kê hoa hồng giả phía NCC. Bảng kê KHÔNG lưu sẵn: mỗi lần gọi tính lại từ khoản đã thu thật của các đơn
- * trong mocks/vendorChat.ts (features/commissions/calc.ts). Chỉ lưu các lần NCC gửi minh chứng thanh toán.
- * Mây Palace (u-vendor-1): kỳ 07, 08 đã thanh toán; kỳ 09 mới trả một phần; kỳ hiện tại đang tạm tính.
- * Admin xác nhận / từ chối minh chứng: giả lập bằng review() (CHỈ CÓ TRONG MOCK).
+ * Bảng kê hoa hồng giả phía NCC. Bảng kê và dòng hoa hồng do mocks/vendorOrders.ts tạo khi đơn Completed (CommissionStatements,
+ * Commissions). GIAI ĐOẠN TẠM: các lần NCC gửi minh chứng thanh toán còn theo mô hình cũ và lưu riêng ở đây;
+ * bước 2 viết lại theo CSDL (Unpaid/Paid, nộp một lần qua VNPay, không minh chứng).
  */
 const STORAGE_KEY = 'weddy.mock.vendorCommissions'
 
 /** Tài khoản nhận như prototype NCC: không dùng để chuyển tiền thật. */
 const TRANSFER = { accountName: 'WEBPLAN DEMO', bankName: 'Ngân hàng mẫu', accountNumber: 'DEMO-000000 · Không dùng chuyển tiền' }
 
-const proof = (fileName: string): VendorFile => ({ url: '', publicId: `mock/sample/${fileName}`, fileName, size: 180_000, mimeType: 'image/jpeg' })
-const confirmed = (id: string, amount: number, submittedAt: string, reviewedAt: string, note: string | null = null): CommissionPayment => ({
-  id,
-  amount,
-  proofFile: proof(`uy-nhiem-chi-${id}.jpg`),
-  note,
-  submittedAt,
-  status: 'CONFIRMED',
-  reviewedAt,
-  reviewNote: null,
-})
-
-function seed(userId: string): Record<string, CommissionPayment[]> {
-  if (userId !== 'u-vendor-1') return {}
-  return {
-    '2026-07': [confirmed('cp-1', 5_760_000, '2026-08-14T03:00:00.000Z', '2026-08-15T02:00:00.000Z', 'VCB, mã GD 0814-55821')],
-    '2026-08': [confirmed('cp-2', 6_400_000, '2026-09-17T08:30:00.000Z', '2026-09-18T02:15:00.000Z', 'VCB, mã GD 0917-10233')],
-    '2026-09': [confirmed('cp-3', 5_000_000, '2026-10-07T09:00:00.000Z', '2026-10-08T03:40:00.000Z', 'Trả trước một phần, phần còn lại trước 20/10')],
-  }
+function seed(): Record<string, CommissionPayment[]> {
+  return {}
 }
 
 function load(): Record<string, Record<string, CommissionPayment[]>> {
@@ -49,7 +31,7 @@ function load(): Record<string, Record<string, CommissionPayment[]>> {
 
 function withPayments<T>(userId: string, fn: (byPeriod: Record<string, CommissionPayment[]>) => T): T {
   const all = load()
-  all[userId] ??= seed(userId)
+  all[userId] ??= seed()
   const result = fn(all[userId])
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(all))
@@ -61,10 +43,10 @@ function withPayments<T>(userId: string, fn: (byPeriod: Record<string, Commissio
 
 function statements(userId: string, byPeriod: Record<string, CommissionPayment[]>): CommissionStatement[] {
   const profile = mockVendors.getMyProfile(userId)
-  const category = profile.verifiedCategory ?? profile.category
-  if (!category) return []
+  // Giai đoạn mock: NCC chưa có hồ sơ thì coi như Nhà hàng (đúng với tỷ lệ mặc định trong mocks/vendorOrders.ts)
+  const category = profile.verifiedCategory ?? profile.category ?? { id: 'cat-nha-hang', slug: 'nha-hang', name: 'Nhà hàng' }
   const vendorName = profile.businessName ?? authStore.getSession()?.user.name ?? 'Nhà cung cấp'
-  return buildStatements({ orders: mockVendorChat.allOrders(userId), category, vendorName, payments: byPeriod, transfer: TRANSFER, now: new Date() })
+  return buildStatements({ source: mockVendorOrders.commissionData(userId), category, vendorName, payments: byPeriod, transfer: TRANSFER, now: now() })
 }
 
 function find(list: CommissionStatement[], id: string) {
