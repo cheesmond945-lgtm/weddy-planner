@@ -80,9 +80,6 @@ export const mockAuth = {
   },
 
   register(data: RegisterRequest): OtpSent {
-    if (accounts.some((a) => a.phone === data.phone)) {
-      throw new ApiError(409, 'PHONE_ALREADY_EXISTS', 'Số điện thoại đã được đăng ký.')
-    }
     if (accounts.some((a) => sameEmail(a.email, data.email))) {
       throw new ApiError(409, 'EMAIL_ALREADY_EXISTS', 'Email đã được đăng ký.')
     }
@@ -113,7 +110,7 @@ export const mockAuth = {
       throw new ApiError(400, 'OTP_INVALID', 'Mã OTP không đúng.')
     }
     pending.delete(key)
-    const account: MockAccount = { id: `u-${Date.now()}`, ...p.data, role: 'COUPLE' }
+    const account: MockAccount = { id: `u-${Date.now()}`, ...p.data, phone: null, role: 'COUPLE' }
     accounts.push(account)
     saveAccounts()
     return toSession(account)

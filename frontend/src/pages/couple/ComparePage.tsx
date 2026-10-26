@@ -9,8 +9,10 @@ import { useGoogleRatings } from '@/features/catalog/useGoogleRating'
 import { CompareTable, type RatingCell } from '@/features/compare/components/CompareTable'
 import { RecommendBox } from '@/features/compare/components/RecommendBox'
 import { recommend } from '@/features/compare/recommend'
+import { CATEGORY_BUDGET_SHARE } from '@/features/compare/recommend.config'
 import { useWedding } from '@/features/weddings/hooks'
-import { AddToPlanButton } from '@/features/weddings/planActions'
+import { AddToPlanButton, OpenChatButton } from '@/features/weddings/planActions'
+import { formatMoney } from '@/lib/format'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
 import { MAX_COMPARE } from '@/store/compare'
@@ -94,6 +96,10 @@ export default function ComparePage() {
 
   const { items } = result.data
   const recommended = recommendation ? (items.find((s) => s.id === recommendation.serviceId) ?? null) : null
+  const category = items[0].category
+  const share = CATEGORY_BUDGET_SHARE[category.slug]
+  // Ngân sách hạng mục ước tính theo tỷ lệ gợi ý (cùng cách tính với đề xuất)
+  const budget = wedding && share ? Math.round((wedding.budget * share) / 1e6) * 1e6 : null
 
   return (
     <>
@@ -103,12 +109,20 @@ export default function ComparePage() {
       ) : (
         <div className="mb-4 h-[74px] animate-pulse rounded-xl bg-muted" aria-busy="true" aria-label="Đang tính đề xuất" />
       )}
+      {budget !== null && (
+        <p className="mb-3 text-[14px] text-muted-foreground">
+          Ngân sách {category.name.toLowerCase()}: <b className="font-semibold text-ink">{formatMoney(budget)}</b> (ước tính{' '}
+          {Math.round(share * 100)}% tổng ngân sách {formatMoney(wedding!.budget)})
+        </p>
+      )}
       <CompareTable
         services={items}
+        budget={budget}
         ratings={ratings}
         recommendedId={recommendation && !recommendation.isTie ? recommendation.serviceId : null}
         isTie={!!recommendation?.isTie}
         renderActions={(s, primary) => <AddToPlanButton service={s} primary={recommendation ? primary : false} />}
+        renderQuote={(s) => <OpenChatButton service={s} label="Yêu cầu báo giá" />}
       />
     </>
   )

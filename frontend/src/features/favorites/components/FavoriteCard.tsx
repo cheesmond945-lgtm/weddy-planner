@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { RatingMeta } from '@/features/catalog/components/RatingMeta'
 import { ComparePill } from '@/features/compare/components/ComparePill'
 import { AddToPlanButton } from '@/features/weddings/planActions'
-import { formatMoney } from '@/lib/format'
+import { formatPriceRange } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { useCompareState } from '@/store/compare'
@@ -50,9 +50,9 @@ export const FavoriteCard = memo(function FavoriteCard({ service, onToggleCompar
       <div className="flex flex-1 flex-col gap-[7px] px-[15px] pt-[13px] pb-[15px]">
         <span className="text-[11px] font-medium text-gold">{service.category.name}</span>
         <h3 className="text-base leading-[1.3]">{service.name}</h3>
-        <RatingMeta location={service.location} vendorId={service.id} />
+        <RatingMeta service={service} />
         <div className="text-xs text-muted-foreground">
-          Từ <b className="text-sm font-semibold text-ink">{formatMoney(service.priceFrom)}</b>
+          <b className="text-sm font-semibold text-ink">{formatPriceRange(service.priceFrom, service.priceTo)}</b>
         </div>
         <div className="mt-auto flex gap-[7px] pt-2">
           <Button asChild size="sm" className="min-h-9 min-w-0 flex-1 rounded-[9px] text-xs">

@@ -2,6 +2,7 @@ import { Controller, Get, HttpException, Query, Req, UseGuards } from '@nestjs/c
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
+import { GooglePlacesService } from '../../integrations/google-places/google-places.service';
 import { ServicesService } from '../catalog/services.service';
 import { recommend } from './recommend';
 
@@ -14,7 +15,11 @@ const fail = (code: string, message: string, status: number): never => {
 @Roles('Couple')
 @Controller('compare')
 export class CompareController {
-  constructor(private readonly prisma: PrismaService, private readonly services: ServicesService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly services: ServicesService,
+    private readonly places: GooglePlacesService,
+  ) {}
 
   @Get()
   async compare(@Req() req: any, @Query('serviceIds') serviceIds = '') {
@@ -26,10 +31,15 @@ export class CompareController {
     const slug = items[0].category.slug;
     if (items.some((s) => s.category.slug !== slug)) return fail('COMPARE_MIXED_CATEGORIES', 'Chỉ so sánh được các nhà cung cấp cùng hạng mục.', 400);
 
+    // Điểm Google lấy lúc gọi. Thiếu điểm ở bất kỳ phương án nào thì trả recommendation = null:
+    // FE tự tính bằng features/compare/recommend.ts (có xử lý bỏ yếu tố điểm khi thiếu, docs/api/compare.md).
+    const scores = await Promise.all(items.map((s) => this.places.ratingOrNull(s.id)));
+    if (scores.some((x) => !x)) return { items, recommendation: null };
+
     // Thông tin đám cưới của người gọi (có thể chưa thiết lập)
     const w = await this.prisma.weddings.findUnique({ where: { user_id: req.user.sub } });
     const rec = recommend(
-      items.map((s) => ({ id: s.id, price: s.priceFrom, rating: s.rating, reviewCount: s.reviewCount, styles: s.styles, city: s.location, capacity: s.capacity })),
+      items.map((s, i) => ({ id: s.id, price: s.priceFrom, rating: scores[i]!.rating, reviewCount: scores[i]!.reviewCount, styles: s.styles, city: s.location, capacity: s.capacity })),
       w ? { budget: Number(w.budget), guestCount: w.guest_count, city: w.city, styles: w.style ? w.style.split(',').map((x) => x.trim()).filter(Boolean) : [] } : null,
       slug,
     );

@@ -11,26 +11,16 @@ import { StarRating } from './StarRating'
 
 const CLAMP = 240
 
-/** Tab "Đánh giá và phản hồi": điểm và tối đa 5 đánh giá Google Maps, rồi phản hồi từ khách WebPlan. */
-export function GoogleReviewsPanel({ vendorId }: { vendorId: string }) {
+/** Tab "Đánh giá và phản hồi": điểm và tối đa 5 đánh giá Google Maps. */
+export function GoogleReviewsPanel({ vendorId, mapsUrl }: { vendorId: string; mapsUrl?: string | null }) {
   return (
-    <>
-      <DetailCard title="Đánh giá trên Google Maps">
-        <GoogleReviewsContent vendorId={vendorId} />
-      </DetailCard>
-      <DetailCard title="Phản hồi từ khách hàng WebPlan">
-        {/* Chưa có bảng phản hồi trong CSDL: chỉ hiện trạng thái trống, không bịa dữ liệu */}
-        <div className="rounded-xl border border-dashed border-line p-[26px] text-center text-muted-foreground">
-          Chưa có phản hồi nào từ khách hàng WebPlan.
-          <br />
-          Sau khi hoàn thành dịch vụ, bạn sẽ được mời đánh giá.
-        </div>
-      </DetailCard>
-    </>
+    <DetailCard title="Đánh giá trên Google Maps">
+      <GoogleReviewsContent vendorId={vendorId} mapsUrl={mapsUrl} />
+    </DetailCard>
   )
 }
 
-function GoogleReviewsContent({ vendorId }: { vendorId: string }) {
+function GoogleReviewsContent({ vendorId, mapsUrl }: { vendorId: string; mapsUrl?: string | null }) {
   const { data, isPending, isError, error, refetch, isFetching } = useGoogleRating(vendorId, 'reviews')
 
   if (isPending) {
@@ -51,7 +41,21 @@ function GoogleReviewsContent({ vendorId }: { vendorId: string }) {
   }
 
   if (isError) {
-    const noPlace = (error as { status?: number }).status === 404
+    const status = (error as { status?: number }).status
+    const noPlace = status === 404
+    // BE chưa có khóa Places API: mời xem thẳng trên Google Maps
+    if (status === 503 && mapsUrl)
+      return (
+        <div className="rounded-xl border border-dashed border-line p-[26px] text-center">
+          <p className="text-muted-foreground">Xem điểm và đánh giá của nhà cung cấp này trực tiếp trên Google Maps.</p>
+          <Button asChild variant="outline" size="sm" className="mt-3">
+            <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+              Mở Google Maps
+              <ExternalLink aria-hidden />
+            </a>
+          </Button>
+        </div>
+      )
     return (
       <div className="rounded-xl border border-dashed border-line p-[26px] text-center">
         <p className="text-muted-foreground">

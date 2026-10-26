@@ -3,6 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../../integrations/mail/mail.service';
+import { registerOtpEmail } from '../../integrations/mail/templates';
 
 const ROLE_MAP: Record<string, 'COUPLE' | 'VENDOR' | 'ADMIN'> = { Couple: 'COUPLE', Vendor: 'VENDOR', Admin: 'ADMIN' };
 
@@ -29,7 +31,8 @@ const MAX_ATTEMPTS = 5;
 
 interface PendingRegistration {
   name: string;
-  phone: string;
+  /** Không bắt buộc khi đăng ký (form đăng ký đã bỏ ô số điện thoại); cặp đôi bổ sung sau ở hồ sơ */
+  phone: string | null;
   passwordHash: string;
   otpHash: string;
   expiresAt: number;
@@ -45,7 +48,11 @@ export class AuthService {
   /** Đăng ký chờ xác thực OTP (lưu trong bộ nhớ, tự hết hạn; khởi động lại backend thì mất). */
   private readonly pending = new Map<string, PendingRegistration>();
 
-  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly mail: MailService,
+  ) {}
 
   private session(user: UserRow & { username: string }) {
     const accessToken = this.jwt.sign({ sub: user.id, username: user.username, role: user.role });
@@ -80,32 +87,37 @@ export class AuthService {
     for (const [email, p] of this.pending) if (p.expiresAt + 10 * 60_000 < now) this.pending.delete(email);
   }
 
-  /** Tạo mã mới cho đăng ký tạm. Chưa cấu hình gửi mail: ghi mã ra log của backend (docs/api/auth.md, Ghi chú cho BE). */
-  private issueOtp(email: string, p: PendingRegistration) {
+  /**
+   * Tạo mã mới cho đăng ký tạm và gửi về email (integrations/mail).
+   * Chưa cấu hình mail hoặc gửi lỗi: ghi mã ra log của backend để dev vẫn thử được (docs/api/auth.md, Ghi chú cho BE).
+   */
+  private async issueOtp(email: string, p: PendingRegistration) {
     const otp = String(randomInt(0, 1_000_000)).padStart(6, '0');
     p.otpHash = hashOtp(email, otp);
     p.expiresAt = Date.now() + OTP_TTL_MS;
     p.resendAt = Date.now() + RESEND_AFTER_MS;
     p.attempts = 0;
-    this.logger.warn(`[OTP đăng ký] ${email}: ${otp} (hiệu lực 5 phút, chưa cấu hình gửi email nên in ra log)`);
+    const mail = registerOtpEmail(p.name, otp, OTP_TTL_MS / 60_000);
+    const sent = await this.mail.send(email, mail.subject, mail.html, mail.text);
+    if (!sent) this.logger.warn(`[OTP đăng ký] ${email}: ${otp} (hiệu lực 5 phút; chưa gửi được email nên in ra log)`);
     return { email, expiresIn: OTP_TTL_MS / 1000, resendAfter: RESEND_AFTER_MS / 1000 };
   }
 
   async register(body: { name?: string; phone?: string; email?: string; password?: string }) {
     this.sweep();
     const name = body.name?.trim() ?? '';
-    const phone = body.phone?.trim() ?? '';
+    const phone = body.phone?.trim() || null;
     const email = body.email?.trim().toLowerCase() ?? '';
     const password = body.password ?? '';
     const errors: Record<string, string> = {};
     if (!name) errors.name = 'Vui lòng nhập họ và tên.';
-    if (!PHONE_RE.test(phone)) errors.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.';
+    if (phone && !PHONE_RE.test(phone)) errors.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.';
     if (!EMAIL_RE.test(email)) errors.email = 'Email chưa hợp lệ.';
     if (password.length < 6) errors.password = 'Mật khẩu cần tối thiểu 6 ký tự.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin đăng ký chưa hợp lệ.', 400, errors);
 
     if (await this.prisma.users.findUnique({ where: { email } })) return fail('EMAIL_ALREADY_EXISTS', 'Email đã được sử dụng.', 409);
-    if (await this.prisma.users.findFirst({ where: { phone_number: phone } })) return fail('PHONE_ALREADY_EXISTS', 'Số điện thoại đã được sử dụng.', 409);
+    if (phone && (await this.prisma.users.findFirst({ where: { phone_number: phone } }))) return fail('PHONE_ALREADY_EXISTS', 'Số điện thoại đã được sử dụng.', 409);
 
     const existing = this.pending.get(email);
     if (existing && existing.resendAt > Date.now()) return fail('OTP_RESEND_TOO_SOON', 'Vui lòng chờ trước khi gửi lại mã.', 429);

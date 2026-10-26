@@ -13,7 +13,7 @@ interface GoogleRatingBadgeProps {
 /**
  * Điểm Google gọn cho thẻ dịch vụ: sao + điểm + số đánh giá + nhãn "Google".
  * Chỉ gọi API (mode summary) khi thẻ vào vùng nhìn thấy, tránh gọi hàng loạt.
- * Lỗi hoặc thiếu dữ liệu thì hiện "Chưa có điểm Google", không báo lỗi ra giao diện.
+ * Lỗi hoặc thiếu dữ liệu thì không hiện gì (địa chỉ bên cạnh đã là link Google Maps), không báo lỗi ra giao diện.
  */
 export function GoogleRatingBadge({ vendorId, className }: GoogleRatingBadgeProps) {
   const { ref, inView } = useInView<HTMLSpanElement>()
@@ -23,7 +23,7 @@ export function GoogleRatingBadge({ vendorId, className }: GoogleRatingBadgeProp
   if (!inView || isPending) {
     content = <span aria-label="Đang tải điểm Google" className="inline-block h-3 w-28 animate-pulse rounded-sm bg-muted" />
   } else if (isError || !data || data.rating === null) {
-    content = <span>Chưa có điểm Google</span>
+    content = null
   } else {
     content = (
       <>

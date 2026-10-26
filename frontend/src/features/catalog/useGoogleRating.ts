@@ -16,10 +16,10 @@ const options = (vendorId: string, mode: GoogleRatingMode, enabled = true) => ({
   enabled: enabled && !!vendorId,
   staleTime: STALE_MS,
   gcTime: STALE_MS,
-  // Thử lại 1 lần với lỗi tạm thời (502, mạng); 404 (chưa có PlaceId) và 429 (vượt hạn mức) thì không
+  // Thử lại 1 lần với lỗi tạm thời (502, mạng); 404 (chưa có PlaceId), 429 (vượt hạn mức), 503 (BE chưa có khóa Google) thì không
   retry: (failureCount: number, error: Error) => {
     const status = (error as { status?: number }).status ?? 0
-    return failureCount < 1 && !(status >= 400 && status < 500)
+    return failureCount < 1 && !(status >= 400 && status < 500) && status !== 503
   },
   refetchOnWindowFocus: false,
 })

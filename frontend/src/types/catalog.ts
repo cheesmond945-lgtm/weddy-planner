@@ -21,10 +21,16 @@ export interface ServiceSummary {
   name: string
   category: CategoryRef
   location: string
+  /** Địa chỉ đầy đủ (số nhà, phường, tỉnh/thành); dữ liệu giả có thể không có */
+  address?: string
   /** Giá thấp nhất trong các gói, đơn vị đồng */
   priceFrom: number
+  /** Giá cao nhất trong các gói, đồng (dữ liệu giả có thể không có) */
+  priceTo?: number
   // Điểm Google Maps không thuộc catalog (CSDL không có cột điểm): lấy riêng qua GET /vendors/{id}/google-rating
   coverImageUrl: string
+  /** Link Google Maps của NCC (vendor_profiles.google_maps_url); hiện thay điểm khi chưa lấy được điểm Google */
+  googleMapsUrl?: string | null
 }
 
 export interface ServicePackage {
@@ -32,6 +38,8 @@ export interface ServicePackage {
   name: string
   description: string
   price: number
+  /** Sức chứa tối đa của gói (khách), null khi gói không ghi */
+  capacity?: number | null
 }
 
 export interface ServiceAlbum {

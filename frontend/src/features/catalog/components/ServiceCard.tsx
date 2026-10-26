@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { formatMoney } from '@/lib/format'
+import { formatPriceRange } from '@/lib/format'
 import { useReveal } from '@/lib/useReveal'
 import { paths } from '@/routes/paths'
 import type { ServiceSummary } from '@/types/catalog'
@@ -44,9 +44,9 @@ export function ServiceCard({ service, index = 0, imageAction, extraActions, bad
             {service.name}
           </Link>
         </h3>
-        <RatingMeta location={service.location} vendorId={service.id} />
+        <RatingMeta service={service} />
         <div className="text-[11px] text-muted-foreground">
-          Từ <b className="text-sm font-semibold text-ink">{formatMoney(service.priceFrom)}</b>
+          <b className="text-sm font-semibold text-ink">{formatPriceRange(service.priceFrom, service.priceTo)}</b>
         </div>
         <div className="mt-auto flex gap-[7px] pt-2">
           <Button asChild size="sm" className="min-h-[34px] flex-1 rounded-[9px] text-[10px]">

@@ -109,7 +109,7 @@ export function PlanSlots({ categorySlugs, items, hasWedding }: PlanSlotsProps) 
               <div className="flex flex-wrap items-center gap-4 rounded-lg border border-line bg-surface px-[18px] py-4">
                 <div className="min-w-[200px] flex-1">
                   <b className="font-serif text-base font-semibold">{item.service.name}</b>
-                  <RatingMeta location={item.service.location} vendorId={item.service.id} />
+                  <RatingMeta service={item.service} />
                   <div className="mt-1 text-[13px] text-muted-foreground">
                     {item.packageName}: {formatMoney(item.price)}
                   </div>

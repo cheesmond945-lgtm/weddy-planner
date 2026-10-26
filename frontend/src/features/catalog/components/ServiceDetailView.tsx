@@ -1,4 +1,4 @@
-import { Check, Info, Lock, MapPin, Star } from 'lucide-react'
+import { Check, ExternalLink, Info, Lock, MapPin, Star } from 'lucide-react'
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { formatNumber } from '@/lib/format'
@@ -8,6 +8,7 @@ import { ServiceGallery } from './ServiceGallery'
 import { ServiceInfoPanel } from './ServiceInfoPanel'
 import { useGoogleRating } from '../useGoogleRating'
 import { GoogleAttribution } from './GoogleAttribution'
+import { mapsHref } from './GoogleMapsLink'
 import { GoogleReviewsPanel } from './GoogleReviewsPanel'
 import { ServiceSidebar } from './ServiceSidebar'
 
@@ -75,10 +76,18 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
 
       <div className="mt-3 mb-3.5 flex flex-wrap items-center gap-x-[18px] gap-y-2.5 text-sm text-muted-foreground">
         <HeaderRating vendorId={service.id} onShowReviews={showReviews} />
-        <span className="inline-flex items-center gap-1.5">
+        <a
+          href={mapsHref(service)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Xem trên Google Maps"
+          className="inline-flex items-center gap-1.5 font-medium text-primary underline underline-offset-[3px] hover:text-gold"
+        >
           <MapPin className="size-4" aria-hidden />
           {service.address}
-        </span>
+          <ExternalLink className="size-3.5" aria-hidden />
+          <span className="sr-only">(mở Google Maps trong tab mới)</span>
+        </a>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -125,7 +134,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
             {tab === 'info' ? (
               <ServiceInfoPanel service={service} onOpenGallery={openGallery} />
             ) : (
-              <GoogleReviewsPanel vendorId={service.id} />
+              <GoogleReviewsPanel vendorId={service.id} mapsUrl={service.googleMapsUrl} />
             )}
           </div>
         </div>
@@ -146,7 +155,8 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
 function HeaderRating({ vendorId, onShowReviews }: { vendorId: string; onShowReviews: () => void }) {
   const { data, isPending, isError } = useGoogleRating(vendorId, 'reviews')
   if (isPending) return <span aria-label="Đang tải điểm Google" className="inline-block h-4 w-40 animate-pulse rounded-sm bg-muted" />
-  if (isError || !data || data.rating === null) return <span>Chưa có điểm Google</span>
+  // Chưa có điểm thì không hiện gì: địa chỉ bên cạnh đã là link mở Google Maps
+  if (isError || !data || data.rating === null) return null
   return (
     <span className="inline-flex items-center gap-1.5">
       <Star className="size-[17px] fill-gold text-gold" aria-hidden />

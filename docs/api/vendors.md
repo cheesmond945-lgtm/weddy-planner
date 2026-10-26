@@ -197,6 +197,37 @@ FE gửi `multipart/form-data` tới `uploadUrl` gồm `file`, `api_key`, `times
 
 Lỗi: 400 VALIDATION_ERROR
 
+### GET /vendors/{vendorId}/google-rating?fields=summary|reviews
+Role: Public
+
+Điểm và đánh giá Google Maps của nhà cung cấp, BE gọi Places API (New) lúc nhận request. FE không gọi thẳng Google và không giữ khóa API.
+
+- CSDL chỉ có `google_maps_url`. BE lấy chuỗi tìm kiếm trong link (`?query=`, `/maps/search/…`, `/maps/place/…`); link rút gọn thì tìm bằng tên + địa chỉ, rồi Text Search ra `placeId`.
+- `placeId` nhớ trong bộ nhớ BE; điểm và đánh giá cache 10 phút, **không lưu CSDL** (điều khoản Google Maps Platform).
+- `fields=summary` (mặc định): điểm và số đánh giá. `fields=reviews`: kèm tối đa 5 đánh giá (giới hạn của Places API), `text` là bản gốc.
+- Khóa: `GOOGLE_MAPS_API_KEY` trong `backend/.env`.
+
+Response 200
+
+```json
+{
+  "data": {
+    "placeId": "ChIJ…",
+    "rating": 4.7,
+    "userRatingCount": 186,
+    "googleMapsUri": "https://maps.google.com/?cid=…",
+    "reviews": [
+      { "authorName": "…", "authorUri": "…", "authorPhotoUri": "…", "rating": 5, "text": "…", "publishTime": "2026-05-01T08:00:00Z", "relativeTime": "5 tháng trước", "languageCode": "vi" }
+    ],
+    "reviewsSortedBy": "relevance"
+  }
+}
+```
+
+`rating` là `null` khi địa điểm chưa có điểm.
+
+Lỗi: 404 `VENDOR_NOT_FOUND`, 404 `GOOGLE_PLACE_NOT_FOUND` (không tìm thấy địa điểm), 429 `GOOGLE_QUOTA_EXCEEDED`, 502 `GOOGLE_UNAVAILABLE`, 503 `GOOGLE_NOT_CONFIGURED` (chưa có khóa). FE hiện "Chưa có điểm Google" với mọi lỗi.
+
 ## Mã lỗi riêng
 
 | HTTP | `code` | Khi nào |

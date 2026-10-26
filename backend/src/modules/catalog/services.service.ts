@@ -38,7 +38,7 @@ export const categoryRank = (slug: string) => {
 /**
  * Frontend gọi "dịch vụ" = nhà cung cấp (vendor_profiles) đã duyệt có ít nhất một gói Approved.
  * "Gói" của dịch vụ = service_packages; mỗi gói là một album (package_albums).
- * Rating/reviewCount (điểm Google Maps) chưa có trong CSDL nên trả 0.
+ * Rating/reviewCount (điểm Google Maps) chưa có trong CSDL nên trả 0; FE hiện link googleMapsUrl để xem trên Google.
  */
 @Injectable()
 export class ServicesService {
@@ -71,10 +71,13 @@ export class ServicesService {
       name: v.business_name,
       category: { id: v.service_categories.id, slug: categorySlug(v.service_categories.name), name: v.service_categories.name },
       location: v.city,
+      address: [v.address, v.ward, v.city].filter(Boolean).join(', '),
       priceFrom: Math.min(...prices),
+      priceTo: Math.max(...prices),
       rating: 0,
       reviewCount: 0,
       coverImageUrl: cover ? this.img(cover.url) : '',
+      googleMapsUrl: v.google_maps_url,
     };
   }
 
@@ -158,7 +161,6 @@ export class ServicesService {
     return {
       ...this.summarize(v),
       priceTo: Math.max(...prices),
-      address: [v.address, v.ward, v.city].filter(Boolean).join(', '),
       description: v.description,
       highlights: [] as string[],
       capacity: capacities.length ? Math.max(...capacities) : null,
@@ -167,7 +169,7 @@ export class ServicesService {
       isVerified: true,
       isGuaranteed: false,
       images: [...covers, ...others].slice(0, 60).map((a) => this.img(a.url)),
-      packages: v.service_packages.map((p) => ({ id: p.id, name: p.name, description: p.description, price: Number(p.price) })),
+      packages: v.service_packages.map((p) => ({ id: p.id, name: p.name, description: p.description, price: Number(p.price), capacity: p.capacity })),
       albums: v.service_packages.map((p) => ({
         id: p.id,
         title: p.name,

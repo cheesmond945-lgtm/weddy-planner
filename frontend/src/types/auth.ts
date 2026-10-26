@@ -26,9 +26,9 @@ export interface LoginRequest {
   password: string
 }
 
+/** Đăng ký không còn ô số điện thoại; cặp đôi bổ sung số ở Thông tin cá nhân nếu muốn. */
 export interface RegisterRequest {
   name: string
-  phone: string
   email: string
   password: string
 }
