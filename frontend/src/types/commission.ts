@@ -99,6 +99,8 @@ export interface CommissionStatementSummary {
   dueDate: string
   /** Đã quá hạn mà còn phải trả */
   isOverdue: boolean
+  /** Đã thanh toán sau hạn bao nhiêu ngày; null: chưa trả hoặc trả đúng hạn */
+  lateDays: number | null
 }
 
 export interface CommissionStatement extends CommissionStatementSummary {

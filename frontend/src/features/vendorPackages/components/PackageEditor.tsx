@@ -1,4 +1,4 @@
-import { Send, Sparkles, Trash2 } from 'lucide-react'
+import { EyeOff, Send, Sparkles, Trash2 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { FormField } from '@/components/FormField'
@@ -14,7 +14,7 @@ import { paths } from '@/routes/paths'
 import type { CategoryRef } from '@/types/catalog'
 import type { VendorFile, VendorProfile } from '@/types/vendor'
 import type { VendorPackage } from '@/types/vendorPackage'
-import { canSubmitPackage, isVenue } from '../constants'
+import { canSubmitPackage, isVenue, workingCopy } from '../constants'
 import { usePackageAction, useSavePackage, useSuggestPackageDescription } from '../hooks'
 import { EMPTY_PACKAGE, toFormValues, toRequest, validatePackage, type PackageFormValues } from '../packageForm'
 import { useListHref } from './PackageHeader'
@@ -57,6 +57,8 @@ interface PackageEditorProps {
   /** Chỉ xem (gói chờ duyệt, đã đăng, ẩn): mọi ô bị khóa, hàng nút do `actions` quyết định */
   readOnly?: boolean
   actions?: ReactNode
+  /** Gói đã đăng: thoát form sửa bản cập nhật về chế độ xem (nút Hủy khi chưa lưu bản cập nhật nào, sau khi xóa bản cập nhật) */
+  onExitUpdate?: () => void
 }
 
 /**
@@ -65,16 +67,20 @@ interface PackageEditorProps {
  * Lưu nháp: cần tên gói và giá. Gửi duyệt: thêm mô tả, ít nhất một ảnh, và hồ sơ đã được duyệt đúng lĩnh vực.
  * Đặt key theo pkg.updatedAt để nạp lại sau khi lưu.
  */
-export function PackageEditor({ pkg, profile, category, vendorName, readOnly, actions }: PackageEditorProps) {
+export function PackageEditor({ pkg, profile, category, vendorName, readOnly, actions, onExitUpdate }: PackageEditorProps) {
   const navigate = useNavigate()
   const listHref = useListHref()
   const save = useSavePackage()
   const action = usePackageAction()
   const suggest = useSuggestPackageDescription()
-  const baseline = useMemo(() => (pkg ? toFormValues(pkg) : EMPTY_PACKAGE), [pkg])
+  // Gói đã đăng: form là bản cập nhật (nếu đã có), bản đang đăng giữ nguyên tới khi Admin duyệt
+  const baseline = useMemo(() => (pkg ? toFormValues(workingCopy(pkg)) : EMPTY_PACKAGE), [pkg])
   const [values, setValues] = useState(baseline)
   const [checkMode, setCheckMode] = useState<'draft' | 'submit' | null>(null)
-  const [confirm, setConfirm] = useState<'submit' | 'remove' | 'ai' | null>(null)
+  const [confirm, setConfirm] = useState<'submit' | 'remove' | 'hide' | 'ai' | null>(null)
+  const isUpdate = pkg?.status === 'PUBLISHED'
+  const hasUpdate = isUpdate && !!pkg.pendingUpdate
+  const resubmit = pkg?.status === 'NEEDS_REVISION' || pkg?.pendingUpdate?.status === 'NEEDS_REVISION'
 
   const venue = isVenue(category)
   const canSubmit = canSubmitPackage(profile, category)
@@ -248,21 +254,33 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
         actions
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
-          {pkg && (
+          {pkg && (!isUpdate || hasUpdate) && (
             <Button type="button" variant="outline" className="mr-auto h-10 border-warn/50 text-warn hover:bg-warn-soft" disabled={busy} onClick={() => setConfirm('remove')}>
               <Trash2 />
               Xóa bản nháp
             </Button>
           )}
-          <Button asChild variant="outline" className="h-10 border-line-strong">
-            <Link to={listHref}>Hủy</Link>
-          </Button>
+          {hasUpdate && (
+            <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={() => setConfirm('hide')}>
+              <EyeOff />
+              Ẩn dịch vụ
+            </Button>
+          )}
+          {isUpdate && !hasUpdate && onExitUpdate ? (
+            <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={onExitUpdate}>
+              Hủy
+            </Button>
+          ) : (
+            <Button asChild variant="outline" className="h-10 border-line-strong">
+              <Link to={listHref}>Hủy</Link>
+            </Button>
+          )}
           <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={() => handleSave(false)}>
             Lưu nháp
           </Button>
           <Button type="submit" className="h-10" disabled={busy} title={canSubmit ? undefined : 'Cần hồ sơ đã được duyệt đúng lĩnh vực'}>
             <Send />
-            {busy ? 'Đang lưu…' : pkg?.status === 'NEEDS_REVISION' ? 'Gửi lại duyệt' : 'Gửi duyệt'}
+            {busy ? 'Đang lưu…' : resubmit ? 'Gửi lại duyệt' : 'Gửi duyệt'}
           </Button>
         </div>
       )}
@@ -270,21 +288,37 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
       <ConfirmDialog
         open={confirm === 'submit'}
         onOpenChange={(o) => !o && setConfirm(null)}
-        title={pkg?.status === 'NEEDS_REVISION' ? 'Gửi lại gói để duyệt?' : 'Gửi gói để duyệt?'}
+        title={isUpdate ? (resubmit ? 'Gửi lại bản cập nhật để duyệt?' : 'Gửi bản cập nhật để duyệt?') : resubmit ? 'Gửi lại gói để duyệt?' : 'Gửi gói để duyệt?'}
         confirmLabel="Gửi duyệt"
         onConfirm={() => doSave(true)}
       >
-        <p>Sau khi gửi, gói chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý. Gói chưa hiển thị công khai cho tới khi được duyệt.</p>
+        <p>
+          {isUpdate
+            ? 'Sau khi gửi, bản cập nhật chỉ đọc cho tới khi Admin xử lý. Trong thời gian này khách vẫn thấy phiên bản đang đăng.'
+            : 'Sau khi gửi, gói chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý. Gói chưa hiển thị công khai cho tới khi được duyệt.'}
+        </p>
       </ConfirmDialog>
       <ConfirmDialog
         open={confirm === 'remove'}
         onOpenChange={(o) => !o && setConfirm(null)}
         danger
-        title="Xóa bản nháp?"
-        confirmLabel="Xóa gói"
-        onConfirm={() => pkg && action.mutate({ action: 'remove', pkg }, { onSuccess: () => navigate(listHref, { replace: true }) })}
+        title={isUpdate ? 'Xóa bản cập nhật nháp?' : 'Xóa bản nháp?'}
+        confirmLabel={isUpdate ? 'Xóa bản cập nhật' : 'Xóa gói'}
+        onConfirm={() =>
+          pkg &&
+          (isUpdate
+            ? action.mutate({ action: 'discardUpdate', pkg }, { onSuccess: () => onExitUpdate?.() })
+            : action.mutate({ action: 'remove', pkg }, { onSuccess: () => navigate(listHref, { replace: true }) }))
+        }
       >
-        <p>Gói “{pkg?.name}” và toàn bộ ảnh của nó sẽ bị xóa. Không thể hoàn tác.</p>
+        <p>
+          {isUpdate
+            ? `Mọi thay đổi chưa được duyệt sẽ bị bỏ. Gói “${pkg?.name}” giữ nguyên phiên bản đang đăng.`
+            : `Gói “${pkg?.name}” và toàn bộ ảnh của nó sẽ bị xóa. Không thể hoàn tác.`}
+        </p>
+      </ConfirmDialog>
+      <ConfirmDialog open={confirm === 'hide'} onOpenChange={(o) => !o && setConfirm(null)} title="Ẩn dịch vụ?" confirmLabel="Ẩn dịch vụ" onConfirm={() => pkg && action.mutate({ action: 'hide', pkg })}>
+        <p>Khách sẽ không còn thấy dịch vụ này. Bản cập nhật đang sửa được giữ lại, bạn sửa tiếp được sau khi khôi phục.</p>
       </ConfirmDialog>
       <ConfirmDialog open={confirm === 'ai'} onOpenChange={(o) => !o && setConfirm(null)} title="Thay phần mô tả hiện tại?" confirmLabel="Tạo mới" onConfirm={generate}>
         <p>Nội dung bạn đã nhập trong ô Mô tả sẽ được thay bằng đoạn do AI gợi ý.</p>

@@ -6,7 +6,7 @@ import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { VendorPackage } from '@/types/vendorPackage'
-import { PACKAGE_STATUS } from '../constants'
+import { PACKAGE_STATUS, UPDATE_LABEL } from '../constants'
 
 /** Nhãn trạng thái gói; `large` = to và nổi bật như nhãn trạng thái ở trang Hồ sơ NCC. */
 export function PackageStatusBadge({ pkg, large }: { pkg: Pick<VendorPackage, 'status'>; large?: boolean }) {
@@ -81,6 +81,11 @@ export function PackageTable({ packages, startIndex = 0, showCapacity }: Package
             </td>
             <td className={td}>
               <PackageStatusBadge pkg={pkg} />
+              {pkg.pendingUpdate && (
+                <span className={cn('mt-1 block w-max rounded-pill px-2.5 py-[3px] text-xs font-medium whitespace-nowrap', UPDATE_LABEL[pkg.pendingUpdate.status].className)}>
+                  {UPDATE_LABEL[pkg.pendingUpdate.status].label}
+                </span>
+              )}
             </td>
             <td className={cn(td, 'whitespace-nowrap tabular-nums')}>{formatUpdated(pkg.updatedAt)}</td>
             {showCapacity && <td className={cn(td, 'text-right whitespace-nowrap tabular-nums')}>{pkg.capacity ? `${pkg.capacity} khách` : '—'}</td>}

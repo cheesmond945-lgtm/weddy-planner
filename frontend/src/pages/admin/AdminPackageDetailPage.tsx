@@ -6,9 +6,12 @@ import { PageTitle } from '@/components/PageTitle'
 import { Button } from '@/components/ui/button'
 import { useAdminPackage, useReviewPackage } from '@/features/adminCatalog/hooks'
 import { AdminConfirm } from '@/features/adminShared/components/AdminConfirm'
+import { ReviewKindBadge } from '@/features/adminVendors/components/ReviewKindBadge'
 import { PackageEditor } from '@/features/vendorPackages/components/PackageEditor'
 import { PackageStatusBadge } from '@/features/vendorPackages/components/PackageTable'
 import { controlClass, Notice } from '@/features/vendors/components/FormParts'
+import { formatDateTime } from '@/features/adminShared/format'
+import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { AdminPackage } from '@/types/admin'
@@ -24,6 +27,7 @@ function toVendorPackage(p: AdminPackage): VendorPackage {
     category: p.category,
     status: p.status as PackageStatus,
     reviewNote: p.reviewNote,
+    pendingUpdate: null,
     tags: p.tags,
     capacity: p.capacity,
     photos: p.photos.map((url, i) => ({ url, publicId: url, fileName: `Ảnh ${i + 1}`, size: 0, mimeType: 'image/jpeg' })),
@@ -32,8 +36,27 @@ function toVendorPackage(p: AdminPackage): VendorPackage {
   }
 }
 
+/** Các mục bản cập nhật khác bản đang hiển thị với khách. */
+function changesOf(p: AdminPackage) {
+  const old = p.published
+  if (!old) return []
+  const list: string[] = []
+  if (old.name !== p.name) list.push(`Tên gói: “${old.name}” → “${p.name}”`)
+  if (old.price !== p.price) list.push(`Giá: ${formatMoney(old.price)} → ${formatMoney(p.price)}`)
+  if (old.capacity !== p.capacity) list.push(`Sức chứa: ${old.capacity ? `${old.capacity} khách` : '—'} → ${p.capacity ? `${p.capacity} khách` : '—'}`)
+  if ([...old.tags].sort().join() !== [...p.tags].sort().join()) list.push(`Tags: ${old.tags.join(', ') || '—'} → ${p.tags.join(', ') || '—'}`)
+  if (old.description !== p.description) list.push('Mô tả')
+  if (old.photos.join() !== p.photos.join()) {
+    const added = p.photos.filter((u) => !old.photos.includes(u)).length
+    const removed = old.photos.filter((u) => !p.photos.includes(u)).length
+    list.push(`Ảnh: ${[added && `thêm ${added}`, removed && `bỏ ${removed}`].filter(Boolean).join(', ') || 'đổi thứ tự / ảnh bìa'} (${old.photos.length} → ${p.photos.length} ảnh)`)
+  }
+  return list
+}
+
 /**
  * Chi tiết gói dịch vụ (Admin): dùng đúng form của trang gói NCC ở chế độ chỉ đọc.
+ * Gói đã đăng có bản cập nhật: form hiện bản cập nhật, khách vẫn thấy bản đang đăng tới khi Admin phê duyệt.
  * Gói đang chờ duyệt: Phê duyệt (đăng công khai) hoặc Yêu cầu chỉnh sửa kèm lý do; đều có popup xác nhận.
  */
 export default function AdminPackageDetailPage() {
@@ -68,6 +91,8 @@ export default function AdminPackageDetailPage() {
   }
 
   const pending = p.status === 'PENDING'
+  const isUpdate = p.reviewKind === 'UPDATE'
+  const changes = changesOf(p)
 
   function openRevisionConfirm() {
     if (!note.trim()) return setFormError('Nhập lý do chỉnh sửa / bổ sung để nhà cung cấp biết cần sửa gì.')
@@ -131,13 +156,42 @@ export default function AdminPackageDetailPage() {
 
   return (
     <div className="mx-auto max-w-[980px]">
-      <PageTitle title="Chi tiết gói dịch vụ" actions={<PackageStatusBadge pkg={{ status: pkg.status }} large />} />
+      <PageTitle
+        title="Chi tiết gói dịch vụ"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <PackageStatusBadge pkg={{ status: pkg.status }} large />
+            {p.reviewKind && <ReviewKindBadge kind={p.reviewKind} />}
+          </div>
+        }
+      />
 
+      {isUpdate && pending && (
+        <Notice tone="info" title="Gói đang đăng, nhà cung cấp vừa gửi bản cập nhật.">
+          <p>Nội dung bên dưới là bản cập nhật. Khách vẫn thấy phiên bản đang đăng cho tới khi bạn phê duyệt.</p>
+          {changes.length > 0 && (
+            <ul className="mt-1 list-disc pl-5">
+              {changes.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          )}
+        </Notice>
+      )}
+      {pending && p.lastRevision?.note && (
+        <Notice tone="warn" title={`Gói đã gửi lại sau lần yêu cầu chỉnh sửa trước${p.lastRevision.reviewedAt ? ` (${formatDateTime(p.lastRevision.reviewedAt)})` : ''}`}>
+          <p>
+            <b>Lý do lần trước:</b> {p.lastRevision.note}
+          </p>
+          <p>Đối chiếu xem nhà cung cấp đã sửa đúng các mục này chưa.</p>
+        </Notice>
+      )}
       {p.status === 'NEEDS_REVISION' && p.reviewNote && (
-        <Notice tone="warn" title="Đã yêu cầu nhà cung cấp chỉnh sửa / bổ sung">
+        <Notice tone="warn" title={p.published ? 'Đã yêu cầu nhà cung cấp chỉnh sửa / bổ sung bản cập nhật' : 'Đã yêu cầu nhà cung cấp chỉnh sửa / bổ sung'}>
           <p>
             <b>Lý do:</b> {p.reviewNote}
           </p>
+          {p.published && <p>Gói vẫn hiển thị phiên bản đang đăng trong lúc nhà cung cấp chỉnh sửa.</p>}
         </Notice>
       )}
 
@@ -151,10 +205,18 @@ export default function AdminPackageDetailPage() {
         title="Phê duyệt gói dịch vụ này?"
         confirmLabel="Phê duyệt"
         pending={review.isPending}
-        notice="Gói sẽ được hiển thị công khai và nhà cung cấp nhận được thông báo."
+        notice={isUpdate ? 'Khách sẽ thấy nội dung mới ngay và nhà cung cấp nhận được thông báo.' : 'Gói sẽ được hiển thị công khai và nhà cung cấp nhận được thông báo.'}
         onConfirm={submitReview}
       >
-        Gói <strong className="text-ink">{p.name}</strong> của {p.vendor.name} sẽ chuyển sang trạng thái Đã đăng.
+        {isUpdate ? (
+          <>
+            Bản cập nhật của gói <strong className="text-ink">{p.name}</strong> ({p.vendor.name}) sẽ thay cho phiên bản đang đăng.
+          </>
+        ) : (
+          <>
+            Gói <strong className="text-ink">{p.name}</strong> của {p.vendor.name} sẽ chuyển sang trạng thái Đã đăng.
+          </>
+        )}
       </AdminConfirm>
 
       <AdminConfirm
@@ -165,7 +227,11 @@ export default function AdminPackageDetailPage() {
         title="Gửi yêu cầu chỉnh sửa / bổ sung?"
         confirmLabel="Gửi yêu cầu"
         pending={review.isPending}
-        notice="Gói chuyển sang Cần chỉnh sửa. Nhà cung cấp sẽ nhận được thông báo kèm lý do."
+        notice={
+          isUpdate
+            ? 'Bản cập nhật chuyển sang Cần chỉnh sửa, gói vẫn hiển thị phiên bản đang đăng. Nhà cung cấp sẽ nhận được thông báo kèm lý do.'
+            : 'Gói chuyển sang Cần chỉnh sửa. Nhà cung cấp sẽ nhận được thông báo kèm lý do.'
+        }
         onConfirm={submitReview}
       >
         Yêu cầu chỉnh sửa gói <strong className="text-ink">{p.name}</strong> với lý do: “{note.trim()}”.

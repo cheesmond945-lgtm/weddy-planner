@@ -1,5 +1,7 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminApi } from '@/api/admin'
+import { toast } from '@/components/ui/toast'
+import { useRefreshAdminSummary } from '@/features/adminShared/hooks'
 import { useAuth } from '@/store/auth'
 import type { AdminStatementQuery } from '@/types/admin'
 
@@ -14,4 +16,20 @@ export function useAdminStatements(query: AdminStatementQuery) {
 export function useAdminStatement(id: string) {
   const enabled = useAuth().user?.role === 'ADMIN'
   return useQuery({ queryKey: ['admin', 'statement', id] as const, queryFn: () => adminApi.getStatement(id), enabled, staleTime: 0 })
+}
+
+/** Ghi nhận đã thanh toán (NCC chuyển khoản ngoài VNPay), có thể mở khóa tài khoản NCC luôn. */
+export function useRecordStatementPayment() {
+  const qc = useQueryClient()
+  const refresh = useRefreshAdminSummary()
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; transactionCode: string; paidAt: string; unlock: boolean }) => adminApi.recordStatementPayment(id, body),
+    onSuccess: (s, { unlock }) => {
+      qc.setQueryData(['admin', 'statement', s.id], s)
+      void qc.invalidateQueries({ queryKey: keys.all })
+      void qc.invalidateQueries({ queryKey: ['admin', 'users'] })
+      refresh()
+      toast(`Đã ghi nhận thanh toán bảng kê ${s.code}${unlock ? ' và mở khóa tài khoản nhà cung cấp' : ''}.`)
+    },
+  })
 }

@@ -13,17 +13,17 @@ datasource db {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model commission_statements {
-  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  vendor_id        String          @db.Uuid
-  period_month     DateTime        @db.Date
-  due_date         DateTime        @db.Date
-  total_orders     Int             @default(0)
-  total_amount     Decimal         @default(0) @db.Decimal(18, 2)
-  transaction_code String?         @unique @db.VarChar(100)
-  status           String          @default("Unpaid") @db.VarChar(20)
-  paid_date        DateTime?       @db.Timestamptz(6)
-  created_date     DateTime        @default(now()) @db.Timestamptz(6)
-  vendor_profiles  vendor_profiles @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendor_id        String?          @db.Uuid
+  period_month     DateTime?        @db.Date
+  due_date         DateTime?        @db.Date
+  total_orders     Int?             @default(0)
+  total_amount     Decimal?         @default(0) @db.Decimal(18, 2)
+  transaction_code String?          @unique @db.VarChar(100)
+  status           String?          @default("Unpaid") @db.VarChar(20)
+  paid_date        DateTime?        @db.Timestamptz(6)
+  created_date     DateTime?        @default(now()) @db.Timestamptz(6)
+  vendor_profiles  vendor_profiles? @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   commissions      commissions[]
 
   @@unique([vendor_id, period_month])
@@ -34,15 +34,15 @@ model commission_statements {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model commissions {
-  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  order_id              String                @unique @db.Uuid
-  statement_id          String                @db.Uuid
-  order_amount          Decimal               @db.Decimal(18, 2)
-  rate                  Decimal               @db.Decimal(5, 2)
-  amount                Decimal               @db.Decimal(18, 2)
-  created_date          DateTime              @default(now()) @db.Timestamptz(6)
-  orders                orders                @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  commission_statements commission_statements @relation(fields: [statement_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id              String?                @unique @db.Uuid
+  statement_id          String?                @db.Uuid
+  order_amount          Decimal?               @db.Decimal(18, 2)
+  rate                  Decimal?               @db.Decimal(5, 2)
+  amount                Decimal?               @db.Decimal(18, 2)
+  created_date          DateTime?              @default(now()) @db.Timestamptz(6)
+  orders                orders?                @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  commission_statements commission_statements? @relation(fields: [statement_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([statement_id], map: "ix_commissions_statement")
 }
@@ -51,34 +51,34 @@ model commissions {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model consultation_requests {
-  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  category_id        String             @db.Uuid
-  brand_name         String             @db.VarChar(150)
-  contact_name       String             @db.VarChar(100)
-  phone_number       String             @db.VarChar(20)
-  email              String             @db.VarChar(255)
-  is_contacted       Boolean            @default(false)
-  contacted_date     DateTime?          @db.Timestamptz(6)
-  qualification      String             @default("Pending") @db.VarChar(20)
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category_id        String?             @db.Uuid
+  brand_name         String?             @db.VarChar(150)
+  contact_name       String?             @db.VarChar(100)
+  phone_number       String?             @db.VarChar(20)
+  email              String?             @db.VarChar(255)
+  is_contacted       Boolean?            @default(false)
+  contacted_date     DateTime?           @db.Timestamptz(6)
+  qualification      String?             @default("Pending") @db.VarChar(20)
   admin_note         String?
-  created_date       DateTime           @default(now()) @db.Timestamptz(6)
-  updated_date       DateTime           @default(now()) @db.Timestamptz(6)
-  service_categories service_categories @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  created_date       DateTime?           @default(now()) @db.Timestamptz(6)
+  updated_date       DateTime?           @default(now()) @db.Timestamptz(6)
+  service_categories service_categories? @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model conversations {
-  id                                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  couple_id                            String             @db.Uuid
-  vendor_id                            String             @db.Uuid
-  category_id                          String             @db.Uuid
-  last_message_date                    DateTime?          @db.Timestamptz(6)
-  created_date                         DateTime           @default(now()) @db.Timestamptz(6)
-  service_categories                   service_categories @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users_conversations_couple_idTousers users              @relation("conversations_couple_idTousers", fields: [couple_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users_conversations_vendor_idTousers users              @relation("conversations_vendor_idTousers", fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  couple_id                            String?             @db.Uuid
+  vendor_id                            String?             @db.Uuid
+  category_id                          String?             @db.Uuid
+  last_message_date                    DateTime?           @db.Timestamptz(6)
+  created_date                         DateTime?           @default(now()) @db.Timestamptz(6)
+  service_categories                   service_categories? @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_conversations_couple_idTousers users?              @relation("conversations_couple_idTousers", fields: [couple_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_conversations_vendor_idTousers users?              @relation("conversations_vendor_idTousers", fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   messages                             messages[]
 
   @@unique([couple_id, vendor_id])
@@ -91,7 +91,7 @@ model conversations {
 model favorite_vendors {
   user_id         String          @db.Uuid
   vendor_id       String          @db.Uuid
-  created_date    DateTime        @default(now()) @db.Timestamptz(6)
+  created_date    DateTime?       @default(now()) @db.Timestamptz(6)
   users           users           @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   vendor_profiles vendor_profiles @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -102,12 +102,12 @@ model favorite_vendors {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model invoices {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  order_id     String   @db.Uuid
-  invoice_code String   @unique @db.VarChar(30)
-  type         String   @db.VarChar(20)
-  created_date DateTime @default(now()) @db.Timestamptz(6)
-  orders       orders   @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id     String?   @db.Uuid
+  invoice_code String?   @unique @db.VarChar(30)
+  type         String?   @db.VarChar(20)
+  created_date DateTime? @default(now()) @db.Timestamptz(6)
+  orders       orders?   @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([order_id, type])
 }
@@ -116,18 +116,18 @@ model invoices {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model messages {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversation_id String        @db.Uuid
-  sender_id       String?       @db.Uuid
-  order_id        String?       @db.Uuid
-  content         String
-  type            String        @default("Text") @db.VarChar(20)
-  is_read         Boolean       @default(false)
-  read_date       DateTime?     @db.Timestamptz(6)
-  sent_date       DateTime      @default(now()) @db.Timestamptz(6)
-  conversations   conversations @relation(fields: [conversation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  orders          orders?       @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users           users?        @relation(fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id String?        @db.Uuid
+  sender_id       String?        @db.Uuid
+  order_id        String?        @db.Uuid
+  content         String?
+  type            String?        @default("Text") @db.VarChar(20)
+  is_read         Boolean?       @default(false)
+  read_date       DateTime?      @db.Timestamptz(6)
+  sent_date       DateTime?      @default(now()) @db.Timestamptz(6)
+  conversations   conversations? @relation(fields: [conversation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orders          orders?        @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users           users?         @relation(fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([conversation_id, sent_date], map: "ix_messages_conv")
 }
@@ -136,16 +136,16 @@ model messages {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model notifications {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id        String    @db.Uuid
-  type           String    @db.VarChar(50)
-  title          String    @db.VarChar(255)
-  content        String
+  user_id        String?   @db.Uuid
+  type           String?   @db.VarChar(50)
+  title          String?   @db.VarChar(255)
+  content        String?
   reference_type String?   @db.VarChar(50)
   reference_id   String?   @db.Uuid
-  is_read        Boolean   @default(false)
+  is_read        Boolean?  @default(false)
   read_date      DateTime? @db.Timestamptz(6)
-  created_date   DateTime  @default(now()) @db.Timestamptz(6)
-  users          users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  created_date   DateTime? @default(now()) @db.Timestamptz(6)
+  users          users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([user_id, is_read, created_date], map: "ix_notifications_user")
 }
@@ -154,14 +154,14 @@ model notifications {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model order_items {
-  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  order_id   String  @db.Uuid
-  item_name  String  @db.VarChar(255)
-  unit       String  @default("Gói") @db.VarChar(30)
-  quantity   Int     @default(1)
-  unit_price Decimal @db.Decimal(18, 2)
-  amount     Decimal @db.Decimal(18, 2)
-  orders     orders  @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id   String?  @db.Uuid
+  item_name  String?  @db.VarChar(255)
+  unit       String?  @default("Gói") @db.VarChar(30)
+  quantity   Int?     @default(1)
+  unit_price Decimal? @db.Decimal(18, 2)
+  amount     Decimal? @db.Decimal(18, 2)
+  orders     orders?  @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([order_id], map: "ix_order_items_order")
 }
@@ -181,16 +181,16 @@ model order_revision_changes {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model order_revisions {
   id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  order_id               String                   @db.Uuid
-  revision_type          String                   @db.VarChar(20)
+  order_id               String?                  @db.Uuid
+  revision_type          String?                  @db.VarChar(20)
   request_note           String?
-  old_total_amount       Decimal                  @db.Decimal(18, 2)
+  old_total_amount       Decimal?                 @db.Decimal(18, 2)
   new_total_amount       Decimal?                 @db.Decimal(18, 2)
-  status                 String                   @default("Requested") @db.VarChar(20)
-  created_date           DateTime                 @default(now()) @db.Timestamptz(6)
+  status                 String?                  @default("Requested") @db.VarChar(20)
+  created_date           DateTime?                @default(now()) @db.Timestamptz(6)
   applied_date           DateTime?                @db.Timestamptz(6)
   order_revision_changes order_revision_changes[]
-  orders                 orders                   @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  orders                 orders?                  @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([order_id], map: "ix_order_revisions_order")
 }
@@ -200,28 +200,28 @@ model order_revisions {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model orders {
   id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  vendor_id        String            @db.Uuid
-  wedding_id       String            @db.Uuid
-  order_code       String            @unique @db.VarChar(30)
-  customer_name    String            @db.VarChar(150)
-  customer_phone   String            @db.VarChar(20)
-  event_date       DateTime          @db.Date
-  total_amount     Decimal           @default(0) @db.Decimal(18, 2)
-  deposit_percent  Decimal           @db.Decimal(5, 2)
-  deposit_amount   Decimal           @default(0) @db.Decimal(18, 2)
+  vendor_id        String?           @db.Uuid
+  wedding_id       String?           @db.Uuid
+  order_code       String?           @unique @db.VarChar(30)
+  customer_name    String?           @db.VarChar(150)
+  customer_phone   String?           @db.VarChar(20)
+  event_date       DateTime?         @db.Date
+  total_amount     Decimal?          @default(0) @db.Decimal(18, 2)
+  deposit_percent  Decimal?          @db.Decimal(5, 2)
+  deposit_amount   Decimal?          @default(0) @db.Decimal(18, 2)
   deposit_due_date DateTime?         @db.Timestamptz(6)
-  status           String            @default("Draft") @db.VarChar(20)
+  status           String?           @default("Draft") @db.VarChar(20)
   note             String?
   completed_date   DateTime?         @db.Timestamptz(6)
   cancelled_date   DateTime?         @db.Timestamptz(6)
-  created_date     DateTime          @default(now()) @db.Timestamptz(6)
+  created_date     DateTime?         @default(now()) @db.Timestamptz(6)
   commissions      commissions?
   invoices         invoices[]
   messages         messages[]
   order_items      order_items[]
   order_revisions  order_revisions[]
-  vendor_profiles  vendor_profiles   @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  weddings         weddings          @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vendor_profiles  vendor_profiles?  @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  weddings         weddings?         @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   payments         payments?
   timeline_tasks   timeline_tasks[]
 
@@ -232,12 +232,14 @@ model orders {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model package_albums {
-  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  package_id       String           @db.Uuid
-  url              String           @db.VarChar(500)
-  display_order    Int              @default(0)
-  is_cover         Boolean          @default(false)
-  service_packages service_packages @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// DB có chỉ mục unique có điều kiện ux_albums_one_cover (package_id WHERE is_cover: mỗi gói 1 ảnh bìa).
+  /// db:pull đọc thành @unique làm quan hệ thành 1-1; bỏ đi sau mỗi lần pull để giữ quan hệ 1-nhiều.
+  package_id       String?           @db.Uuid
+  url              String?           @db.VarChar(500)
+  display_order    Int?              @default(0)
+  is_cover         Boolean?          @default(false)
+  service_packages service_packages? @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([package_id, display_order], map: "ix_albums_package_order")
 }
@@ -256,13 +258,14 @@ model package_tags {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model package_verifications {
-  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  package_id       String           @db.Uuid
-  status           String           @default("Pending") @db.VarChar(20)
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  package_id       String?           @db.Uuid
+  status           String?           @default("Pending") @db.VarChar(20)
   admin_note       String?
-  reviewed_date    DateTime?        @db.Timestamptz(6)
-  created_date     DateTime         @default(now()) @db.Timestamptz(6)
-  service_packages service_packages @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviewed_date    DateTime?         @db.Timestamptz(6)
+  created_date     DateTime?         @default(now()) @db.Timestamptz(6)
+  snapshot         Json?
+  service_packages service_packages? @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([package_id], map: "ix_package_ver_package")
 }
@@ -272,12 +275,12 @@ model package_verifications {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model payments {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  order_id         String    @unique @db.Uuid
+  order_id         String?   @unique @db.Uuid
   transaction_code String?   @unique @db.VarChar(100)
-  status           String    @default("Unpaid") @db.VarChar(20)
+  status           String?   @default("Unpaid") @db.VarChar(20)
   paid_date        DateTime? @db.Timestamptz(6)
-  created_date     DateTime  @default(now()) @db.Timestamptz(6)
-  orders           orders    @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  created_date     DateTime? @default(now()) @db.Timestamptz(6)
+  orders           orders?   @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -285,7 +288,7 @@ model payments {
 model plan_vendors {
   wedding_id      String          @db.Uuid
   vendor_id       String          @db.Uuid
-  created_date    DateTime        @default(now()) @db.Timestamptz(6)
+  created_date    DateTime?       @default(now()) @db.Timestamptz(6)
   vendor_profiles vendor_profiles @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   weddings        weddings        @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -295,11 +298,11 @@ model plan_vendors {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model search_histories {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id      String   @db.Uuid
-  keyword      String   @db.VarChar(255)
-  created_date DateTime @default(now()) @db.Timestamptz(6)
-  users        users    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String?   @db.Uuid
+  keyword      String?   @db.VarChar(255)
+  created_date DateTime? @default(now()) @db.Timestamptz(6)
+  users        users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([user_id], map: "ix_search_user")
 }
@@ -309,9 +312,9 @@ model search_histories {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model service_categories {
   id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                  String                  @unique @db.VarChar(100)
+  name                  String?                 @unique @db.VarChar(100)
   description           String?                 @db.VarChar(500)
-  commission_rate       Decimal                 @db.Decimal(5, 2)
+  commission_rate       Decimal?                @db.Decimal(5, 2)
   consultation_requests consultation_requests[]
   conversations         conversations[]
   timeline_tasks        timeline_tasks[]
@@ -324,18 +327,18 @@ model service_categories {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model service_packages {
   id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  vendor_id             String                  @db.Uuid
-  name                  String                  @db.VarChar(200)
-  description           String
-  price                 Decimal                 @db.Decimal(18, 2)
+  vendor_id             String?                 @db.Uuid
+  name                  String?                 @db.VarChar(200)
+  description           String?
+  price                 Decimal?                @db.Decimal(18, 2)
   capacity              Int?
-  status                String                  @default("Draft") @db.VarChar(20)
-  created_date          DateTime                @default(now()) @db.Timestamptz(6)
-  updated_date          DateTime                @default(now()) @db.Timestamptz(6)
+  status                String?                 @default("Draft") @db.VarChar(20)
+  created_date          DateTime?               @default(now()) @db.Timestamptz(6)
+  updated_date          DateTime?               @default(now()) @db.Timestamptz(6)
   package_albums        package_albums[]
   package_tags          package_tags[]
   package_verifications package_verifications[]
-  vendor_profiles       vendor_profiles         @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vendor_profiles       vendor_profiles?        @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([vendor_id, status], map: "ix_packages_vendor_status")
 }
@@ -345,20 +348,20 @@ model service_packages {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model timeline_tasks {
   id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  wedding_id         String              @db.Uuid
+  wedding_id         String?             @db.Uuid
   category_id        String?             @db.Uuid
   order_id           String?             @db.Uuid
-  title              String              @db.VarChar(255)
-  scheduled_date     DateTime            @db.Date
-  status             String              @default("Todo") @db.VarChar(20)
+  title              String?             @db.VarChar(255)
+  scheduled_date     DateTime?           @db.Date
+  status             String?             @default("Todo") @db.VarChar(20)
   completed_date     DateTime?           @db.Timestamptz(6)
-  task_type          String              @db.VarChar(20)
+  task_type          String?             @db.VarChar(20)
   task_code          String?             @db.VarChar(50)
-  display_order      Int                 @default(0)
-  created_date       DateTime            @default(now()) @db.Timestamptz(6)
+  display_order      Int?                @default(0)
+  created_date       DateTime?           @default(now()) @db.Timestamptz(6)
   service_categories service_categories? @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   orders             orders?             @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  weddings           weddings            @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  weddings           weddings?           @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([wedding_id, task_code])
   @@index([order_id], map: "ix_timeline_order")
@@ -370,14 +373,14 @@ model timeline_tasks {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model users {
   id                                           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  username                                     String             @db.VarChar(50)
-  email                                        String             @unique @db.VarChar(255)
-  full_name                                    String             @db.VarChar(150)
-  password_hash                                String             @db.VarChar(255)
+  username                                     String?            @db.VarChar(50)
+  email                                        String?            @unique @db.VarChar(255)
+  full_name                                    String?            @db.VarChar(150)
+  password_hash                                String?            @db.VarChar(255)
   phone_number                                 String?            @db.VarChar(20)
-  role                                         String             @db.VarChar(20)
-  status                                       String             @default("Active") @db.VarChar(20)
-  created_date                                 DateTime           @default(now()) @db.Timestamptz(6)
+  role                                         String?            @db.VarChar(20)
+  status                                       String?            @default("Active") @db.VarChar(20)
+  created_date                                 DateTime?          @default(now()) @db.Timestamptz(6)
   last_login_at                                DateTime?          @db.Timestamptz(6)
   conversations_conversations_couple_idTousers conversations[]    @relation("conversations_couple_idTousers")
   conversations_conversations_vendor_idTousers conversations[]    @relation("conversations_vendor_idTousers")
@@ -393,13 +396,13 @@ model users {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model vendor_documents {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  vendor_id       String          @db.Uuid
-  document_type   String          @db.VarChar(30)
-  url             String          @db.VarChar(500)
-  display_order   Int             @default(0)
-  created_date    DateTime        @default(now()) @db.Timestamptz(6)
-  vendor_profiles vendor_profiles @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendor_id       String?          @db.Uuid
+  document_type   String?          @db.VarChar(30)
+  url             String?          @db.VarChar(500)
+  display_order   Int?             @default(0)
+  created_date    DateTime?        @default(now()) @db.Timestamptz(6)
+  vendor_profiles vendor_profiles? @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([vendor_id], map: "ix_vendor_docs_vendor")
 }
@@ -409,28 +412,28 @@ model vendor_documents {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model vendor_profiles {
   id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id               String                  @unique @db.Uuid
-  category_id           String                  @db.Uuid
-  business_name         String                  @db.VarChar(200)
+  user_id               String?                 @unique @db.Uuid
+  category_id           String?                 @db.Uuid
+  business_name         String?                 @db.VarChar(200)
   tax_code              String?                 @unique @db.VarChar(20)
-  representative_name   String                  @db.VarChar(100)
-  address               String                  @db.VarChar(255)
-  ward                  String                  @db.VarChar(100)
-  city                  String                  @db.VarChar(100)
+  representative_name   String?                 @db.VarChar(100)
+  address               String?                 @db.VarChar(255)
+  ward                  String?                 @db.VarChar(100)
+  city                  String?                 @db.VarChar(100)
   google_maps_url       String?                 @db.VarChar(500)
-  description           String
+  description           String?
   working_hours         String?                 @db.VarChar(100)
-  status                String                  @default("Draft") @db.VarChar(20)
-  created_date          DateTime                @default(now()) @db.Timestamptz(6)
-  updated_date          DateTime                @default(now()) @db.Timestamptz(6)
+  status                String?                 @default("Draft") @db.VarChar(20)
+  created_date          DateTime?               @default(now()) @db.Timestamptz(6)
+  updated_date          DateTime?               @default(now()) @db.Timestamptz(6)
   commission_statements commission_statements[]
   favorite_vendors      favorite_vendors[]
   orders                orders[]
   plan_vendors          plan_vendors[]
   service_packages      service_packages[]
   vendor_documents      vendor_documents[]
-  service_categories    service_categories      @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users                 users                   @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  service_categories    service_categories?     @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                 users?                  @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   vendor_verifications  vendor_verifications[]
 
   @@index([category_id, status], map: "ix_vendor_category_status")
@@ -440,13 +443,13 @@ model vendor_profiles {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model vendor_verifications {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  vendor_id       String          @db.Uuid
-  status          String          @default("Pending") @db.VarChar(20)
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendor_id       String?          @db.Uuid
+  status          String?          @default("Pending") @db.VarChar(20)
   admin_note      String?
-  submitted_date  DateTime        @default(now()) @db.Timestamptz(6)
-  reviewed_date   DateTime?       @db.Timestamptz(6)
-  vendor_profiles vendor_profiles @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  submitted_date  DateTime?        @default(now()) @db.Timestamptz(6)
+  reviewed_date   DateTime?        @db.Timestamptz(6)
+  vendor_profiles vendor_profiles? @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([vendor_id], map: "ix_vendor_ver_vendor")
 }
@@ -467,19 +470,19 @@ model wedding_categories {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model weddings {
   id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id            String               @unique @db.Uuid
-  groom_name         String               @db.VarChar(100)
-  bride_name         String               @db.VarChar(100)
-  wedding_date       DateTime             @db.Date
-  budget             Decimal              @db.Decimal(18, 2)
-  guest_count        Int
-  city               String               @db.VarChar(100)
+  user_id            String?              @unique @db.Uuid
+  groom_name         String?              @db.VarChar(100)
+  bride_name         String?              @db.VarChar(100)
+  wedding_date       DateTime?            @db.Date
+  budget             Decimal?             @db.Decimal(18, 2)
+  guest_count        Int?
+  city               String?              @db.VarChar(100)
   style              String?              @db.VarChar(100)
-  created_date       DateTime             @default(now()) @db.Timestamptz(6)
-  updated_date       DateTime             @default(now()) @db.Timestamptz(6)
+  created_date       DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_date       DateTime?            @default(now()) @db.Timestamptz(6)
   orders             orders[]
   plan_vendors       plan_vendors[]
   timeline_tasks     timeline_tasks[]
   wedding_categories wedding_categories[]
-  users              users                @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users              users?               @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }

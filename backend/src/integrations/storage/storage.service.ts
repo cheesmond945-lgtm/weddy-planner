@@ -18,14 +18,16 @@ export class StorageService {
   }
 
   /** Cột package_albums.url lưu đường dẫn tương đối, vd "trang-tri/v01/p001/01.jpg" */
-  publicAlbumUrl(path: string): string {
+  publicAlbumUrl(path: string | null): string {
+    if (!path) return '';
     if (/^https?:\/\//.test(path)) return path;
     const encoded = path.split('/').map(encodeURIComponent).join('/');
     return `${this.baseUrl}/storage/v1/object/public/${ALBUM_BUCKET}/${encoded}`;
   }
 
   /** Link tạm thời (mặc định 10 phút) để xem giấy tờ trong bucket riêng tư */
-  async signedDocumentUrl(path: string, expiresInSec = 600): Promise<string | null> {
+  async signedDocumentUrl(path: string | null, expiresInSec = 600): Promise<string | null> {
+    if (!path) return null;
     const { data, error } = await this.supabase.storage.from(DOC_BUCKET).createSignedUrl(path, expiresInSec);
     return error ? null : data.signedUrl;
   }

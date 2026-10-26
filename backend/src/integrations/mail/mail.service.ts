@@ -86,4 +86,24 @@ Mật khẩu: ${password}
 Bạn có thể đổi mật khẩu sau khi đăng nhập. Không chia sẻ email này cho người khác.`;
     return this.send(to, 'Thông tin tài khoản WebPlan của bạn', html, text);
   }
+
+  /** Báo mật khẩu vừa được đổi (thực tế các hệ thống đều gửi), để chủ tài khoản phát hiện nếu không phải mình đổi. */
+  sendPasswordChanged(to: string, name: string) {
+    const at = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+    const html = `<!doctype html>
+<html lang="vi"><body style="margin:0;padding:24px 12px;background:#f4efe6;font-family:'Segoe UI',Helvetica,Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden">
+    <tr><td style="background:#161d1d;padding:24px 32px;font-family:Georgia,serif;font-size:26px;color:#ffffff">Web<i style="color:#d4b068">Plan.</i></td></tr>
+    <tr><td style="padding:28px 32px;font-size:15px;line-height:1.6;color:#4a4a45">
+      <h1 style="margin:0 0 12px;font-size:20px;color:#161d1d">Mật khẩu đã được thay đổi</h1>
+      <p style="margin:0 0 12px">Chào ${esc(name || to)}, mật khẩu tài khoản WebPlan <b>${esc(to)}</b> vừa được đổi lúc ${esc(at)}.</p>
+      <p style="margin:0">Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên WebPlan ngay để được hỗ trợ khóa và lấy lại tài khoản.</p>
+    </td></tr>
+    <tr><td style="background:#faf7f0;padding:16px 32px;text-align:center;font-size:12px;color:#8a8170">Email được gửi tự động từ hệ thống WebPlan, vui lòng không trả lời.</td></tr>
+  </table>
+</body></html>`;
+    const text = `Mật khẩu tài khoản WebPlan ${to} vừa được đổi lúc ${at}.
+Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên WebPlan ngay.`;
+    return this.send(to, 'Mật khẩu tài khoản WebPlan đã được thay đổi', html, text);
+  }
 }

@@ -77,7 +77,7 @@ export class CommissionPaymentsService {
     const txnRef = `${row.id.replace(/-/g, '')}${Date.now().toString(36)}`;
     const code = `DS${period.slice(5)}${period.slice(0, 4)}`;
     if (!this.live) {
-      this.intents.set(txnRef, { statementId: row.id, userId, amount, code, vendorName: vendor.business_name, expires: Date.now() + INTENT_TTL_MS });
+      this.intents.set(txnRef, { statementId: row.id, userId, amount, code, vendorName: vendor.business_name ?? '', expires: Date.now() + INTENT_TTL_MS });
       return { mode: 'SIMULATE' as const, paymentUrl: `${this.frontend}/vendor/commissions/vnpay-sandbox?ref=${txnRef}` };
     }
     const params: Record<string, string> = {
@@ -141,8 +141,8 @@ export class CommissionPaymentsService {
       transactionNo = `GD${ymdVN(paidAt).replaceAll('-', '')}${String(randomInt(0, 100000)).padStart(5, '0')}`;
     }
 
-    const row = await this.prisma.commission_statements.findUnique({ where: { id: statementId }, include: { vendor_profiles: { select: { user_id: true } } } });
-    if (!row || row.vendor_profiles.user_id !== userId) return fail('COMMISSION_STATEMENT_NOT_FOUND', 'Không tìm thấy bảng kê.', 404);
+    const row = await this.prisma.commission_statements.findUnique({ where: { id: statementId }, include: { vendor_profiles: { select: { user_id: true, business_name: true } } } });
+    if (!row || row.vendor_profiles?.user_id !== userId) return fail('COMMISSION_STATEMENT_NOT_FOUND', 'Không tìm thấy bảng kê.', 404);
     const code = `DS${ymd(row.period_month).slice(5, 7)}${ymd(row.period_month).slice(0, 4)}`;
     if (row.status === 'Paid') return { status: 'PAID' as const, statementId: code, transactionCode: row.transaction_code, message: 'Bảng kê đã được ghi nhận thanh toán.' };
     if (Math.round(Number(row.total_amount)) !== Math.round(amount)) return fail('PAYMENT_AMOUNT_MISMATCH', 'Số tiền thanh toán không khớp bảng kê.', 409);
@@ -159,6 +159,21 @@ export class CommissionPaymentsService {
       referenceType: 'CommissionStatement',
       referenceId: row.id,
     });
+    // Báo mọi Admin: NCC đã thanh toán hoa hồng (đối soát ở trang Thanh toán hoa hồng)
+    const admins = await this.prisma.users.findMany({ where: { role: 'Admin', status: 'Active' }, select: { id: true } });
+    const period = ymd(row.period_month);
+    await Promise.all(
+      admins.map((a) =>
+        notify(this.prisma, {
+          userId: a.id,
+          type: 'CommissionReceived',
+          title: `Đã nhận hoa hồng: ${row.vendor_profiles?.business_name || 'Nhà cung cấp'}`,
+          content: `${row.vendor_profiles?.business_name || 'Một nhà cung cấp'} đã thanh toán hoa hồng kỳ ${period.slice(5, 7)}/${period.slice(0, 4)}: ${Number(row.total_amount).toLocaleString('vi-VN')}đ (mã giao dịch ${txCode}).`,
+          referenceType: 'CommissionStatement',
+          referenceId: row.id,
+        }),
+      ),
+    );
     return { status: 'PAID' as const, statementId: code, transactionCode: txCode, message: 'Thanh toán thành công.' };
   }
 }

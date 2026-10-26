@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { StorageService } from '../../integrations/storage/storage.service';
+import { ALBUM_BUCKET, StorageService } from '../../integrations/storage/storage.service';
 import { notify } from '../chat/chat-messages';
 import { categorySlug } from '../catalog/services.service';
 import { fileNameOfPath, mimeOfPath } from '../vendors/vendor-files';
+import { livePhotos, liveSnapshot, openUpdate } from '../vendors/package-update';
 import { parseHours } from '../vendors/working-hours';
 import { fail, matches, UUID } from './admin-common';
 
@@ -27,7 +28,7 @@ export interface VendorQueryDto extends ReviewQueryDto {
   pageSize?: string | number;
 }
 
-const catRef = (c: { id: string; name: string }) => ({ id: c.id, slug: categorySlug(c.name), name: c.name });
+const catRef = (c: { id: string; name: string | null } | null) => ({ id: c?.id ?? '', slug: categorySlug(c?.name ?? null), name: c?.name ?? '' });
 
 /** Duyệt hồ sơ nhà cung cấp (vendor_profiles + vendor_verifications) và gói dịch vụ (service_packages + package_verifications). */
 @Injectable()
@@ -70,12 +71,12 @@ export class AdminReviewsService {
       description: v.description || null,
       documents: [] as unknown[],
       photos: [] as unknown[],
-      status: updateReview ? 'PENDING' : updateRevision ? 'NEEDS_REVISION' : (VENDOR_STATUS_OUT[v.status] ?? 'NOT_SUBMITTED'),
+      status: updateReview ? 'PENDING' : updateRevision ? 'NEEDS_REVISION' : (VENDOR_STATUS_OUT[v.status ?? ''] ?? 'NOT_SUBMITTED'),
       /** Duyệt lần đầu (hồ sơ Pending) hoặc kiểm tra cập nhật (hồ sơ Approved có lần gửi cập nhật chưa kiểm). */
       reviewKind: updateReview ? 'UPDATE' : v.status === 'Pending' ? 'INITIAL' : null,
       reviewNote: v.status === 'NeedRevision' || updateRevision ? (last?.admin_note ?? null) : null,
-      submittedAt: (last?.submitted_date ?? v.updated_date).toISOString(),
-      owner: { name: v.users.full_name, email: v.users.email, phone: v.users.phone_number },
+      submittedAt: (last?.submitted_date ?? v.updated_date)?.toISOString() ?? '',
+      owner: { name: v.users?.full_name ?? null, email: v.users?.email ?? null, phone: v.users?.phone_number ?? null },
     };
   }
 
@@ -98,7 +99,7 @@ export class AdminReviewsService {
     for (const v of scoped) if (v.status in counts) counts[v.status as 'PENDING' | 'NEEDS_REVISION' | 'VERIFIED']++;
 
     const dir = q.sort === 'oldest' ? 1 : -1;
-    const rows = scoped.filter((v) => !q.status || v.status === q.status).sort((a, b) => dir * a.submittedAt.localeCompare(b.submittedAt) || a.businessName.localeCompare(b.businessName, 'vi'));
+    const rows = scoped.filter((v) => !q.status || v.status === q.status).sort((a, b) => dir * a.submittedAt.localeCompare(b.submittedAt) || (a.businessName ?? '').localeCompare(b.businessName ?? '', 'vi'));
     const page = Math.max(1, Math.trunc(Number(q.page)) || 1);
     const size = Math.min(100, Math.max(1, Math.trunc(Number(q.pageSize)) || 10));
     return { items: rows.slice((page - 1) * size, page * size), total: rows.length, counts };
@@ -108,7 +109,7 @@ export class AdminReviewsService {
     const v = UUID.test(id) ? (await this.loadVendors({ id }))[0] : undefined;
     if (!v) return fail('VENDOR_NOT_FOUND', 'Không tìm thấy hồ sơ nhà cung cấp.', 404);
     const docs = await this.prisma.vendor_documents.findMany({ where: { vendor_id: id, document_type: { in: [...Object.keys(DOC_OUT), 'StorefrontPhoto'] } }, orderBy: [{ display_order: 'asc' }, { created_date: 'asc' }] });
-    const file = async (path: string) => {
+    const file = async (path: string | null) => {
       const url = (await this.storage.signedDocumentUrl(path, 3600)) ?? '';
       const size = url ? await fetch(url, { method: 'HEAD' }).then((r) => Number(r.headers.get('content-length')) || 0).catch(() => 0) : 0;
       return { url, publicId: path, fileName: fileNameOfPath(path), size, mimeType: mimeOfPath(path) };
@@ -124,7 +125,7 @@ export class AdminReviewsService {
     return {
       ...dto,
       lastRevision: prev ? { note: prev.admin_note, reviewedAt: prev.reviewed_date?.toISOString() ?? null } : null,
-      documents: await Promise.all(docs.filter((d) => d.document_type in DOC_OUT).map(async (d) => ({ type: DOC_OUT[d.document_type], ...(await file(d.url)) }))),
+      documents: await Promise.all(docs.filter((d) => !!d.document_type && d.document_type in DOC_OUT).map(async (d) => ({ type: DOC_OUT[d.document_type!], ...(await file(d.url)) }))),
       photos: await Promise.all(docs.filter((d) => d.document_type === 'StorefrontPhoto').map(async (d) => ({ type: 'FRONT', ...(await file(d.url)) }))),
     };
   }
@@ -149,7 +150,7 @@ export class AdminReviewsService {
         : this.prisma.vendor_verifications.create({ data: { vendor_id: id, ...result } }),
     ]);
     await notify(this.prisma, {
-      userId: v.user_id,
+      userId: v.user_id!,
       type: revision ? 'VendorNeedRevision' : 'VendorApproved',
       title: revision ? 'Hồ sơ cần bổ sung' : 'Hồ sơ đã được xác minh',
       content: revision ? `Quản trị viên yêu cầu bổ sung hồ sơ: ${text}` : 'Hồ sơ nhà cung cấp của bạn đã được xác minh. Bạn có thể gửi duyệt gói dịch vụ.',
@@ -172,21 +173,35 @@ export class AdminReviewsService {
     return this.prisma.service_packages.findMany({ where: { status: { not: 'Draft' }, ...where }, include: this.packageInclude });
   }
 
+  /** Bản cập nhật Admin nhìn thấy: đã gửi (chờ duyệt hoặc đã bị yêu cầu chỉnh sửa); bản nháp của NCC thì chưa. */
+  private sentUpdate(p: Awaited<ReturnType<AdminReviewsService['loadPackages']>>[number]) {
+    const upd = openUpdate(p);
+    return upd && upd.status !== 'Draft' ? upd : null;
+  }
+
   private packageDto(p: Awaited<ReturnType<AdminReviewsService['loadPackages']>>[number]) {
     const last = p.package_verifications[0];
+    const live = liveSnapshot(p);
+    const upd = this.sentUpdate(p);
+    // Gói đã đăng có bản cập nhật đã gửi: hiện nội dung bản cập nhật, trạng thái theo bản cập nhật (cùng cách với hồ sơ NCC)
+    const shown = upd?.data ?? live;
     return {
       id: p.id,
-      name: p.name,
-      description: p.description,
-      price: Number(p.price),
-      capacity: p.capacity,
-      tags: p.package_tags.map((t) => t.tag),
-      photos: p.package_albums.map((a) => this.storage.publicAlbumUrl(a.url)),
-      category: catRef(p.vendor_profiles.service_categories),
-      vendor: { id: p.vendor_profiles.id, name: p.vendor_profiles.business_name, city: p.vendor_profiles.city },
-      status: PACKAGE_STATUS_OUT[p.status] ?? 'PENDING',
-      reviewNote: p.status === 'NeedRevision' ? (last?.admin_note ?? null) : null,
-      submittedAt: (last?.created_date ?? p.updated_date).toISOString(),
+      name: shown.name,
+      description: shown.description,
+      price: shown.price,
+      capacity: shown.capacity,
+      tags: shown.tags,
+      photos: shown.photos.map((u) => this.storage.publicAlbumUrl(u)),
+      category: catRef(p.vendor_profiles!.service_categories),
+      vendor: { id: p.vendor_profiles!.id, name: p.vendor_profiles!.business_name, city: p.vendor_profiles!.city },
+      status: upd ? (upd.status === 'Pending' ? 'PENDING' : 'NEEDS_REVISION') : (PACKAGE_STATUS_OUT[p.status ?? ''] ?? 'PENDING'),
+      /** Duyệt lần đầu (gói chưa đăng) hoặc duyệt bản cập nhật của gói đã đăng */
+      reviewKind: upd?.status === 'Pending' ? 'UPDATE' : p.status === 'Pending' ? 'INITIAL' : null,
+      reviewNote: p.status === 'NeedRevision' ? (last?.admin_note ?? null) : upd?.status === 'NeedRevision' ? upd.admin_note : null,
+      /** Bản đang hiển thị với khách, để đối chiếu với bản cập nhật */
+      published: upd ? { ...live, photos: live.photos.map((u) => this.storage.publicAlbumUrl(u)) } : null,
+      submittedAt: (upd?.created_date ?? (last && last.status !== 'Draft' ? last.created_date : p.updated_date))?.toISOString() ?? '',
     };
   }
 
@@ -212,29 +227,70 @@ export class AdminReviewsService {
   async getPackage(id: string) {
     const p = UUID.test(id) ? (await this.loadPackages({ id }))[0] : undefined;
     if (!p) return fail('PACKAGE_NOT_FOUND', 'Không tìm thấy gói dịch vụ.', 404);
-    return this.packageDto(p);
+    const dto = this.packageDto(p);
+    // Như hồ sơ NCC: lần gửi ngay trước lần đang chờ bị yêu cầu chỉnh sửa thì cho Admin xem lý do để đối chiếu
+    let prev: { admin_note: string | null; reviewed_date: Date | null } | null = null;
+    if (dto.status === 'PENDING') {
+      const [, before] = await this.prisma.package_verifications.findMany({ where: { package_id: id, status: { not: 'Draft' } }, orderBy: { created_date: 'desc' }, take: 2 });
+      if (before?.status === 'NeedRevision' && (dto.reviewKind === 'UPDATE') === !!before.snapshot) prev = before;
+    }
+    return { ...dto, lastRevision: prev ? { note: prev.admin_note, reviewedAt: prev.reviewed_date?.toISOString() ?? null } : null };
   }
 
+  /**
+   * Duyệt (note = undefined) hoặc yêu cầu chỉnh sửa (note bắt buộc) một gói đang chờ.
+   * - Gói chưa đăng: duyệt -> Approved (hiển thị), yêu cầu sửa -> NeedRevision.
+   * - Bản cập nhật của gói đã đăng: duyệt -> chép bản cập nhật vào gói; yêu cầu sửa -> chỉ ghi ở dòng xác minh. Gói vẫn hiển thị.
+   */
   async reviewPackage(id: string, note?: string) {
     const p = UUID.test(id) ? (await this.loadPackages({ id }))[0] : undefined;
     if (!p) return fail('PACKAGE_NOT_FOUND', 'Không tìm thấy gói dịch vụ.', 404);
-    if (p.status !== 'Pending') return fail('PACKAGE_NOT_PENDING', 'Chỉ xử lý được gói đang chờ duyệt.', 409);
+    const upd = this.sentUpdate(p);
+    const isUpdate = upd?.status === 'Pending';
+    if (p.status !== 'Pending' && !isUpdate) return fail('PACKAGE_NOT_PENDING', 'Chỉ xử lý được gói đang chờ duyệt.', 409);
     const revision = note !== undefined;
     const text = revision ? this.checkNote(note) : null;
-
-    const pending = await this.prisma.package_verifications.findFirst({ where: { package_id: id, status: 'Pending' }, orderBy: { created_date: 'desc' } });
     const result = revision ? { status: 'NeedRevision', admin_note: text, reviewed_date: new Date() } : { status: 'Approved', admin_note: null, reviewed_date: new Date() };
-    await this.prisma.$transaction([
-      this.prisma.service_packages.update({ where: { id }, data: { status: revision ? 'NeedRevision' : 'Approved', updated_date: new Date() } }),
-      pending
-        ? this.prisma.package_verifications.update({ where: { id: pending.id }, data: result })
-        : this.prisma.package_verifications.create({ data: { package_id: id, ...result } }),
-    ]);
+    const name = isUpdate ? upd.data.name : p.name;
+
+    if (isUpdate) {
+      const s = upd.data;
+      const dropped = revision ? [] : livePhotos(p).filter((u) => !s.photos.includes(u) && u.startsWith(`vendors/${p.vendor_profiles!.id}/`));
+      await this.prisma.$transaction([
+        this.prisma.package_verifications.update({ where: { id: upd.id }, data: result }),
+        ...(revision
+          ? []
+          : [
+              this.prisma.service_packages.update({
+                where: { id },
+                data: { name: s.name, description: s.description, price: s.price, capacity: s.capacity, updated_date: new Date() },
+              }),
+              this.prisma.package_tags.deleteMany({ where: { package_id: id } }),
+              this.prisma.package_tags.createMany({ data: s.tags.map((tag) => ({ package_id: id, tag })) }),
+              this.prisma.package_albums.deleteMany({ where: { package_id: id } }),
+              this.prisma.package_albums.createMany({ data: s.photos.map((url, i) => ({ package_id: id, url, display_order: i, is_cover: url === s.cover })) }),
+            ]),
+      ]);
+      // Ảnh của bản cũ không còn trong bản mới (dòng xác minh vẫn giữ snapshot làm lịch sử nội dung)
+      await this.storage.remove(ALBUM_BUCKET, dropped);
+    } else {
+      const pending = await this.prisma.package_verifications.findFirst({ where: { package_id: id, status: 'Pending' }, orderBy: { created_date: 'desc' } });
+      await this.prisma.$transaction([
+        this.prisma.service_packages.update({ where: { id }, data: { status: revision ? 'NeedRevision' : 'Approved', updated_date: new Date() } }),
+        pending
+          ? this.prisma.package_verifications.update({ where: { id: pending.id }, data: result })
+          : this.prisma.package_verifications.create({ data: { package_id: id, ...result } }),
+      ]);
+    }
     await notify(this.prisma, {
-      userId: p.vendor_profiles.user_id,
+      userId: p.vendor_profiles!.user_id!,
       type: revision ? 'PackageNeedRevision' : 'PackageApproved',
-      title: revision ? 'Gói dịch vụ cần chỉnh sửa' : 'Gói dịch vụ đã được duyệt',
-      content: revision ? `Quản trị viên yêu cầu chỉnh sửa gói "${p.name}": ${text}` : `Gói "${p.name}" đã được duyệt và hiển thị công khai.`,
+      title: revision ? (isUpdate ? 'Bản cập nhật gói dịch vụ cần chỉnh sửa' : 'Gói dịch vụ cần chỉnh sửa') : isUpdate ? 'Bản cập nhật gói dịch vụ đã được duyệt' : 'Gói dịch vụ đã được duyệt',
+      content: revision
+        ? `Quản trị viên yêu cầu chỉnh sửa ${isUpdate ? 'bản cập nhật của ' : ''}gói "${name}": ${text}`
+        : isUpdate
+          ? `Bản cập nhật gói "${name}" đã được duyệt và đang hiển thị với khách.`
+          : `Gói "${name}" đã được duyệt và hiển thị công khai.`,
       referenceType: 'ServicePackage',
       referenceId: id,
     });

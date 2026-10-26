@@ -45,6 +45,7 @@ export function StatementTable({ statements, onOpen }: { statements: CommissionS
                 <span className="flex flex-wrap items-center gap-1.5">
                   <StatusBadge tone={COMMISSION_STATUS[s.status].tone}>{COMMISSION_STATUS[s.status].label}</StatusBadge>
                   {s.isOverdue && <StatusBadge tone="warn">Quá hạn</StatusBadge>}
+                  {s.lateDays && <StatusBadge tone="warn">Trả trễ {s.lateDays} ngày</StatusBadge>}
                 </span>
               </td>
               <td className={cn(td, 'text-right')}>

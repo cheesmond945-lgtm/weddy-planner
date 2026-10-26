@@ -11,6 +11,7 @@ const ICON: Record<string, LucideIcon> = {
   PackageNeedRevision: Package,
   CommissionPaid: Wallet,
   CommissionDueSoon: Wallet,
+  CommissionOverdue: Wallet,
   OrderDeposited: ClipboardList,
   OrderCancelled: ClipboardList,
   OrderCompleted: ClipboardList,

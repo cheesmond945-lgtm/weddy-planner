@@ -40,6 +40,12 @@ export class VendorPackagesController {
     return this.packages.remove(req.user.sub, id);
   }
 
+  /** Xóa bản cập nhật nháp của gói đã đăng (gói giữ nguyên bản đang đăng) */
+  @Delete(':id/update')
+  discardUpdate(@Req() req: any, @Param('id') id: string) {
+    return this.packages.discardUpdate(req.user.sub, id);
+  }
+
   @Post(':id/submit')
   submit(@Req() req: any, @Param('id') id: string) {
     return this.packages.submit(req.user.sub, id);

@@ -19,7 +19,7 @@ export class AdminNotificationsService {
     // Trạng thái hiện tại của yêu cầu tư vấn mà thông báo trỏ tới, để bấm vào thì chuyển đúng bộ lọc
     const ids = rows.filter((n) => n.reference_type === 'ConsultationRequest' && n.reference_id).map((n) => n.reference_id!);
     const consults = ids.length ? await this.prisma.consultation_requests.findMany({ where: { id: { in: ids } }, select: { id: true, is_contacted: true, qualification: true, service_categories: { select: { name: true } } } }) : [];
-    const stateOf = new Map(consults.map((c) => [c.id, { isContacted: c.is_contacted, qualification: QUAL_OUT[c.qualification] ?? 'UNRATED', categorySlug: categorySlug(c.service_categories.name) }]));
+    const stateOf = new Map(consults.map((c) => [c.id, { isContacted: c.is_contacted, qualification: QUAL_OUT[c.qualification ?? ''] ?? 'UNRATED', categorySlug: categorySlug(c.service_categories?.name ?? null) }]));
     return {
       unread,
       items: rows.map((n) => ({
@@ -28,7 +28,7 @@ export class AdminNotificationsService {
         title: n.title,
         content: n.content,
         isRead: n.is_read,
-        createdAt: n.created_date.toISOString(),
+        createdAt: n.created_date?.toISOString() ?? null,
         refType: n.reference_type,
         refId: n.reference_id,
         consultation: n.reference_id ? (stateOf.get(n.reference_id) ?? null) : null,

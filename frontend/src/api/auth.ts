@@ -1,4 +1,5 @@
 import type {
+  ChangePasswordRequest,
   LoginRequest,
   OtpSent,
   RegisterRequest,
@@ -28,4 +29,8 @@ export const authApi = {
 
   updateProfile: (body: UpdateProfileRequest): Promise<SessionUser> =>
     http.patch('/auth/me', body),
+
+  /** Đổi mật khẩu khi đang đăng nhập (quy tắc ở features/auth/passwordRules.ts) */
+  changePassword: (body: ChangePasswordRequest): Promise<null> =>
+    http.post('/auth/me/password', body),
 }

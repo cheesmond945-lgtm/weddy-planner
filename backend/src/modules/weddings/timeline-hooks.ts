@@ -1,7 +1,7 @@
 import type { PrismaService } from '../../prisma/prisma.service';
 
 const DAY = 86_400_000;
-const ymdOf = (d: Date) => d.toISOString().slice(0, 10);
+const ymdOf = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
 /** Ngày hôm nay theo giờ Việt Nam, dạng UTC nửa đêm (khớp cột @db.Date). */
 export const todayVNDate = () => new Date(`${new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10)}T00:00:00Z`);
 

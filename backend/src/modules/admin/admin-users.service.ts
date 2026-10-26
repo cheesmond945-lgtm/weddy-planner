@@ -34,15 +34,15 @@ export interface SaveUserDto {
 
 type UserRow = {
   id: string;
-  username: string;
-  email: string;
-  full_name: string;
+  username: string | null;
+  email: string | null;
+  full_name: string | null;
   phone_number: string | null;
-  role: string;
-  status: string;
-  created_date: Date;
+  role: string | null;
+  status: string | null;
+  created_date: Date | null;
   last_login_at: Date | null;
-  vendor_profiles: { status: string; _count: { vendor_documents: number; service_packages: number; vendor_verifications: number } } | null;
+  vendor_profiles: { status: string | null; _count: { vendor_documents: number; service_packages: number; vendor_verifications: number } } | null;
 };
 
 /** NCC đã bắt đầu tạo hồ sơ: đã gửi xác minh (không còn nháp), hoặc đã tải giấy tờ / ảnh, tạo gói dịch vụ. Hồ sơ trống do Admin tạo kèm tài khoản chưa tính. */
@@ -61,7 +61,7 @@ export class AdminUsersService {
 
   /** Mã hiển thị ND-00000015 theo thứ tự tạo tài khoản (ổn định vì tài khoản không bị xóa lẻ giữa chừng thường xuyên). */
   private dtos(rows: UserRow[]) {
-    const order = [...rows].sort((a, b) => a.created_date.getTime() - b.created_date.getTime() || a.id.localeCompare(b.id));
+    const order = [...rows].sort((a, b) => (a.created_date?.getTime() ?? 0) - (b.created_date?.getTime() ?? 0) || a.id.localeCompare(b.id));
     const codeOf = new Map(order.map((u, i) => [u.id, `ND-${String(i + 1).padStart(8, '0')}`]));
     return rows.map((u) => ({
       id: u.id,
@@ -70,9 +70,9 @@ export class AdminUsersService {
       name: u.full_name,
       email: u.email,
       phone: u.phone_number,
-      role: ROLE_OUT[u.role] ?? 'COUPLE',
+      role: ROLE_OUT[u.role ?? ''] ?? 'COUPLE',
       status: u.status === 'Locked' ? 'LOCKED' : 'ACTIVE',
-      createdAt: u.created_date.toISOString(),
+      createdAt: u.created_date?.toISOString() ?? null,
       lastLoginAt: u.last_login_at?.toISOString() ?? null,
     }));
   }
@@ -87,7 +87,7 @@ export class AdminUsersService {
     const all = this.dtos(await this.allRows());
     const filtered = all
       .filter((u) => matches(q.q, u.name, u.username, u.email, u.phone, u.code) && (!q.role || u.role === q.role) && (!q.status || u.status === q.status))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+      .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '') || a.id.localeCompare(b.id));
     const page = Math.max(1, Math.trunc(Number(q.page)) || 1);
     const size = Math.min(200, Math.max(1, Math.trunc(Number(q.pageSize)) || 10));
     return {
@@ -130,7 +130,7 @@ export class AdminUsersService {
     if (input.consultationId && !consult) return fail('CONSULTATION_NOT_FOUND', 'Không tìm thấy yêu cầu tư vấn.', 404);
     if (consult && consult.qualification !== 'Qualified') return fail('VALIDATION_ERROR', 'Chỉ tạo tài khoản cho nhà cung cấp đã được đánh giá đạt.', 409);
     const b: SaveUserDto = consult
-      ? { username: consult.contact_name.slice(0, 50), email: input.email || consult.email, phone: input.phone || consult.phone_number, role: 'VENDOR', categoryId: consult.category_id, consultationId: consult.id }
+      ? { username: (consult.contact_name ?? '').slice(0, 50), email: input.email || (consult.email ?? undefined), phone: input.phone || (consult.phone_number ?? undefined), role: 'VENDOR', categoryId: consult.category_id ?? undefined, consultationId: consult.id }
       : input;
     const v = await this.validate(b, null, true);
     const role = ROLE_IN[b.role!];
@@ -180,7 +180,7 @@ export class AdminUsersService {
   async update(id: string, b: SaveUserDto) {
     const { row } = await this.one(id);
     // Email là thông tin đăng nhập nên không cho sửa: luôn giữ email hiện tại, bỏ qua giá trị client gửi lên
-    const v = await this.validate({ ...b, email: row.email }, id, false);
+    const v = await this.validate({ ...b, email: row.email ?? undefined }, id, false);
     if (ROLE_IN[b.role!] !== row.role) return fail('VALIDATION_ERROR', 'Không đổi vai trò của tài khoản đã tạo.', 400, { role: 'Không đổi được vai trò của tài khoản đã tạo.' });
     await this.prisma.users.update({
       where: { id },

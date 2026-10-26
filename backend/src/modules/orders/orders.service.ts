@@ -70,13 +70,13 @@ export class OrdersService {
   }
 
   private async conversationOf(o: OrderRow) {
-    const c = await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: o.weddings.user_id, vendor_id: o.vendor_profiles.user_id } } });
+    const c = await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: o.weddings!.user_id!, vendor_id: o.vendor_profiles!.user_id! } } });
     return c?.id ?? '';
   }
 
   private async cancelReason(orderId: string) {
     const m = await this.prisma.messages.findFirst({ where: { order_id: orderId, sender_id: null, content: { startsWith: 'Đã hủy đơn' } }, orderBy: { sent_date: 'desc' } });
-    return m && m.content.includes('Lý do: ') ? m.content.split('Lý do: ').slice(1).join('Lý do: ') : null;
+    return m?.content?.includes('Lý do: ') ? m.content.split('Lý do: ').slice(1).join('Lý do: ') : null;
   }
 
   private async loadFull(id: string) {
@@ -230,7 +230,7 @@ export class OrdersService {
       await postMessage(this.prisma, { conversationId, senderId: null, content: 'Đã gửi yêu cầu chỉnh sửa cho nhà cung cấp. Nhà cung cấp sẽ cập nhật và gửi lại đơn.', orderId: id, isRead: true });
     }
     await notify(this.prisma, {
-      userId: o.vendor_profiles.user_id,
+      userId: o.vendor_profiles!.user_id!,
       type: 'OrderRevisionRequested',
       title: 'Khách yêu cầu chỉnh sửa đơn',
       content: `Khách yêu cầu chỉnh sửa đơn ${o.order_code}: ${text}`,
@@ -263,7 +263,7 @@ export class OrdersService {
       this.prisma.invoices.create({ data: { order_id: orderId, invoice_code: receiptCode, type: 'DepositReceipt' } }),
     ]);
 
-    await onOrderDeposited(this.prisma, { id: o.id, wedding_id: o.wedding_id, vendor_id: o.vendor_id, event_date: o.event_date });
+    await onOrderDeposited(this.prisma, { id: o.id, wedding_id: o.wedding_id!, vendor_id: o.vendor_id!, event_date: o.event_date! });
 
     const conversationId = await this.conversationOf(o);
     if (conversationId) {
@@ -277,7 +277,7 @@ export class OrdersService {
       });
     }
     await notify(this.prisma, {
-      userId: o.vendor_profiles.user_id,
+      userId: o.vendor_profiles!.user_id!,
       type: 'OrderDeposited',
       title: 'Đơn đã được đặt cọc',
       content: `Đơn ${o.order_code} đã được đặt cọc ${money(deposit)}.`,
@@ -298,7 +298,7 @@ export class OrdersService {
     let list = rows;
     if (q.conversationId) {
       const cp = convs.find((c) => c.id === q.conversationId)?.couple_id;
-      list = list.filter((o) => o.weddings.user_id === cp);
+      list = list.filter((o) => o.weddings?.user_id === cp);
     }
     if (q.status) list = list.filter((o) => serviceStatusOf(o.status) === q.status);
     if (q.paymentStatus) list = list.filter((o) => paymentStatusOf(o.status) === q.paymentStatus);
@@ -307,14 +307,14 @@ export class OrdersService {
     const term = q.q?.trim().toLowerCase();
     if (term) {
       const digits = term.replace(/\D/g, '');
-      list = list.filter((o) => o.order_code.toLowerCase().includes(term) || o.customer_name.toLowerCase().includes(term) || (digits.length >= 3 && o.customer_phone.replace(/\D/g, '').includes(digits)));
+      list = list.filter((o) => (o.order_code ?? '').toLowerCase().includes(term) || (o.customer_name ?? '').toLowerCase().includes(term) || (digits.length >= 3 && (o.customer_phone ?? '').replace(/\D/g, '').includes(digits)));
     }
 
     const page = Math.max(1, Math.trunc(Number(q.page)) || 1);
     const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(q.pageSize)) || 20));
     const slice = list.slice((page - 1) * pageSize, page * pageSize);
     const items = await Promise.all(
-      slice.map(async (o) => toServiceOrder(o, convByCouple.get(o.weddings.user_id) ?? '', o.status === 'Cancelled' ? await this.cancelReason(o.id) : null)),
+      slice.map(async (o) => toServiceOrder(o, convByCouple.get(o.weddings?.user_id ?? null) ?? '', o.status === 'Cancelled' ? await this.cancelReason(o.id) : null)),
     );
     return Paginated.of(items, list.length, { page, pageSize });
   }
@@ -336,7 +336,7 @@ export class OrdersService {
     const v = await this.vendorOf(userId);
     const conv = body.conversationId && UUID.test(body.conversationId) ? await this.prisma.conversations.findFirst({ where: { id: body.conversationId, vendor_id: userId } }) : null;
     if (!conv) return fail('CONVERSATION_NOT_FOUND', 'Không tìm thấy hội thoại.', 404);
-    const wedding = await this.prisma.weddings.findUnique({ where: { user_id: conv.couple_id } });
+    const wedding = conv.couple_id ? await this.prisma.weddings.findUnique({ where: { user_id: conv.couple_id } }) : null;
     if (!wedding) return fail('WEDDING_NOT_SET', 'Khách chưa thiết lập thông tin đám cưới nên chưa tạo được đơn.', 409);
 
     const p = this.parse(body.content ?? {}, !!body.send);
@@ -364,7 +364,7 @@ export class OrdersService {
 
   async send(userId: string, id: string, body: { content?: ContentBody }) {
     const { order } = await this.ownedByVendor(userId, id);
-    if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status)) {
+    if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status ?? '')) {
       return fail('ORDER_NOT_REVISABLE', order.status === 'Deposited' || order.status === 'Completed' ? 'Đơn đã đặt cọc, không sửa và gửi lại được.' : 'Đơn đã hủy hoặc hết hạn.', 409);
     }
     const p = this.parse(body.content ?? {}, true);
@@ -416,7 +416,7 @@ export class OrdersService {
       });
     }
     await notify(this.prisma, {
-      userId: o.weddings.user_id,
+      userId: o.weddings!.user_id!,
       type: 'OrderSent',
       title: changes ? 'Nhà cung cấp đã gửi lại đơn' : 'Nhà cung cấp đã gửi đơn dịch vụ',
       content: `Đơn ${o.order_code} đang chờ bạn đặt cọc ${money(deposit)}.`,
@@ -441,7 +441,7 @@ export class OrdersService {
     if (Number.isNaN(paidAt.getTime())) errors.paidAt = 'Thời điểm nhận tiền không hợp lệ.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Khoản thu chưa hợp lệ.', 400, errors);
 
-    const category = await this.prisma.service_categories.findUniqueOrThrow({ where: { id: vendor.category_id } });
+    const category = await this.prisma.service_categories.findUniqueOrThrow({ where: { id: vendor.category_id! } });
     const rate = Number(category.commission_rate);
     const commission = Math.round((total * rate) / 100);
     // Kỳ tính hoa hồng là tháng hoàn thành. Bảng kê đã thanh toán thì đã khép lại: hoa hồng của đơn hoàn thành sau đó
@@ -480,7 +480,7 @@ export class OrdersService {
       });
     }
     await notify(this.prisma, {
-      userId: order.weddings.user_id,
+      userId: order.weddings!.user_id!,
       type: 'OrderCompleted',
       title: 'Đơn dịch vụ đã hoàn thành',
       content: `Đơn ${order.order_code} đã được thanh toán đủ và hoàn thành.`,
@@ -494,7 +494,7 @@ export class OrdersService {
     const { order } = await this.ownedByVendor(userId, id);
     const text = (reason ?? '').trim();
     if (!text) return fail('VALIDATION_ERROR', 'Nhập lý do hủy đơn.', 400);
-    if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status)) {
+    if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status ?? '')) {
       return fail('CONFLICT', order.status === 'Deposited' || order.status === 'Completed' ? 'Đơn đã nhận cọc, không thể hủy.' : 'Đơn đã hủy hoặc hết hạn.', 409);
     }
     await this.prisma.orders.update({ where: { id }, data: { status: 'Cancelled', cancelled_date: new Date() } });
@@ -504,7 +504,7 @@ export class OrdersService {
         await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `Đã hủy đơn ${order.order_code}. Lý do: ${text}` });
       }
       await notify(this.prisma, {
-        userId: order.weddings.user_id,
+        userId: order.weddings!.user_id!,
         type: 'OrderCancelled',
         title: 'Đơn dịch vụ đã bị hủy',
         content: `Đơn ${order.order_code} đã bị nhà cung cấp hủy. Lý do: ${text}`,

@@ -2,19 +2,22 @@ import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomInt } from 'node:crypto';
+import { MailService } from '../../integrations/mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { passwordProblem } from './password-policy';
 
 const ROLE_MAP: Record<string, 'COUPLE' | 'VENDOR' | 'ADMIN'> = { Couple: 'COUPLE', Vendor: 'VENDOR', Admin: 'ADMIN' };
 
-type UserRow = { id: string; full_name: string; email: string; phone_number: string | null; role: string };
+type UserRow = { id: string; username?: string | null; full_name: string | null; email: string | null; phone_number: string | null; role: string | null };
 
 // Dạng người dùng frontend cần (docs/api/auth.md)
 const toSessionUser = (u: UserRow) => ({
   id: u.id,
-  name: u.full_name,
-  email: u.email,
+  username: u.username ?? null,
+  name: u.full_name ?? '',
+  email: u.email ?? '',
   phone: u.phone_number,
-  role: ROLE_MAP[u.role] ?? 'COUPLE',
+  role: ROLE_MAP[u.role ?? ''] ?? 'COUPLE',
 });
 
 const fail = (code: string, message: string, status: number, details?: unknown): never => {
@@ -37,6 +40,10 @@ interface PendingRegistration {
   attempts: number;
 }
 
+/** Đổi mật khẩu: nhập sai mật khẩu hiện tại quá số lần này thì tạm khóa chức năng đổi mật khẩu. */
+const MAX_WRONG_CURRENT = 5;
+const WRONG_LOCK_MS = 15 * 60_000;
+
 const hashOtp = (email: string, otp: string) => createHash('sha256').update(`${email}:${otp}`).digest('hex');
 
 @Injectable()
@@ -44,10 +51,16 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   /** Đăng ký chờ xác thực OTP (lưu trong bộ nhớ, tự hết hạn; khởi động lại backend thì mất). */
   private readonly pending = new Map<string, PendingRegistration>();
+  /** Số lần nhập sai mật khẩu hiện tại khi đổi mật khẩu, theo người dùng (trong bộ nhớ). */
+  private readonly wrongCurrent = new Map<string, { count: number; until: number }>();
 
-  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly mail: MailService,
+  ) {}
 
-  private session(user: UserRow & { username: string }) {
+  private session(user: UserRow & { username: string | null }) {
     const accessToken = this.jwt.sign({ sub: user.id, username: user.username, role: user.role });
     return { accessToken, user: toSessionUser(user) };
   }
@@ -58,7 +71,7 @@ export class AuthService {
       where: { email: identifier.trim().toLowerCase() },
     });
     // Hash trong CSDL tạo bằng pgcrypto crypt(..., gen_salt('bf')) => tương thích bcryptjs
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    if (!user?.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
       return fail('INVALID_CREDENTIALS', 'Sai tài khoản hoặc mật khẩu.', 401);
     }
     if (user.status === 'Locked') return fail('ACCOUNT_DISABLED', 'Tài khoản đã bị khóa.', 403);
@@ -167,5 +180,48 @@ export class AuthService {
     }
     const user = await this.prisma.users.update({ where: { id: userId }, data: { full_name: name, email, phone_number: phone } });
     return toSessionUser(user);
+  }
+
+  // ---------- Đổi mật khẩu ----------
+
+  /**
+   * Đổi mật khẩu khi đang đăng nhập: kiểm tra mật khẩu hiện tại, mật khẩu mới theo password-policy, nhập lại khớp và khác mật khẩu cũ.
+   * Sai mật khẩu hiện tại 5 lần thì tạm khóa chức năng này 15 phút. Đổi xong gửi email báo (nếu đã cấu hình mail).
+   */
+  async changePassword(userId: string, body: { currentPassword?: string; newPassword?: string; confirmPassword?: string }) {
+    const lock = this.wrongCurrent.get(userId);
+    if (lock && lock.until > Date.now()) {
+      const min = Math.ceil((lock.until - Date.now()) / 60_000);
+      return fail('TOO_MANY_ATTEMPTS', `Bạn đã nhập sai mật khẩu hiện tại quá ${MAX_WRONG_CURRENT} lần. Thử lại sau ${min} phút.`, 429);
+    }
+    const user = await this.prisma.users.findUnique({ where: { id: userId } });
+    if (!user?.password_hash) return fail('UNAUTHORIZED', 'Chưa đăng nhập.', 401);
+
+    const current = body.currentPassword ?? '';
+    const next = body.newPassword ?? '';
+    const errors: Record<string, string> = {};
+    if (!current) errors.currentPassword = 'Nhập mật khẩu hiện tại.';
+    const problem = next ? passwordProblem(next, { username: user.username, email: user.email, phone: user.phone_number }) : 'Nhập mật khẩu mới.';
+    if (problem) errors.newPassword = problem;
+    if ((body.confirmPassword ?? '') !== next) errors.confirmPassword = 'Mật khẩu nhập lại không khớp.';
+    if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin chưa hợp lệ.', 400, errors);
+
+    if (!(await bcrypt.compare(current, user.password_hash))) {
+      // Hết thời gian tạm khóa (until đã qua) thì đếm lại từ đầu
+      const count = (lock && lock.until === 0 ? lock.count : 0) + 1;
+      this.wrongCurrent.set(userId, { count, until: count >= MAX_WRONG_CURRENT ? Date.now() + WRONG_LOCK_MS : 0 });
+      const left = MAX_WRONG_CURRENT - count;
+      return fail('VALIDATION_ERROR', 'Mật khẩu hiện tại không đúng.', 400, {
+        currentPassword: left > 0 ? `Mật khẩu hiện tại không đúng. Còn ${left} lần thử.` : `Mật khẩu hiện tại không đúng. Đã tạm khóa đổi mật khẩu ${WRONG_LOCK_MS / 60_000} phút.`,
+      });
+    }
+    if (await bcrypt.compare(next, user.password_hash)) {
+      return fail('VALIDATION_ERROR', 'Thông tin chưa hợp lệ.', 400, { newPassword: 'Mật khẩu mới phải khác mật khẩu hiện tại.' });
+    }
+
+    this.wrongCurrent.delete(userId);
+    await this.prisma.users.update({ where: { id: userId }, data: { password_hash: await bcrypt.hash(next, 10) } });
+    if (user.email) void this.mail.sendPasswordChanged(user.email, user.full_name ?? '');
+    return null;
   }
 }

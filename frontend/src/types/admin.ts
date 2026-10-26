@@ -45,7 +45,7 @@ export interface AdminDashboard {
 /** Một thông báo của Admin (chuông ở header). */
 export interface AdminNotification {
   id: string
-  /** NewConsultationRequest | VendorSubmitted | PackageSubmitted */
+  /** NewConsultationRequest | VendorSubmitted | VendorUpdated | PackageSubmitted | CommissionReceived | CommissionOverdue | CommissionLockable */
   type: string
   title: string
   content: string
@@ -259,8 +259,14 @@ export interface AdminPackage {
   category: CategoryRef
   vendor: { id: string; name: string; city: string }
   status: AdminPackageStatus
+  /** Duyệt lần đầu (gói chưa đăng) hoặc duyệt bản cập nhật của gói đã đăng; null khi không chờ duyệt */
+  reviewKind: 'INITIAL' | 'UPDATE' | null
   reviewNote: string | null
+  /** Bản đang hiển thị với khách khi gói có bản cập nhật đã gửi (các trường trên là bản cập nhật); null nếu không có */
+  published: { name: string; description: string; price: number; capacity: number | null; tags: string[]; photos: string[] } | null
   submittedAt: string | null
+  /** Chỉ ở chi tiết: lần gửi trước bị yêu cầu chỉnh sửa (để đối chiếu) */
+  lastRevision?: { note: string | null; reviewedAt: string | null } | null
 }
 
 export interface AdminPackageQuery {
@@ -301,6 +307,8 @@ export interface AdminStatement {
   dueDate: string
   status: AdminStatementStatus
   isOverdue: boolean
+  /** Đã thanh toán sau hạn bao nhiêu ngày; null: chưa trả hoặc trả đúng hạn */
+  lateDays: number | null
   /** ISO, khi đã thanh toán */
   paidAt: string | null
   transactionCode: string | null
@@ -369,6 +377,8 @@ export interface AdminStatementDetail extends AdminStatement {
     ownerName: string
     email: string
     phone: string | null
+    /** Tài khoản NCC đang bị khóa */
+    accountLocked: boolean
   }
   lines: AdminStatementLine[]
 }

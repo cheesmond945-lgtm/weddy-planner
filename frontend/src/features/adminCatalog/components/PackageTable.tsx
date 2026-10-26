@@ -4,6 +4,7 @@ import { Badge } from '@/components/Badge'
 import { DataTable, num, td, th } from '@/features/adminShared/components/AdminTable'
 import { formatDay, waitingOf } from '@/features/adminShared/format'
 import { isVenue } from '@/features/vendorPackages/constants'
+import { ReviewKindBadge } from '@/features/adminVendors/components/ReviewKindBadge'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
@@ -78,6 +79,11 @@ export function PackageTable({ packages, startIndex = 0 }: { packages: AdminPack
                   <i aria-hidden className="size-1.5 rounded-full bg-current opacity-75" />
                   {st.label}
                 </Badge>
+                {p.reviewKind && (
+                  <span className="mt-1 block">
+                    <ReviewKindBadge kind={p.reviewKind} />
+                  </span>
+                )}
               </td>
               {showCapacity && <td className={cn(td, 'text-right whitespace-nowrap tabular-nums')}>{p.capacity ? `${p.capacity} khách` : '—'}</td>}
             </tr>

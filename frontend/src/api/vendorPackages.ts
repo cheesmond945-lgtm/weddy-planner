@@ -20,6 +20,10 @@ export const vendorPackagesApi = {
   remove: (id: string): Promise<null> =>
     http.delete(`/vendors/me/packages/${id}`),
 
+  /** Xóa bản cập nhật nháp của gói đã đăng (gói giữ nguyên bản đang đăng) */
+  discardUpdate: (id: string): Promise<VendorPackage> =>
+    http.delete(`/vendors/me/packages/${id}/update`),
+
   submit: (id: string): Promise<VendorPackage> =>
     http.post(`/vendors/me/packages/${id}/submit`),
 

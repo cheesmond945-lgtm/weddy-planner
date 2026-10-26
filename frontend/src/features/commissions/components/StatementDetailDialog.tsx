@@ -97,6 +97,7 @@ export function StatementDetailDialog({ id, onClose }: { id: string; onClose: ()
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <StatusBadge tone={COMMISSION_STATUS[s.status].tone}>{COMMISSION_STATUS[s.status].label}</StatusBadge>
         {s.isOverdue && <StatusBadge tone="warn">Quá hạn</StatusBadge>}
+        {s.lateDays && <StatusBadge tone="warn">Trả trễ {s.lateDays} ngày</StatusBadge>}
       </div>
       <div className="mb-1 grid grid-cols-3 gap-2.5 max-sm:grid-cols-1">
         {[

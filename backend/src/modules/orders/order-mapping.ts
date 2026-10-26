@@ -19,9 +19,15 @@ export const ORDER_INCLUDE = {
 export type OrderRow = Prisma.ordersGetPayload<{ include: typeof ORDER_INCLUDE }>;
 
 /** Ngày thuần (cột @db.Date) -> "YYYY-MM-DD". */
-export const ymd = (d: Date) => d.toISOString().slice(0, 10);
+export const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
 /** Thời điểm (timestamptz) -> "YYYY-MM-DD" theo giờ Việt Nam. */
 export const ymdVN = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+/** Số ngày trả trễ so với hạn (ngày thanh toán theo giờ Việt Nam); null nếu chưa trả hoặc trả đúng hạn. */
+export const lateDaysOf = (due: Date | null, paidAt: Date | null) => {
+  if (!due || !paidAt) return null;
+  const days = Math.round((Date.parse(`${ymdVN(paidAt)}T00:00:00Z`) - Date.parse(`${ymd(due)}T00:00:00Z`)) / 86_400_000);
+  return days > 0 ? days : null;
+};
 /** "YYYY-MM-DD" -> cuối ngày giờ Việt Nam. */
 export const endOfDayVN = (s: string) => new Date(`${s}T23:59:00+07:00`);
 
@@ -38,8 +44,8 @@ const STATUS_OUT: Record<string, ServiceOrderStatus> = {
   Cancelled: 'CANCELLED',
 };
 
-export const serviceStatusOf = (status: string): ServiceOrderStatus => STATUS_OUT[status] ?? 'DRAFT';
-export const paymentStatusOf = (status: string): OrderPaymentStatus => (status === 'Completed' ? 'PAID' : status === 'Deposited' ? 'DEPOSIT_PAID' : 'UNPAID');
+export const serviceStatusOf = (status: string | null): ServiceOrderStatus => STATUS_OUT[status ?? ''] ?? 'DRAFT';
+export const paymentStatusOf = (status: string | null): OrderPaymentStatus => (status === 'Completed' ? 'PAID' : status === 'Deposited' ? 'DEPOSIT_PAID' : 'UNPAID');
 
 export interface OrderContentDto {
   customerName: string;
@@ -55,16 +61,16 @@ export function contentOf(o: OrderRow): OrderContentDto {
   const deposit = Number(o.deposit_amount);
   const percent = Number(o.deposit_percent);
   return {
-    customerName: o.customer_name,
-    customerPhone: o.customer_phone,
+    customerName: o.customer_name ?? '',
+    customerPhone: o.customer_phone ?? '',
     eventDate: ymd(o.event_date),
     note: o.note,
     lines: o.order_items.map((i) => ({
       id: i.id,
       packageId: null,
-      name: i.item_name,
-      unit: i.unit,
-      quantity: i.quantity,
+      name: i.item_name ?? '',
+      unit: i.unit ?? 'Gói',
+      quantity: i.quantity ?? 1,
       unitPrice: Number(i.unit_price),
       isPolicyFee: false,
     })),
@@ -119,7 +125,7 @@ export function toServiceOrder(o: OrderRow, conversationId: string, cancelReason
   const deposit = Number(o.deposit_amount);
   const paidDeposit = o.payments?.status === 'Paid';
   const request = o.status === 'NeedRevision' ? o.order_revisions.find((r) => r.status === 'Requested') : undefined;
-  const createdAt = o.created_date;
+  const createdAt = o.created_date ?? new Date();
 
   const payments: {
     id: string;
@@ -165,7 +171,7 @@ export function toServiceOrder(o: OrderRow, conversationId: string, cancelReason
   const history: { at: string; text: string }[] = [{ at: createdAt.toISOString(), text: 'Tạo đơn' }];
   if (status !== 'DRAFT') history.push({ at: createdAt.toISOString(), text: 'Gửi đơn cho khách' });
   for (const r of [...o.order_revisions].reverse()) {
-    history.push({ at: r.created_date.toISOString(), text: `Khách yêu cầu chỉnh sửa${r.request_note ? `: ${r.request_note}` : ''}` });
+    history.push({ at: (r.created_date ?? createdAt).toISOString(), text: `Khách yêu cầu chỉnh sửa${r.request_note ? `: ${r.request_note}` : ''}` });
     if (r.applied_date) history.push({ at: r.applied_date.toISOString(), text: 'Đã cập nhật và gửi lại đơn' });
   }
   if (paidDeposit) history.push({ at: (o.payments!.paid_date ?? createdAt).toISOString(), text: `Đã nhận cọc ${deposit.toLocaleString('vi-VN')}đ` });
@@ -181,7 +187,7 @@ export function toServiceOrder(o: OrderRow, conversationId: string, cancelReason
     paymentStatus: paymentStatusOf(o.status),
     versions: status === 'DRAFT' ? [] : [{ version: 1, sentAt: createdAt.toISOString(), content, changes: [] as string[], fromAdjustmentId: null }],
     draft: status === 'DRAFT' ? { kind: 'NEW' as const, baseVersion: null, content, savedAt: createdAt.toISOString() } : null,
-    revisionRequest: request ? { version: 1, note: request.request_note ?? '', requestedAt: request.created_date.toISOString() } : null,
+    revisionRequest: request ? { version: 1, note: request.request_note ?? '', requestedAt: (request.created_date ?? createdAt).toISOString() } : null,
     adjustmentRequest: null,
     payments,
     adjustments: [] as unknown[],
@@ -199,7 +205,7 @@ export function toServiceOrder(o: OrderRow, conversationId: string, cancelReason
 
 export type CoupleOrderStatus = 'SENT' | 'REVISION_REQUESTED' | 'PAID' | 'CANCELLED';
 
-export const coupleStatusOf = (status: string): CoupleOrderStatus =>
+export const coupleStatusOf = (status: string | null): CoupleOrderStatus =>
   status === 'Deposited' || status === 'Completed' ? 'PAID' : status === 'NeedRevision' ? 'REVISION_REQUESTED' : status === 'Cancelled' || status === 'Expired' ? 'CANCELLED' : 'SENT';
 
 /** Đơn phía cặp đôi (kiểu Order của frontend). */
@@ -208,8 +214,8 @@ export function toCoupleOrder(o: OrderRow, conversationId: string) {
   return {
     id: o.id,
     code: o.order_code,
-    planItemId: o.vendor_profiles.id,
-    serviceId: o.vendor_profiles.id,
+    planItemId: o.vendor_profiles!.id,
+    serviceId: o.vendor_profiles!.id,
     conversationId,
     packageName: o.order_items[0]?.item_name ?? '',
     serviceDate: ymd(o.event_date),

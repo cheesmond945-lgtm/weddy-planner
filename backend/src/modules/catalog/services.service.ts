@@ -27,7 +27,7 @@ const CATEGORY_SLUGS: Record<string, string> = {
 const slugify = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-export const categorySlug = (name: string) => CATEGORY_SLUGS[name] ?? slugify(name);
+export const categorySlug = (name: string | null) => (name ? (CATEGORY_SLUGS[name] ?? slugify(name)) : '');
 
 /** Thứ tự hiển thị danh mục (như prototype): các slug lạ xếp cuối. */
 export const CATEGORY_ORDER = ['nha-hang', 'decor', 'trang-phuc', 'makeup', 'chup-anh', 'co-cuoi', 'hoa-cuoi'];
@@ -60,7 +60,7 @@ export class ServicesService {
     });
   }
 
-  private img(path: string) {
+  private img(path: string | null) {
     return this.storage.publicAlbumUrl(path);
   }
 
@@ -70,7 +70,7 @@ export class ServicesService {
     return {
       id: v.id,
       name: v.business_name,
-      category: { id: v.service_categories.id, slug: categorySlug(v.service_categories.name), name: v.service_categories.name },
+      category: { id: v.service_categories!.id, slug: categorySlug(v.service_categories!.name), name: v.service_categories!.name ?? '' },
       location: v.city,
       priceFrom: Math.min(...prices),
       rating: 0,
@@ -139,7 +139,7 @@ export class ServicesService {
           (!query.location || s.location === query.location) &&
           (query.priceMin === undefined || s.priceFrom >= query.priceMin) &&
           (query.priceMax === undefined || s.priceFrom < query.priceMax) &&
-          (!q || s.name.toLowerCase().includes(q) || s.category.name.toLowerCase().includes(q)),
+          (!q || (s.name ?? '').toLowerCase().includes(q) || s.category.name.toLowerCase().includes(q)),
       );
 
     const rows = items.slice((page - 1) * pageSize, page * pageSize);

@@ -35,26 +35,26 @@ export class AdminConsultationsService {
 
   private async dto(rows: Awaited<ReturnType<AdminConsultationsService['load']>>) {
     // Đã tạo tài khoản NCC = có tài khoản vai trò Vendor trùng email của yêu cầu
-    const vendors = await this.prisma.users.findMany({ where: { role: 'Vendor', email: { in: rows.map((r) => r.email.toLowerCase()) } }, select: { email: true } });
-    const have = new Set(vendors.map((v) => v.email.toLowerCase()));
+    const vendors = await this.prisma.users.findMany({ where: { role: 'Vendor', email: { in: rows.map((r) => (r.email ?? '').toLowerCase()) } }, select: { email: true } });
+    const have = new Set(vendors.map((v) => (v.email ?? '').toLowerCase()));
     return rows.map((r) => ({
       id: r.id,
       brandName: r.brand_name,
-      category: { id: r.service_categories.id, slug: categorySlug(r.service_categories.name), name: r.service_categories.name },
+      category: { id: r.service_categories!.id, slug: categorySlug(r.service_categories!.name), name: r.service_categories!.name ?? '' },
       contactName: r.contact_name,
       phone: r.phone_number,
       email: r.email,
-      createdAt: r.created_date.toISOString(),
-      isContacted: r.is_contacted,
+      createdAt: r.created_date?.toISOString() ?? '',
+      isContacted: !!r.is_contacted,
       contactedAt: r.contacted_date?.toISOString() ?? null,
-      qualification: QUAL_OUT[r.qualification] ?? 'UNRATED',
+      qualification: QUAL_OUT[r.qualification ?? ''] ?? 'UNRATED',
       note: r.admin_note,
-      vendorAccountCreated: have.has(r.email.toLowerCase()),
+      vendorAccountCreated: !!r.email && have.has(r.email.toLowerCase()),
     }));
   }
 
-  private async hasVendorAccount(email: string) {
-    return !!(await this.prisma.users.findFirst({ where: { role: 'Vendor', email: email.toLowerCase() }, select: { id: true } }));
+  private async hasVendorAccount(email: string | null) {
+    return !!email && !!(await this.prisma.users.findFirst({ where: { role: 'Vendor', email: email.toLowerCase() }, select: { id: true } }));
   }
 
   private load(where: object = {}) {

@@ -151,6 +151,8 @@ export function buildStatements({ orders, category, vendorName, payments, transf
       closingDate,
       dueDate,
       isOverdue: status !== 'OPEN' && status !== 'PAID' && today > dueDate && remainingOf({ commissionAmount, paidAmount }) > 0,
+      // Bản dựng phía client không có ngày ghi nhận thanh toán của bảng kê: số ngày trả trễ do backend tính
+      lateDays: null,
       lines: own.sort((a, b) => a.eventDate.localeCompare(b.eventDate)),
       payments: [...subs].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
       transfer: { ...transfer, content: `${code} — ${vendorName}` },

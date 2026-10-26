@@ -56,7 +56,14 @@ export class VendorProfileService {
       },
     });
     if (!v) return fail('VENDOR_PROFILE_NOT_FOUND', 'Tài khoản chưa có hồ sơ nhà cung cấp.', 404);
-    return v;
+    const cat = v.service_categories;
+    if (!cat) return fail('VENDOR_PROFILE_NOT_FOUND', 'Hồ sơ nhà cung cấp chưa có lĩnh vực.', 404);
+    return {
+      ...v,
+      service_categories: { id: cat.id, name: cat.name ?? '' },
+      // Bỏ dòng tệp thiếu loại hoặc đường dẫn
+      vendor_documents: v.vendor_documents.flatMap((d) => (d.url && d.document_type ? [{ ...d, url: d.url, document_type: d.document_type }] : [])),
+    };
   }
 
   async vendorId(userId: string) {
@@ -81,7 +88,7 @@ export class VendorProfileService {
 
     return {
       id: v.id,
-      status: STATUS_OUT[v.status] ?? 'NOT_SUBMITTED',
+      status: STATUS_OUT[v.status ?? ''] ?? 'NOT_SUBMITTED',
       businessName: v.business_name || null,
       taxCode: v.tax_code,
       representativeName: v.representative_name || null,
@@ -102,8 +109,8 @@ export class VendorProfileService {
       revisionRequested: verified && lastReview?.status === 'NeedRevision',
       /** Đã duyệt, đã gửi cập nhật và đang chờ Admin kiểm tra (hậu kiểm): hồ sơ chỉ đọc. */
       pendingReview: verified && lastReview?.status === 'Pending',
-      submittedAt: lastReview?.submitted_date.toISOString() ?? null,
-      updatedAt: v.updated_date.toISOString(),
+      submittedAt: lastReview?.submitted_date?.toISOString() ?? null,
+      updatedAt: v.updated_date?.toISOString() ?? '',
     };
   }
 
@@ -238,7 +245,7 @@ export class VendorProfileService {
     }
 
     await this.storage.remove(DOC_BUCKET, dropped);
-    if (submit) await this.notifyAdmins(v.id, businessName ?? v.business_name, approved);
+    if (submit) await this.notifyAdmins(v.id, businessName ?? v.business_name ?? '', approved);
     return this.getProfile(userId);
   }
 

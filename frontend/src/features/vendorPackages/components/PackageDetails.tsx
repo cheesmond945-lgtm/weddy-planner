@@ -1,4 +1,4 @@
-import { EyeOff, RotateCcw } from 'lucide-react'
+import { EyeOff, PencilLine, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -10,31 +10,54 @@ import { usePackageAction } from '../hooks'
 import { PackageEditor } from './PackageEditor'
 import { useListHref } from './PackageHeader'
 
-/** Gói chờ duyệt / đã đăng / đang ẩn: xem trên cùng form ở chế độ chỉ đọc; đã đăng thì ẩn được, đang ẩn thì đăng lại được. */
-export function PackageDetails({ pkg, profile, category }: { pkg: VendorPackage; profile: VendorProfile; category: CategoryRef }) {
+interface PackageDetailsProps {
+  pkg: VendorPackage
+  profile: VendorProfile
+  category: CategoryRef
+  /** Bấm "Cập nhật" (gói đã đăng, chưa có bản cập nhật): chuyển sang form sửa */
+  onEdit: () => void
+}
+
+/**
+ * Gói chờ duyệt / đã đăng / đang ẩn: xem trên cùng form ở chế độ chỉ đọc.
+ * - Chờ duyệt, hoặc bản cập nhật đang chờ duyệt: không có thao tác.
+ * - Đã đăng: Cập nhật, Ẩn.
+ * - Đang ẩn: chỉ Khôi phục (khôi phục rồi mới cập nhật được).
+ */
+export function PackageDetails({ pkg, profile, category, onEdit }: PackageDetailsProps) {
   const action = usePackageAction()
   const listHref = useListHref()
-  const [confirmHide, setConfirmHide] = useState(false)
+  const [confirm, setConfirm] = useState<'hide' | 'republish' | null>(null)
+  const published = pkg.status === 'PUBLISHED' && !pkg.pendingUpdate
 
   const actions = (
     <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>*]:flex-1">
       <Button asChild variant="outline" className="h-10 border-line-strong">
         <Link to={listHref}>Quay lại</Link>
       </Button>
-      {pkg.status === 'PUBLISHED' && (
-        <Button className="h-10" disabled={action.isPending} onClick={() => setConfirmHide(true)}>
-          <EyeOff />
-          Ẩn dịch vụ
-        </Button>
+      {published && (
+        <>
+          <Button variant="outline" className="h-10 border-line-strong" disabled={action.isPending} onClick={() => setConfirm('hide')}>
+            <EyeOff />
+            Ẩn dịch vụ
+          </Button>
+          <Button className="h-10" disabled={action.isPending} onClick={onEdit}>
+            <PencilLine />
+            Cập nhật
+          </Button>
+        </>
       )}
       {pkg.status === 'HIDDEN' && (
-        <Button className="h-10" disabled={action.isPending} onClick={() => action.mutate({ action: 'republish', pkg })}>
+        <Button className="h-10" disabled={action.isPending} onClick={() => setConfirm('republish')}>
           <RotateCcw />
-          Đăng lại
+          Khôi phục
         </Button>
       )}
-      <ConfirmDialog open={confirmHide} onOpenChange={setConfirmHide} title="Ẩn dịch vụ?" confirmLabel="Ẩn dịch vụ" onConfirm={() => action.mutate({ action: 'hide', pkg })}>
-        <p>Khách sẽ không còn thấy dịch vụ này. Dữ liệu và ảnh được giữ nguyên, bạn có thể đăng lại phiên bản đã duyệt bất cứ lúc nào.</p>
+      <ConfirmDialog open={confirm === 'hide'} onOpenChange={(o) => !o && setConfirm(null)} title="Ẩn dịch vụ?" confirmLabel="Ẩn dịch vụ" onConfirm={() => action.mutate({ action: 'hide', pkg })}>
+        <p>Khách sẽ không còn thấy dịch vụ này. Dữ liệu và ảnh được giữ nguyên, bạn có thể khôi phục bất cứ lúc nào.</p>
+      </ConfirmDialog>
+      <ConfirmDialog open={confirm === 'republish'} onOpenChange={(o) => !o && setConfirm(null)} title="Khôi phục dịch vụ?" confirmLabel="Khôi phục" onConfirm={() => action.mutate({ action: 'republish', pkg })}>
+        <p>Khách sẽ thấy lại dịch vụ “{pkg.name}” theo phiên bản đã được duyệt.</p>
       </ConfirmDialog>
     </div>
   )

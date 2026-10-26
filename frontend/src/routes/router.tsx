@@ -36,6 +36,7 @@ import VendorDashboardPage from '@/pages/vendor/VendorDashboardPage'
 import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
 import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
 import VendorProfilePage from '@/pages/vendor/VendorProfilePage'
+import VendorAccountPage from '@/pages/vendor/VendorAccountPage'
 import { RequireRole } from './RequireRole'
 import { paths } from './paths'
 
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
         children: [
           { path: paths.vendor.dashboard, element: <VendorDashboardPage /> },
           { path: paths.vendor.profile, element: <VendorProfilePage /> },
+          { path: paths.vendor.account, element: <VendorAccountPage /> },
           { path: paths.vendor.catalog, element: <VendorCatalogPage /> },
           { path: paths.vendor.packageNew, element: <VendorPackagePage /> },
           { path: '/vendor/catalog/:packageId', element: <VendorPackagePage /> },

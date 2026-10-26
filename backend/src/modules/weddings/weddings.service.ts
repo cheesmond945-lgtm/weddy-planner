@@ -110,7 +110,7 @@ export class WeddingsService {
   // ---------- Kế hoạch (nhà cung cấp đã chọn) ----------
 
   /** Trạng thái của từng NCC trong kế hoạch, tính từ hội thoại và đơn. */
-  private async statuses(userId: string, weddingId: string, vendors: { id: string; user_id: string }[]) {
+  private async statuses(userId: string, weddingId: string, vendors: { id: string; user_id: string | null }[]) {
     const [orders, convs] = await Promise.all([
       this.prisma.orders.findMany({ where: { wedding_id: weddingId, status: { in: ACTIVE_ORDER } }, include: ORDER_INCLUDE, orderBy: { created_date: 'desc' } }),
       this.prisma.conversations.findMany({ where: { couple_id: userId } }),
@@ -119,7 +119,7 @@ export class WeddingsService {
     const out = new Map<string, { status: PlanStatus; order: (typeof orders)[number] | null; conversationId: string | null }>();
     for (const v of vendors) {
       const order = orders.find((o) => o.vendor_id === v.id) ?? null;
-      const conversationId = convByVendorUser.get(v.user_id) ?? null;
+      const conversationId = (v.user_id && convByVendorUser.get(v.user_id)) || null;
       let status: PlanStatus = conversationId ? 'DISCUSSING' : 'PLANNED';
       if (order?.status === 'Pending') status = 'AWAITING_DEPOSIT';
       else if (order?.status === 'Deposited' || order?.status === 'Completed') status = 'CONFIRMED';
@@ -132,12 +132,12 @@ export class WeddingsService {
   /** Dịch vụ đang chọn của từng hạng mục (slug), dùng cho timeline. */
   async planSnapshot(userId: string, weddingId: string) {
     const out = new Map<string, { serviceName: string; serviceId: string; status: PlanStatus }>();
-    for (const b of await this.buildItems(userId, weddingId)) out.set(b.slug, { serviceName: b.item.service.name, serviceId: b.item.service.id, status: b.item.status });
+    for (const b of await this.buildItems(userId, weddingId)) out.set(b.slug, { serviceName: b.item.service.name ?? '', serviceId: b.item.service.id, status: b.item.status });
     return out;
   }
 
   /** Trạng thái kế hoạch của các NCC (chỉ những NCC đang có trong kế hoạch của người này). */
-  async planStatusMap(userId: string, vendors: { id: string; user_id: string }[]) {
+  async planStatusMap(userId: string, vendors: { id: string; user_id: string | null }[]) {
     const w = await this.findWedding(userId);
     const out = new Map<string, PlanStatus>();
     if (!w) return out;
@@ -153,14 +153,14 @@ export class WeddingsService {
       orderBy: { created_date: 'asc' },
       include: { vendor_profiles: { select: { id: true, user_id: true, category_id: true, service_categories: { select: { name: true } } } } },
     });
-    return rows.map((r) => ({ ...r.vendor_profiles, slug: categorySlug(r.vendor_profiles.service_categories.name) }));
+    return rows.flatMap((r) => (r.vendor_profiles ? [{ ...r.vendor_profiles, slug: categorySlug(r.vendor_profiles.service_categories?.name ?? null) }] : []));
   }
 
   /** Mặc định của một PlanItem khi chưa có đơn: gói rẻ nhất (đầu tiên) của NCC. */
   private async firstPackages(vendorIds: string[]) {
     const pkgs = await this.prisma.service_packages.findMany({ where: { vendor_id: { in: vendorIds }, status: 'Approved' }, orderBy: [{ price: 'asc' }, { id: 'asc' }] });
     const map = new Map<string, { name: string; price: number }>();
-    for (const p of pkgs) if (!map.has(p.vendor_id)) map.set(p.vendor_id, { name: p.name, price: Number(p.price) });
+    for (const p of pkgs) if (p.vendor_id && !map.has(p.vendor_id)) map.set(p.vendor_id, { name: p.name ?? '', price: Number(p.price) });
     return map;
   }
 
@@ -240,11 +240,11 @@ export class WeddingsService {
   }
 
   /** Bỏ NCC khỏi kế hoạch cùng hội thoại và các đơn chưa cọc (Nháp, Chờ cọc, Cần sửa). */
-  private async purge(weddingId: string, vendor: { id: string; user_id: string }) {
+  private async purge(weddingId: string, vendor: { id: string; user_id: string | null }) {
     const wedding = await this.prisma.weddings.findUnique({ where: { id: weddingId }, select: { user_id: true } });
     const orders = await this.prisma.orders.findMany({ where: { wedding_id: weddingId, vendor_id: vendor.id, status: { in: ['Draft', 'Pending', 'NeedRevision'] } }, select: { id: true } });
     const orderIds = orders.map((o) => o.id);
-    const conv = wedding ? await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: wedding.user_id, vendor_id: vendor.user_id } } }) : null;
+    const conv = wedding?.user_id && vendor.user_id ? await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: wedding.user_id, vendor_id: vendor.user_id } } }) : null;
     await this.prisma.$transaction([
       this.prisma.messages.deleteMany({ where: { OR: [{ order_id: { in: orderIds } }, ...(conv ? [{ conversation_id: conv.id }] : [])] } }),
       this.prisma.payments.deleteMany({ where: { order_id: { in: orderIds } } }),

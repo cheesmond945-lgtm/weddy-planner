@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
-import { isEditablePackage, packageCategoryOf } from '@/features/vendorPackages/constants'
+import { hasEditableUpdate, isEditablePackage, packageCategoryOf } from '@/features/vendorPackages/constants'
 import { PackageDetails } from '@/features/vendorPackages/components/PackageDetails'
 import { PackageEditor } from '@/features/vendorPackages/components/PackageEditor'
 import { PackageHeader } from '@/features/vendorPackages/components/PackageHeader'
@@ -15,6 +16,8 @@ export default function VendorPackagePage() {
   const { packageId } = useParams()
   const profile = useVendorProfile()
   const pkg = usePackage(packageId)
+  // Gói đã đăng, chưa có bản cập nhật: bấm "Cập nhật" thì mở form sửa. Nhớ theo updatedAt để gói đổi (vd vừa được duyệt) thì về chế độ xem
+  const [editingAt, setEditingAt] = useState<string | null>(null)
 
   const back = (
     <Button asChild variant="outline" size="sm">
@@ -66,13 +69,17 @@ export default function VendorPackagePage() {
     )
   }
 
+  // Form sửa: gói chưa đăng còn sửa được, hoặc gói đã đăng đang có bản cập nhật nháp / bị trả về, hoặc vừa bấm "Cập nhật"
+  const p = pkg.data
+  const showEditor = !p || isEditablePackage(p.status) || hasEditableUpdate(p) || (p.status === 'PUBLISHED' && editingAt === p.updatedAt && !p.pendingUpdate)
+
   return (
     <div className="mx-auto max-w-[980px]">
-      <PackageHeader pkg={pkg.data} profile={profile.data} category={category} />
-      {pkg.data && !isEditablePackage(pkg.data.status) ? (
-        <PackageDetails pkg={pkg.data} profile={profile.data} category={category} />
+      <PackageHeader pkg={p} profile={profile.data} category={category} />
+      {showEditor ? (
+        <PackageEditor key={p?.updatedAt ?? 'new'} pkg={p} profile={profile.data} category={category} onExitUpdate={() => setEditingAt(null)} />
       ) : (
-        <PackageEditor key={pkg.data?.updatedAt ?? 'new'} pkg={pkg.data} profile={profile.data} category={category} />
+        <PackageDetails pkg={p} profile={profile.data} category={category} onEdit={() => setEditingAt(p.updatedAt)} />
       )}
     </div>
   )

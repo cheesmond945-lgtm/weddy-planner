@@ -2,7 +2,7 @@ import type { BadgeTone } from '@/components/Badge'
 import { RESTAURANT_SLUG } from '@/features/vendors/constants'
 import type { CategoryRef } from '@/types/catalog'
 import type { VendorProfile } from '@/types/vendor'
-import type { PackageStatus } from '@/types/vendorPackage'
+import type { PackageStatus, PackageUpdateStatus, VendorPackage } from '@/types/vendorPackage'
 
 /** Nhãn và màu trạng thái gói theo prototype NCC. */
 export const PACKAGE_STATUS: Record<PackageStatus, { label: string; tone: BadgeTone }> = {
@@ -16,11 +16,20 @@ export const PACKAGE_STATUS: Record<PackageStatus, { label: string; tone: BadgeT
 /** Gói còn sửa được: bản nháp, hoặc đã bị Admin yêu cầu chỉnh sửa. */
 export const isEditablePackage = (status: PackageStatus) => status === 'DRAFT' || status === 'NEEDS_REVISION'
 
-/** Thông báo đầu trang chi tiết gói (gói không còn sửa được thì chỉ xem). */
-export const PACKAGE_NOTICE: Partial<Record<PackageStatus, { tone: 'ok' | 'info'; text: string }>> = {
-  PENDING: { tone: 'info', text: 'Dịch vụ đang chờ duyệt. Nội dung không thể chỉnh sửa trong thời gian này.' },
-  PUBLISHED: { tone: 'ok', text: 'Dịch vụ đang hiển thị công khai với khách. Nội dung chỉ xem.' },
-  HIDDEN: { tone: 'info', text: 'Dịch vụ đang ẩn khỏi danh sách và tìm kiếm công khai. Đăng lại sẽ khôi phục đúng phiên bản đã được duyệt.' },
+/** Gói đã đăng có bản cập nhật đang sửa (nháp hoặc bị Admin yêu cầu chỉnh sửa). */
+export const hasEditableUpdate = (p: VendorPackage) => p.status === 'PUBLISHED' && (p.pendingUpdate?.status === 'DRAFT' || p.pendingUpdate?.status === 'NEEDS_REVISION')
+
+/** Nội dung NCC đang làm: gói đã đăng có bản cập nhật thì là bản cập nhật, còn lại là chính gói. */
+export function workingCopy(p: VendorPackage): VendorPackage {
+  const u = p.status === 'PUBLISHED' ? p.pendingUpdate : null
+  return u ? { ...p, name: u.name, description: u.description, price: u.price, tags: u.tags, capacity: u.capacity, photos: u.photos, coverPublicId: u.coverPublicId } : p
+}
+
+/** Nhãn phụ cạnh "Đã đăng" khi gói có bản cập nhật. */
+export const UPDATE_LABEL: Record<PackageUpdateStatus, { label: string; className: string }> = {
+  DRAFT: { label: 'Có bản cập nhật nháp', className: 'bg-surface-2 text-muted-foreground' },
+  PENDING: { label: 'Cập nhật chờ duyệt', className: 'bg-info-soft text-info' },
+  NEEDS_REVISION: { label: 'Cập nhật cần chỉnh sửa', className: 'bg-gold-soft text-gold-ink' },
 }
 
 export const isVenue = (category: CategoryRef | null | undefined) => category?.slug === RESTAURANT_SLUG

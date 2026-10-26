@@ -4,7 +4,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AdminConsultationsService, ConsultationQueryDto, UpdateConsultationDto } from './admin-consultations.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminNotificationsService } from './admin-notifications.service';
-import { AdminPaymentsService, StatementQueryDto } from './admin-payments.service';
+import { AdminPaymentsService, RecordPaymentDto, StatementQueryDto } from './admin-payments.service';
 import { AdminReviewsService, ReviewQueryDto, VendorQueryDto } from './admin-reviews.service';
 import { AdminUsersService, SaveUserDto, UserQueryDto } from './admin-users.service';
 
@@ -146,5 +146,11 @@ export class AdminController {
   @Get('commissions/:id')
   statementDetail(@Param('id') id: string) {
     return this.payments.detail(id);
+  }
+
+  /** Ghi nhận đã thanh toán khi NCC chuyển khoản ngoài VNPay (tuỳ chọn mở khóa tài khoản NCC) */
+  @Post('commissions/:id/record-payment')
+  recordPayment(@Param('id') id: string, @Body() body: RecordPaymentDto) {
+    return this.payments.recordPayment(id, body ?? {});
   }
 }

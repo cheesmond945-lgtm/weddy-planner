@@ -64,6 +64,9 @@ export const adminApi = {
 
   // Thanh toán hoa hồng
   getStatement: (id: string): Promise<AdminStatementDetail> => http.get(`/admin/commissions/${id}`),
+  /** Ghi nhận NCC đã chuyển khoản ngoài VNPay; unlock = mở khóa tài khoản NCC luôn */
+  recordStatementPayment: (id: string, body: { transactionCode: string; paidAt: string; unlock: boolean }): Promise<AdminStatementDetail> =>
+    http.post(`/admin/commissions/${id}/record-payment`, body),
   listStatements: (query: AdminStatementQuery): Promise<AdminStatementList> =>
     http.get('/admin/commissions', { query: { ...query } }),
 }

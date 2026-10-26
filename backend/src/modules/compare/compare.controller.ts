@@ -29,7 +29,7 @@ export class CompareController {
     // Thông tin đám cưới của người gọi (có thể chưa thiết lập)
     const w = await this.prisma.weddings.findUnique({ where: { user_id: req.user.sub } });
     const rec = recommend(
-      items.map((s) => ({ id: s.id, price: s.priceFrom, rating: s.rating, reviewCount: s.reviewCount, styles: s.styles, city: s.location, capacity: s.capacity })),
+      items.map((s) => ({ id: s.id, price: s.priceFrom, rating: s.rating, reviewCount: s.reviewCount, styles: s.styles, city: s.location ?? '', capacity: s.capacity })),
       w ? { budget: Number(w.budget), guestCount: w.guest_count, city: w.city, styles: w.style ? w.style.split(',').map((x) => x.trim()).filter(Boolean) : [] } : null,
       slug,
     );

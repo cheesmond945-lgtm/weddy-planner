@@ -27,6 +27,7 @@ export const paths = {
     orders: '/vendor/orders',
     chat: '/vendor/chat',
     commissions: '/vendor/commissions',
+    account: '/vendor/account',
   },
 
   // Admin

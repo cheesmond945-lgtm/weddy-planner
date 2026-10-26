@@ -37,6 +37,13 @@ export class AuthController {
     return this.auth.me(req.user.sub);
   }
 
+  // POST /api/auth/me/password  { currentPassword, newPassword, confirmPassword }
+  @UseGuards(JwtAuthGuard)
+  @Post('me/password')
+  changePassword(@Req() req: any, @Body() body: { currentPassword?: string; newPassword?: string; confirmPassword?: string }) {
+    return this.auth.changePassword(req.user.sub, body ?? {});
+  }
+
   @UseGuards(JwtAuthGuard)
   @Patch('me')
   updateMe(@Req() req: any, @Body() body: { name?: string | null; email?: string | null; phone?: string | null }) {

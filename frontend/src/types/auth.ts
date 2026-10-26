@@ -7,10 +7,19 @@ export type Role = (typeof ROLES)[number]
 
 export interface SessionUser {
   id: string
+  /** Tên đăng nhập (tài khoản NCC do Admin tạo) */
+  username?: string | null
   name: string
   email: string | null
   phone: string | null
   role: Role
+}
+
+/** Body của POST /auth/me/password. */
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
+  confirmPassword: string
 }
 
 export interface Session {

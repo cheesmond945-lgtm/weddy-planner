@@ -1,7 +1,7 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { categorySlug } from '../catalog/services.service';
-import { ymd, ymdVN } from '../orders/order-mapping';
+import { lateDaysOf, ymd, ymdVN } from '../orders/order-mapping';
 
 /*
  * Hoa hồng NCC trả WebPlan (docs/api/commissions.md), theo mô hình của CSDL:
@@ -29,7 +29,7 @@ export class CommissionsService {
     return v ?? fail('VENDOR_PROFILE_NOT_FOUND', 'Tài khoản chưa có hồ sơ nhà cung cấp.', 404);
   }
 
-  private summaryOf(s: { period: string; total_orders: number; due_date: Date; status: string; paid_date: Date | null }, base: number, commission: number) {
+  private summaryOf(s: { period: string; total_orders: number | null; due_date: Date | null; status: string | null; paid_date: Date | null }, base: number, commission: number) {
     const current = s.period === monthVN();
     const paid = s.status === 'Paid';
     const today = ymdVN(new Date());
@@ -38,7 +38,7 @@ export class CommissionsService {
       code: codeOf(s.period),
       period: s.period,
       status: current && !paid ? 'OPEN' : paid ? 'PAID' : 'UNPAID',
-      orderCount: s.total_orders,
+      orderCount: s.total_orders ?? 0,
       supplementCount: 0,
       baseAmount: base,
       commissionAmount: commission,
@@ -47,6 +47,8 @@ export class CommissionsService {
       closingDate: lastDay(s.period),
       dueDate: ymd(s.due_date),
       isOverdue: !current && !paid && ymd(s.due_date) < today,
+      /** Đã thanh toán sau hạn bao nhiêu ngày (null: chưa trả hoặc trả đúng hạn) */
+      lateDays: paid ? lateDaysOf(s.due_date, s.paid_date) : null,
     };
   }
 
@@ -79,8 +81,9 @@ export class CommissionsService {
         ? (await this.list(userId)).find((s) => s.period === period)!
         : fail('COMMISSION_STATEMENT_NOT_FOUND', 'Không tìm thấy bảng kê.', 404);
 
-    const cat = { id: v.service_categories.id, slug: categorySlug(v.service_categories.name), name: v.service_categories.name };
-    const lines = (row?.commissions ?? []).map((c) => {
+    const cat = { id: v.service_categories?.id ?? '', slug: categorySlug(v.service_categories?.name ?? null), name: v.service_categories?.name ?? '' };
+    // Dòng hoa hồng thiếu đơn (dữ liệu hỏng) thì bỏ qua
+    const lines = (row?.commissions ?? []).flatMap((c) => (c.orders ? [{ ...c, orders: c.orders }] : [])).map((c) => {
       const o = c.orders;
       const total = Number(o.total_amount);
       const deposit = Number(o.deposit_amount);
@@ -113,7 +116,7 @@ export class CommissionsService {
       ...summary,
       lines,
       payments: paid
-        ? [{ id: row!.id, amount: Number(row!.total_amount), proofFile: null, note: row!.transaction_code ? `Mã giao dịch ${row!.transaction_code}` : null, submittedAt: (row!.paid_date ?? row!.created_date).toISOString(), status: 'CONFIRMED', reviewedAt: (row!.paid_date ?? row!.created_date).toISOString(), reviewNote: null }]
+        ? [{ id: row!.id, amount: Number(row!.total_amount), proofFile: null, note: row!.transaction_code ? `Mã giao dịch ${row!.transaction_code}` : null, submittedAt: (row!.paid_date ?? row!.created_date)?.toISOString() ?? '', status: 'CONFIRMED', reviewedAt: (row!.paid_date ?? row!.created_date)?.toISOString() ?? '', reviewNote: null }]
         : [],
       transfer: {
         accountName: process.env.WEBPLAN_ACCOUNT_NAME ?? 'WEBPLAN DEMO',
