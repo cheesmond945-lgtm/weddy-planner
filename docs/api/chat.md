@@ -140,7 +140,9 @@ Nhãn trạng thái trong danh sách hội thoại (FE suy từ `latestOrder.sta
 | `DepositReceipt` | Cọc thành công | Thẻ "Giấy xác nhận cọc {mã}: đã nhận … cho đơn …" kèm nút Xem. `orderId` bắt buộc |
 | `FinalInvoice` | NCC xuất hóa đơn cuối | Thẻ "Hóa đơn {mã} cho đơn …" kèm nút Xem. `orderId` bắt buộc |
 
-- Các tin hệ thống (`sender = SYSTEM`, `type = Text`): khách yêu cầu chỉnh sửa đơn (kèm nội dung và lời nhắn), đơn hết hạn đặt cọc, khách hủy đơn, đơn hoàn thành.
+- Các tin hệ thống (`sender = SYSTEM`, `type = Text`): khách yêu cầu chỉnh sửa đơn, đơn hết hạn đặt cọc, khách hủy đơn, đơn hoàn thành.
+- **Quy ước nội dung tin khi khách yêu cầu chỉnh sửa** (cả trước và sau cọc; backend làm theo, **chỉ một tin hệ thống**, không thêm tin của khách): `Khách yêu cầu chỉnh sửa đơn {OrderCode}: {các nội dung thay đổi, nối bằng ", "} · "{RequestNote}"`. Ví dụ: `Khách yêu cầu chỉnh sửa đơn DH26100002: Đổi số lượng, Đổi ngày thực hiện · "Giảm từ 20 xuống 15 bàn nhé."`. Nhãn nội dung theo `OrderRevisionChanges.ChangeType`: Item "Đổi hạng mục", Quantity "Đổi số lượng", EventDate "Đổi ngày thực hiện", Other "Khác". Thiếu một phần thì bỏ phần đó (không có nội dung chọn thì chỉ còn lời nhắn; không có lời nhắn thì chỉ còn nội dung). Thẻ đơn vẫn có hộp cam "Khách yêu cầu: …" đọc từ `OrderRevisions`.
+- **Người gửi các tin loại đơn:** `DepositReceipt` do hệ thống gửi (`SenderId` rỗng); `FinalInvoice` do NCC gửi (`SenderId` = tài khoản NCC); `Order` do NCC gửi.
 - Bản nháp đơn **không** tạo tin; khách không thấy.
 - Gửi lại đơn tạo thêm một thẻ `Order` mới; FE thu gọn các thẻ cũ của cùng đơn thành "Đơn … đã được cập nhật, xem bản mới nhất bên dưới".
 - Để vẽ thẻ, FE lấy đơn qua `GET /vendors/me/orders?conversationId=…`.

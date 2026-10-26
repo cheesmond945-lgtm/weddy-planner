@@ -15,6 +15,7 @@ import type {
   RevisionChangeType,
 } from '@/types/vendorOrder'
 import { ORDER_STATUSES } from '@/types/vendorOrder'
+import { CHANGE_LABEL } from '@/features/vendorOrders/constants'
 import { mockVendors } from './vendors'
 
 /*
@@ -29,7 +30,7 @@ import { mockVendors } from './vendors'
  *
  * Dữ liệu lưu trong localStorage theo từng tài khoản NCC. Muốn làm lại từ đầu thì xóa khóa bên dưới.
  */
-const STORAGE_KEY = 'weddy.mock.vendorOrders.v4'
+const STORAGE_KEY = 'weddy.mock.vendorOrders.v5'
 
 /** Tỷ lệ hoa hồng theo loại dịch vụ (ServiceCategories.CommissionRate): chỉ để dữ liệu giả có số; BE đọc từ CSDL. */
 export const COMMISSION_RATE: Record<string, number> = { 'nha-hang': 5, decor: 7, 'hoa-cuoi': 8, 'trang-phuc': 8, 'chup-anh': 8, makeup: 10 }
@@ -326,7 +327,9 @@ function requestRevision(d: Data, o: Order, changes: RevisionChangeType[], note:
   }
   o.revisions.unshift(rv)
   if (type === 'BeforeDeposit') o.status = 'NeedRevision'
-  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `Khách đã yêu cầu chỉnh sửa đơn ${o.orderCode}`, o.id, at)
+  const what = changes.map((c) => CHANGE_LABEL[c]).join(', ')
+  const detail = [what, rv.requestNote ? `"${rv.requestNote}"` : ''].filter(Boolean).join(' · ')
+  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `Khách yêu cầu chỉnh sửa đơn ${o.orderCode}${detail ? `: ${detail}` : ''}`, o.id, at)
 }
 
 /** Khách hủy đơn sau khi cọc (mất cọc). */

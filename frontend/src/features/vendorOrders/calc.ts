@@ -132,7 +132,7 @@ export function orderHint(o: Order): { text: string; tone: 'info' | 'warn' | 'ok
     case 'Draft':
       return { text: 'Bản nháp, khách chưa thấy.', tone: 'info' }
     case 'Pending':
-      return { text: 'Chờ khách thanh toán cọc.', tone: 'info' }
+      return { text: o.depositDueDate ? `Chờ khách thanh toán cọc · hạn ${depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '').split(' · ')[0]}` : 'Chờ khách thanh toán cọc.', tone: 'info' }
     case 'NeedRevision':
       return { text: `Khách yêu cầu: ${req ? [changesLabel(req), req.requestNote].filter(Boolean).join(' · ') : 'chỉnh sửa đơn'}`, tone: 'warn' }
     case 'Expired':
@@ -141,8 +141,10 @@ export function orderHint(o: Order): { text: string; tone: 'info' | 'warn' | 'ok
       return {
         text: req
           ? `Khách yêu cầu chỉnh sửa: ${[changesLabel(req), req.requestNote].filter(Boolean).join(' · ')}`
-          : `Đã nhận cọc. Thực hiện ngày ${formatDate(o.eventDate)}.`,
-        tone: req ? 'warn' : 'ok',
+          : eventPassed(o)
+            ? 'Đã qua ngày thực hiện. Bấm Hoàn tất khi đã xong dịch vụ.'
+            : `Đã nhận cọc. Thực hiện ngày ${formatDate(o.eventDate)}.`,
+        tone: req || eventPassed(o) ? 'warn' : 'ok',
       }
     case 'Completed':
       return { text: `Đã hoàn thành ngày ${o.completedDate ? formatDay(o.completedDate) : ''}. Đã tính hoa hồng.`, tone: 'ok' }
