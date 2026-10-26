@@ -24,6 +24,8 @@ export function PanelDialog({ open, onRequestClose, title, subtitle, footer, siz
         className={cn('flex max-h-[92dvh] flex-col overflow-hidden p-0 max-sm:max-h-[100dvh] max-sm:w-full max-sm:rounded-none', WIDTH[size])}
         onInteractOutside={(e) => {
           e.preventDefault()
+          // Bấm hoặc nhận focus trong hộp thoại khác nằm chồng lên (hộp xác nhận) thì không phải đóng hộp này
+          if ((e.target as HTMLElement | null)?.closest('[role=dialog], [role=alertdialog]')) return
           onRequestClose()
         }}
         onEscapeKeyDown={(e) => {
