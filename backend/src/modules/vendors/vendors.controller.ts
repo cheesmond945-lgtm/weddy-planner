@@ -1,12 +1,23 @@
-import { Controller, ForbiddenException, Get, NotFoundException, Param, ParseUUIDPipe, Req, UseGuards } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, NotFoundException, Param, ParseUUIDPipe, Query, Req, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../integrations/storage/storage.service';
+import { GooglePlacesService } from '../../integrations/google-places/google-places.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('vendors')
 export class VendorsController {
-  constructor(private readonly prisma: PrismaService, private readonly storage: StorageService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+    private readonly places: GooglePlacesService,
+  ) {}
+
+  // GET /api/vendors/:id/google-rating?fields=summary|reviews — Public; điểm Google Maps lấy lúc gọi, không lưu CSDL
+  @Get(':id/google-rating')
+  googleRating(@Param('id', ParseUUIDPipe) id: string, @Query('fields') fields?: string) {
+    return this.places.rating(id, fields === 'reviews' ? 'reviews' : 'summary');
+  }
 
   // GET /api/vendors/:id/documents — Admin hoặc chính NCC đó; trả link xem tạm thời (10 phút)
   @UseGuards(JwtAuthGuard)

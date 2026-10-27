@@ -4,22 +4,40 @@
  */
 :root {
   /* Nền và chữ */
-  --bg: #faf7f2;
-  --surface: #ffffff;
-  --ink: #29231d;
-  --muted: #948a7c;
-  --line: #eadfd0;
-  --line-soft: #f0e6d8;
-  --header-bg: rgba(250, 247, 242, 0.94);
+  --bg: #fbf7ee;
+  --surface: #fffdf8;
+  --ink: #2b2620;
+  /* Chữ phụ, tương phản >= 6:1 trên nền kem */
+  --ink-2: #5e5547;
+  /* Chỉ cho placeholder, chú thích cỡ lớn */
+  --ink-3: #8a8070;
+  --muted: var(--ink-2);
+  --line: #e9dfcb;
+  --line-soft: #f0e7d6;
+  --header-bg: rgba(255, 253, 248, 0.85);
   /* Nền mờ sau modal (.mb trong prototype) */
   --overlay: rgba(10, 18, 19, 0.55);
 
-  /* Thương hiệu */
-  --accent: #c49a4a;
-  --accent-ink: #ffffff;
-  --accent-soft: #f5ebd8;
-  --gold: #ae8131;
-  --nav-ink: #756a5d;
+  /* Thương hiệu. gold-500 chỉ để trang trí (viền, icon, chữ italic/script >= 32px);
+     gold-700 cho mọi chữ vàng trên nền sáng (~5:1 trên nền kem) */
+  /* #c49a4a theo bản đề xuất chỉ đạt ~2.4:1 trên nền kem; #ae8131 đạt ~3.3:1 cho chữ lớn */
+  --gold-500: #ae8131;
+  --gold-700: #8a6420;
+  --gold-800: #6f4f16;
+  --gold-100: #f3e8cf;
+  --moss-700: #4f5a3a;
+  /* Nút chính: vàng mù tạt / hướng dương phẳng như poster tham khảo, chữ trắng kem (~3.1:1, có bóng chữ nhẹ hỗ trợ).
+     Chữ vàng trên nền kem vẫn dùng gold-700 (màu này quá sáng để làm chữ nhỏ) */
+  --gold-600: #b98a2e;
+  --gold-sheen: none;
+  --gold-glow: 0 3px 10px rgb(185 138 46 / 0.25);
+  --gold-650: #a67a24;
+  --accent: var(--gold-600);
+  --accent-hover: var(--gold-650);
+  --accent-ink: #fffaf0;
+  --accent-soft: var(--gold-100);
+  --gold: var(--gold-700);
+  --nav-ink: var(--ink-2);
 
   /* Trạng thái */
   --sage: #3f8a63;
@@ -28,7 +46,8 @@
   --warn-soft: #fbe9e6;
   --info: #3a6b93;
   --info-soft: #e6eff7;
-  --heart: #f05a83;
+  /* Tim yêu thích dùng cùng màu vàng đậm toàn site */
+  --heart: var(--gold-700);
   --notify: #e34f5f;
 
   /* Màu theo hạng mục dịch vụ */
@@ -41,6 +60,7 @@
 
   /* Font */
   --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --script: 'Great Vibes', 'Brush Script MT', cursive;
   --sans: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
 
   /* Màu gốc của đổ bóng (nâu ấm như prototype) */
@@ -54,6 +74,16 @@
     --surface: #1d2627;
     --ink: #ecf0ee;
     --muted: #9aa8a6;
+    --ink-2: #b4bebb;
+    --ink-3: #8c9896;
+    --gold-500: #d4a94f;
+    --gold-700: #d4a94f;
+    --gold-800: #e5c27a;
+    --gold-100: #3a3222;
+    --moss-700: #a3b38c;
+    --accent-hover: #e2a3bd;
+    --gold-sheen: none;
+    --gold-glow: none;
     --line: #2e3b3b;
     --line-soft: #263232;
     --header-bg: rgba(20, 26, 27, 0.92);
@@ -68,7 +98,7 @@
     --warn-soft: #3a221d;
     --info: #7faad0;
     --info-soft: #1e2c38;
-    --heart: #f07ca0;
+    --heart: var(--gold-700);
     --notify: #e8826c;
     --c1: #d77c95;
     --c2: #7fb59e;
@@ -85,6 +115,16 @@
   --surface: #1d2627;
   --ink: #ecf0ee;
   --muted: #9aa8a6;
+  --ink-2: #b4bebb;
+  --ink-3: #8c9896;
+  --gold-500: #d4a94f;
+  --gold-700: #d4a94f;
+  --gold-800: #e5c27a;
+  --gold-100: #3a3222;
+  --moss-700: #a3b38c;
+  --accent-hover: #e2a3bd;
+  --gold-sheen: none;
+  --gold-glow: none;
   --line: #2e3b3b;
   --line-soft: #263232;
   --header-bg: rgba(20, 26, 27, 0.92);
@@ -99,7 +139,7 @@
   --warn-soft: #3a221d;
   --info: #7faad0;
   --info-soft: #1e2c38;
-  --heart: #f07ca0;
+  --heart: var(--gold-700);
   --notify: #e8826c;
   --c1: #d77c95;
   --c2: #7fb59e;

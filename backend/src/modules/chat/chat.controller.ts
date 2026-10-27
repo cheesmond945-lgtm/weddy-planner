@@ -29,6 +29,11 @@ export class CoupleChatController {
   send(@Req() req: any, @Param('id') id: string, @Body() body: { text?: string }) {
     return this.chat.sendForCouple(req.user.sub, id, body?.text ?? '');
   }
+
+  @Post(':id/read')
+  read(@Req() req: any, @Param('id') id: string) {
+    return this.chat.markReadForCouple(req.user.sub, id);
+  }
 }
 
 /** Hội thoại phía nhà cung cấp (docs/api/chat.md, phần Nhà cung cấp). */

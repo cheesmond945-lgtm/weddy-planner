@@ -21,6 +21,10 @@
   --header-bg: color-mix(in srgb, var(--bg) 86%, transparent);
   --overlay: var(--scrim);
   --accent: var(--gold);
+  /* Component dùng chung tô chữ vàng bằng gold-700: trong vùng NCC lấy vàng của NCC */
+  --gold-700: var(--gold);
+  --gold-sheen: none;
+  --gold-glow: none;
   --accent-ink: #ffffff;
   --accent-soft: var(--gold-soft);
   --nav-ink: var(--muted);

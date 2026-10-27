@@ -5,8 +5,11 @@
  * cặp đôi. KHÔNG có bất kỳ yếu tố nào ưu tiên nhà cung cấp trả phí, quảng cáo hay hoa hồng.
  * Không thêm yếu tố như vậy vào đây.
  *
+ * Điểm Google lấy lúc gọi (GET /vendors/{id}/google-rating), có thể thiếu: khi đó bỏ yếu tố điểm
+ * cho cả nhóm, chỉ so giá và độ phù hợp.
+ *
  * Hàm thuần, không phụ thuộc React hay alias "@/": FE dùng ở chế độ dữ liệu giả, BE phải tính
- * giống hệt (docs/api/compare.md). Hằng số nằm trong recommend.config.ts.
+ * giống hệt (docs/api/compare.md). Hằng số nằm trong recommend.config.ts. Test: recommend.test.ts.
  */
 import {
   BAYES_PRIOR_COUNT,
@@ -16,6 +19,8 @@ import {
   CATEGORY_BUDGET_SHARE,
   MAX_REASONS,
   TIE_THRESHOLD,
+  WEIGHTS_NO_RATING,
+  WEIGHTS_NO_RATING_WITH_WEDDING,
   WEIGHTS_NO_WEDDING,
   WEIGHTS_WITH_WEDDING,
 } from './recommend.config.ts'
@@ -24,8 +29,9 @@ export interface RecommendItem {
   id: string
   /** Giá từ, đồng */
   price: number
-  rating: number
-  reviewCount: number
+  /** Điểm Google; null khi chưa có điểm hoặc lấy lỗi */
+  rating: number | null
+  reviewCount: number | null
   styles: string[]
   city: string
   capacity?: number | null
@@ -44,6 +50,8 @@ export interface Recommendation {
   /** Lý do ngắn (chữ thường, chưa viết hoa đầu câu), tối đa 3 */
   reasons: string[]
   isTie: boolean
+  /** false khi có phương án thiếu điểm Google nên không dùng yếu tố điểm */
+  usedRating: boolean
 }
 
 interface Scored {
@@ -58,20 +66,16 @@ interface Scored {
 const average = (xs: number[]) => xs.reduce((a, x) => a + x, 0) / xs.length
 
 export function recommend(items: RecommendItem[], wedding: RecommendWedding | null, categorySlug: string): Recommendation {
-  if (items.length < 2) return { recommendedId: null, reasons: [], isTie: false }
+  const useRating = items.every((i) => i.rating !== null && i.reviewCount !== null)
+  if (items.length < 2) return { recommendedId: null, reasons: [], isTie: false, usedRating: useRating }
 
   const minPrice = Math.min(...items.map((i) => i.price))
-  const maxRating = Math.max(...items.map((i) => i.rating))
-  const maxReviews = Math.max(...items.map((i) => i.reviewCount))
   const share = CATEGORY_BUDGET_SHARE[categorySlug] ?? 0
   const categoryBudget = wedding?.budget && share ? wedding.budget * share : null
   const hasCapacity = CAPACITY_CATEGORIES.includes(categorySlug)
 
   const scored: Scored[] = items
     .map((item) => {
-      // Điểm Google Maps hiệu chỉnh theo số đánh giá (ít đánh giá thì kéo về mức trung bình)
-      const bayes = (item.rating * item.reviewCount + BAYES_PRIOR_RATING * BAYES_PRIOR_COUNT) / (item.reviewCount + BAYES_PRIOR_COUNT)
-      const R = bayes / 5
       const P = minPrice / item.price
 
       let F: number | null = null
@@ -85,7 +89,15 @@ export function recommend(items: RecommendItem[], wedding: RecommendWedding | nu
         F = parts.length ? average(parts) : null
       }
 
-      let score = F === null ? WEIGHTS_NO_WEDDING.rating * R + WEIGHTS_NO_WEDDING.price * P : WEIGHTS_WITH_WEDDING.rating * R + WEIGHTS_WITH_WEDDING.price * P + WEIGHTS_WITH_WEDDING.fit * F
+      let score: number
+      if (useRating) {
+        // Điểm Google hiệu chỉnh theo số đánh giá (ít đánh giá thì kéo về mức trung bình)
+        const bayes = (item.rating! * item.reviewCount! + BAYES_PRIOR_RATING * BAYES_PRIOR_COUNT) / (item.reviewCount! + BAYES_PRIOR_COUNT)
+        const R = bayes / 5
+        score = F === null ? WEIGHTS_NO_WEDDING.rating * R + WEIGHTS_NO_WEDDING.price * P : WEIGHTS_WITH_WEDDING.rating * R + WEIGHTS_WITH_WEDDING.price * P + WEIGHTS_WITH_WEDDING.fit * F
+      } else {
+        score = F === null ? WEIGHTS_NO_RATING.price * P : WEIGHTS_NO_RATING_WITH_WEDDING.price * P + WEIGHTS_NO_RATING_WITH_WEDDING.fit * F
+      }
 
       const capacityOk = hasCapacity && wedding?.guestCount && item.capacity != null ? item.capacity >= wedding.guestCount : null
       if (capacityOk === false) score *= CAPACITY_PENALTY
@@ -94,7 +106,7 @@ export function recommend(items: RecommendItem[], wedding: RecommendWedding | nu
     })
     .sort((a, b) => b.score - a.score)
 
-  if (scored[0].score - scored[1].score < TIE_THRESHOLD) return { recommendedId: null, reasons: [], isTie: true }
+  if (scored[0].score - scored[1].score < TIE_THRESHOLD) return { recommendedId: null, reasons: [], isTie: true, usedRating: useRating }
 
   // Lý do: chỉ nêu khi phương án đề xuất thật sự hơn các phương án còn lại
   const [top, ...others] = scored
@@ -107,8 +119,14 @@ export function recommend(items: RecommendItem[], wedding: RecommendWedding | nu
     reasons.push(`hợp phong cách ${t.styles.filter((s) => wedding!.styles.includes(s)).join(', ').toLowerCase()}`)
   }
   if (t.price === minPrice && items.filter((i) => i.price === minPrice).length === 1) reasons.push('giá thấp nhất')
-  if (t.rating === maxRating && items.filter((i) => i.rating === maxRating).length === 1) reasons.push('điểm Google Maps cao nhất')
-  if (!reasons.length) reasons.push(t.reviewCount === maxReviews ? 'nhiều đánh giá nhất' : 'cân bằng tốt giữa giá và đánh giá')
+  if (useRating) {
+    const maxRating = Math.max(...items.map((i) => i.rating!))
+    if (t.rating === maxRating && items.filter((i) => i.rating === maxRating).length === 1) reasons.push('điểm Google Maps cao nhất')
+  }
+  if (!reasons.length) {
+    if (!useRating) reasons.push('cân bằng tốt giữa giá và nhu cầu của bạn')
+    else reasons.push(t.reviewCount === Math.max(...items.map((i) => i.reviewCount!)) ? 'nhiều đánh giá nhất' : 'cân bằng tốt giữa giá và đánh giá')
+  }
 
-  return { recommendedId: t.id, reasons: reasons.slice(0, MAX_REASONS), isTie: false }
+  return { recommendedId: t.id, reasons: reasons.slice(0, MAX_REASONS), isTie: false, usedRating: useRating }
 }

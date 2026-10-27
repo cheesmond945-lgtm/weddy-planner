@@ -1,18 +1,19 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { closeAuthDialog, setAuthDialogMode, useAuthDialog } from '../authDialog'
 import { useAfterAuth } from '../useAfterAuth'
+import { AuthBrandHeader } from './AuthBrandHeader'
 import { AuthTabs } from './AuthTabs'
 import { LoginForm } from './LoginForm'
 import { RegisterForm } from './RegisterForm'
 
-/** Modal đăng nhập / đăng ký phía cặp đôi (như authModal trong prototype). Đặt một lần trong CoupleLayout. */
+/** Modal đăng nhập / đăng ký phía cặp đôi (như authModal trong prototype), cùng giao diện với trang đăng nhập. */
 export function AuthDialog() {
   const { open, mode, redirectTo, onAuthenticated } = useAuthDialog()
   const [step, setStep] = useState<'info' | 'otp'>('info')
   const afterAuth = useAfterAuth()
 
-  const title = mode === 'login' ? 'Đăng nhập' : step === 'otp' ? 'Xác thực email' : 'Tạo tài khoản'
+  const title = mode === 'login' ? 'Đăng nhập' : step === 'otp' ? 'Xác thực email' : 'Đăng ký'
 
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -23,14 +24,14 @@ export function AuthDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className="sr-only">
-            {mode === 'login' ? 'Đăng nhập bằng email hoặc số điện thoại' : 'Đăng ký tài khoản cặp đôi'}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-[470px] rounded-[20px] px-6 py-8 sm:px-10">
+        <DialogTitle className="sr-only">{title}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {mode === 'login' ? 'Đăng nhập bằng email' : 'Đăng ký tài khoản cặp đôi'}
+        </DialogDescription>
+        <AuthBrandHeader />
 
+        {step === 'otp' && <p className="mb-4 text-center font-serif text-xl font-semibold">Xác thực email</p>}
         {step === 'info' && (
           <AuthTabs
             mode={mode}
@@ -43,7 +44,6 @@ export function AuthDialog() {
 
         {mode === 'login' ? (
           <LoginForm
-            onCancel={() => handleOpenChange(false)}
             onSuccess={(session) => {
               handleOpenChange(false)
               void afterAuth(session, 'Đăng nhập thành công', redirectTo, onAuthenticated)
@@ -51,7 +51,6 @@ export function AuthDialog() {
           />
         ) : (
           <RegisterForm
-            onCancel={() => handleOpenChange(false)}
             onStepChange={setStep}
             onSuccess={(session) => {
               handleOpenChange(false)

@@ -15,6 +15,7 @@ export const paths = {
   // Xác thực
   login: '/login',
   register: '/register',
+  forgotPassword: '/forgot-password',
   setPassword: '/set-password',
 
   // NCC

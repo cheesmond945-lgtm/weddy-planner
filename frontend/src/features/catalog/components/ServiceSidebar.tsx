@@ -1,7 +1,8 @@
-import { Clock, MapPin } from 'lucide-react'
+import { Clock, ExternalLink, MapPin } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { formatMoney } from '@/lib/format'
 import type { ServiceDetail } from '@/types/catalog'
+import { mapsHref } from './GoogleMapsLink'
 
 interface ServiceSidebarProps {
   service: ServiceDetail
@@ -23,16 +24,34 @@ export function ServiceSidebar({ service, actions, tip }: ServiceSidebarProps) {
       </div>
       <p className="mb-4 text-center text-[13px] text-muted-foreground">Nhà cung cấp xác nhận giá cuối cùng khi trao đổi.</p>
 
-      <InfoRow icon={<MapPin className="size-[18px]" />} label="Địa chỉ" value={service.address} />
+      {/* Nút ngay dưới khoảng giá: nhắn tin NCC, thêm vào kế hoạch */}
+      {actions && <div className="mb-4 grid gap-2.5">{actions}</div>}
+
+      <InfoRow
+        icon={<MapPin className="size-[18px]" />}
+        label="Địa chỉ"
+        value={
+          <a
+            href={mapsHref(service)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Xem trên Google Maps"
+            className="text-gold-700 underline underline-offset-[3px] hover:text-gold"
+          >
+            {service.address}
+            <ExternalLink className="ml-1 inline size-3.5 align-[-2px]" aria-hidden />
+            <span className="sr-only">(mở Google Maps trong tab mới)</span>
+          </a>
+        }
+      />
       <InfoRow icon={<Clock className="size-[18px]" />} label="Giờ làm việc" value={service.workingHours} />
 
-      {actions && <div className="mt-4 mb-3 grid gap-2.5">{actions}</div>}
-      {tip && <div className="rounded-xl bg-accent-soft px-3.5 py-3 text-[12.5px] leading-[1.55] text-ink">{tip}</div>}
+      {tip && <div className="mt-1.5 rounded-xl bg-accent-soft px-3.5 py-3 text-[12.5px] leading-[1.55] text-ink">{tip}</div>}
     </aside>
   )
 }
 
-function InfoRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function InfoRow({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
   return (
     <div className="mb-2.5 flex items-start gap-3 rounded-xl bg-bg px-3.5 py-3">
       <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden>

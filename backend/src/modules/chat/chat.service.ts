@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
 import { WeddingsService } from '../weddings/weddings.service';
 import { paymentStatusOf, serviceStatusOf } from '../orders/order-mapping';
-import { postMessage } from './chat-messages';
+import { notify, postMessage } from './chat-messages';
 
 const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);
@@ -98,6 +98,7 @@ export class ChatService {
           id: c.id,
           service,
           planStatus: statuses.get(v.id) ?? null,
+          unreadCount: lasts.filter((m) => m.conversation_id === c.id && m.sender_id === c.vendor_id && !m.is_read).length,
           lastMessage: last ? { type: last.type === 'Order' ? 'ORDER' : 'TEXT', text: last.content, createdAt: last.sent_date.toISOString() } : null,
         },
       ];
@@ -134,8 +135,29 @@ export class ChatService {
     const conv = await this.ownedByCouple(userId, id);
     const content = (text ?? '').trim();
     if (!content) return fail('VALIDATION_ERROR', 'Nhập nội dung tin nhắn.', 400);
+    // Tin đầu tiên NCC chưa đọc thì báo cho NCC; các tin sau gộp chung, tránh dồn thông báo
+    const hadUnread = await this.prisma.messages.count({ where: { conversation_id: id, sender_id: userId, is_read: false } });
     const m = await postMessage(this.prisma, { conversationId: id, senderId: userId, content });
+    if (!hadUnread) {
+      const couple = await this.prisma.users.findUnique({ where: { id: userId }, select: { full_name: true } });
+      // Lỗi ghi thông báo không được làm hỏng việc gửi tin
+      await notify(this.prisma, {
+        userId: conv.vendor_id,
+        type: 'NewMessage',
+        title: `Tin nhắn mới từ ${couple?.full_name ?? 'khách hàng'}`,
+        content: content.length > 120 ? `${content.slice(0, 117)}...` : content,
+        referenceType: 'Conversation',
+        referenceId: id,
+      }).catch(() => undefined);
+    }
     return coupleMessage(m, conv.couple_id);
+  }
+
+  /** Khách mở hội thoại: đánh dấu đã đọc các tin của NCC. */
+  async markReadForCouple(userId: string, id: string) {
+    const conv = await this.ownedByCouple(userId, id);
+    await this.prisma.messages.updateMany({ where: { conversation_id: id, sender_id: conv.vendor_id, is_read: false }, data: { is_read: true, read_date: new Date() } });
+    return null;
   }
 
   // ================= Nhà cung cấp =================
@@ -155,14 +177,26 @@ export class ChatService {
     const vendor = await this.vendorOf(userId);
     const convs = await this.prisma.conversations.findMany({ where: { vendor_id: userId }, orderBy: [{ last_message_date: 'desc' }, { created_date: 'desc' }] });
     const coupleIds = convs.map((c) => c.couple_id);
-    const [couples, weddings, orders, msgs] = await Promise.all([
+    const [couples, weddings, orders, msgs, packages] = await Promise.all([
       this.prisma.users.findMany({ where: { id: { in: coupleIds } }, select: { id: true, full_name: true, phone_number: true } }),
       this.prisma.weddings.findMany({ where: { user_id: { in: coupleIds } }, select: { id: true, user_id: true, groom_name: true, bride_name: true } }),
-      this.prisma.orders.findMany({ where: { vendor_id: vendor.id, weddings: { user_id: { in: coupleIds } } }, include: { weddings: { select: { user_id: true } } }, orderBy: { created_date: 'desc' } }),
+      this.prisma.orders.findMany({ where: { vendor_id: vendor.id, weddings: { user_id: { in: coupleIds } } }, include: { weddings: { select: { user_id: true } }, order_items: { select: { item_name: true }, take: 1 } }, orderBy: { created_date: 'desc' } }),
       this.prisma.messages.findMany({ where: { conversation_id: { in: convs.map((c) => c.id) } }, orderBy: { sent_date: 'desc' }, include: { orders: { select: { order_code: true } } } }),
+      this.services.packageCards(vendor.id),
     ]);
     const coupleById = new Map(couples.map((u) => [u.id, u]));
     const weddingByUser = new Map(weddings.map((w) => [w.user_id, w]));
+    // Ngữ cảnh hội thoại: khách đã thêm NCC này vào kế hoạch thì gói đang tính là gói trong đơn mới nhất, chưa có đơn thì gói rẻ nhất (như PlanItem)
+    const inPlan = new Set(
+      (await this.prisma.plan_vendors.findMany({ where: { vendor_id: vendor.id, wedding_id: { in: weddings.map((w) => w.id) } }, select: { wedding_id: true } })).map((r) => r.wedding_id),
+    );
+    const interestOf = (coupleId: string, latestOrder?: { order_items?: { item_name: string }[] }) => {
+      const w = weddingByUser.get(coupleId);
+      if (!w || !inPlan.has(w.id) || !packages.length) return null;
+      const itemName = latestOrder?.order_items?.[0]?.item_name;
+      const p = packages.find((x) => x.name === itemName) ?? packages[0];
+      return { id: p.id, name: p.name, price: p.price, maxPrice: null, imageUrl: p.imageUrl };
+    };
 
     return convs.map((c) => {
       const u = coupleById.get(c.couple_id);
@@ -175,7 +209,7 @@ export class ChatService {
       return {
         id: c.id,
         customer: { name: w && w.bride_name && !w.bride_name.startsWith('(') ? `${w.groom_name} & ${w.bride_name}` : (w?.groom_name ?? u?.full_name ?? ''), phone: u?.phone_number ?? '' },
-        interestPackage: null,
+        interestPackage: interestOf(c.couple_id, mine[0]),
         unreadCount: mineMsgs.filter((m) => m.sender_id === c.couple_id && !m.is_read).length,
         lastMessage: lastMapped
           ? { sender: lastMapped.sender, type: lastMapped.type, text: lastMapped.text, orderVersion: lastMapped.orderVersion, orderCode: last?.orders?.order_code ?? null, createdAt: lastMapped.createdAt }

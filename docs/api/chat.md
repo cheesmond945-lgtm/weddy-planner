@@ -15,6 +15,7 @@ Role: **COUPLE** (phía NCC: VENDOR, chỉ hội thoại của NCC mình).
   "id": "cv-1",
   "service": { "id": "sv-11", "name": "Lumi Wedding Studio", "…": "ServiceSummary" },
   "planStatus": "AWAITING_DEPOSIT",
+  "unreadCount": 2,
   "lastMessage": { "type": "ORDER", "text": "Nhà cung cấp đã gửi đơn dịch vụ", "createdAt": "2026-10-17T08:10:00.000Z" }
 }
 ```
@@ -64,7 +65,16 @@ Lỗi: 404 `CONVERSATION_NOT_FOUND`
 ### POST /conversations/:id/messages
 Body `{ "text": "Cho mình hỏi giá bao nhiêu?" }`. Response 200: `{ "data": Message }`
 
+Tin đầu tiên NCC chưa đọc tạo một thông báo cho NCC (bảng `notifications`, loại `NewMessage`); các tin tiếp theo khi NCC chưa đọc không báo thêm.
+
 Lỗi: 400 `VALIDATION_ERROR` (tin rỗng), 404 `CONVERSATION_NOT_FOUND`
+
+### POST /conversations/:id/read
+Khách đã xem hội thoại: các tin của NCC thành đã đọc (`unreadCount = 0`). FE gọi khi mở khung chat hoặc trang Tin nhắn và khi có tin mới của NCC lúc đang mở. Response 200: `{ "data": null }`
+
+`unreadCount` (tin NCC gửi mà khách chưa đọc) là số trên nút chat nổi và mục Tin nhắn trong menu tài khoản.
+
+Lỗi: 404 `CONVERSATION_NOT_FOUND`
 
 ---
 

@@ -21,12 +21,16 @@ export interface ServiceSummary {
   name: string
   category: CategoryRef
   location: string
+  /** Địa chỉ đầy đủ (số nhà, phường, tỉnh/thành); dữ liệu giả có thể không có */
+  address?: string
   /** Giá thấp nhất trong các gói, đơn vị đồng */
   priceFrom: number
-  /** Điểm đánh giá lấy từ Google Maps */
-  rating: number
-  reviewCount: number
+  /** Giá cao nhất trong các gói, đồng (dữ liệu giả có thể không có) */
+  priceTo?: number
+  // Điểm Google Maps không thuộc catalog (CSDL không có cột điểm): lấy riêng qua GET /vendors/{id}/google-rating
   coverImageUrl: string
+  /** Link Google Maps của NCC (vendor_profiles.google_maps_url); hiện thay điểm khi chưa lấy được điểm Google */
+  googleMapsUrl?: string | null
 }
 
 export interface ServicePackage {
@@ -34,6 +38,20 @@ export interface ServicePackage {
   name: string
   description: string
   price: number
+  /** Sức chứa tối đa của gói (khách), null khi gói không ghi */
+  capacity?: number | null
+  /** Ảnh bìa của gói; dữ liệu giả có thể không có (khi đó lấy ảnh album cùng id hoặc ảnh dịch vụ) */
+  imageUrl?: string | null
+  /** Thẻ phong cách của gói (Hiện đại, Pha lê...) */
+  tags?: string[]
+  /** Đơn vị tính giá: "gói" (mặc định), "mâm"... */
+  unit?: string
+  /** Nhãn ưu đãi trên ảnh gói (CSDL chưa có, để sẵn cho sau) */
+  promotion?: string | null
+  /** Gói nổi bật: ô lớn ở layout tiles (CSDL chưa có: mặc định gói đầu tiên) */
+  featured?: boolean
+  /** Danh sách "Bao gồm" trong drawer chi tiết gói (CSDL chưa có) */
+  includes?: string[]
 }
 
 export interface ServiceAlbum {
@@ -55,6 +73,10 @@ export interface ServiceDetail extends ServiceSummary {
   capacity: number | null
   styles: string[]
   workingHours: string
+  /** Cách hiện gói: "tiles" mỗi gói một ô ảnh (chụp ảnh, váy, trang điểm), "album" card ảnh ghép (mặc định) */
+  packageLayout?: 'tiles' | 'album'
+  /** Số điện thoại NCC (dùng khi nhắn qua Zalo, VITE_CHAT_MODE=zalo) */
+  contactPhone?: string | null
   isVerified: boolean
   isGuaranteed: boolean
   images: string[]

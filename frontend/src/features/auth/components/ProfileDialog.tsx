@@ -7,7 +7,7 @@ import type { SessionUser } from '@/types/auth'
 import { useUpdateProfile } from '../hooks'
 import { profileSchema, validate, type FieldErrors } from '../schemas'
 
-type Values = { name: string; email: string; phone: string }
+type Values = { name: string; email: string }
 
 interface ProfileDialogProps {
   user: SessionUser
@@ -22,7 +22,7 @@ export function ProfileDialog({ user, open, onOpenChange }: ProfileDialogProps) 
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Thông tin cá nhân</DialogTitle>
-          <DialogDescription className="sr-only">Sửa họ tên, email, số điện thoại</DialogDescription>
+          <DialogDescription className="sr-only">Sửa họ tên, email</DialogDescription>
         </DialogHeader>
         {/* key: mở lại modal thì form lấy lại giá trị mới nhất */}
         {open && <ProfileForm key={user.id} user={user} onDone={() => onOpenChange(false)} />}
@@ -32,7 +32,7 @@ export function ProfileDialog({ user, open, onOpenChange }: ProfileDialogProps) 
 }
 
 function ProfileForm({ user, onDone }: { user: SessionUser; onDone: () => void }) {
-  const [values, setValues] = useState<Values>({ name: user.name, email: user.email ?? '', phone: user.phone ?? '' })
+  const [values, setValues] = useState<Values>({ name: user.name, email: user.email ?? '' })
   const [errors, setErrors] = useState<FieldErrors<Values>>({})
   const update = useUpdateProfile()
 
@@ -47,7 +47,8 @@ function ProfileForm({ user, onDone }: { user: SessionUser; onDone: () => void }
     setErrors(errors)
     if (!data) return
     update.mutate(
-      { name: data.name, email: data.email || null, phone: data.phone || null },
+      // Không còn ô số điện thoại: gửi lại số cũ (nếu có) để không bị xóa
+      { name: data.name, email: data.email || null, phone: user.phone ?? null },
       {
         onSuccess: () => {
           onDone()
@@ -60,18 +61,7 @@ function ProfileForm({ user, onDone }: { user: SessionUser; onDone: () => void }
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       <FormField label="Họ và tên" autoComplete="name" value={values.name} onChange={change('name')} error={errors.name} autoFocus />
-      <div className="grid gap-3.5 sm:grid-cols-2">
-        <FormField label="Email" type="email" autoComplete="email" value={values.email} onChange={change('email')} error={errors.email} />
-        <FormField
-          label="Số điện thoại"
-          type="tel"
-          inputMode="numeric"
-          autoComplete="tel"
-          value={values.phone}
-          onChange={change('phone')}
-          error={errors.phone}
-        />
-      </div>
+      <FormField label="Email" type="email" autoComplete="email" value={values.email} onChange={change('email')} error={errors.email} />
       <FormError message={update.error?.message} />
       <DialogFooter className="mt-1">
         <Button type="button" variant="outline" onClick={onDone}>

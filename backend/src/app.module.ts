@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
 import { StorageModule } from './integrations/storage/storage.module';
+import { MailModule } from './integrations/mail/mail.module';
+import { GooglePlacesModule } from './integrations/google-places/google-places.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
@@ -13,6 +15,6 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { CommissionsModule } from './modules/commissions/commissions.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule],
+  imports: [PrismaModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule],
 })
 export class AppModule {}

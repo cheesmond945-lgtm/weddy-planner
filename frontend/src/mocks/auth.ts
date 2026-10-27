@@ -3,6 +3,7 @@ import type {
   LoginRequest,
   OtpSent,
   RegisterRequest,
+  ResetPasswordRequest,
   Session,
   SessionUser,
   UpdateProfileRequest,
@@ -69,6 +70,14 @@ function otpSent(email: string, now: number): OtpSent {
   return { email, expiresIn: Math.round((p.expiresAt - now) / 1000), resendAfter: Math.max(0, Math.round((p.resendAt - now) / 1000)) }
 }
 
+/** Yêu cầu đặt lại mật khẩu đang chờ nhập OTP, theo email (chữ thường). */
+const resets = new Map<string, { expiresAt: number; resendAt: number; attempts: number }>()
+
+function resetSent(email: string, now: number): OtpSent {
+  const p = resets.get(email)!
+  return { email, expiresIn: Math.round((p.expiresAt - now) / 1000), resendAfter: Math.max(0, Math.round((p.resendAt - now) / 1000)) }
+}
+
 export const mockAuth = {
   login({ identifier, password }: LoginRequest): Session {
     const id = identifier.trim()
@@ -80,9 +89,6 @@ export const mockAuth = {
   },
 
   register(data: RegisterRequest): OtpSent {
-    if (accounts.some((a) => a.phone === data.phone)) {
-      throw new ApiError(409, 'PHONE_ALREADY_EXISTS', 'Số điện thoại đã được đăng ký.')
-    }
     if (accounts.some((a) => sameEmail(a.email, data.email))) {
       throw new ApiError(409, 'EMAIL_ALREADY_EXISTS', 'Email đã được đăng ký.')
     }
@@ -113,8 +119,47 @@ export const mockAuth = {
       throw new ApiError(400, 'OTP_INVALID', 'Mã OTP không đúng.')
     }
     pending.delete(key)
-    const account: MockAccount = { id: `u-${Date.now()}`, ...p.data, role: 'COUPLE' }
+    const account: MockAccount = { id: `u-${Date.now()}`, ...p.data, phone: null, role: 'COUPLE' }
     accounts.push(account)
+    saveAccounts()
+    return toSession(account)
+  },
+
+  forgotPassword(email: string): OtpSent {
+    const key = email.trim().toLowerCase()
+    if (!accounts.some((a) => sameEmail(a.email, key))) {
+      throw new ApiError(404, 'EMAIL_NOT_FOUND', 'Email này chưa đăng ký tài khoản WebPlan.')
+    }
+    const now = Date.now()
+    const p = resets.get(key)
+    if (p && now < p.resendAt) throw new ApiError(429, 'OTP_RESEND_TOO_SOON', 'Vui lòng chờ trước khi gửi lại mã.')
+    resets.set(key, { expiresAt: now + OTP_TTL * 1000, resendAt: now + RESEND_AFTER * 1000, attempts: 0 })
+    return resetSent(key, now)
+  },
+
+  resendResetOtp(email: string): OtpSent {
+    const key = email.toLowerCase()
+    const p = resets.get(key)
+    if (!p) throw new ApiError(404, 'RESET_NOT_FOUND', 'Yêu cầu đặt lại mật khẩu đã hết hạn, hãy nhập lại email.')
+    const now = Date.now()
+    if (now < p.resendAt) throw new ApiError(429, 'OTP_RESEND_TOO_SOON', 'Vui lòng chờ trước khi gửi lại mã.')
+    Object.assign(p, { expiresAt: now + OTP_TTL * 1000, resendAt: now + RESEND_AFTER * 1000, attempts: 0 })
+    return resetSent(key, now)
+  },
+
+  resetPassword({ email, otp, password }: ResetPasswordRequest): Session {
+    const key = email.toLowerCase()
+    const p = resets.get(key)
+    const account = accounts.find((a) => sameEmail(a.email, key))
+    if (!p || !account) throw new ApiError(404, 'RESET_NOT_FOUND', 'Yêu cầu đặt lại mật khẩu đã hết hạn, hãy nhập lại email.')
+    if (Date.now() > p.expiresAt) throw new ApiError(400, 'OTP_EXPIRED', 'Mã OTP đã hết hạn, vui lòng gửi lại mã.')
+    if (p.attempts >= 5) throw new ApiError(429, 'OTP_TOO_MANY_ATTEMPTS', 'Nhập sai quá nhiều lần, vui lòng gửi lại mã.')
+    if (otp !== MOCK_OTP) {
+      p.attempts += 1
+      throw new ApiError(400, 'OTP_INVALID', 'Mã OTP không đúng.')
+    }
+    resets.delete(key)
+    account.password = password
     saveAccounts()
     return toSession(account)
   },

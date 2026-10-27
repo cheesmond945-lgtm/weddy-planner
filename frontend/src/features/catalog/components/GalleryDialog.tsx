@@ -1,6 +1,6 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { ChevronLeft, ChevronRight, XIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface GalleryDialogProps {
@@ -12,10 +12,11 @@ interface GalleryDialogProps {
 
 const roundBtn = 'grid size-12 place-items-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-white'
 
-/** Khung xem một ảnh lớn, nền tối toàn màn hình, nguyên khung gốc; chuyển ảnh bằng nút hoặc phím mũi tên. */
-function Lightbox({ title, images, index, onIndex, onClose }: { title: string; images: string[]; index: number | null; onIndex: (i: number) => void; onClose: () => void }) {
+/** Khung xem một ảnh lớn, nền tối toàn màn hình, nguyên khung gốc; chuyển ảnh bằng nút, phím mũi tên hoặc vuốt ngang (điện thoại). */
+export function Lightbox({ title, images, index, onIndex, onClose }: { title: string; images: string[]; index: number | null; onIndex: (i: number) => void; onClose: () => void }) {
   const count = images.length
   const open = index !== null
+  const touchX = useRef<number | null>(null)
 
   useEffect(() => {
     if (index === null) return
@@ -35,6 +36,15 @@ function Lightbox({ title, images, index, onIndex, onClose }: { title: string; i
           aria-describedby={undefined}
           className="fixed inset-0 z-[70] outline-none"
           onClick={(e) => e.target === e.currentTarget && onClose()}
+          // Vuốt ngang quá 50px thì sang ảnh trước / sau
+          onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
+          onTouchEnd={(e) => {
+            const start = touchX.current
+            touchX.current = null
+            if (start === null || index === null || count < 2) return
+            const dx = e.changedTouches[0].clientX - start
+            if (Math.abs(dx) > 50) onIndex((index + (dx < 0 ? 1 : -1) + count) % count)
+          }}
         >
           <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
           {index !== null && (
