@@ -69,8 +69,8 @@ const empty = (): UserData => ({
 function seedCouple(): UserData {
   const now = Date.now()
   const at = (minAgo: number) => new Date(now - minAgo * 60_000).toISOString()
-  const msg = (id: string, sender: Message['sender'], text: string, minAgo: number, type: Message['type'] = 'TEXT', orderId: string | null = null): Message => ({
-    id, conversationId: 'cv-1', sender, type, text, orderId, createdAt: at(minAgo),
+  const msg = (id: string, sender: Message['sender'], content: string, minAgo: number, type: Message['type'] = 'Text', orderId: string | null = null): Message => ({
+    id, conversationId: 'cv-1', sender, type, content, orderId, isRead: true, sentDate: at(minAgo),
   })
   return {
     ...empty(),
@@ -87,16 +87,29 @@ function seedCouple(): UserData {
       msg('m-1', 'VENDOR', 'Chào bạn! Mình là Lumi Wedding Studio. Bạn cần tư vấn gói nào cho chụp ảnh?', 60 * 26),
       msg('m-2', 'COUPLE', 'Mình muốn gói ngoại cảnh 1 ngày, bên bạn còn lịch không?', 60 * 25),
       msg('m-3', 'VENDOR', 'Còn lịch bạn nhé. Mình gửi đơn để bạn xác nhận.', 60 * 25 - 5),
-      msg('m-4', 'VENDOR', 'Nhà cung cấp đã gửi đơn dịch vụ', 60 * 25 - 6, 'ORDER', 'od-1'),
+      msg('m-4', 'VENDOR', 'Nhà cung cấp đã gửi đơn dịch vụ', 60 * 25 - 6, 'Order', 'od-1'),
       msg('m-5', 'SYSTEM', 'Nhà cung cấp đã gửi đơn dịch vụ. Bạn xem lại và thanh toán cọc.', 60 * 25 - 6),
     ],
     seq: 100,
   }
 }
 
+/** Tin nhắn lưu từ bản cũ (text, createdAt, TEXT/ORDER) đổi sang dạng chung (content, sentDate, Text/Order). */
+function migrateMessages(all: Record<string, UserData>) {
+  for (const data of Object.values(all)) {
+    data.messages = (data.messages ?? []).map((m) => {
+      const old = m as unknown as { text?: string; createdAt?: string; type: string }
+      if (old.text === undefined && old.createdAt === undefined) return m
+      const { text, createdAt, ...rest } = old as typeof old & Record<string, unknown>
+      return { ...rest, type: old.type === 'ORDER' ? 'Order' : 'Text', content: text ?? '', isRead: true, sentDate: createdAt ?? new Date().toISOString() } as Message
+    })
+  }
+  return all
+}
+
 function loadAll(): Record<string, UserData> {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, UserData>
+    return migrateMessages(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, UserData>)
   } catch {
     return {}
   }

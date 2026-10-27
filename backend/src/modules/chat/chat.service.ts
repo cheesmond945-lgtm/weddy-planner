@@ -2,63 +2,26 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
 import { WeddingsService } from '../weddings/weddings.service';
-import { paymentStatusOf, serviceStatusOf } from '../orders/order-mapping';
-import { notify, postMessage } from './chat-messages';
+import { markNewMessageRead, notifyNewMessage, postMessage } from './chat-messages';
+import { ChatRole, isUuid, todayVn, toLastMessage, toMessage } from './chat.mappers';
 
 const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);
 };
 
-type MessageRow = Awaited<ReturnType<typeof postMessage>>;
+const MAX_TEXT = 2000;
 
-const senderOf = (m: { sender_id: string | null }, coupleId: string) => (m.sender_id === null ? 'SYSTEM' : m.sender_id === coupleId ? 'COUPLE' : 'VENDOR');
-
-/** Tin phía cặp đôi: chỉ có TEXT và ORDER; các tin hệ thống (biên nhận, hủy...) hiện như tin chữ. */
-function coupleMessage(m: MessageRow, coupleId: string) {
-  return {
-    id: m.id,
-    conversationId: m.conversation_id,
-    sender: senderOf(m, coupleId),
-    type: m.type === 'Order' ? 'ORDER' : 'TEXT',
-    text: m.content,
-    orderId: m.order_id,
-    createdAt: m.sent_date.toISOString(),
-  };
+export interface ChatUser {
+  sub: string;
+  role: ChatRole;
 }
 
-/** Tin phía NCC: thêm các loại tin sự kiện của đơn, nhận ra từ loại tin và đầu câu của nội dung. */
-function vendorMessage(m: MessageRow, coupleId: string) {
-  const sender = senderOf(m, coupleId);
-  let type = 'TEXT';
-  let text = m.content;
-  let changes: string[] | null = null;
-  if (m.type === 'Order') type = 'ORDER';
-  else if (m.type === 'DepositReceipt' || m.type === 'FinalInvoice') type = 'PAYMENT_RECORDED';
-  else if (m.order_id && sender === 'COUPLE' && m.content.startsWith('Yêu cầu chỉnh sửa đơn')) {
-    type = 'ORDER_REVISION_REQUESTED';
-    text = m.content.split('\n').slice(1).join('\n');
-  } else if (m.order_id && sender === 'SYSTEM' && m.content.startsWith('Đã hủy đơn')) {
-    type = 'ORDER_CANCELLED';
-    text = m.content.includes('Lý do: ') ? m.content.split('Lý do: ').slice(1).join('Lý do: ') : '';
-  } else if (m.order_id && sender === 'SYSTEM' && m.content.startsWith('Đã cập nhật và gửi lại')) {
-    type = 'ORDER_RESENT';
-    changes = m.content.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2));
-    text = '';
-  }
-  return {
-    id: m.id,
-    conversationId: m.conversation_id,
-    sender,
-    type,
-    text,
-    orderId: m.order_id,
-    orderVersion: m.order_id && ['ORDER', 'ORDER_RESENT', 'ORDER_REVISION_REQUESTED'].includes(type) ? 1 : null,
-    adjustmentId: null,
-    changes,
-    createdAt: m.sent_date.toISOString(),
-  };
-}
+const lastMessageInclude = { messages: { orderBy: [{ sent_date: 'desc' as const }, { id: 'desc' as const }], take: 1, include: { orders: { select: { order_code: true, status: true } } } } };
 
+/**
+ * Hội thoại và tin nhắn cho cả cặp đôi và NCC (docs/api/chat.md). Mọi thao tác nhận ChatUser lấy từ JWT:
+ * cặp đôi chỉ thấy hội thoại của mình (couple_id), NCC chỉ thấy hội thoại của mình (vendor_id).
+ */
 @Injectable()
 export class ChatService {
   constructor(
@@ -67,48 +30,103 @@ export class ChatService {
     private readonly weddings: WeddingsService,
   ) {}
 
-  // ================= Cặp đôi =================
-
-  private async ownedByCouple(userId: string, id: string) {
-    const ok = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const conv = ok ? await this.prisma.conversations.findFirst({ where: { id, couple_id: userId } }) : null;
+  private async owned(user: ChatUser, id: string) {
+    const where = user.role === 'Couple' ? { id, couple_id: user.sub } : { id, vendor_id: user.sub };
+    const conv = isUuid(id) ? await this.prisma.conversations.findFirst({ where }) : null;
     return conv ?? fail('CONVERSATION_NOT_FOUND', 'Không tìm thấy hội thoại.', 404);
   }
 
+  /** Số tin của bên kia mà người xem chưa đọc, theo từng hội thoại. */
+  private async unreadByConversation(convs: { id: string; couple_id: string; vendor_id: string }[], role: ChatRole) {
+    const counterparts = convs.map((c) => (role === 'Couple' ? c.vendor_id : c.couple_id));
+    const rows = await this.prisma.messages.groupBy({
+      by: ['conversation_id'],
+      where: { conversation_id: { in: convs.map((c) => c.id) }, sender_id: { in: counterparts }, is_read: false },
+      _count: { _all: true },
+    });
+    return new Map(rows.map((r) => [r.conversation_id, r._count._all]));
+  }
+
+  list(user: ChatUser) {
+    return user.role === 'Couple' ? this.coupleConversations(user.sub) : this.vendorConversations(user.sub);
+  }
+
+  async messages(user: ChatUser, id: string, after?: string) {
+    const conv = await this.owned(user, id);
+    const afterDate = after ? new Date(after) : null;
+    const rows = await this.prisma.messages.findMany({
+      where: { conversation_id: id, ...(afterDate && !Number.isNaN(afterDate.getTime()) ? { sent_date: { gt: afterDate } } : {}) },
+      orderBy: [{ sent_date: 'asc' }, { id: 'asc' }],
+      include: { orders: { select: { order_code: true, status: true } } },
+    });
+    return rows.map((m) => toMessage(m, conv.couple_id));
+  }
+
+  async send(user: ChatUser, id: string, text: string) {
+    const conv = await this.owned(user, id);
+    const content = (text ?? '').trim();
+    if (!content) return fail('VALIDATION_ERROR', 'Nhập nội dung tin nhắn.', 400);
+    if (content.length > MAX_TEXT) return fail('VALIDATION_ERROR', `Tin nhắn tối đa ${MAX_TEXT} ký tự.`, 400);
+    const m = await postMessage(this.prisma, { conversationId: id, senderId: user.sub, content });
+    const toCouple = user.role === 'Vendor';
+    await notifyNewMessage(this.prisma, { userId: toCouple ? conv.couple_id : conv.vendor_id, conversationId: id, from: await this.displayName(user), content });
+    return toMessage(m, conv.couple_id);
+  }
+
+  /** Người xem mở hội thoại: các tin của bên kia thành đã đọc, thông báo NewMessage của hội thoại cũng đã đọc. */
+  async markRead(user: ChatUser, id: string) {
+    const conv = await this.owned(user, id);
+    const counterpart = user.role === 'Couple' ? conv.vendor_id : conv.couple_id;
+    await this.prisma.messages.updateMany({ where: { conversation_id: id, sender_id: counterpart, is_read: false }, data: { is_read: true, read_date: new Date() } });
+    await markNewMessageRead(this.prisma, user.sub, id);
+    return null;
+  }
+
+  /** Tên hiện trong thông báo: cặp đôi là họ tên, NCC là tên doanh nghiệp. */
+  private async displayName(user: ChatUser) {
+    if (user.role === 'Vendor') {
+      const v = await this.prisma.vendor_profiles.findUnique({ where: { user_id: user.sub }, select: { business_name: true } });
+      return v?.business_name ?? 'nhà cung cấp';
+    }
+    const u = await this.prisma.users.findUnique({ where: { id: user.sub }, select: { full_name: true } });
+    return u?.full_name ?? 'khách hàng';
+  }
+
+  // ================= Cặp đôi =================
+
   private async coupleConversations(userId: string, only?: string) {
-    const convs = await this.prisma.conversations.findMany({ where: { couple_id: userId, ...(only ? { id: only } : {}) }, orderBy: [{ last_message_date: 'desc' }, { created_date: 'desc' }] });
+    const convs = await this.prisma.conversations.findMany({
+      where: { couple_id: userId, ...(only ? { id: only } : {}) },
+      orderBy: [{ last_message_date: 'desc' }, { created_date: 'desc' }],
+      include: lastMessageInclude,
+    });
     const vendors = await this.prisma.vendor_profiles.findMany({ where: { user_id: { in: convs.map((c) => c.vendor_id) } }, select: { id: true, user_id: true } });
     const vendorByUser = new Map(vendors.map((v) => [v.user_id, v]));
-    const [summaries, statuses, lasts] = await Promise.all([
+    const [summaries, statuses, unread] = await Promise.all([
       this.services.summaries(vendors.map((v) => v.id)),
       this.weddings.planStatusMap(userId, vendors),
-      this.prisma.messages.findMany({ where: { conversation_id: { in: convs.map((c) => c.id) } }, orderBy: { sent_date: 'desc' } }),
+      this.unreadByConversation(convs, 'Couple'),
     ]);
     const sumById = new Map(summaries.map((s) => [s.id, s]));
-    const lastByConv = new Map<string, (typeof lasts)[number]>();
-    for (const m of lasts) if (!lastByConv.has(m.conversation_id)) lastByConv.set(m.conversation_id, m);
 
     return convs.flatMap((c) => {
       const v = vendorByUser.get(c.vendor_id);
       const service = v && sumById.get(v.id);
       if (!v || !service) return []; // NCC đã bị ẩn
-      const last = lastByConv.get(c.id);
+      const last = c.messages[0];
       return [
         {
           id: c.id,
           service,
           planStatus: statuses.get(v.id) ?? null,
-          unreadCount: lasts.filter((m) => m.conversation_id === c.id && m.sender_id === c.vendor_id && !m.is_read).length,
-          lastMessage: last ? { type: last.type === 'Order' ? 'ORDER' : 'TEXT', text: last.content, createdAt: last.sent_date.toISOString() } : null,
+          unreadCount: unread.get(c.id) ?? 0,
+          lastMessage: last ? toLastMessage(last, c.couple_id) : null,
         },
       ];
     });
   }
 
-  listForCouple(userId: string) {
-    return this.coupleConversations(userId);
-  }
-
+  /** POST /conversations: mở (hoặc tạo) hội thoại với NCC của một dịch vụ, tự thêm dịch vụ vào kế hoạch. */
   async startForCouple(userId: string, serviceId: string, replace: boolean) {
     await this.weddings.addPlanItem(userId, serviceId, replace, true);
     const vendor = await this.prisma.vendor_profiles.findUniqueOrThrow({ where: { id: serviceId }, include: { service_categories: { select: { name: true } } } });
@@ -125,120 +143,48 @@ export class ChatService {
     return (await this.coupleConversations(userId, conv.id))[0];
   }
 
-  async messagesForCouple(userId: string, id: string) {
-    const conv = await this.ownedByCouple(userId, id);
-    const rows = await this.prisma.messages.findMany({ where: { conversation_id: id }, orderBy: [{ sent_date: 'asc' }, { id: 'asc' }], include: { orders: { select: { order_code: true } } } });
-    return rows.map((m) => coupleMessage(m, conv.couple_id));
-  }
-
-  async sendForCouple(userId: string, id: string, text: string) {
-    const conv = await this.ownedByCouple(userId, id);
-    const content = (text ?? '').trim();
-    if (!content) return fail('VALIDATION_ERROR', 'Nhập nội dung tin nhắn.', 400);
-    // Tin đầu tiên NCC chưa đọc thì báo cho NCC; các tin sau gộp chung, tránh dồn thông báo
-    const hadUnread = await this.prisma.messages.count({ where: { conversation_id: id, sender_id: userId, is_read: false } });
-    const m = await postMessage(this.prisma, { conversationId: id, senderId: userId, content });
-    if (!hadUnread) {
-      const couple = await this.prisma.users.findUnique({ where: { id: userId }, select: { full_name: true } });
-      // Lỗi ghi thông báo không được làm hỏng việc gửi tin
-      await notify(this.prisma, {
-        userId: conv.vendor_id,
-        type: 'NewMessage',
-        title: `Tin nhắn mới từ ${couple?.full_name ?? 'khách hàng'}`,
-        content: content.length > 120 ? `${content.slice(0, 117)}...` : content,
-        referenceType: 'Conversation',
-        referenceId: id,
-      }).catch(() => undefined);
-    }
-    return coupleMessage(m, conv.couple_id);
-  }
-
-  /** Khách mở hội thoại: đánh dấu đã đọc các tin của NCC. */
-  async markReadForCouple(userId: string, id: string) {
-    const conv = await this.ownedByCouple(userId, id);
-    await this.prisma.messages.updateMany({ where: { conversation_id: id, sender_id: conv.vendor_id, is_read: false }, data: { is_read: true, read_date: new Date() } });
-    return null;
-  }
-
   // ================= Nhà cung cấp =================
 
-  private async vendorOf(userId: string) {
-    const v = await this.prisma.vendor_profiles.findUnique({ where: { user_id: userId }, select: { id: true } });
-    return v ?? fail('VENDOR_PROFILE_NOT_FOUND', 'Tài khoản chưa có hồ sơ nhà cung cấp.', 404);
-  }
-
-  private async ownedByVendor(userId: string, id: string) {
-    const ok = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const conv = ok ? await this.prisma.conversations.findFirst({ where: { id, vendor_id: userId } }) : null;
-    return conv ?? fail('CONVERSATION_NOT_FOUND', 'Không tìm thấy hội thoại.', 404);
-  }
-
-  async listForVendor(userId: string) {
-    const vendor = await this.vendorOf(userId);
-    const convs = await this.prisma.conversations.findMany({ where: { vendor_id: userId }, orderBy: [{ last_message_date: 'desc' }, { created_date: 'desc' }] });
+  private async vendorConversations(userId: string) {
+    const vendor = await this.prisma.vendor_profiles.findUnique({ where: { user_id: userId }, select: { id: true } });
+    if (!vendor) return fail('VENDOR_PROFILE_NOT_FOUND', 'Tài khoản chưa có hồ sơ nhà cung cấp.', 404);
+    const convs = await this.prisma.conversations.findMany({
+      where: { vendor_id: userId },
+      orderBy: [{ last_message_date: 'desc' }, { created_date: 'desc' }],
+      include: lastMessageInclude,
+    });
     const coupleIds = convs.map((c) => c.couple_id);
-    const [couples, weddings, orders, msgs, packages] = await Promise.all([
+    const [couples, weddings, orders, unread] = await Promise.all([
       this.prisma.users.findMany({ where: { id: { in: coupleIds } }, select: { id: true, full_name: true, phone_number: true } }),
-      this.prisma.weddings.findMany({ where: { user_id: { in: coupleIds } }, select: { id: true, user_id: true, groom_name: true, bride_name: true } }),
-      this.prisma.orders.findMany({ where: { vendor_id: vendor.id, weddings: { user_id: { in: coupleIds } } }, include: { weddings: { select: { user_id: true } }, order_items: { select: { item_name: true }, take: 1 } }, orderBy: { created_date: 'desc' } }),
-      this.prisma.messages.findMany({ where: { conversation_id: { in: convs.map((c) => c.id) } }, orderBy: { sent_date: 'desc' }, include: { orders: { select: { order_code: true } } } }),
-      this.services.packageCards(vendor.id),
+      this.prisma.weddings.findMany({ where: { user_id: { in: coupleIds } }, select: { user_id: true, groom_name: true, bride_name: true } }),
+      this.prisma.orders.findMany({
+        where: { vendor_id: vendor.id, weddings: { user_id: { in: coupleIds } } },
+        select: { id: true, order_code: true, status: true, event_date: true, weddings: { select: { user_id: true } } },
+        orderBy: { created_date: 'desc' },
+      }),
+      this.unreadByConversation(convs, 'Vendor'),
     ]);
     const coupleById = new Map(couples.map((u) => [u.id, u]));
     const weddingByUser = new Map(weddings.map((w) => [w.user_id, w]));
-    // Ngữ cảnh hội thoại: khách đã thêm NCC này vào kế hoạch thì gói đang tính là gói trong đơn mới nhất, chưa có đơn thì gói rẻ nhất (như PlanItem)
-    const inPlan = new Set(
-      (await this.prisma.plan_vendors.findMany({ where: { vendor_id: vendor.id, wedding_id: { in: weddings.map((w) => w.id) } }, select: { wedding_id: true } })).map((r) => r.wedding_id),
-    );
-    const interestOf = (coupleId: string, latestOrder?: { order_items?: { item_name: string }[] }) => {
-      const w = weddingByUser.get(coupleId);
-      if (!w || !inPlan.has(w.id) || !packages.length) return null;
-      const itemName = latestOrder?.order_items?.[0]?.item_name;
-      const p = packages.find((x) => x.name === itemName) ?? packages[0];
-      return { id: p.id, name: p.name, price: p.price, maxPrice: null, imageUrl: p.imageUrl };
-    };
+    const today = todayVn();
 
     return convs.map((c) => {
       const u = coupleById.get(c.couple_id);
       const w = weddingByUser.get(c.couple_id);
       const mine = orders.filter((o) => o.weddings.user_id === c.couple_id);
-      const mineMsgs = msgs.filter((m) => m.conversation_id === c.id);
-      const last = mineMsgs[0];
       const latestSent = mine.find((o) => o.status !== 'Draft');
-      const lastMapped = last ? vendorMessage(last, c.couple_id) : null;
+      const last = c.messages[0];
       return {
         id: c.id,
         customer: { name: w && w.bride_name && !w.bride_name.startsWith('(') ? `${w.groom_name} & ${w.bride_name}` : (w?.groom_name ?? u?.full_name ?? ''), phone: u?.phone_number ?? '' },
-        interestPackage: interestOf(c.couple_id, mine[0]),
-        unreadCount: mineMsgs.filter((m) => m.sender_id === c.couple_id && !m.is_read).length,
-        lastMessage: lastMapped
-          ? { sender: lastMapped.sender, type: lastMapped.type, text: lastMapped.text, orderVersion: lastMapped.orderVersion, orderCode: last?.orders?.order_code ?? null, createdAt: lastMapped.createdAt }
-          : null,
-        latestOrder: latestSent ? { id: latestSent.id, code: latestSent.order_code, status: serviceStatusOf(latestSent.status), paymentStatus: paymentStatusOf(latestSent.status) } : null,
+        unreadCount: unread.get(c.id) ?? 0,
+        lastMessage: last ? toLastMessage(last, c.couple_id) : null,
+        latestOrder: latestSent ? { id: latestSent.id, orderCode: latestSent.order_code, status: latestSent.status } : null,
         hasDraftOrder: mine.some((o) => o.status === 'Draft'),
-        needsAction: mine.some((o) => o.status === 'Draft' || o.status === 'NeedRevision'),
+        // Cần NCC xử lý: có đơn nháp, đơn cần chỉnh sửa, hoặc đơn đã cọc đã qua ngày thực hiện (chờ đánh dấu hoàn thành)
+        needsAction: mine.some((o) => o.status === 'Draft' || o.status === 'NeedRevision' || (o.status === 'Deposited' && o.event_date.toISOString().slice(0, 10) < today)),
         orderCodes: mine.map((o) => o.order_code),
       };
     });
-  }
-
-  async messagesForVendor(userId: string, id: string) {
-    const conv = await this.ownedByVendor(userId, id);
-    const rows = await this.prisma.messages.findMany({ where: { conversation_id: id }, orderBy: [{ sent_date: 'asc' }, { id: 'asc' }], include: { orders: { select: { order_code: true } } } });
-    return rows.map((m) => vendorMessage(m, conv.couple_id));
-  }
-
-  async sendForVendor(userId: string, id: string, text: string) {
-    const conv = await this.ownedByVendor(userId, id);
-    const content = (text ?? '').trim();
-    if (!content) return fail('VALIDATION_ERROR', 'Nhập nội dung tin nhắn.', 400);
-    const m = await postMessage(this.prisma, { conversationId: id, senderId: userId, content, isRead: false });
-    return vendorMessage(m, conv.couple_id);
-  }
-
-  async markReadForVendor(userId: string, id: string) {
-    const conv = await this.ownedByVendor(userId, id);
-    await this.prisma.messages.updateMany({ where: { conversation_id: id, sender_id: conv.couple_id, is_read: false }, data: { is_read: true, read_date: new Date() } });
-    return null;
   }
 }

@@ -6,8 +6,8 @@ import { advanceClock, resetClock } from '@/lib/clock'
 import { useAuth } from '@/store/auth'
 import type { CustomerSimulation, VendorMessage } from '@/types/vendorConversation'
 
-// Chưa có websocket (docs/api/chat.md): hỏi lại định kỳ khi đang mở trang Tin nhắn, như phía cặp đôi
-const POLL_MS = 2500
+// Chưa có websocket (docs/api/chat.md): hỏi lại định kỳ khi đang mở trang Tin nhắn, như phía cặp đôi (5 giây)
+const POLL_MS = 5000
 
 function useVendorId() {
   const { user } = useAuth()

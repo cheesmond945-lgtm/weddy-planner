@@ -1,5 +1,6 @@
 import { Receipt } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { OrderStubCard } from '@/components/OrderStubCard'
 import { Button } from '@/components/ui/button'
 import { formatStamp } from '@/features/vendorOrders/calc'
 import { OrderCard } from '@/features/vendorOrders/components/OrderCard'
@@ -36,6 +37,14 @@ function Bubble({ mine, wide, at, children }: { mine: boolean; wide?: boolean; a
 export function MessageItem({ message: m, order, isLatestCard, highlight, onOpenForm, onViewOrder, onViewInvoice }: MessageItemProps) {
   switch (m.type) {
     case 'Order': {
+      // Chưa đọc được đơn đầy đủ (chat thật, API đơn còn giả): ô gọn "Đơn {mã} · {trạng thái}"
+      if (!order && m.order) {
+        return (
+          <Bubble mine wide at={m.sentDate}>
+            <OrderStubCard orderCode={m.order.orderCode} status={m.order.status} />
+          </Bubble>
+        )
+      }
       if (!order) break
       // Gửi lại: các thẻ cũ của cùng đơn thu gọn thành một dòng
       if (!isLatestCard) {

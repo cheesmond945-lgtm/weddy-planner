@@ -23,6 +23,8 @@ export interface VendorMessage {
   content: string
   isRead: boolean
   sentDate: string
+  /** Chỉ BE thật trả, với tin có orderId: mã và trạng thái đơn, để vẽ ô đơn gọn khi chưa đọc được đơn đầy đủ */
+  order?: { orderCode: string; status: OrderStatus } | null
 }
 
 export interface VendorConversation {

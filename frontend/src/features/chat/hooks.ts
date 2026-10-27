@@ -6,8 +6,8 @@ import { planningKeys } from '@/features/weddings/hooks'
 import { useAuth } from '@/store/auth'
 import type { Message } from '@/types/chat'
 
-// Chưa có thư viện websocket trong danh sách được dùng: hỏi lại định kỳ khi đang mở khung chat
-const POLL_MS = 2500
+// Chưa có thư viện websocket trong danh sách được dùng: hỏi lại định kỳ khi đang mở khung chat (5 giây, như phía NCC)
+const POLL_MS = 5000
 
 function useCoupleId() {
   const { user } = useAuth()

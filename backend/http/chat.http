@@ -1,0 +1,111 @@
+### Thử API tin nhắn (docs/api/chat.md). Dùng với extension "REST Client" của VS Code.
+### Chỉ dùng ncc01 với thao.trinh01 (hội thoại mới) và linh.pham04 (hội thoại có sẵn): DB Supabase dùng chung cả nhóm.
+### Mật khẩu tài khoản mẫu: xem HUONG_DAN_CHAY.md (không ghi vào file này).
+
+@host = http://localhost:3000/api
+@password = <điền mật khẩu mẫu>
+
+### 1. Đăng nhập NCC (ncc01)
+# @name loginVendor
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "identifier": "ncc01", "password": "{{password}}" }
+
+###
+@vendorToken = {{loginVendor.response.body.data.accessToken}}
+
+### 2. Đăng nhập khách (linh.pham04: đã có hội thoại với ncc01)
+# @name loginCouple
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "identifier": "linh.pham04", "password": "{{password}}" }
+
+###
+@coupleToken = {{loginCouple.response.body.data.accessToken}}
+
+### 3. Đăng nhập khách mới (thao.trinh01: chưa có hội thoại với ncc01)
+# @name loginNewCouple
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "identifier": "thao.trinh01", "password": "{{password}}" }
+
+###
+@newCoupleToken = {{loginNewCouple.response.body.data.accessToken}}
+
+### ===== Phía NCC =====
+
+### 4. Danh sách hội thoại của NCC (đường dẫn dùng chung, vai trò lấy từ token)
+GET {{host}}/conversations
+Authorization: Bearer {{vendorToken}}
+
+### 5. Bí danh cũ của NCC, kết quả giống mục 4
+GET {{host}}/vendors/me/conversations
+Authorization: Bearer {{vendorToken}}
+
+###
+@vendorConvId = <id hội thoại lấy từ mục 4>
+
+### 6. Tin nhắn của một hội thoại (thêm ?after=2026-10-01T00:00:00.000Z để chỉ lấy tin mới hơn)
+GET {{host}}/conversations/{{vendorConvId}}/messages
+Authorization: Bearer {{vendorToken}}
+
+### 7. NCC gửi tin (khách nhận thông báo NewMessage, chỉ 1 thông báo chưa đọc cho mỗi hội thoại)
+POST {{host}}/conversations/{{vendorConvId}}/messages
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{ "text": "Tin thử từ NCC" }
+
+### 8. NCC đánh dấu đã đọc
+POST {{host}}/conversations/{{vendorConvId}}/read
+Authorization: Bearer {{vendorToken}}
+
+### ===== Phía khách =====
+
+### 9. Danh sách hội thoại của khách
+GET {{host}}/conversations
+Authorization: Bearer {{coupleToken}}
+
+###
+@coupleConvId = <id hội thoại lấy từ mục 9>
+
+### 10. Khách gửi tin (NCC nhận thông báo NewMessage)
+POST {{host}}/conversations/{{coupleConvId}}/messages
+Authorization: Bearer {{coupleToken}}
+Content-Type: application/json
+
+{ "text": "Tin thử từ khách" }
+
+### 11. Khách đánh dấu đã đọc
+POST {{host}}/conversations/{{coupleConvId}}/read
+Authorization: Bearer {{coupleToken}}
+
+### 12. Khách mới bắt đầu hội thoại với ncc01 (serviceId = id hồ sơ NCC của ncc01). Tự thêm NCC vào kế hoạch của khách.
+POST {{host}}/conversations
+Authorization: Bearer {{newCoupleToken}}
+Content-Type: application/json
+
+{ "serviceId": "8f9dfd27-ad78-5786-841f-c54111318a9c" }
+
+### ===== Phải bị từ chối =====
+
+### 13. NCC không được bắt đầu hội thoại: 403
+POST {{host}}/conversations
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{ "serviceId": "8f9dfd27-ad78-5786-841f-c54111318a9c" }
+
+### 14. Khách mới đọc hội thoại của người khác: 404 CONVERSATION_NOT_FOUND
+GET {{host}}/conversations/{{vendorConvId}}/messages
+Authorization: Bearer {{newCoupleToken}}
+
+### 15. Tin rỗng: 400 VALIDATION_ERROR
+POST {{host}}/conversations/{{vendorConvId}}/messages
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{ "text": "   " }

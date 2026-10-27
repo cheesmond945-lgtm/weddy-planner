@@ -235,12 +235,12 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
 const bubble = 'max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-[1.5] whitespace-pre-wrap [overflow-wrap:anywhere]'
 
 function Bubble({ message: m, conversationId }: { message: Message; conversationId: string }) {
-  const time = <span className="mt-1 text-xs text-ink-3">{formatMessageTime(m.createdAt)}</span>
+  const time = <span className="mt-1 text-xs text-ink-3">{formatMessageTime(m.sentDate)}</span>
   if (m.sender === 'SYSTEM') {
-    return <div className="self-center rounded-pill bg-sage-soft px-3 py-1 text-center text-xs text-sage">{m.text}</div>
+    return <div className="self-center rounded-pill bg-sage-soft px-3 py-1 text-center text-xs text-sage">{m.content}</div>
   }
   // Đơn dịch vụ: khung hẹp không đủ chỗ cho thẻ đơn đầy đủ, mở trang Tin nhắn để xem và xử lý
-  if (m.type === 'ORDER') {
+  if (m.type === 'Order') {
     return (
       <div className="flex flex-col items-start">
         <Link
@@ -261,7 +261,7 @@ function Bubble({ message: m, conversationId }: { message: Message; conversation
   const mine = m.sender === 'COUPLE'
   return (
     <div className={cn('flex flex-col', mine ? 'items-end' : 'items-start')}>
-      <div className={cn(bubble, mine ? 'rounded-br-md bg-gold-700 text-white' : 'rounded-bl-md bg-gold-100 text-ink')}>{m.text}</div>
+      <div className={cn(bubble, mine ? 'rounded-br-md bg-gold-700 text-white' : 'rounded-bl-md bg-gold-100 text-ink')}>{m.content}</div>
       {time}
     </div>
   )

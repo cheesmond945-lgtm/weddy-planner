@@ -1,6 +1,7 @@
 import { MessageSquare } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
+import { orderCardsStubbed } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
@@ -37,12 +38,14 @@ export function VendorChatView() {
   const invoiceOrder = orders.find((o) => o.id === invoice?.orderId)
 
   // Từ trang Quản lý đơn hàng: "+ Tạo đơn" chọn khách rồi sang đây (?c=…&create=1) mở sẵn form tạo đơn
+  // Chat thật mà API đơn còn giả: chưa tạo đơn được, chỉ mở hội thoại
+  const orderStub = orderCardsStubbed('vendorChat')
   const wantCreate = params.get('create') === '1'
   useEffect(() => {
     if (!wantCreate || !active) return
-    setForm({ kind: 'new' })
+    if (!orderStub) setForm({ kind: 'new' })
     setParams({ c: active.id }, { replace: true })
-  }, [wantCreate, active, setParams])
+  }, [wantCreate, active, orderStub, setParams])
 
   // Làm nổi thẻ đơn vừa gửi trong 2,4 giây (như prototype)
   useEffect(() => {

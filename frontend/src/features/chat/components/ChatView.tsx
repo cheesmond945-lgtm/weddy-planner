@@ -1,7 +1,9 @@
 import { Filter, Search, Send } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
+import { orderCardsStubbed } from '@/api'
 import { Badge } from '@/components/Badge'
+import { OrderStubCard } from '@/components/OrderStubCard'
 import { Button } from '@/components/ui/button'
 import { useCategories } from '@/features/catalog/hooks'
 import { OrderCard } from '@/features/orders/components/OrderCard'
@@ -19,7 +21,7 @@ interface ChatViewProps {
   onSelect: (id: string) => void
 }
 
-const preview = (c: Conversation) => (c.lastMessage ? (c.lastMessage.type === 'ORDER' ? 'Đã gửi đơn dịch vụ' : c.lastMessage.text) : '')
+const preview = (c: Conversation) => (c.lastMessage ? (c.lastMessage.type === 'Order' ? 'Đã gửi đơn dịch vụ' : c.lastMessage.content) : '')
 
 /** Hộp thư: danh sách hội thoại + khung trò chuyện (renderChat trong prototype). */
 export function ChatView({ conversations, activeId, onSelect }: ChatViewProps) {
@@ -129,7 +131,7 @@ function Inbox({ conversations, activeId, onSelect }: ChatViewProps) {
               </Badge>
             )}
           </span>
-          <span className="text-[11px] whitespace-nowrap text-muted-foreground">{c.lastMessage ? formatMessageTime(c.lastMessage.createdAt) : ''}</span>
+          <span className="text-[11px] whitespace-nowrap text-muted-foreground">{c.lastMessage ? formatMessageTime(c.lastMessage.sentDate) : ''}</span>
           <span className={cn('truncate text-[11px] text-muted-foreground', c.unreadCount > 0 && c.id !== activeId ? 'font-semibold text-ink' : 'col-span-2')}>{preview(c)}</span>
           {c.unreadCount > 0 && c.id !== activeId && (
             <span aria-label={`${c.unreadCount} tin chưa đọc`} className="grid h-[18px] min-w-[18px] place-items-center justify-self-end rounded-pill bg-notify px-1 text-[10px] font-bold text-white">
@@ -206,9 +208,13 @@ function Thread({ conversation }: { conversation: Conversation }) {
 }
 
 function MessageItem({ message, categorySlug, onRevise }: { message: Message; categorySlug: string; onRevise: (o: Order) => void }) {
-  if (message.type === 'ORDER' && message.orderId) return <OrderCard orderId={message.orderId} categorySlug={categorySlug} onRevise={onRevise} />
+  if (message.type === 'Order' && message.orderId) {
+    // Chat thật mà API đơn còn giả: không đọc được đơn đầy đủ, hiện ô gọn "Đơn {mã} · {trạng thái}"
+    if (orderCardsStubbed('chat') && message.order) return <OrderStubCard orderCode={message.order.orderCode} status={message.order.status} />
+    return <OrderCard orderId={message.orderId} categorySlug={categorySlug} onRevise={onRevise} />
+  }
   const base = 'max-w-[78%] rounded-[20px] px-[15px] py-[11px] text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere] max-[640px]:max-w-[94%]'
-  if (message.sender === 'SYSTEM') return <div className={cn(base, 'self-center bg-sage-soft text-sage')}>{message.text}</div>
-  if (message.sender === 'COUPLE') return <div className={cn(base, 'self-end rounded-br-[5px] bg-primary text-primary-foreground')}>{message.text}</div>
-  return <div className={cn(base, 'self-start rounded-bl-[5px] bg-bg text-nav')}>{message.text}</div>
+  if (message.sender === 'SYSTEM') return <div className={cn(base, 'self-center bg-sage-soft text-sage')}>{message.content}</div>
+  if (message.sender === 'COUPLE') return <div className={cn(base, 'self-end rounded-br-[5px] bg-primary text-primary-foreground')}>{message.content}</div>
+  return <div className={cn(base, 'self-start rounded-bl-[5px] bg-bg text-nav')}>{message.content}</div>
 }

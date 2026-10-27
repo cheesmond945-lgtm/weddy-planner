@@ -63,12 +63,14 @@ npm run dev
 ```
 VITE_API_URL=http://localhost:3000/api
 VITE_USE_MOCK=true
-VITE_REAL_APIS=catalog,auth
+VITE_REAL_APIS=catalog,auth,chat,vendorChat
 ```
 
-- `VITE_REAL_APIS=catalog,auth`: danh mục, dịch vụ, ảnh và đăng nhập lấy từ backend thật.
+- `VITE_REAL_APIS=catalog,auth,chat,vendorChat`: danh mục, dịch vụ, ảnh, đăng nhập và **tin nhắn** (cả khách lẫn NCC) lấy từ backend thật. Muốn chỉ xem giao diện bằng dữ liệu giả thì bỏ `chat,vendorChat`.
 - Các tính năng chưa có backend (đơn hàng, chat, yêu thích, kế hoạch đám cưới, NCC...) vẫn dùng dữ liệu giả vì `VITE_USE_MOCK=true`.
-- **Phía NCC: các cờ `orders`, `vendorChat` và `commissions` phải bật hoặc tắt CÙNG NHAU** (cùng nằm trong `VITE_REAL_APIS` hoặc cùng không). Hội thoại, đơn và hoa hồng giả dùng chung một kho dữ liệu (`weddy.mock.vendorOrders.*`); bật thật riêng một cờ thì hội thoại giả gặp đơn thật (hoặc ngược lại) và vỡ trang. Nút "Giả lập khách" và "Giả lập thời gian" chỉ có khi các cờ này đang dùng dữ liệu giả.
+- **Phía NCC: `orders` và `commissions` phải bật hoặc tắt CÙNG NHAU** (đơn và hoa hồng giả dùng chung một kho dữ liệu `weddy.mock.vendorOrders.*`). Nút "Giả lập khách" và "Giả lập thời gian" chỉ có khi các cờ này đang dùng dữ liệu giả.
+- **Tin nhắn thật mà đơn hàng còn giả** (`chat,vendorChat` có, `orders` không): đã hỗ trợ. Tin loại đơn hiện ô gọn "Đơn {mã} · {trạng thái}" ở cả hai bên; phía NCC ẩn nút "Tạo đơn" (thay bằng dòng "Tạo đơn sẽ bật khi nối backend đơn hàng") và ẩn "Giả lập khách". Khi `chat,vendorChat` dùng dữ liệu giả thì mọi thứ như cũ (thẻ đơn đầy đủ, Tạo đơn, giả lập khách). **Bật `orders,commissions` thật sau khi làm xong backend đơn hàng đợt 2** (backend đơn hàng hiện còn theo hợp đồng cũ, xem `docs/api/LECH_FE_BE.md`); lúc đó thêm cả hai cờ vào `VITE_REAL_APIS` cùng nhau.
+- Cờ `chat` thật thì "Nhắn tin với NCC" tạo hội thoại trên backend và **tự thêm NCC vào kế hoạch thật** của khách; trang Kế hoạch vẫn dùng dữ liệu giả nếu `weddings` chưa bật thật, nên hai nơi có thể lệch nhau.
 - Sửa `.env` xong phải khởi động lại `npm run dev`.
 
 Mở http://localhost:5173 và đăng nhập thử bằng `admin` / `Everly@2026`.
@@ -84,6 +86,7 @@ Các tài khoản mẫu khác (ví dụ `ncc01`, `thao.trinh01`) dùng chung m�
 | `GET /api/auth/me` | Header `Authorization: Bearer <accessToken>` |
 | `GET /api/vendors/:id/documents` | Giấy tờ NCC, link tạm 10 phút. Chỉ Admin hoặc chính NCC đó |
 | `GET /api/health` | Kiểm tra kết nối DB |
+| `GET/POST /api/conversations`, `GET/POST /api/conversations/:id/messages`, `POST /api/conversations/:id/read` | Tin nhắn, dùng chung cho khách và NCC (vai trò lấy từ token). Bí danh phía NCC: `/api/vendors/me/conversations/*`. Chi tiết: `docs/api/chat.md`; thử nhanh bằng `backend/http/chat.http` |
 
 Chưa có: đăng ký và OTP, sửa hồ sơ, rating Google Maps (đang trả 0).
 

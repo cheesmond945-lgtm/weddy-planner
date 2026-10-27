@@ -1,65 +1,69 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ChatService } from './chat.service';
 
-/** Hội thoại phía cặp đôi (docs/api/chat.md). */
+/**
+ * Hội thoại dùng chung cho cặp đôi và NCC (docs/api/chat.md): vai trò lấy từ JWT, mỗi người chỉ thấy
+ * hội thoại của mình. Chỉ cặp đôi mới bắt đầu được hội thoại (POST /conversations).
+ */
 @UseGuards(JwtAuthGuard)
-@Roles('Couple')
+@Roles('Couple', 'Vendor')
 @Controller('conversations')
-export class CoupleChatController {
+export class ConversationsController {
   constructor(private readonly chat: ChatService) {}
 
   @Get()
   list(@Req() req: any) {
-    return this.chat.listForCouple(req.user.sub);
+    return this.chat.list(req.user);
   }
 
   @Post()
   start(@Req() req: any, @Body() body: { serviceId?: string; replace?: boolean }) {
+    if (req.user.role !== 'Couple') throw new ForbiddenException('Không có quyền');
     return this.chat.startForCouple(req.user.sub, String(body?.serviceId ?? ''), !!body?.replace);
   }
 
   @Get(':id/messages')
-  messages(@Req() req: any, @Param('id') id: string) {
-    return this.chat.messagesForCouple(req.user.sub, id);
+  messages(@Req() req: any, @Param('id') id: string, @Query('after') after?: string) {
+    return this.chat.messages(req.user, id, after);
   }
 
   @Post(':id/messages')
   send(@Req() req: any, @Param('id') id: string, @Body() body: { text?: string }) {
-    return this.chat.sendForCouple(req.user.sub, id, body?.text ?? '');
+    return this.chat.send(req.user, id, body?.text ?? '');
   }
 
   @Post(':id/read')
   read(@Req() req: any, @Param('id') id: string) {
-    return this.chat.markReadForCouple(req.user.sub, id);
+    return this.chat.markRead(req.user, id);
   }
 }
 
-/** Hội thoại phía nhà cung cấp (docs/api/chat.md, phần Nhà cung cấp). */
+/** Bí danh của ConversationsController cho phía NCC, giữ đường dẫn cũ /vendors/me/conversations. */
 @UseGuards(JwtAuthGuard)
 @Roles('Vendor')
 @Controller('vendors/me/conversations')
-export class VendorChatController {
+export class VendorConversationsController {
   constructor(private readonly chat: ChatService) {}
 
   @Get()
   list(@Req() req: any) {
-    return this.chat.listForVendor(req.user.sub);
+    return this.chat.list(req.user);
   }
 
   @Get(':id/messages')
-  messages(@Req() req: any, @Param('id') id: string) {
-    return this.chat.messagesForVendor(req.user.sub, id);
+  messages(@Req() req: any, @Param('id') id: string, @Query('after') after?: string) {
+    return this.chat.messages(req.user, id, after);
   }
 
   @Post(':id/messages')
   send(@Req() req: any, @Param('id') id: string, @Body() body: { text?: string }) {
-    return this.chat.sendForVendor(req.user.sub, id, body?.text ?? '');
+    return this.chat.send(req.user, id, body?.text ?? '');
   }
 
   @Post(':id/read')
   read(@Req() req: any, @Param('id') id: string) {
-    return this.chat.markReadForVendor(req.user.sub, id);
+    return this.chat.markRead(req.user, id);
   }
 }

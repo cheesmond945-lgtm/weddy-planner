@@ -19,7 +19,7 @@ export async function postMessage(
         is_read: data.isRead ?? false,
         sent_date: now,
       },
-      include: { orders: { select: { order_code: true } } },
+      include: { orders: { select: { order_code: true, status: true } } },
     }),
     prisma.conversations.update({ where: { id: data.conversationId }, data: { last_message_date: now } }),
   ]);
@@ -33,5 +33,35 @@ export async function notify(
 ) {
   await prisma.notifications.create({
     data: { user_id: data.userId, type: data.type, title: data.title, content: data.content, reference_type: data.referenceType ?? null, reference_id: data.referenceId ?? null },
+  });
+}
+
+/**
+ * Báo tin nhắn mới: mỗi hội thoại chỉ giữ một thông báo NewMessage chưa đọc cho mỗi người nhận,
+ * đã có thì không tạo thêm. Người nhận mở hội thoại (markNewMessageRead) thì tin kế tiếp báo lại.
+ * Lỗi ghi thông báo không được làm hỏng việc gửi tin, nên hàm này không ném lỗi.
+ */
+export async function notifyNewMessage(prisma: PrismaService, data: { userId: string; conversationId: string; from: string; content: string }) {
+  try {
+    const where = { user_id: data.userId, type: 'NewMessage', reference_type: 'Conversation', reference_id: data.conversationId, is_read: false };
+    if (await prisma.notifications.count({ where })) return;
+    await notify(prisma, {
+      userId: data.userId,
+      type: 'NewMessage',
+      title: `Tin nhắn mới từ ${data.from}`,
+      content: data.content.length > 120 ? `${data.content.slice(0, 117)}...` : data.content,
+      referenceType: 'Conversation',
+      referenceId: data.conversationId,
+    });
+  } catch {
+    /* bỏ qua: thông báo chỉ là phụ */
+  }
+}
+
+/** Người nhận đã mở hội thoại: đánh dấu đã đọc thông báo NewMessage của hội thoại đó. */
+export async function markNewMessageRead(prisma: PrismaService, userId: string, conversationId: string) {
+  await prisma.notifications.updateMany({
+    where: { user_id: userId, type: 'NewMessage', reference_type: 'Conversation', reference_id: conversationId, is_read: false },
+    data: { is_read: true, read_date: new Date() },
   });
 }

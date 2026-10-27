@@ -3,6 +3,7 @@
 > Giai đoạn này **phía NCC của frontend chạy hoàn toàn bằng dữ liệu giả** (`frontend/.env`: `VITE_REAL_APIS=catalog,auth`), làm đúng theo `docs/database.md`, `docs/CHOT_NGHIEP_VU_NCC.md`, `docs/api/THE_DON_HANG.md`. Backend làm sau, theo các file `docs/api/*.md` phần NCC (đã viết lại thành hợp đồng đúng CSDL).
 > File này liệt kê **backend hiện tại (`backend/`) chưa đúng ở đâu** để người làm backend sửa. Chưa sửa gì trong `backend/`.
 > Đối chiếu ngày 25/10/2026, theo `backend/src/modules/*` và `backend/prisma/schema.prisma`.
+> Cập nhật 27/10/2026: **backend tin nhắn đã làm xong** (module `chat`), chat chạy thật được ở cả hai phía; các mục khác vẫn như cũ.
 
 ## Backend hiện chưa đúng
 
@@ -23,12 +24,15 @@
 13. **CSDL cần thêm `Orders.CancelReason`** (CHECK: `CUSTOMER_REQUEST`, `VENDOR_UNABLE`), và nên có `Orders.CancelNote` (TEXT, tùy chọn). Sửa `database.md` mục 9.5: luồng "Deposited → Khách hủy → Cancelled" thành "NCC hủy (trước EventDate)"; trạng thái `Cancelled` "Khách hủy sau khi đã cọc, mất cọc" thành "NCC hủy sau khi đã cọc (khách mất cọc hoặc NCC hoàn cọc ngoài hệ thống)"; mục 9.8 "Không tính hoa hồng" giữ nguyên.
 14. **Yêu cầu chỉnh sửa sau cọc của khách bỏ.** `OrderRevisions` loại `AfterDeposit` do **NCC tạo** khi Chỉnh sửa (`PATCH /vendors/me/orders/:id` nhận thêm `changeNote` bắt buộc, lưu vào `RequestNote`), trạng thái `Applied` luôn. Sửa `database.md` mục 9.5 ("Sau cọc: đơn vẫn ở Deposited, yêu cầu của khách ghi OrderRevisions Requested") và đoạn tương ứng ở mục 9.5 dưới bảng trạng thái.
 
-### Tin nhắn (`chat`) — hợp đồng: [chat.md](chat.md) phần NCC
+### Tin nhắn (`chat`) — hợp đồng: [chat.md](chat.md)
 
-1. `Messages.Type` chỉ có `Text`, `Order`, `DepositReceipt`, `FinalInvoice` (và tin hệ thống `SenderId` rỗng). Backend đang ánh xạ về các loại cũ của FE (`PAYMENT_RECORDED`, `ORDER_REVISION_REQUESTED`…): cần trả đúng 4 loại và `sender` `COUPLE`/`VENDOR`/`SYSTEM`.
-2. Tin liên quan đơn do hệ thống gửi (khách yêu cầu chỉnh sửa, hết hạn, hủy, hoàn thành) phải là tin `Text` với `SenderId` rỗng.
-3. `VendorConversation`: `latestOrder.status` dùng 7 trạng thái thô; `needsAction` thêm trường hợp đơn `Deposited` đã qua `EventDate` và có yêu cầu sửa sau cọc đang `Requested`.
+Phần tin nhắn **đã làm xong ngày 27/10/2026** (xem mục "Đã đối chiếu" bên dưới). Còn lại:
+
+1. **Thẻ đơn trong chat chưa nối được đơn thật.** `backend/src/modules/orders/order-mapping.ts` (`toServiceOrder`, `toCoupleOrder`) và `orders.service.ts` **còn theo hợp đồng cũ** (phiên bản, `installments`, `adjustments`, trạng thái gộp), xem mục "Đơn hàng" ở trên. Vì vậy, khi dùng chat thật mà `orders` vẫn là dữ liệu giả, FE chạy **chế độ ô đơn gọn**: tin `Order` hiện "Đơn {mã} · {trạng thái}" ở cả hai bên (dữ liệu lấy từ trường `order` của tin nhắn); phía NCC ẩn nút "Tạo đơn" (thay bằng dòng "Tạo đơn sẽ bật khi nối backend đơn hàng") và ẩn "Giả lập khách". Khi backend đơn hàng đúng hợp đồng mới thì bật `orders` thật, chế độ này tự tắt (hàm `orderCardsStubbed` trong `frontend/src/api/mock.ts`) và có thể xoá `OrderStubCard`.
+2. Các nơi trong `orders.service.ts` gọi `postMessage` (khách yêu cầu chỉnh sửa, hết hạn, hủy, xác nhận cọc, hoàn thành, hóa đơn cuối) chưa được rà theo quy ước: tin liên quan đơn có `type` đúng (`Order`, `DepositReceipt`, `FinalInvoice`), `orderId` đủ, tin hệ thống `SenderId` rỗng và là `Text`. Rà lại khi sửa `orders.service.ts`.
+3. `needsAction` hiện gồm đơn `Draft`, `NeedRevision` và `Deposited` đã qua `EventDate`. Nếu sau này có "yêu cầu sửa sau cọc đang `Requested`" thì thêm vào.
 4. Chưa có trạng thái trực tuyến (`customer.online`): giao diện đang ẩn.
+5. Chưa có API đọc `Notifications` (`notifications.md` còn trống): thông báo `NewMessage` đã được tạo nhưng chưa có nơi hiển thị.
 
 ### Hoa hồng (`commissions`) — hợp đồng: [commissions.md](commissions.md)
 
@@ -58,7 +62,7 @@
 - **Ngày thực hiện:** Gửi đơn, Tạo lại đơn, Chỉnh sửa sau cọc phải từ hôm nay trở đi (giờ VN), nếu không `422 EVENT_DATE_IN_PAST`; giữ nguyên ngày đang có thì không kiểm; Lưu nháp không chặn.
 - **Tự hoàn thành:** job hằng ngày phải ghi `CompletedDate` = cuối ngày `EventDate` + 7 (giờ VN) chứ không phải lúc job chạy, để hoa hồng vào đúng bảng kê tháng.
 
-- Chưa có API đọc `Notifications` cho NCC (`notifications.md` còn trống). Chuông thông báo để sau.
+- Chưa có API đọc `Notifications` cho NCC và khách (`notifications.md` còn trống). Chuông thông báo để sau.
 
 ## Đã đối chiếu, BE đã khớp
 
@@ -66,3 +70,4 @@
 - Gửi đơn bắt buộc số điện thoại hợp lệ; lưu nháp không kiểm tra số điện thoại.
 - `customer.name` = "Chú rể & Cô dâu", không có đám cưới thì `users.full_name`; `customer.phone` = `users.phone_number` (rỗng nếu chưa nhập).
 - Tỷ lệ hoa hồng đọc từ `service_categories.commission_rate`, hạn nộp ngày 25 tháng sau.
+- **Tin nhắn (27/10/2026):** `GET/POST /conversations`, `/conversations/:id/messages`, `/conversations/:id/read` dùng chung cho khách và NCC (vai trò lấy từ JWT), bí danh `/vendors/me/conversations/*`. Tin theo `database.md` 4.18: `content`, `sentDate`, `isRead`, `type` ∈ `Text`/`Order`/`DepositReceipt`/`FinalInvoice`, `sender` ∈ `COUPLE`/`VENDOR`/`SYSTEM`; tin hệ thống là `Text` với `SenderId` rỗng. `latestOrder.status` trả 7 trạng thái thô. `needsAction` gồm `Deposited` đã qua `EventDate`. Mỗi hội thoại chỉ giữ một thông báo `NewMessage` chưa đọc cho mỗi người nhận.

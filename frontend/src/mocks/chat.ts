@@ -17,8 +17,8 @@ import { addToPlan, openServiceTasks } from './planning'
 const fm = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`
 const now = () => new Date().toISOString()
 
-function pushMessage(data: UserData, conversationId: string, m: Pick<Message, 'sender' | 'type' | 'text'> & { orderId?: string | null }) {
-  const msg: Message = { id: nextId(data, 'm'), conversationId, orderId: null, createdAt: now(), ...m }
+function pushMessage(data: UserData, conversationId: string, m: Pick<Message, 'sender' | 'type' | 'content'> & { orderId?: string | null }) {
+  const msg: Message = { id: nextId(data, 'm'), conversationId, orderId: null, isRead: true, sentDate: now(), ...m }
   data.messages.push(msg)
   return msg
 }
@@ -37,7 +37,7 @@ function toConversation(data: UserData, c: UserData['conversations'][number]): C
     planStatus: data.planItems.find((p) => p.serviceId === c.serviceId)?.status ?? null,
     // Dữ liệu giả không theo dõi đã đọc: NCC giả trả lời ngay khi khách đang mở khung chat
     unreadCount: 0,
-    lastMessage: last ? { type: last.type, text: last.text, createdAt: last.createdAt } : null,
+    lastMessage: last ? { sender: last.sender, type: last.type, content: last.content, sentDate: last.sentDate } : null,
   }
 }
 
@@ -58,7 +58,7 @@ function vendorSendOrder(data: UserData, conversationId: string) {
   const existing = data.orders.find((o) => o.planItemId === plan.id && o.status !== 'PAID')
   if (existing) {
     Object.assign(existing, { status: 'SENT', revisionNote: null })
-    pushMessage(data, c.id, { sender: 'SYSTEM', type: 'TEXT', text: 'Nhà cung cấp đã cập nhật đơn dịch vụ. Bạn xem lại và thanh toán cọc.' })
+    pushMessage(data, c.id, { sender: 'SYSTEM', type: 'Text', content: 'Nhà cung cấp đã cập nhật đơn dịch vụ. Bạn xem lại và thanh toán cọc.' })
   } else {
     const pkg = mockCatalog.getService(c.serviceId).packages[0]
     const order: Order = {
@@ -72,8 +72,8 @@ function vendorSendOrder(data: UserData, conversationId: string) {
       status: 'SENT', revisionNote: null, paidAt: null,
     }
     data.orders.push(order)
-    pushMessage(data, c.id, { sender: 'VENDOR', type: 'ORDER', text: 'Nhà cung cấp đã gửi đơn dịch vụ', orderId: order.id })
-    pushMessage(data, c.id, { sender: 'SYSTEM', type: 'TEXT', text: 'Nhà cung cấp đã gửi đơn dịch vụ. Bạn xem lại và thanh toán cọc.' })
+    pushMessage(data, c.id, { sender: 'VENDOR', type: 'Order', content: 'Nhà cung cấp đã gửi đơn dịch vụ', orderId: order.id })
+    pushMessage(data, c.id, { sender: 'SYSTEM', type: 'Text', content: 'Nhà cung cấp đã gửi đơn dịch vụ. Bạn xem lại và thanh toán cọc.' })
   }
   plan.status = 'AWAITING_DEPOSIT'
 }
@@ -89,7 +89,7 @@ export const mockChat = {
     const data = read()
     return data.conversations
       .map((c) => toConversation(data, c))
-      .sort((a, b) => (b.lastMessage?.createdAt ?? '').localeCompare(a.lastMessage?.createdAt ?? ''))
+      .sort((a, b) => (b.lastMessage?.sentDate ?? '').localeCompare(a.lastMessage?.sentDate ?? ''))
   },
 
   /** Bắt đầu (hoặc mở lại) hội thoại với NCC của dịch vụ: tự thêm vào kế hoạch, chuyển sang Đang trao đổi (openChat trong prototype). */
@@ -103,7 +103,7 @@ export const mockChat = {
       if (!c) {
         c = { id: nextId(data, 'cv'), serviceId }
         data.conversations.push(c)
-        pushMessage(data, c.id, { sender: 'VENDOR', type: 'TEXT', text: `Chào bạn! Mình là ${service.name}. Bạn cần tư vấn gói nào cho ${service.category.name.toLowerCase()}?` })
+        pushMessage(data, c.id, { sender: 'VENDOR', type: 'Text', content: `Chào bạn! Mình là ${service.name}. Bạn cần tư vấn gói nào cho ${service.category.name.toLowerCase()}?` })
       }
       return toConversation(data, c)
     }),
@@ -119,7 +119,7 @@ export const mockChat = {
     const msg = write((data) => {
       findConversation(data, conversationId)
       if (!text.trim()) throw new ApiError(400, 'VALIDATION_ERROR', 'Tin nhắn không được để trống.')
-      return pushMessage(data, conversationId, { sender: 'COUPLE', type: 'TEXT', text: text.trim() })
+      return pushMessage(data, conversationId, { sender: 'COUPLE', type: 'Text', content: text.trim() })
     })
     // NCC giả trả lời sau 0,9 giây
     setTimeout(() => {
@@ -127,7 +127,7 @@ export const mockChat = {
         const c = data.conversations.find((x) => x.id === conversationId)
         if (!c) return
         if (/gửi đơn|chốt/i.test(text)) vendorSendOrder(data, conversationId)
-        else pushMessage(data, conversationId, { sender: 'VENDOR', type: 'TEXT', text: cannedReply(text, c.serviceId) })
+        else pushMessage(data, conversationId, { sender: 'VENDOR', type: 'Text', content: cannedReply(text, c.serviceId) })
       }, userId)
     }, 900)
     return msg
@@ -149,8 +149,8 @@ export const mockChat = {
       Object.assign(o, { status: 'REVISION_REQUESTED', revisionNote: note.trim() })
       const plan = data.planItems.find((p) => p.id === o.planItemId)
       if (plan) plan.status = 'DISCUSSING'
-      pushMessage(data, o.conversationId, { sender: 'COUPLE', type: 'TEXT', text: `Yêu cầu chỉnh sửa đơn ${o.code}:\n${note.trim()}` })
-      pushMessage(data, o.conversationId, { sender: 'SYSTEM', type: 'TEXT', text: 'Đã gửi yêu cầu chỉnh sửa cho nhà cung cấp. Nhà cung cấp sẽ gửi lại đơn đã cập nhật.' })
+      pushMessage(data, o.conversationId, { sender: 'COUPLE', type: 'Text', content: `Yêu cầu chỉnh sửa đơn ${o.code}:\n${note.trim()}` })
+      pushMessage(data, o.conversationId, { sender: 'SYSTEM', type: 'Text', content: 'Đã gửi yêu cầu chỉnh sửa cho nhà cung cấp. Nhà cung cấp sẽ gửi lại đơn đã cập nhật.' })
       return { ...o }
     })
     // NCC giả gửi lại đơn sau 2 giây
@@ -167,7 +167,7 @@ export const mockChat = {
       const plan = data.planItems.find((p) => p.id === o.planItemId)!
       plan.status = 'CONFIRMED'
       openServiceTasks(data, plan.id)
-      pushMessage(data, o.conversationId, { sender: 'SYSTEM', type: 'TEXT', text: `Đã ghi nhận đặt cọc ${fm(o.depositAmount)}. Dịch vụ được chốt.` })
+      pushMessage(data, o.conversationId, { sender: 'SYSTEM', type: 'Text', content: `Đã ghi nhận đặt cọc ${fm(o.depositAmount)}. Dịch vụ được chốt.` })
       return { paymentId: nextId(data, 'pay'), paymentUrl: `/plan/deal/${o.id}?vnp_ResponseCode=00` }
     }),
 }

@@ -1,131 +1,17 @@
-# API: chat (phía cặp đôi)
+# API: chat (tin nhắn giữa cặp đôi và NCC)
 
-> **Bản nháp** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/chat.ts`).
-> Quy ước chung: [README.md](README.md). `ServiceSummary`: xem [catalog.md](catalog.md).
-> **Chờ đối chiếu `docs/database.md`.**
+> **Đã làm ở backend** (`backend/src/modules/chat`, cập nhật 27/10/2026) và đúng với `docs/database.md` mục 4.17, 4.18.
+> Quy ước chung: [README.md](README.md). `ServiceSummary`: xem [catalog.md](catalog.md). Thẻ đơn và các tin liên quan đơn: [THE_DON_HANG.md](THE_DON_HANG.md), [orders.md](orders.md).
 
-Phạm vi: cặp đôi nhắn tin với NCC của một dịch vụ (mục 6.1, 6.2). Mỗi dịch vụ trong kế hoạch có tối đa **một** hội thoại. Phía NCC dùng chung các endpoint này (làm khi tới phần NCC).
+Cặp đôi và NCC dùng **cùng một bộ API** `/conversations`. Vai trò lấy từ JWT, mỗi người chỉ thấy hội thoại của mình (`Conversations.CoupleId` hoặc `Conversations.VendorId`). Mỗi cặp (khách, NCC) có đúng **một** hội thoại.
 
-Role: **COUPLE** (phía NCC: VENDOR, chỉ hội thoại của NCC mình).
+Phía NCC còn có **bí danh** `/vendors/me/conversations/*` (cùng hành vi, chỉ role `Vendor`, không có `POST` tạo hội thoại) để giữ đường dẫn cũ.
 
-`Conversation`
-
-```json
-{
-  "id": "cv-1",
-  "service": { "id": "sv-11", "name": "Lumi Wedding Studio", "…": "ServiceSummary" },
-  "planStatus": "AWAITING_DEPOSIT",
-  "unreadCount": 2,
-  "lastMessage": { "type": "ORDER", "text": "Nhà cung cấp đã gửi đơn dịch vụ", "createdAt": "2026-10-17T08:10:00.000Z" }
-}
-```
-
-`Message`
-
-```json
-{
-  "id": "m-4",
-  "conversationId": "cv-1",
-  "sender": "VENDOR",
-  "type": "ORDER",
-  "text": "Nhà cung cấp đã gửi đơn dịch vụ",
-  "orderId": "od-1",
-  "createdAt": "2026-10-17T08:10:00.000Z"
-}
-```
-
-| Trường | Giá trị |
-|---|---|
-| `sender` | `COUPLE`, `VENDOR`, `SYSTEM` (tin hệ thống: đã gửi đơn, đã cọc…) |
-| `type` | `TEXT`; `ORDER` = thẻ đơn dịch vụ, FE lấy chi tiết bằng `GET /orders/:orderId` |
-
-### GET /conversations
-Hội thoại của người gọi, mới nhất trước. Không phân trang (mỗi cặp đôi chỉ vài hội thoại). Response 200: `{ "data": Conversation[] }`
-
-FE lọc theo dịch vụ (hạng mục, `service.category.slug`) và hiện nhãn "Đã cọc" khi `planStatus = CONFIRMED`, đều làm ở FE nên không cần tham số lọc.
-
-### POST /conversations
-Bắt đầu hoặc mở lại hội thoại với NCC của dịch vụ (openChat trong prototype). Body `{ "serviceId": "sv-5", "replace": false }`.
-
-- Dịch vụ chưa có trong kế hoạch: tự thêm vào (cùng quy tắc `POST /weddings/me/plan-items`, kể cả 409 `PLAN_CATEGORY_TAKEN` và `replace`).
-- Dịch vụ đang `PLANNED` → chuyển `DISCUSSING`.
-- Hội thoại mới: tạo kèm lời chào của NCC "Chào bạn! Mình là <tên>. Bạn cần tư vấn gói nào cho <hạng mục>?".
-
-Response 200: `{ "data": Conversation }`
-
-Lỗi: 404 `SERVICE_NOT_FOUND`, 409 `PLAN_CATEGORY_TAKEN`, 409 `PLAN_CATEGORY_LOCKED`
-
-### GET /conversations/:id/messages
-Toàn bộ tin, cũ trước. Response 200: `{ "data": Message[] }`
-
-> Khi hội thoại dài cần phân trang ngược (`?before=<messageId>&limit=50`); bản nháp chưa cần.
-
-Lỗi: 404 `CONVERSATION_NOT_FOUND`
-
-### POST /conversations/:id/messages
-Body `{ "text": "Cho mình hỏi giá bao nhiêu?" }`. Response 200: `{ "data": Message }`
-
-Tin đầu tiên NCC chưa đọc tạo một thông báo cho NCC (bảng `notifications`, loại `NewMessage`); các tin tiếp theo khi NCC chưa đọc không báo thêm.
-
-Lỗi: 400 `VALIDATION_ERROR` (tin rỗng), 404 `CONVERSATION_NOT_FOUND`
-
-### POST /conversations/:id/read
-Khách đã xem hội thoại: các tin của NCC thành đã đọc (`unreadCount = 0`). FE gọi khi mở khung chat hoặc trang Tin nhắn và khi có tin mới của NCC lúc đang mở. Response 200: `{ "data": null }`
-
-`unreadCount` (tin NCC gửi mà khách chưa đọc) là số trên nút chat nổi và mục Tin nhắn trong menu tài khoản.
-
-Lỗi: 404 `CONVERSATION_NOT_FOUND`
-
----
-
-## Cập nhật tin mới
-
-Chưa có thư viện websocket trong danh sách được dùng, nên FE **hỏi lại định kỳ** (2,5 giây) `GET /conversations` và `GET /conversations/:id/messages` khi đang mở trang Tin nhắn. Nếu sau này thêm websocket/SSE thì contract các endpoint trên giữ nguyên.
-
-## Ghi chú về dữ liệu giả
-
-NCC trong dữ liệu giả tự trả lời theo câu mẫu của prototype; nhắn có chữ "gửi đơn" hoặc "chốt" thì NCC tự gửi đơn; yêu cầu chỉnh sửa đơn thì NCC tự gửi lại đơn sau 2 giây. Các hành vi này **chỉ có trong mock** để thử luồng 7.3 khi chưa làm phía NCC; BE không làm.
-
----
-
-# Phía Nhà cung cấp: tin nhắn
-
-> **Hợp đồng theo CSDL** (`docs/database.md` mục 4.17, 4.18, 9.4) và `docs/CHOT_NGHIEP_VU_NCC.md` mục 3 và 5. Thẻ đơn và các tin liên quan đơn: [THE_DON_HANG.md](THE_DON_HANG.md) và [orders.md](orders.md) (phần NCC).
-> Quy ước chung: [README.md](README.md). Role: **VENDOR**.
-
-Cùng bảng `Conversations` / `Messages` với phía cặp đôi: mỗi cặp (khách, NCC) một hội thoại. Phía NCC nhìn thấy khách (`customer`).
+Role: **Couple** hoặc **Vendor**. Không đăng nhập: 401. Sai vai trò: 403.
 
 ## Kiểu dữ liệu
 
-### `VendorConversation`
-
-```json
-{
-  "id": "fb9cffdf-…",
-  "customer": { "name": "Minh Anh & Quốc Huy", "phone": "0901 234 567" },
-  "unreadCount": 2,
-  "lastMessage": { "sender": "COUPLE", "type": "Text", "content": "Bên mình cập nhật giúp…", "orderCode": null, "sentDate": "2026-10-18T00:51:00.000Z" },
-  "latestOrder": { "id": "5d1c8b1e-…", "orderCode": "DH26100003", "status": "NeedRevision" },
-  "hasDraftOrder": false,
-  "needsAction": true,
-  "orderCodes": ["DH26100003"]
-}
-```
-
-| Trường | Ghi chú |
-|---|---|
-| `customer.name` | "Chú rể & Cô dâu" (`Weddings.GroomName` & `BrideName`); khách chưa có thông tin đám cưới thì `Users.FullName`. FE điền sẵn vào đơn |
-| `customer.phone` | `Users.PhoneNumber`, chuỗi rỗng nếu khách chưa nhập. FE điền sẵn vào đơn, NCC sửa hoặc tự nhập được |
-| `customer.online` | **Tùy chọn.** Chỉ có khi backend có dữ liệu trạng thái trực tuyến thật; không có thì FE không hiện chấm xanh và "Trực tuyến" |
-| `lastMessage` | Tin gần nhất (kể cả tin hệ thống); `orderCode` có với tin liên quan đơn |
-| `latestOrder` | Đơn **đã gửi** mới nhất của hội thoại (bỏ qua bản nháp): mọi trạng thái trừ `Draft`. Dùng cho nhãn trạng thái và nút "Xem đơn" |
-| `hasDraftOrder` | Có đơn `Draft` |
-| `needsAction` | Cần NCC xử lý: có đơn `Draft`, `NeedRevision`, hoặc đơn `Deposited` đã qua `eventDate` (chờ đánh dấu hoàn thành) |
-| `orderCodes` | Mã mọi đơn của hội thoại, để tìm theo mã đơn |
-
-Nhãn trạng thái trong danh sách hội thoại (FE suy từ `latestOrder.status`): `Pending` Chờ cọc, `NeedRevision` Cần sửa, `Deposited` Đã cọc, `Completed` Hoàn thành, `Expired` Hết hạn, `Cancelled` Đã hủy; chỉ có bản nháp thì "Bản nháp".
-
-### `VendorMessage`
+### `Message` (dùng chung hai phía)
 
 ```json
 {
@@ -136,51 +22,122 @@ Nhãn trạng thái trong danh sách hội thoại (FE suy từ `latestOrder.sta
   "orderId": "5d1c8b1e-…",
   "content": "Đơn dịch vụ DH26100004",
   "isRead": true,
-  "sentDate": "2026-10-25T07:30:00.000Z"
+  "sentDate": "2026-10-25T07:30:00.000Z",
+  "order": { "orderCode": "DH26100004", "status": "Pending" }
 }
 ```
 
-- `sender`: `COUPLE`, `VENDOR`, `SYSTEM` (`Messages.SenderId` rỗng).
-- `type` (`Messages.Type`) **chỉ có 4 giá trị**:
+| Trường | Ghi chú |
+|---|---|
+| `sender` | `COUPLE`, `VENDOR`, `SYSTEM` (`Messages.SenderId` rỗng = tin hệ thống) |
+| `type` | `Messages.Type`, **chỉ 4 giá trị**: `Text`, `Order`, `DepositReceipt`, `FinalInvoice` |
+| `orderId` | Có với `Order`, `DepositReceipt`, `FinalInvoice`, còn lại `null` |
+| `content` | Nội dung chữ; với `Order` là câu mô tả ngắn |
+| `isRead`, `sentDate` | `Messages.IsRead`, `Messages.SentDate` |
+| `order` | **Phần thêm**, chỉ có khi tin có `orderId`: `orderCode` và `status` thô của đơn (7 trạng thái `Draft`, `Pending`, `NeedRevision`, `Deposited`, `Completed`, `Expired`, `Cancelled`). Để FE vẽ ô đơn gọn "Đơn {mã} · {trạng thái}" khi chưa đọc được đơn đầy đủ |
 
-| `type` | Khi nào | Hiển thị |
-|---|---|---|
-| `Text` | Tin nhắn thường, và tin hệ thống | Bong bóng (tin hệ thống: dòng nhỏ ở giữa, nền xanh nhạt) |
-| `Order` | NCC gửi hoặc gửi lại đơn, hoặc Chỉnh sửa đơn sau cọc | Thẻ đơn (đọc dữ liệu trực tiếp từ `Orders`, không phải bản chụp). `orderId` bắt buộc |
-| `DepositReceipt` | Cọc thành công | Thẻ "Giấy xác nhận cọc {mã}: đã nhận … cho đơn …" kèm nút Xem. `orderId` bắt buộc |
-| `FinalInvoice` | NCC xuất hóa đơn cuối | Thẻ "Hóa đơn {mã} cho đơn …" kèm nút Xem. `orderId` bắt buộc |
+Tin hệ thống (`sender = SYSTEM`) luôn có `type = Text`, trừ `DepositReceipt` do hệ thống gửi. Khách yêu cầu chỉnh sửa đơn, đơn hết hạn, NCC hủy đơn, đơn hoàn thành đều là tin `Text` hệ thống: xem [CHOT_NGHIEP_VU_NCC.md](../CHOT_NGHIEP_VU_NCC.md) mục 5 và [THE_DON_HANG.md](THE_DON_HANG.md) mục 5.
 
-- Các tin hệ thống (`sender = SYSTEM`, `type = Text`): khách yêu cầu chỉnh sửa đơn (chỉ trước cọc), đơn hết hạn đặt cọc, **NCC hủy đơn** (`NCC đã hủy đơn {OrderCode} · Lý do: {nhãn lý do}[ · {ghi chú}]`), đơn hoàn thành.
-- **Quy ước nội dung tin khi khách yêu cầu chỉnh sửa** (chỉ trước cọc, vì sau cọc khách không có yêu cầu chỉnh sửa; backend làm theo, **chỉ một tin hệ thống**, không thêm tin của khách): `Khách yêu cầu chỉnh sửa đơn {OrderCode}: {các nội dung thay đổi, nối bằng ", "} · "{RequestNote}"`. Ví dụ: `Khách yêu cầu chỉnh sửa đơn DH26100002: Đổi số lượng, Đổi ngày thực hiện · "Giảm từ 20 xuống 15 bàn nhé."`. Nhãn nội dung theo `OrderRevisionChanges.ChangeType`: Item "Đổi hạng mục", Quantity "Đổi số lượng", EventDate "Đổi ngày thực hiện", Other "Khác". Thiếu một phần thì bỏ phần đó (không có nội dung chọn thì chỉ còn lời nhắn; không có lời nhắn thì chỉ còn nội dung). Thẻ đơn vẫn có hộp cam "Khách yêu cầu: …" đọc từ `OrderRevisions`.
-- **Người gửi các tin loại đơn:** `DepositReceipt` do hệ thống gửi (`SenderId` rỗng); `FinalInvoice` do NCC gửi (`SenderId` = tài khoản NCC); `Order` do NCC gửi.
-- Bản nháp đơn **không** tạo tin; khách không thấy.
-- Gửi lại đơn tạo thêm một thẻ `Order` mới; FE thu gọn các thẻ cũ của cùng đơn thành "Đơn … đã được cập nhật, xem bản mới nhất bên dưới".
-- Để vẽ thẻ, FE lấy đơn qua `GET /vendors/me/orders?conversationId=…`.
+### `Conversation` phía cặp đôi
+
+```json
+{
+  "id": "fb9cffdf-…",
+  "service": { "id": "8f9dfd27-…", "name": "Ha Vy Wedding & Event", "…": "ServiceSummary" },
+  "planStatus": "AWAITING_DEPOSIT",
+  "unreadCount": 2,
+  "lastMessage": { "sender": "VENDOR", "type": "Text", "content": "Còn lịch bạn nhé", "sentDate": "2026-10-17T08:10:00.000Z", "orderCode": null }
+}
+```
+
+### `VendorConversation` (phía NCC)
+
+```json
+{
+  "id": "fb9cffdf-…",
+  "customer": { "name": "Minh Anh & Quốc Huy", "phone": "0901 234 567" },
+  "unreadCount": 2,
+  "lastMessage": { "sender": "COUPLE", "type": "Text", "content": "Bên mình cập nhật giúp…", "sentDate": "2026-10-18T00:51:00.000Z", "orderCode": null },
+  "latestOrder": { "id": "5d1c8b1e-…", "orderCode": "DH26100003", "status": "NeedRevision" },
+  "hasDraftOrder": false,
+  "needsAction": true,
+  "orderCodes": ["DH26100003"]
+}
+```
+
+| Trường | Ghi chú |
+|---|---|
+| `unreadCount` | Số tin **của bên kia** mà người xem chưa đọc (`IsRead = false`, bỏ qua tin hệ thống) |
+| `lastMessage` | Tin gần nhất (kể cả tin hệ thống); `orderCode` có với tin liên quan đơn |
+| `customer.name` | "Chú rể & Cô dâu" (`Weddings.GroomName` & `BrideName`); khách chưa có thông tin đám cưới thì `Users.FullName`. FE điền sẵn vào đơn |
+| `customer.phone` | `Users.PhoneNumber`, chuỗi rỗng nếu khách chưa nhập |
+| `customer.online` | **Tùy chọn.** Chưa có dữ liệu trực tuyến thật nên BE không trả; FE không hiện chấm xanh |
+| `latestOrder` | Đơn **đã gửi** mới nhất của hội thoại (bỏ qua bản nháp): `status` là trạng thái thô, trừ `Draft` |
+| `hasDraftOrder` | Có đơn `Draft` |
+| `needsAction` | Có đơn `Draft`, `NeedRevision`, hoặc đơn `Deposited` đã qua `EventDate` (giờ VN, chờ đánh dấu hoàn thành) |
+| `orderCodes` | Mã mọi đơn của hội thoại, để tìm theo mã đơn |
+
+Nhãn trạng thái trong danh sách hội thoại NCC (FE suy từ `latestOrder.status`): `Pending` Chờ cọc, `NeedRevision` Cần sửa, `Deposited` Đã cọc, `Completed` Hoàn thành, `Expired` Hết hạn, `Cancelled` Đã hủy; chỉ có bản nháp thì "Bản nháp".
 
 ## Endpoint
 
-### GET /vendors/me/conversations
-Hội thoại của NCC, mới nhất trước (`Conversations.LastMessageDate`). Response 200: `{ "data": VendorConversation[] }`
+### GET /conversations
+Hội thoại của người gọi, mới nhất trước (`LastMessageDate`). Không phân trang. Response 200: `{ "data": Conversation[] }` (cặp đôi) hoặc `VendorConversation[]` (NCC).
 
-### GET /vendors/me/conversations/:id/messages
-Tin nhắn của hội thoại, cũ nhất trước. Response 200: `{ "data": VendorMessage[] }`. Lỗi: 404 `CONVERSATION_NOT_FOUND`.
+Phía cặp đôi: NCC đã bị ẩn thì hội thoại không hiện. FE lọc theo hạng mục (`service.category.slug`) và hiện nhãn "Đã cọc" khi `planStatus = CONFIRMED`.
 
-### POST /vendors/me/conversations/:id/messages
-NCC gửi tin nhắn văn bản. Request: `{ "text": "…" }` (không rỗng). Response 201: `{ "data": VendorMessage }`. Lỗi: 400 `VALIDATION_ERROR`, 404.
+### POST /conversations
+**Chỉ cặp đôi** (NCC: 403). Bắt đầu hoặc mở lại hội thoại với NCC của một dịch vụ. Body `{ "serviceId": "…", "replace": false }`.
 
-### POST /vendors/me/conversations/:id/read
-Đánh dấu đã đọc mọi tin của khách (`unreadCount` về 0). Response 204.
+- Dịch vụ chưa có trong kế hoạch: tự thêm vào (cùng quy tắc `POST /weddings/me/plan-items`, kể cả 409 `PLAN_CATEGORY_TAKEN` và `replace`).
+- Hội thoại mới: tạo kèm lời chào của NCC "Chào bạn! Mình là <tên>. Bạn cần tư vấn gói nào cho <hạng mục>?".
+- Gọi lại với cùng dịch vụ trả về cùng hội thoại.
+
+Response 201: `{ "data": Conversation }`
+
+Lỗi: 404 `SERVICE_NOT_FOUND`, 409 `PLAN_CATEGORY_TAKEN`, 409 `PLAN_CATEGORY_LOCKED` (hạng mục đang chờ cọc hoặc đã chốt với NCC khác).
+
+### GET /conversations/:id/messages
+Toàn bộ tin của hội thoại, cũ trước. Response 200: `{ "data": Message[] }`
+
+Tham số tùy chọn `?after=<sentDate ISO>`: chỉ lấy tin **mới hơn** mốc đó (cho polling nhẹ hơn). FE hiện chưa dùng, vẫn tải toàn bộ.
+
+Lỗi: 404 `CONVERSATION_NOT_FOUND` (không tồn tại, id sai định dạng, hoặc không phải hội thoại của người gọi).
+
+### POST /conversations/:id/messages
+Gửi tin văn bản. Body `{ "text": "Cho mình hỏi giá bao nhiêu?" }`. Response 201: `{ "data": Message }`
+
+Lỗi: 400 `VALIDATION_ERROR` (tin rỗng hoặc quá 2000 ký tự), 404 `CONVERSATION_NOT_FOUND`.
+
+### POST /conversations/:id/read
+Người xem đã mở hội thoại: các tin của bên kia thành đã đọc (`unreadCount = 0`) và thông báo `NewMessage` của hội thoại đó thành đã đọc. FE gọi khi mở hội thoại và khi có tin mới lúc đang mở. Response 201: `{ "data": null }`
+
+Lỗi: 404 `CONVERSATION_NOT_FOUND`.
+
+## Thông báo tin mới
+
+Khi có tin văn bản mới, **người nhận** có một thông báo (bảng `Notifications`, `Type = NewMessage`, `ReferenceType = Conversation`, `ReferenceId` = hội thoại). Áp dụng cho cả hai chiều (khách nhắn thì NCC nhận, NCC nhắn thì khách nhận).
+
+- Mỗi hội thoại **chỉ giữ một thông báo `NewMessage` chưa đọc** cho mỗi người nhận: đã có thì không tạo thêm.
+- Người nhận mở hội thoại (`POST …/read`) thì thông báo đó thành đã đọc; tin kế tiếp sẽ báo lại.
+- Lỗi khi ghi thông báo không làm hỏng việc gửi tin.
 
 ## Cập nhật tin mới
 
-Chưa có websocket: FE hỏi lại định kỳ (2,5 giây khi đang mở trang Tin nhắn, 15 giây cho số chưa đọc trên sidebar).
+Chưa có websocket: FE **hỏi lại định kỳ 5 giây** `GET /conversations` và `GET /conversations/:id/messages` khi đang mở trang Tin nhắn (cả hai phía); số tin chưa đọc trên menu và nút chat thưa hơn (15 đến 30 giây). Nếu sau này thêm websocket hoặc SSE thì contract các endpoint trên giữ nguyên.
+
+## Thẻ đơn trong chat (giai đoạn 1)
+
+Tin `Order` hiện **ô đơn gọn** "Đơn {mã} · {trạng thái}" ở cả hai bên khi chat dùng backend thật mà API đơn hàng còn là dữ liệu giả. Phía NCC lúc đó ẩn nút "Tạo đơn" (thay bằng dòng "Tạo đơn sẽ bật khi nối backend đơn hàng"). Việc còn thiếu ở backend đơn hàng: xem [LECH_FE_BE.md](LECH_FE_BE.md).
 
 ## Ghi chú về dữ liệu giả
 
-`frontend/src/mocks/vendorOrders.ts` mô phỏng đúng các quy tắc trên (tính tiền, hạn cọc, hết hạn, tự hoàn thành, hoa hồng, hóa đơn). Nút **"Giả lập khách"** (đặt cọc, yêu cầu chỉnh sửa trước cọc, nhắn tin) và **"Giả lập thời gian"** (tua nhanh để thử hết hạn, hoàn thành) **chỉ có khi dùng dữ liệu giả**, không nằm trong hợp đồng.
+- Phía cặp đôi (`frontend/src/mocks/chat.ts`): NCC giả tự trả lời theo câu mẫu; nhắn có chữ "gửi đơn" hoặc "chốt" thì NCC giả tự gửi đơn; yêu cầu chỉnh sửa đơn thì NCC giả tự gửi lại đơn sau 2 giây. Các hành vi này **chỉ có trong mock**, BE không làm.
+- Phía NCC (`frontend/src/mocks/vendorOrders.ts`): nút **"Giả lập khách"** (đặt cọc, yêu cầu chỉnh sửa trước cọc, nhắn tin) và **"Giả lập thời gian"** **chỉ có khi dùng dữ liệu giả**, không nằm trong hợp đồng.
 
-## Cần chốt (phía NCC)
+## Cần chốt
 
 1. Gửi ảnh / tệp trong chat (prototype có nút đính kèm): có làm không.
-2. Trạng thái trực tuyến của khách: chưa có dữ liệu, nên giao diện đang ẩn. Cần chốt có làm (websocket / presence) không.
-3. `OrderRevisionChanges.ChangeType`: danh sách đầy đủ (hiện: `Item`, `Quantity`, `EventDate`, `Other`).
+2. Trạng thái trực tuyến của khách và NCC: cần chốt có làm (websocket / presence) không.
+3. Phân trang tin khi hội thoại dài (`?before=<messageId>&limit=50`): bản này chưa cần.
+4. Chuông thông báo hiển thị `NewMessage`: chờ API đọc `Notifications`.
