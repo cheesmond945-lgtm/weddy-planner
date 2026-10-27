@@ -46,8 +46,9 @@
 - Hạng mục: `ItemName`, `Unit` (Gói/Bàn), `Quantity`, `UnitPrice`, `Amount`. Một `DepositPercent` (>0, <100), `DepositAmount` làm tròn 100.000đ, hạn cọc 1 ngày.
 - **Thanh toán:** chỉ một khoản trong hệ thống là **tiền cọc qua VNPay**. Phần còn lại khách trả **tiền mặt trực tiếp cho NCC, ngoài hệ thống, không ghi nhận**. Không có nhiều đợt tùy chỉnh, không có "Ghi nhận thanh toán", không có "Đã thu thực tế / Còn phải thu".
 - **Đơn hết hạn cọc (`Expired`): khóa. Muốn tiếp tục thì NCC bấm "Tạo đơn mới từ đơn này"** (chép hạng mục, mã đơn mới). Không có "gửi lại để gia hạn".
-- **NCC không hủy được đơn.** Chỉ khách hủy, và chỉ sau khi đã cọc (`Deposited` → `Cancelled`, mất cọc).
-- Sửa sau cọc: NCC sửa trực tiếp hạng mục, ngày, ghi chú; khóa tỷ lệ và tiền cọc; tổng mới ≥ tiền đã cọc; ghi `OrderRevisions`. Không có bước "phương án điều chỉnh chờ khách đồng ý".
+- **Hai giai đoạn.** Trước cọc (`Pending`, `NeedRevision`): khách Thanh toán cọc / Yêu cầu chỉnh sửa / Xem chi tiết; NCC Cập nhật đơn (đặt lại hạn cọc 24 giờ). Sau cọc (`Deposited`): khách **không** có Yêu cầu chỉnh sửa và Hủy đơn, chỉ Xem việc cần làm và Xem chi tiết; khách nhắn trong chat, **NCC tự thao tác**.
+- **NCC hủy đơn sau cọc** (`Deposited` → `Cancelled`), **chỉ khi hôm nay còn trước `EventDate`** (giờ VN). Bắt buộc chọn lý do: "Khách yêu cầu hủy" (khách mất cọc) hoặc "NCC không thể thực hiện" (NCC hoàn cọc ngoài hệ thống), kèm ghi chú tùy chọn; ghi `CancelReason`, `CancelledDate`, gửi tin hệ thống vào chat; không tính hoa hồng. Đơn chưa cọc không hủy được (tự hết hạn). Khách không hủy được đơn.
+- Sửa sau cọc: NCC sửa trực tiếp hạng mục, ngày, ghi chú; khóa tỷ lệ và tiền cọc; tổng mới ≥ tiền đã cọc; **bắt buộc ghi "Nội dung thay đổi" (khách sẽ thấy)**; lưu `OrderRevisions` loại `AfterDeposit` trạng thái `Applied` luôn (không có yêu cầu `Requested` của khách sau cọc); gửi thẻ cập nhật vào chat. Không có bước "phương án điều chỉnh chờ khách đồng ý".
 - **NCC đánh dấu Hoàn thành** khi đã qua `EventDate`; hệ thống tự hoàn thành sau `EventDate` + 7 ngày.
 - **NCC xuất hóa đơn cuối** (`FinalInvoice`) khi khách yêu cầu, mỗi đơn một lần.
 - Không thêm cột `SourceOrderId` (đơn tạo lại không cần trỏ về đơn cũ).
@@ -70,7 +71,7 @@
 
 ## 8. Chưa chốt
 
-- Khách hủy đơn có bắt nhập lý do không (nếu có thì cần thêm `Orders.CancelReason`).
 - Bắt buộc SĐT khi đăng ký tài khoản khách (việc của phía khách).
-- **Quy tắc làm tròn tiền cọc đến 100.000đ** (`database.md` mục 15.5): tạm làm tròn **gần nhất** (form hiện "Tiền cọc ước tính ≈ …"). Chờ nhóm chốt làm tròn lên, xuống hay gần nhất; backend là nơi tính chính thức.
+- **Quy tắc làm tròn tiền cọc đến 100.000đ** (`database.md` mục 15.5): tạm làm tròn **gần nhất**, **tối thiểu 100.000đ** (cọc 0đ thì khách không thanh toán được qua VNPay); nếu tiền cọc sau làm tròn **lớn hơn hoặc bằng tổng đơn** thì không cho Gửi đơn ("Tổng đơn quá nhỏ để đặt cọc"), Lưu nháp vẫn được. Form hiện "Tiền cọc ước tính ≈ …". **Chờ nhóm xác nhận** làm tròn gần nhất, lên hay xuống, và mức tối thiểu; backend là nơi tính chính thức (cùng công thức `frontend/src/lib/deposit.ts`).
+- **Ngày thực hiện phải từ hôm nay trở đi** (giờ VN) khi Gửi đơn, Tạo lại đơn, Chỉnh sửa sau cọc (backend trả `422 EVENT_DATE_IN_PAST`); Lưu nháp không chặn. Chờ nhóm xác nhận.
 - CSDL mục 9.6 cần sửa câu "NCC phải gửi lại để có hạn mới" thành "NCC tạo đơn mới (mã mới)".

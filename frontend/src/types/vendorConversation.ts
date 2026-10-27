@@ -50,4 +50,3 @@ export type CustomerSimulation =
   | { action: 'MESSAGE' }
   | { action: 'PAY_DEPOSIT' }
   | { action: 'REQUEST_REVISION'; changes: RevisionChangeType[]; note: string }
-  | { action: 'CANCEL_ORDER' }

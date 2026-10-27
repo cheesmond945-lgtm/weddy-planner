@@ -17,6 +17,7 @@ import { TimeTravelMenu } from '@/features/vendorOrders/components/TimeTravelMen
 import { useOrderPageState } from '@/features/vendorOrders/filters'
 import { useOrder, useOrderCounts, useOrders } from '@/features/vendorOrders/hooks'
 import { orderTiles } from '@/features/vendorOrders/summary'
+import { useNow } from '@/lib/clock'
 import { paths } from '@/routes/paths'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
 
@@ -36,12 +37,8 @@ export default function VendorOrdersPage() {
   const [form, setForm] = useState<OrderFormMode | null>(null)
   const [invoice, setInvoice] = useState<{ order: Order; type: InvoiceType } | null>(null)
 
-  // Đếm ngược hạn cọc chạy theo thời gian: dựng lại mỗi 30 giây
-  const [, setTick] = useState(0)
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 30_000)
-    return () => clearInterval(t)
-  }, [])
+  // Đếm ngược hạn cọc chạy theo thời gian: dựng lại mỗi 30 giây và khi tua đồng hồ giả lập
+  useNow()
 
   // Đơn đang mở chi tiết (?order=…): lấy từ danh sách nếu có, không thì tải riêng
   const open = useOrder(page.openOrderId)

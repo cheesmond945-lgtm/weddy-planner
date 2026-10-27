@@ -1,8 +1,8 @@
 import { MessageSquareWarning } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Badge } from '@/components/Badge'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
+import { useNow } from '@/lib/clock'
 import { cn } from '@/lib/utils'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { changesLabel, depositDeadline, formatStamp, openRevision, orderHint } from '../calc'
@@ -37,11 +37,14 @@ const HINT_TONE = {
  * khách và NCC thấy cùng nội dung, chỉ khác dòng gợi ý và nút. Đọc dữ liệu trực tiếp từ đơn (không phải bản chụp).
  */
 export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoice }: OrderCardProps) {
+  // Đếm ngược hạn cọc tự chạy (dựng lại mỗi 30 giây, và khi tua đồng hồ giả lập)
+  useNow()
   const hint = orderHint(o)
-  const request = openRevision(o)
-  const afterDepositRequest = o.status === 'Deposited' && !!request
-  // Vừa cập nhật (trước hoặc sau cọc): ghi tổng cũ và mới
-  const updated = (o.status === 'Pending' || o.status === 'Deposited') && o.revisions[0]?.status === 'Applied' ? o.revisions[0] : undefined
+  // Khách yêu cầu chỉnh sửa (chỉ trước cọc): hộp cam, đơn đang NeedRevision
+  const request = o.status === 'NeedRevision' ? openRevision(o) : undefined
+  // Vừa cập nhật: Chờ cọc thì lần cập nhật trước cọc, Đã đặt cọc thì lần chỉnh sửa sau cọc; ghi tổng cũ, mới và nội dung thay đổi
+  const last = o.revisions[0]
+  const updated = last?.status === 'Applied' && ((o.status === 'Pending' && last.revisionType === 'BeforeDeposit') || (o.status === 'Deposited' && last.revisionType === 'AfterDeposit')) ? last : undefined
   const shown = o.items.slice(0, 2)
 
   return (
@@ -56,7 +59,6 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
         <span>Đơn dịch vụ {o.orderCode}</span>
         <span className="flex flex-wrap items-center gap-1.5">
           <OrderStatusBadge status={o.status} />
-          {afterDepositRequest && <Badge tone="warn">Khách yêu cầu chỉnh sửa</Badge>}
         </span>
       </div>
       <p className="mt-0.5 mb-1.5 text-[12.5px] text-muted-foreground">{o.customerName}</p>
@@ -81,19 +83,14 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
           Đã cập nhật: tổng {formatMoney(updated.oldTotalAmount)} → {formatMoney(updated.newTotalAmount)}
         </p>
       )}
-      {row(
-        `Đặt cọc (${o.depositPercent}%)`,
-        <>
-          <span className="text-primary">{formatMoney(o.depositAmount)}</span> <span className="font-normal text-muted-foreground">qua VNPay</span>
-        </>,
+      {updated?.revisionType === 'AfterDeposit' && updated.requestNote && (
+        <p className="border-b border-dashed border-line py-1.5 text-[12.5px] whitespace-pre-wrap">
+          <span className="text-muted-foreground">Nội dung thay đổi: </span>
+          {updated.requestNote}
+        </p>
       )}
-      {row(
-        'Còn lại',
-        <>
-          {formatMoney(o.totalAmount - o.depositAmount)}{' '}
-          <span className="font-normal text-muted-foreground">(tiền mặt, thanh toán trực tiếp cho NCC)</span>
-        </>,
-      )}
+      {row(`Đặt cọc (${o.depositPercent}%)`, <span className="text-primary">{formatMoney(o.depositAmount)}</span>)}
+      {row('Còn lại', formatMoney(o.totalAmount - o.depositAmount))}
       {o.status === 'Pending' && o.depositDueDate && row('Hạn đặt cọc', <span className="text-gold-ink">{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</span>)}
 
       {o.payment?.status === 'Paid' && o.payment.paidDate && (
@@ -108,7 +105,8 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
           <MessageSquareWarning className="mr-1.5 -mt-0.5 inline size-4 text-warn" aria-hidden />
           <b className="font-semibold text-warn">Khách yêu cầu:</b> {[changesLabel(request), request.requestNote ? `"${request.requestNote}"` : ''].filter(Boolean).join(' · ')}
         </div>
-      ) : (
+      ) : o.status === 'Pending' ? null : (
+        // Chờ cọc: hạn đã có ở dòng "Hạn đặt cọc" phía trên, không nhắc lại bằng ô gợi ý
         <p className={cn('mt-2.5 rounded-sm px-2.5 py-2 text-[13px]', HINT_TONE[hint.tone], hint.tone === 'warn' && 'bg-warn-soft', hint.tone === 'ok' && 'bg-sage-soft', hint.tone === 'info' && 'bg-bg')}>
           {hint.text}
         </p>

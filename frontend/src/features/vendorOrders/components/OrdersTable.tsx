@@ -1,4 +1,4 @@
-import { CheckCheck, ChevronLeft, ChevronRight, Copy, Eye, FilePen, FileText, Pencil, type LucideIcon } from 'lucide-react'
+import { Ban, CheckCheck, ChevronLeft, ChevronRight, Copy, Eye, FilePen, FileText, Pencil, type LucideIcon } from 'lucide-react'
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import type { PageMeta } from '@/types/api'
 import type { Order } from '@/types/vendorOrder'
 import { actionsOf, mainActionKey, type ActionKey } from '../actions'
-import { formatDM, openRevision } from '../calc'
+import { formatDM } from '../calc'
 import { attentionOf, countdownText, msToDeadline, URGENT_HOURS } from '../summary'
 import { OrderStatusBadge } from './OrderBadges'
 
@@ -23,6 +23,7 @@ const ICON: Record<ActionKey, LucideIcon> = {
   complete: CheckCheck,
   invoice: FileText,
   viewInvoice: FileText,
+  cancel: Ban,
 }
 
 /*
@@ -78,6 +79,7 @@ function RowActions({ order: o, busy, onRun, chevron }: { order: Order; busy: bo
     .map((a) => ({
       label: a.label,
       icon: ICON[a.key],
+      danger: a.danger,
       onClick: () => onRun(a.key, o),
     }))
   return (
@@ -133,7 +135,6 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
           <tbody>
             {orders.map((o) => {
               const accent = attentionOf(o)
-              const req = o.status === 'Deposited' && openRevision(o)
               return (
                 <tr
                   key={o.id}
@@ -167,7 +168,6 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
                     <span className="flex flex-col items-start gap-1.5">
                       <OrderStatusBadge status={o.status} compact />
                       {o.status === 'Pending' && o.depositDueDate && <Countdown order={o} />}
-                      {req && <Badge tone="warn">Yêu cầu sửa</Badge>}
                     </span>
                   </td>
                   <td className={td}>
@@ -184,7 +184,6 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
       <ul className="grid gap-3 p-3.5 min-[1100px]:hidden">
         {orders.map((o) => {
           const accent = attentionOf(o)
-          const req = o.status === 'Deposited' && openRevision(o)
           return (
             <li key={o.id}>
               <div
@@ -198,7 +197,6 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
                   <b className="font-semibold tabular-nums">{o.orderCode}</b>
                   <span className="flex flex-wrap items-center justify-end gap-1.5">
                     <OrderStatusBadge status={o.status} compact />
-                    {req && <Badge tone="warn">Yêu cầu sửa</Badge>}
                   </span>
                 </div>
                 <div className="mt-2.5 flex items-center gap-2.5">

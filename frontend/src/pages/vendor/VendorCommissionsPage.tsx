@@ -10,7 +10,7 @@ import { PayStatementDialog } from '@/features/commissions/components/PayStateme
 import { StatementDetailDialog } from '@/features/commissions/components/StatementDetailDialog'
 import { StatementTable } from '@/features/commissions/components/StatementTable'
 import { useCommissions, usePayStatement } from '@/features/commissions/hooks'
-import { useClock } from '@/lib/clock'
+import { todayVN, useNow } from '@/lib/clock'
 import { TimeTravelMenu } from '@/features/vendorOrders/components/TimeTravelMenu'
 import type { CommissionStatement } from '@/types/commission'
 
@@ -25,10 +25,9 @@ export default function VendorCommissionsPage() {
   const [paying, setPaying] = useState<CommissionStatement | null>(null)
 
   // Trạng thái Quá hạn và kỳ hiện tại phụ thuộc ngày hôm nay: dựng lại khi tua giờ giả lập
-  const clock = useClock()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const statements = useMemo(() => (data ? withCurrentPeriod(data.statements) : []), [data, clock])
-  const tiles = commissionTiles(statements)
+  const today = todayVN(useNow())
+  const statements = useMemo(() => (data ? withCurrentPeriod(data.statements, today) : []), [data, today])
+  const tiles = commissionTiles(statements, today)
   const open = statements.find((s) => s.id === params.get('ds'))
   const setOpen = (id: string | null) => {
     const next = new URLSearchParams(params)

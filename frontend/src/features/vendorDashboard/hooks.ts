@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useNow } from '@/lib/clock'
 import { currentPeriod, withCurrentPeriod } from '@/features/commissions/calc'
 import { useCommissions } from '@/features/commissions/hooks'
 import { useVendorConversations } from '@/features/vendorChat/hooks'
@@ -20,6 +21,8 @@ export function useVendorDashboard() {
   const conversations = useVendorConversations(15_000)
   const packages = usePackages()
   const commissions = useCommissions()
+  // Việc cần làm, hạn cọc, số liệu theo ngày: tính lại mỗi 30 giây và khi tua đồng hồ giả lập
+  const tick = Math.floor(useNow().getTime() / 30_000)
 
   const data = useMemo(() => {
     const o = orders.data?.data ?? []
@@ -31,7 +34,8 @@ export function useVendorDashboard() {
       upcoming: upcomingOrders(o),
       recent: recentOrders(o),
     }
-  }, [orders.data, conversations.data, packages.data, commissions.data])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders.data, conversations.data, packages.data, commissions.data, tick])
 
   return {
     profile: profile.data,

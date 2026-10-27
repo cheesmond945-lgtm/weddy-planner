@@ -1,7 +1,7 @@
 import { mockVendorOrders } from '@/mocks/vendorOrders'
 import { authStore } from '@/store/auth'
 import type { Paginated } from '@/types/api'
-import type { Order, OrderContent, OrderListQuery, OrderStatus } from '@/types/vendorOrder'
+import type { CancelReason, Order, OrderContent, OrderListQuery, OrderStatus } from '@/types/vendorOrder'
 import { ApiError, http, requestRaw } from './client'
 import { isMock, mockDelay } from './mock'
 
@@ -49,8 +49,12 @@ export const vendorOrdersApi = {
     isMock('orders') ? mock((u) => mockVendorOrders.sendOrder(u, orderId, content), 600) : http.post(`/vendors/me/orders/${orderId}/send`, { content }),
 
   /** Sửa đơn đã cọc: hạng mục, ngày, ghi chú. Khóa tỷ lệ cọc và tiền cọc. */
-  edit: (orderId: string, content: OrderContent): Promise<Order> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.editDeposited(u, orderId, content), 500) : http.patch(`/vendors/me/orders/${orderId}`, { content }),
+  edit: (orderId: string, content: OrderContent, changeNote: string): Promise<Order> =>
+    isMock('orders') ? mock((u) => mockVendorOrders.editDeposited(u, orderId, content, changeNote), 500) : http.patch(`/vendors/me/orders/${orderId}`, { content, changeNote }),
+
+  /** NCC hủy đơn đã cọc, chỉ khi hôm nay còn trước ngày sự kiện. reason: CUSTOMER_REQUEST (khách mất cọc) hoặc VENDOR_UNABLE (NCC hoàn cọc ngoài hệ thống). */
+  cancel: (orderId: string, body: { reason: CancelReason; note?: string }): Promise<Order> =>
+    isMock('orders') ? mock((u) => mockVendorOrders.cancelOrder(u, orderId, body), 500) : http.post(`/vendors/me/orders/${orderId}/cancel`, body),
 
   /** Hoàn tất đơn (chỉ khi đã qua ngày sự kiện). */
   complete: (orderId: string): Promise<Order> =>

@@ -19,7 +19,7 @@ interface Item {
 }
 
 const canRequestRevision = (o: Order | undefined) =>
-  o?.status === 'Pending' || (o?.status === 'Deposited' && !o.revisions.some((r) => r.revisionType === 'AfterDeposit' && r.status === 'Requested'))
+  o?.status === 'Pending'
 
 /** Hộp giả lập khách "Yêu cầu chỉnh sửa": chọn nội dung muốn đổi và nhập lời nhắn (bắt buộc), như form phía khách. */
 function RevisionDialog({ order, busy, onClose, onSubmit }: { order: Order | undefined; busy: boolean; onClose: () => void; onSubmit: (changes: RevisionChangeType[], note: string) => void }) {
@@ -115,9 +115,8 @@ export function CustomerSimulator({ conversationId, orders }: { conversationId: 
     { label: 'Khách nhắn tin', sim: { action: 'MESSAGE' }, when: () => true },
     { label: 'Khách đặt cọc qua VNPay', sim: { action: 'PAY_DEPOSIT' }, when: (o) => o?.status === 'Pending' },
     { label: 'Khách yêu cầu chỉnh sửa đơn', sim: { action: 'REQUEST_REVISION', changes: [], note: '' }, when: canRequestRevision, dialog: true },
-    { label: 'Khách hủy đơn (sau cọc, mất cọc)', sim: { action: 'CANCEL_ORDER' }, when: (o) => o?.status === 'Deposited' },
   ]
-  const target = (sim: CustomerSimulation) => (sim.action === 'PAY_DEPOSIT' ? newest(orders, ['Pending']) : sim.action === 'CANCEL_ORDER' ? newest(orders, ['Deposited']) : newest(orders, ['Pending', 'Deposited']))
+  const target = (sim: CustomerSimulation) => (sim.action === 'MESSAGE' ? undefined : newest(orders, ['Pending']))
   const shift = clockOffsetHours()
 
   return (

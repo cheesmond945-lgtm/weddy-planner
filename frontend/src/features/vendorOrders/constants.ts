@@ -1,5 +1,5 @@
 import type { BadgeTone } from '@/components/Badge'
-import type { OrderStatus, RevisionChangeType } from '@/types/vendorOrder'
+import type { CancelReason, OrderStatus, RevisionChangeType } from '@/types/vendorOrder'
 
 /** Nhãn và màu trạng thái đơn, theo docs/api/THE_DON_HANG.md mục 3 (khách và NCC thấy giống nhau). */
 export const ORDER_STATUS: Record<OrderStatus, { label: string; tone: BadgeTone }> = {
@@ -20,11 +20,9 @@ export const CHANGE_LABEL: Record<RevisionChangeType, string> = {
   Other: 'Khác',
 }
 
-/** Đơn đã khóa: không sửa, không gửi lại. */
-export const isOrderLocked = (s: OrderStatus) => s === 'Completed' || s === 'Expired' || s === 'Cancelled'
+/** Lý do hủy đơn: nhãn và hệ quả (hoàn cọc xử lý ngoài hệ thống). */
+export const CANCEL_REASON: Record<CancelReason, { label: string; effect: string }> = {
+  CUSTOMER_REQUEST: { label: 'Khách yêu cầu hủy', effect: 'Khách mất cọc.' },
+  VENDOR_UNABLE: { label: 'NCC không thể thực hiện', effect: 'NCC hoàn cọc cho khách ngoài hệ thống.' },
+}
 
-/** Làm tròn tiền cọc đến 100.000đ (tạm: gần nhất, chờ nhóm chốt). Số chính thức do backend tính. */
-export const DEPOSIT_ROUNDING = 100_000
-
-/** Hạn cọc: 1 ngày sau khi gửi đơn. */
-export const DEPOSIT_DUE_HOURS = 24

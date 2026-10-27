@@ -3,10 +3,9 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
-import { formatStamp, orderPageHref } from '@/features/vendorOrders/calc'
+import { formatDay, formatStamp, orderPageHref } from '@/features/vendorOrders/calc'
 import type { OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
 import { useConversationOrders } from '@/features/vendorOrders/hooks'
-import { formatDate, toISODate } from '@/lib/date'
 import type { VendorConversation } from '@/types/vendorConversation'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { useMarkRead, useSendVendorMessage, useVendorMessages } from '../hooks'
@@ -25,7 +24,7 @@ interface ChatThreadProps {
   onViewInvoice: (order: Order, type: InvoiceType) => void
 }
 
-const dayOf = (iso: string) => formatDate(toISODate(new Date(iso)))
+const dayOf = formatDay
 
 /** Khung chat với một khách (chat-main trong prototype NCC), cùng kiểu khung chat phía cặp đôi. */
 export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrderId, onViewOrder, onViewInvoice }: ChatThreadProps) {

@@ -1,5 +1,6 @@
 import { ApiError } from '@/api/client'
 import { addDaysYmd, now, todayVN } from '@/lib/clock'
+import { depositOf, isDepositTooLarge } from '@/lib/deposit'
 import { formatMoney } from '@/lib/format'
 import type { Paginated } from '@/types/api'
 import type { CustomerSimulation, MessageSender, MessageType, VendorConversation, VendorMessage } from '@/types/vendorConversation'
@@ -14,8 +15,9 @@ import type {
   OrderStatus,
   RevisionChangeType,
 } from '@/types/vendorOrder'
-import { ORDER_STATUSES } from '@/types/vendorOrder'
-import { CHANGE_LABEL } from '@/features/vendorOrders/constants'
+import { CANCEL_REASONS, ORDER_STATUSES, type CancelReason } from '@/types/vendorOrder'
+import { COMMISSION_DUE_DAY } from '@/features/commissions/constants'
+import { CANCEL_REASON, CHANGE_LABEL } from '@/features/vendorOrders/constants'
 import { mockVendors } from './vendors'
 
 /*
@@ -30,7 +32,7 @@ import { mockVendors } from './vendors'
  *
  * Dữ liệu lưu trong localStorage theo từng tài khoản NCC. Muốn làm lại từ đầu thì xóa khóa bên dưới.
  */
-const STORAGE_KEY = 'weddy.mock.vendorOrders.v5'
+const STORAGE_KEY = 'weddy.mock.vendorOrders.v6'
 
 /** Tỷ lệ hoa hồng theo loại dịch vụ (ServiceCategories.CommissionRate): chỉ để dữ liệu giả có số; BE đọc từ CSDL. */
 export const COMMISSION_RATE: Record<string, number> = { 'nha-hang': 5, decor: 7, 'hoa-cuoi': 8, 'trang-phuc': 8, 'chup-anh': 8, makeup: 10 }
@@ -102,8 +104,7 @@ function nextCode(d: Data, kind: 'order' | 'receipt' | 'final', at: Date) {
   return `${prefix}${String(used + 1).padStart(4, '0')}`
 }
 
-/** Tiền cọc = tổng × tỷ lệ / 100, làm tròn gần nhất đến 100.000đ, không vượt tổng. */
-export const roundDeposit = (total: number, percent: number) => Math.min(total, Math.round((total * percent) / 100 / 100_000) * 100_000)
+// Tiền cọc: một công thức chung ở lib/deposit.ts (làm tròn gần nhất 100.000đ, tối thiểu 100.000đ)
 
 const totalOfItems = (items: { quantity: number; unitPrice: number }[]) => items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
 
@@ -127,8 +128,15 @@ const normalize = (c: OrderContent) =>
     items: keepItems(c.items).map((i) => ({ ...i, itemName: i.itemName.trim() })),
   })
 
-/** Kiểm tra nội dung đơn. strict = gửi (đủ); không strict = lưu nháp (chỉ bắt ngày sự kiện). */
-function validate(c: OrderContent, strict: boolean) {
+/** Đang dựng dữ liệu mẫu: đơn trong quá khứ được phép (không kiểm ngày sự kiện từ hôm nay). */
+let seeding = false
+
+/**
+ * Kiểm tra nội dung đơn. strict = gửi (đủ); không strict = lưu nháp (chỉ bắt ngày sự kiện).
+ * Gửi đơn, Tạo lại đơn, Sửa đơn sau cọc: ngày sự kiện phải từ hôm nay (giờ VN) trở đi, trừ khi giữ nguyên ngày đang có (`originalDate`);
+ * trả 422 EVENT_DATE_IN_PAST. `deposit: false` (sửa sau cọc): tiền cọc đã khóa, bỏ kiểm "tổng đơn quá nhỏ để đặt cọc".
+ */
+function validate(c: OrderContent, strict: boolean, at: Date, ctx: { originalDate?: string; deposit?: boolean } = {}) {
   const e: Record<string, string> = {}
   if (!YMD_RE.test(c.eventDate) || Number.isNaN(Date.parse(c.eventDate))) e.eventDate = 'Chọn ngày diễn ra sự kiện.'
   if (strict) {
@@ -143,8 +151,12 @@ function validate(c: OrderContent, strict: boolean) {
     })
     if (items.length && totalOfItems(items) <= 0) e.items ??= 'Tổng tiền phải lớn hơn 0.'
     if (!(c.depositPercent > 0 && c.depositPercent < 100)) e.depositPercent = 'Tỷ lệ cọc lớn hơn 0 và nhỏ hơn 100 (%).'
+    else if (ctx.deposit !== false && items.length && isDepositTooLarge(totalOfItems(items), c.depositPercent)) e.deposit = 'Tổng đơn quá nhỏ để đặt cọc.'
   }
   if (Object.keys(e).length) throw new ApiError(400, 'VALIDATION_ERROR', 'Đơn chưa hợp lệ.', e)
+  if (strict && !seeding && c.eventDate !== ctx.originalDate && c.eventDate < todayVN(at)) {
+    throw new ApiError(422, 'EVENT_DATE_IN_PAST', 'Ngày diễn ra sự kiện phải từ hôm nay trở đi.', { eventDate: 'Ngày diễn ra sự kiện phải từ hôm nay trở đi.' })
+  }
 }
 
 function applyItems(d: Data, o: Order, input: OrderItemInput[]) {
@@ -164,7 +176,7 @@ function applyContent(d: Data, o: Order, c: OrderContent) {
   o.note = c.note?.trim() || null
   o.depositPercent = c.depositPercent > 0 && c.depositPercent < 100 ? c.depositPercent : 30
   applyItems(d, o, c.items)
-  o.depositAmount = roundDeposit(o.totalAmount, o.depositPercent)
+  o.depositAmount = depositOf(o.totalAmount, o.depositPercent)
 }
 
 function pushMsg(d: Data, conversationId: string, sender: MessageSender, type: MessageType, content: string, orderId: string | null, at: Date | string) {
@@ -210,6 +222,8 @@ function newDraft(d: Data, conversationId: string, c: OrderContent, at: Date): O
     invoices: [],
     completedDate: null,
     cancelledDate: null,
+    cancelReason: null,
+    cancelNote: null,
     createdDate: iso(at),
   }
   applyContent(d, o, c)
@@ -222,8 +236,8 @@ function sendOrder(d: Data, o: Order, c: OrderContent, at: Date) {
   if (!['Draft', 'Pending', 'NeedRevision'].includes(o.status)) {
     throw new ApiError(409, 'ORDER_NOT_SENDABLE', 'Đơn đã đặt cọc, hết hạn hoặc đã hủy nên không gửi lại được.')
   }
-  validate(c, true)
   const first = o.status === 'Draft'
+  validate(c, true, at, { originalDate: first ? undefined : o.eventDate })
   if (!first && normalize(contentOf(o)) === normalize(c)) throw new ApiError(400, 'ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn đang gửi.')
   const oldTotal = o.totalAmount
   applyContent(d, o, c)
@@ -253,11 +267,15 @@ function sendOrder(d: Data, o: Order, c: OrderContent, at: Date) {
   pushMsg(d, o.conversationId, 'VENDOR', 'Order', `Đơn dịch vụ ${o.orderCode}`, o.id, at)
 }
 
-/** Sửa đơn đã cọc: hạng mục, ngày, ghi chú; khóa tỷ lệ và tiền cọc; tổng mới không nhỏ hơn tiền đã cọc. */
-function editDeposited(d: Data, o: Order, c: OrderContent, at: Date) {
+/**
+ * Sửa đơn đã cọc: hạng mục, ngày, ghi chú; khóa tỷ lệ và tiền cọc; tổng mới không nhỏ hơn tiền đã cọc.
+ * NCC ghi "nội dung thay đổi" (khách thấy): lưu một OrderRevisions AfterDeposit trạng thái Applied luôn.
+ */
+function editDeposited(d: Data, o: Order, c: OrderContent, changeNote: string, at: Date) {
   if (o.status !== 'Deposited') throw new ApiError(409, 'ORDER_NOT_EDITABLE', 'Chỉ sửa được đơn đã đặt cọc theo cách này.')
+  if (!changeNote.trim()) throw new ApiError(400, 'VALIDATION_ERROR', 'Cần ghi nội dung thay đổi để khách biết.', { changeNote: 'Nhập nội dung thay đổi.' })
   const merged: OrderContent = { ...contentOf(o), eventDate: c.eventDate, note: c.note, items: c.items }
-  validate(merged, true)
+  validate(merged, true, at, { originalDate: o.eventDate, deposit: false })
   if (normalize(contentOf(o)) === normalize(merged)) throw new ApiError(400, 'ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn hiện tại.')
   const newTotal = totalOfItems(keepItems(merged.items))
   if (newTotal < o.depositAmount) {
@@ -267,24 +285,17 @@ function editDeposited(d: Data, o: Order, c: OrderContent, at: Date) {
   o.eventDate = merged.eventDate
   o.note = merged.note?.trim() || null
   applyItems(d, o, merged.items)
-  const open = o.revisions.find((r) => r.revisionType === 'AfterDeposit' && r.status === 'Requested')
-  if (open) {
-    open.status = 'Applied'
-    open.newTotalAmount = o.totalAmount
-    open.appliedDate = iso(at)
-  } else {
-    o.revisions.unshift({
-      id: uid(d, 'rv'),
-      revisionType: 'AfterDeposit',
-      requestNote: null,
-      changes: [],
-      oldTotalAmount: oldTotal,
-      newTotalAmount: o.totalAmount,
-      status: 'Applied',
-      createdDate: iso(at),
-      appliedDate: iso(at),
-    })
-  }
+  o.revisions.unshift({
+    id: uid(d, 'rv'),
+    revisionType: 'AfterDeposit',
+    requestNote: changeNote.trim(),
+    changes: [],
+    oldTotalAmount: oldTotal,
+    newTotalAmount: o.totalAmount,
+    status: 'Applied',
+    createdDate: iso(at),
+    appliedDate: iso(at),
+  })
   pushMsg(d, o.conversationId, 'VENDOR', 'Order', `Đơn dịch vụ ${o.orderCode} đã được cập nhật`, o.id, at)
 }
 
@@ -307,10 +318,10 @@ function payDeposit(d: Data, o: Order, at: Date) {
   )
 }
 
-/** Khách yêu cầu chỉnh sửa: trước cọc thì đơn thành NeedRevision; sau cọc đơn vẫn Deposited. */
+/** Khách yêu cầu chỉnh sửa (chỉ trước cọc): đơn Pending thành NeedRevision. Sau cọc khách nhắn trong chat, không có yêu cầu. */
 function requestRevision(d: Data, o: Order, changes: RevisionChangeType[], note: string, at: Date) {
-  if (o.status !== 'Pending' && o.status !== 'Deposited') throw new ApiError(409, 'ORDER_NOT_REVISABLE', 'Đơn không ở trạng thái khách yêu cầu chỉnh sửa được.')
-  const type = o.status === 'Pending' ? 'BeforeDeposit' : 'AfterDeposit'
+  if (o.status !== 'Pending') throw new ApiError(409, 'ORDER_NOT_REVISABLE', 'Chỉ yêu cầu chỉnh sửa được đơn đang chờ đặt cọc.')
+  const type = 'BeforeDeposit'
   if (o.revisions.some((r) => r.revisionType === type && r.status === 'Requested')) {
     throw new ApiError(409, 'REVISION_ALREADY_REQUESTED', 'Đơn đã có yêu cầu chỉnh sửa đang chờ.')
   }
@@ -326,42 +337,47 @@ function requestRevision(d: Data, o: Order, changes: RevisionChangeType[], note:
     appliedDate: null,
   }
   o.revisions.unshift(rv)
-  if (type === 'BeforeDeposit') o.status = 'NeedRevision'
+  o.status = 'NeedRevision'
   const what = changes.map((c) => CHANGE_LABEL[c]).join(', ')
   const detail = [what, rv.requestNote ? `"${rv.requestNote}"` : ''].filter(Boolean).join(' · ')
   pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `Khách yêu cầu chỉnh sửa đơn ${o.orderCode}${detail ? `: ${detail}` : ''}`, o.id, at)
 }
 
-/** Khách hủy đơn sau khi cọc (mất cọc). */
-function cancelByCustomer(d: Data, o: Order, at: Date) {
-  if (o.status !== 'Deposited') throw new ApiError(409, 'ORDER_NOT_CANCELLABLE', 'Khách chỉ hủy được đơn đã đặt cọc.')
+/** NCC hủy đơn đã cọc, chỉ khi hôm nay (giờ VN) còn trước EventDate. Không tính hoa hồng. */
+function cancelOrder(d: Data, o: Order, reason: CancelReason, note: string | undefined, at: Date) {
+  if (o.status !== 'Deposited' || !(todayVN(at) < o.eventDate)) {
+    throw new ApiError(422, 'ORDER_NOT_CANCELLABLE', 'Chỉ hủy được đơn đã đặt cọc và chưa tới ngày diễn ra sự kiện.')
+  }
+  if (!CANCEL_REASONS.includes(reason)) throw new ApiError(400, 'VALIDATION_ERROR', 'Chọn lý do hủy đơn.', { reason: 'Chọn lý do hủy đơn.' })
   o.status = 'Cancelled'
   o.cancelledDate = iso(at)
-  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `Khách đã hủy đơn ${o.orderCode} (mất cọc).`, o.id, at)
+  o.cancelReason = reason
+  o.cancelNote = note?.trim() || null
+  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `NCC đã hủy đơn ${o.orderCode} · Lý do: ${CANCEL_REASON[reason].label}${o.cancelNote ? ` · ${o.cancelNote}` : ''}`, o.id, at)
 }
 
 const firstOfMonth = (d: Date) => `${todayVN(d).slice(0, 7)}-01`
 const dueDateOf = (periodMonth: string) => {
   const [y, m] = periodMonth.split('-').map(Number)
-  return new Date(Date.UTC(y, m, 25)).toISOString().slice(0, 10)
+  return new Date(Date.UTC(y, m, COMMISSION_DUE_DAY)).toISOString().slice(0, 10)
 }
 
 /** Hoàn thành: ghi CompletedDate, tạo Commissions vào bảng kê của tháng chứa CompletedDate. */
-function completeOrder(d: Data, o: Order, at: Date, categorySlug: string) {
+function completeOrder(d: Data, o: Order, at: Date, categorySlug: string, completedAt: Date = at) {
   o.status = 'Completed'
-  o.completedDate = iso(at)
-  const period = firstOfMonth(at)
+  o.completedDate = iso(completedAt)
+  const period = firstOfMonth(completedAt)
   let st = d.statements.find((s) => s.periodMonth === period)
   if (!st) {
-    st = { id: uid(d, 'st'), periodMonth: period, dueDate: dueDateOf(period), totalOrders: 0, totalAmount: 0, transactionCode: null, status: 'Unpaid', paidDate: null, createdDate: iso(at) }
+    st = { id: uid(d, 'st'), periodMonth: period, dueDate: dueDateOf(period), totalOrders: 0, totalAmount: 0, transactionCode: null, status: 'Unpaid', paidDate: null, createdDate: iso(completedAt) }
     d.statements.push(st)
   }
   const rate = COMMISSION_RATE[categorySlug] ?? COMMISSION_RATE['nha-hang']
   const amount = Math.round((o.totalAmount * rate) / 100)
-  d.commissions.push({ id: uid(d, 'cm'), orderId: o.id, statementId: st.id, orderAmount: o.totalAmount, rate, amount, createdDate: iso(at) })
+  d.commissions.push({ id: uid(d, 'cm'), orderId: o.id, statementId: st.id, orderAmount: o.totalAmount, rate, amount, createdDate: iso(completedAt) })
   st.totalOrders += 1
   st.totalAmount += amount
-  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `Đơn ${o.orderCode} đã hoàn thành.`, o.id, at)
+  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `Đơn ${o.orderCode} đã hoàn thành.`, o.id, completedAt)
 }
 
 function issueFinalInvoice(d: Data, o: Order, at: Date) {
@@ -390,13 +406,23 @@ function runJobs(d: Data, at: Date, categorySlug: () => string) {
   }
   const today = todayVN(at)
   for (const o of d.orders) {
-    if (o.status === 'Deposited' && today > addDaysYmd(o.eventDate, 7)) completeOrder(d, o, at, categorySlug())
+    // Tự hoàn thành: CompletedDate là cuối ngày EventDate + 7 (giờ VN), không phải lúc mock chạy, nên hoa hồng vào đúng tháng
+    if (o.status === 'Deposited' && today > addDaysYmd(o.eventDate, 7)) completeOrder(d, o, at, categorySlug(), new Date(`${addDaysYmd(o.eventDate, 7)}T23:59:00+07:00`))
   }
 }
 
 // ---- Dữ liệu mẫu ----
 
 function seed(userId: string, n: Date): Data {
+  seeding = true
+  try {
+    return buildSeed(userId, n)
+  } finally {
+    seeding = false
+  }
+}
+
+function buildSeed(userId: string, n: Date): Data {
   const d: Data = { conversations: [], messages: [], orders: [], commissions: [], statements: [], counter: 0 }
   const slug = () => profileSlug(userId)
   const ago = (h: number) => plusHours(n, -h)
@@ -476,12 +502,12 @@ function seed(userId: string, n: Date): Data {
   requestRevision(d, o5, ['Quantity'], 'Cho mình giảm còn 22 bàn nhé.', ago(60))
   sendOrder(d, o5, content('Ngọc Mai & Hoàng Nam', '0966 802 117', dayIn(62), [['Tiệc cưới – Menu A', 'Bàn', 22, 3_200_000]]), ago(3))
 
-  // c6: Deposited, khách yêu cầu sửa sau cọc (đang chờ NCC)
+  // c6: Deposited, khách nhắn xin tăng số bàn (sau cọc khách chỉ nhắn trong chat, NCC tự chỉnh sửa)
   const c6 = conv('vc-6', 'Hải Yến & Anh Tuấn', '0945 678 901')
   couple(c6, 122, 'Tụi mình đặt 20 bàn Menu A cho ngày cưới nhé.')
   const o6 = order(c6, content('Hải Yến & Anh Tuấn', '0945 678 901', dayIn(20), [['Tiệc cưới – Menu A', 'Bàn', 20, 3_200_000]]), ago(121), ago(120))
   payDeposit(d, o6, ago(115))
-  requestRevision(d, o6, ['Quantity'], 'Cho nhà mình tăng từ 20 lên 22 bàn nhé.', ago(20))
+  couple(c6, 20, 'Cho nhà mình tăng từ 20 lên 22 bàn nhé.')
 
   // c7: Deposited, đã qua ngày sự kiện 2 ngày: NCC đánh dấu hoàn thành được
   const c7 = conv('vc-7', 'Phương Linh & Minh Khôi', '0987 123 456')
@@ -493,18 +519,18 @@ function seed(userId: string, n: Date): Data {
   const c8 = conv('vc-8', 'Quỳnh Anh & Đức Long', '0909 555 321')
   const o8 = order(c8, content('Quỳnh Anh & Đức Long', '0909 555 321', dayIn(35), [['Tiệc cưới – Menu A', 'Bàn', 20, 3_200_000]]), ago(24 * 13), ago(24 * 12))
   payDeposit(d, o8, ago(24 * 12 - 5))
-  editDeposited(d, o8, content('Quỳnh Anh & Đức Long', '0909 555 321', dayIn(35), [['Tiệc cưới – Menu A', 'Bàn', 22, 3_200_000]], 30, 'Thêm 2 bàn theo yêu cầu.'), ago(24 * 3))
+  editDeposited(d, o8, content('Quỳnh Anh & Đức Long', '0909 555 321', dayIn(35), [['Tiệc cưới – Menu A', 'Bàn', 22, 3_200_000]], 30, 'Thêm 2 bàn theo yêu cầu.'), 'Tăng từ 20 lên 22 bàn theo yêu cầu của khách.', ago(24 * 3))
 
   // c9: Expired (khách không cọc kịp): NCC tạo đơn mới từ đơn này
   const c9 = conv('vc-9', 'Thanh Trúc & Gia Bảo', '0911 222 333')
   couple(c9, 24 * 3 + 4, 'Mình sẽ chuyển cọc trong tuần này nhé.')
   order(c9, content('Thanh Trúc & Gia Bảo', '0911 222 333', dayIn(40), [['Tiệc cưới – Menu B', 'Bàn', 16, 3_000_000]]), ago(24 * 3 + 2), ago(24 * 3))
 
-  // c10: Cancelled (khách hủy sau cọc)
+  // c10: Cancelled (NCC hủy theo yêu cầu của khách, khách mất cọc)
   const c10 = conv('vc-10', 'Thùy Dung & Văn Khoa', '0966 802 117')
   const o10 = order(c10, content('Thùy Dung & Văn Khoa', '0966 802 117', dayIn(12), [['Tiệc cưới – Menu A', 'Bàn', 12, 3_200_000]]), ago(24 * 26), ago(24 * 25))
   payDeposit(d, o10, ago(24 * 25 - 5))
-  cancelByCustomer(d, o10, ago(24 * 2))
+  cancelOrder(d, o10, 'CUSTOMER_REQUEST', 'Khách báo không tổ chức nữa.', ago(24 * 2))
 
   // c11 đến c13: đã hoàn thành ở các tháng trước (tạo hoa hồng, bảng kê)
   const done = (id: string, name: string, phone: string, eventAgo: number, tables: number, withFinalInvoice: boolean) => {
@@ -586,7 +612,7 @@ function summarize(d: Data, c: StoredConversation): VendorConversation {
     (o) =>
       o.status === 'Draft' ||
       o.status === 'NeedRevision' ||
-      (o.status === 'Deposited' && (today > o.eventDate || o.revisions.some((r) => r.revisionType === 'AfterDeposit' && r.status === 'Requested'))),
+      (o.status === 'Deposited' && today > o.eventDate),
   )
   return {
     id: c.id,
@@ -646,6 +672,8 @@ export const mockVendorOrders = {
             (!q.conversationId || o.conversationId === q.conversationId) &&
             (!q.from || o.eventDate >= q.from) &&
             (!q.to || o.eventDate <= q.to) &&
+            (!q.depositFrom || (o.payment?.status === 'Paid' && !!o.payment.paidDate && todayVN(new Date(o.payment.paidDate)) >= q.depositFrom)) &&
+            (!q.depositTo || (o.payment?.status === 'Paid' && !!o.payment.paidDate && todayVN(new Date(o.payment.paidDate)) <= q.depositTo)) &&
             (!k || o.orderCode.toLowerCase().includes(k) || o.customerName.toLowerCase().includes(k) || (digits.length >= 3 && o.customerPhone.replace(/\D/g, '').includes(digits))),
         )
         .sort((a, b) => b.createdDate.localeCompare(a.createdDate))
@@ -670,7 +698,7 @@ export const mockVendorOrders = {
       const conv = findConversation(d, body.conversationId)
       // Như BE: đơn gắn với đám cưới của khách (suy từ hội thoại), chưa có thì không tạo được
       if (conv.noWedding) throw new ApiError(409, 'WEDDING_NOT_SET', 'Khách chưa thiết lập thông tin đám cưới nên chưa tạo được đơn.')
-      validate(body.content, body.send)
+      validate(body.content, body.send, at)
       const o = newDraft(d, conv.id, body.content, at)
       if (body.send) sendOrder(d, o, body.content, at)
       return o
@@ -678,10 +706,10 @@ export const mockVendorOrders = {
   },
 
   saveDraft(userId: string, orderId: string, content: OrderContent): Order {
-    return withData(userId, (d) => {
+    return withData(userId, (d, at) => {
       const o = findOrder(d, orderId)
       if (o.status !== 'Draft') throw new ApiError(409, 'ORDER_NOT_DRAFT', 'Chỉ lưu nháp được đơn chưa gửi.')
-      validate(content, false)
+      validate(content, false, at)
       applyContent(d, o, content)
       return o
     })
@@ -691,16 +719,29 @@ export const mockVendorOrders = {
   sendOrder(userId: string, orderId: string, content: OrderContent): Order {
     return withData(userId, (d, at) => {
       const o = findOrder(d, orderId)
+      // Như BE: gửi bản nháp cũng cần khách đã có thông tin đám cưới (đơn gắn với đám cưới của khách)
+      if (o.status === 'Draft' && findConversation(d, o.conversationId).noWedding) {
+        throw new ApiError(409, 'WEDDING_NOT_SET', 'Khách chưa thiết lập thông tin đám cưới nên chưa gửi được đơn.')
+      }
       sendOrder(d, o, content, at)
       return o
     })
   },
 
   /** Sửa đơn đã cọc. */
-  editDeposited(userId: string, orderId: string, content: OrderContent): Order {
+  editDeposited(userId: string, orderId: string, content: OrderContent, changeNote: string): Order {
     return withData(userId, (d, at) => {
       const o = findOrder(d, orderId)
-      editDeposited(d, o, content, at)
+      editDeposited(d, o, content, changeNote, at)
+      return o
+    })
+  },
+
+  /** NCC hủy đơn đã cọc (trước ngày sự kiện). */
+  cancelOrder(userId: string, orderId: string, body: { reason: CancelReason; note?: string }): Order {
+    return withData(userId, (d, at) => {
+      const o = findOrder(d, orderId)
+      cancelOrder(d, o, body.reason, body.note, at)
       return o
     })
   },
@@ -751,11 +792,10 @@ export const mockVendorOrders = {
         pushMsg(d, conversationId, 'COUPLE', 'Text', SIM_TEXTS[d.messages.length % SIM_TEXTS.length], null, at)
         return
       }
-      const want: OrderStatus[] = sim.action === 'PAY_DEPOSIT' ? ['Pending'] : sim.action === 'CANCEL_ORDER' ? ['Deposited'] : ['Pending', 'Deposited']
-      const o = d.orders.filter((x) => x.conversationId === conversationId && want.includes(x.status)).sort((a, b) => b.createdDate.localeCompare(a.createdDate))[0]
+      // Khách chỉ đặt cọc hoặc yêu cầu chỉnh sửa khi đơn đang chờ cọc; sau cọc khách nhắn trong chat
+      const o = d.orders.filter((x) => x.conversationId === conversationId && x.status === 'Pending').sort((a, b) => b.createdDate.localeCompare(a.createdDate))[0]
       if (!o) throw new ApiError(409, 'SIMULATION_NOT_APPLICABLE', 'Không có đơn phù hợp để giả lập.')
       if (sim.action === 'PAY_DEPOSIT') payDeposit(d, o, at)
-      else if (sim.action === 'CANCEL_ORDER') cancelByCustomer(d, o, at)
       else requestRevision(d, o, sim.changes, sim.note, at)
     })
   },

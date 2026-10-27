@@ -5,6 +5,7 @@ import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { InvoiceType, Order, OrderRevision } from '@/types/vendorOrder'
+import { CANCEL_REASON } from '../constants'
 import { changesLabel, depositDeadline, formatDay, formatDayTime, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
 import { OrderStatusBadge } from './OrderBadges'
@@ -43,7 +44,17 @@ function RevisionRow({ r }: { r: OrderRevision }) {
         <Badge tone={requested ? 'warn' : 'done'}>{requested ? 'Đang chờ NCC sửa' : 'Đã áp dụng'}</Badge>
       </div>
       {r.changes.length > 0 && <p className="mt-1.5 font-medium">{changesLabel(r)}</p>}
-      <p className="mt-1 text-muted-foreground">{r.requestNote ? r.requestNote : r.changes.length ? '' : 'NCC tự sửa đơn (không có yêu cầu của khách).'}</p>
+      <p className="mt-1 text-muted-foreground">
+        {r.revisionType === 'AfterDeposit'
+          ? r.requestNote
+            ? `Nội dung thay đổi: ${r.requestNote}`
+            : 'NCC chỉnh sửa đơn.'
+          : r.requestNote
+            ? r.requestNote
+            : r.changes.length
+              ? ''
+              : 'NCC tự sửa đơn (không có yêu cầu của khách).'}
+      </p>
       <p className="mt-1.5 tabular-nums">
         Tổng {formatMoney(r.oldTotalAmount)} → {r.newTotalAmount === null ? <span className="text-muted-foreground">chưa áp dụng</span> : <b className="font-semibold">{formatMoney(r.newTotalAmount)}</b>}
         {r.appliedDate && <span className="ml-2 text-[12.5px] text-muted-foreground">Áp dụng {formatDayTime(r.appliedDate)}</span>}
@@ -106,7 +117,13 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
           <Item label="Ngày thực hiện">{formatDate(o.eventDate)}</Item>
           {o.status === 'Pending' && o.depositDueDate && <Item label="Hạn đặt cọc">{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</Item>}
           {o.completedDate && <Item label="Ngày hoàn thành">{formatDay(o.completedDate)}</Item>}
-          {o.cancelledDate && <Item label="Ngày khách hủy">{formatDay(o.cancelledDate)}</Item>}
+          {o.cancelledDate && <Item label="Ngày hủy">{formatDay(o.cancelledDate)}</Item>}
+          {o.cancelReason && (
+            <Item label="Lý do hủy">
+              {CANCEL_REASON[o.cancelReason].label}
+              {o.cancelNote ? ` · ${o.cancelNote}` : ''}
+            </Item>
+          )}
           <Item label="Ghi chú gửi khách" full>
             {o.note ?? <span className="text-muted-foreground">Không có</span>}
           </Item>

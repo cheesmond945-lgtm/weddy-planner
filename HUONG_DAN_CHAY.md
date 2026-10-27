@@ -68,6 +68,7 @@ VITE_REAL_APIS=catalog,auth
 
 - `VITE_REAL_APIS=catalog,auth`: danh mục, dịch vụ, ảnh và đăng nhập lấy từ backend thật.
 - Các tính năng chưa có backend (đơn hàng, chat, yêu thích, kế hoạch đám cưới, NCC...) vẫn dùng dữ liệu giả vì `VITE_USE_MOCK=true`.
+- **Phía NCC: các cờ `orders`, `vendorChat` và `commissions` phải bật hoặc tắt CÙNG NHAU** (cùng nằm trong `VITE_REAL_APIS` hoặc cùng không). Hội thoại, đơn và hoa hồng giả dùng chung một kho dữ liệu (`weddy.mock.vendorOrders.*`); bật thật riêng một cờ thì hội thoại giả gặp đơn thật (hoặc ngược lại) và vỡ trang. Nút "Giả lập khách" và "Giả lập thời gian" chỉ có khi các cờ này đang dùng dữ liệu giả.
 - Sửa `.env` xong phải khởi động lại `npm run dev`.
 
 Mở http://localhost:5173 và đăng nhập thử bằng `admin` / `Everly@2026`.

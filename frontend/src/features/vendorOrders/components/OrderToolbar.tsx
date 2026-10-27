@@ -149,6 +149,15 @@ export function OrderToolbar({ query, onChange, onReset, hasFilter }: ToolbarPro
         )}
       </div>
 
+      {(query.depositFrom || query.depositTo) && (
+        <span className="inline-flex h-[46px] items-center gap-2 rounded-pill border border-gold/45 bg-gold-soft pr-2 pl-4 text-[13.5px] text-gold-ink">
+          Ngày cọc: {query.depositFrom ? formatDate(query.depositFrom) : '…'} – {query.depositTo ? formatDate(query.depositTo) : '…'}
+          <button type="button" aria-label="Bỏ lọc ngày cọc" onClick={() => onChange({ depositFrom: undefined, depositTo: undefined })} className="grid size-7 place-items-center rounded-full hover:bg-surface/60">
+            <X className="size-3.5" />
+          </button>
+        </span>
+      )}
+
       {hasFilter && (
         <button type="button" onClick={onReset} className="text-[13px] font-medium text-gold-ink hover:underline">
           Đặt lại bộ lọc

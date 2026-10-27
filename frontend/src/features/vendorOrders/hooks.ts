@@ -3,7 +3,7 @@ import { vendorOrdersApi } from '@/api/vendorOrders'
 import { toast } from '@/components/ui/toast'
 import { vendorKeys } from '@/features/vendorOrders/keys'
 import { useAuth } from '@/store/auth'
-import type { Order, OrderContent, OrderListQuery } from '@/types/vendorOrder'
+import type { CancelReason, Order, OrderContent, OrderListQuery } from '@/types/vendorOrder'
 
 // Chưa có websocket: hỏi lại định kỳ khi đang mở khung chat (đơn đổi trạng thái khi khách cọc, hết hạn…)
 const POLL_MS = 2500
@@ -79,7 +79,7 @@ export type SaveOrderInput =
   | { kind: 'create'; conversationId: string; content: OrderContent; send: boolean }
   | { kind: 'draft'; orderId: string; content: OrderContent }
   | { kind: 'send'; orderId: string; content: OrderContent; resend: boolean }
-  | { kind: 'edit'; orderId: string; content: OrderContent }
+  | { kind: 'edit'; orderId: string; content: OrderContent; changeNote: string }
 
 /**
  * Lưu nháp, gửi đơn, "Cập nhật đơn" hoặc sửa sau cọc từ form đơn trong chat.
@@ -98,7 +98,7 @@ export function useSaveOrder() {
         case 'send':
           return vendorOrdersApi.send(i.orderId, i.content)
         case 'edit':
-          return vendorOrdersApi.edit(i.orderId, i.content)
+          return vendorOrdersApi.edit(i.orderId, i.content, i.changeNote)
       }
     },
     onSuccess: (o, i) => {
@@ -125,6 +125,19 @@ export function useCompleteOrder() {
     onSuccess: (o) => {
       sync(o)
       toast(`Đã hoàn tất đơn ${o.orderCode}. Hoa hồng được tính vào bảng kê tháng này.`)
+    },
+    onError: (e) => toast(e.message),
+  })
+}
+
+/** NCC hủy đơn đã cọc (trước ngày sự kiện), kèm lý do. */
+export function useCancelOrder() {
+  const sync = useSyncOrder()
+  return useMutation({
+    mutationFn: ({ orderId, reason, note }: { orderId: string; reason: CancelReason; note: string }) => vendorOrdersApi.cancel(orderId, { reason, note: note || undefined }),
+    onSuccess: (o) => {
+      sync(o)
+      toast(`Đã hủy đơn ${o.orderCode}.`)
     },
     onError: (e) => toast(e.message),
   })

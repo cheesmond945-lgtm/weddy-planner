@@ -31,6 +31,10 @@ export interface OrderPayment {
   transactionCode: string | null
 }
 
+/** Lý do NCC hủy đơn đã cọc (Orders.CancelReason): khách mất cọc, hoặc NCC hoàn cọc ngoài hệ thống. */
+export const CANCEL_REASONS = ['CUSTOMER_REQUEST', 'VENDOR_UNABLE'] as const
+export type CancelReason = (typeof CANCEL_REASONS)[number]
+
 export const REVISION_CHANGE_TYPES = ['Item', 'Quantity', 'EventDate', 'Other'] as const
 /** Nội dung khách muốn đổi (OrderRevisionChanges.ChangeType). Danh sách đầy đủ chưa chốt (CSDL mục 15). */
 export type RevisionChangeType = (typeof REVISION_CHANGE_TYPES)[number]
@@ -39,13 +43,13 @@ export type RevisionChangeType = (typeof REVISION_CHANGE_TYPES)[number]
 export interface OrderRevision {
   id: string
   revisionType: 'BeforeDeposit' | 'AfterDeposit'
-  /** Lời nhắn của khách; null khi NCC tự sửa */
+  /** BeforeDeposit: lời nhắn của khách (null khi NCC tự sửa). AfterDeposit: "Nội dung thay đổi" do NCC ghi, khách thấy */
   requestNote: string | null
   changes: RevisionChangeType[]
   oldTotalAmount: number
   /** null khi chưa áp dụng */
   newTotalAmount: number | null
-  /** Requested: khách yêu cầu, chờ NCC sửa. Applied: NCC đã sửa */
+  /** Requested: khách yêu cầu trước cọc, chờ NCC sửa. Applied: NCC đã sửa. Sau cọc chỉ có Applied (do NCC tạo khi chỉnh sửa) */
   status: 'Requested' | 'Applied'
   createdDate: string
   appliedDate: string | null
@@ -88,7 +92,10 @@ export interface Order {
   revisions: OrderRevision[]
   invoices: Invoice[]
   completedDate: string | null
+  /** NCC hủy đơn đã cọc (trước ngày sự kiện): ngày hủy, lý do, ghi chú tùy chọn */
   cancelledDate: string | null
+  cancelReason: CancelReason | null
+  cancelNote: string | null
   createdDate: string
 }
 
@@ -117,6 +124,9 @@ export interface OrderListQuery {
   from?: string
   to?: string
   conversationId?: string
+  /** Ngày cọc (Payments.PaidDate, giờ VN) từ / đến "YYYY-MM-DD", gồm cả hai đầu: đơn đã cọc trong khoảng này, mọi trạng thái */
+  depositFrom?: string
+  depositTo?: string
   page?: number
   pageSize?: number
 }

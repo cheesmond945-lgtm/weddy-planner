@@ -16,6 +16,8 @@ export function useOrderPageState() {
     status: status && ORDER_STATUSES.includes(status) ? status : undefined,
     from: params.get('from') ?? undefined,
     to: params.get('to') ?? undefined,
+    depositFrom: params.get('dfrom') ?? undefined,
+    depositTo: params.get('dto') ?? undefined,
     page: Math.max(1, Number(params.get('page')) || 1),
     pageSize: ORDER_PAGE_SIZE,
   }
@@ -27,6 +29,8 @@ export function useOrderPageState() {
     if (q.status) p.set('status', q.status)
     if (q.from) p.set('from', q.from)
     if (q.to) p.set('to', q.to)
+    if (q.depositFrom) p.set('dfrom', q.depositFrom)
+    if (q.depositTo) p.set('dto', q.depositTo)
     if (q.page && q.page > 1) p.set('page', String(q.page))
     if (order) p.set('order', order)
     setParams(p, { replace: true })
@@ -39,6 +43,6 @@ export function useOrderPageState() {
     setFilter: (patch: Partial<OrderListQuery>) => write({ ...query, ...patch, page: patch.page ?? 1 }, openOrderId),
     resetFilters: () => write({ page: 1 }, openOrderId),
     openOrder: (id: string | null) => write(query, id),
-    hasFilter: !!(query.q || query.status || query.from || query.to),
+    hasFilter: !!(query.q || query.status || query.from || query.to || query.depositFrom || query.depositTo),
   }
 }

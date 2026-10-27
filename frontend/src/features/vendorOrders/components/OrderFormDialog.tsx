@@ -9,13 +9,14 @@ import { usePackages } from '@/features/vendorPackages/hooks'
 import { controlClass, Field } from '@/features/vendors/components/FormParts'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { UnsavedChangesGuard } from '@/features/vendors/components/UnsavedChangesGuard'
-import { formatDate, toISODate } from '@/lib/date'
+import { formatDate } from '@/lib/date'
+import { DEPOSIT_MIN, DEPOSIT_ROUNDING, depositOf } from '@/lib/deposit'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { VendorConversation } from '@/types/vendorConversation'
 import type { Order } from '@/types/vendorOrder'
-import { depositEstimate, emptyValues, filledItems, sameValues, toContent, totalOf, valuesFromOrder, valuesOfOrder, type OrderFormValues } from '../calc'
-import { CHANGE_LABEL, DEPOSIT_ROUNDING } from '../constants'
+import { emptyValues, formatDay, filledItems, sameValues, toContent, totalOf, valuesFromOrder, valuesOfOrder, type OrderFormValues } from '../calc'
+import { CHANGE_LABEL } from '../constants'
 import { useSaveOrder, type SaveOrderInput } from '../hooks'
 import { validateDraft, validateOrder, type OrderErrors } from '../validation'
 import { OrderItemsEditor, type QuickFillPackage } from './OrderItemsEditor'
@@ -60,6 +61,8 @@ interface ScheduleProps {
   percent: number
   onPercent: (n: number) => void
   error?: string
+  /** Tổng đơn quá nhỏ để đặt cọc (chặn Gửi đơn, vẫn Lưu nháp) */
+  depositError?: string
   deposit: number
   rest: number
   /** Sửa sau cọc: ô tỷ lệ bị khóa, số tiền cọc đã chốt */
@@ -74,7 +77,7 @@ interface ScheduleProps {
  * Đợt 1 (đặt cọc): NCC nhập tỷ lệ % ngay trong dòng; số tiền là ước tính, hệ thống tính chính thức khi gửi đơn.
  * Đợt 2 (phần còn lại): tỷ lệ = 100 − tỷ lệ cọc, số tiền = tổng − tiền cọc, chỉ để xem.
  */
-function ScheduleTable({ percent, onPercent, error, deposit, rest, locked, paidDate, eventDate, disabled }: ScheduleProps) {
+function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest, locked, paidDate, eventDate, disabled }: ScheduleProps) {
   const th = 'px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase'
   const td = 'px-3 py-2.5 align-top text-[13.5px]'
   const valid = percent > 0 && percent < 100
@@ -121,10 +124,10 @@ function ScheduleTable({ percent, onPercent, error, deposit, rest, locked, paidD
             <td className={td}>
               <b className="block font-semibold whitespace-nowrap tabular-nums">{locked || !valid ? formatMoney(deposit) : `≈ ${formatMoney(deposit)}`}</b>
               <span className="text-xs text-muted-foreground">
-                {locked ? 'Tiền cọc đã chốt' : `ước tính, hệ thống tính chính thức khi gửi (làm tròn ${formatMoney(DEPOSIT_ROUNDING)})`}
+                {locked ? 'Tiền cọc đã chốt' : `ước tính, hệ thống tính chính thức khi gửi (làm tròn ${formatMoney(DEPOSIT_ROUNDING)}, tối thiểu ${formatMoney(DEPOSIT_MIN)})`}
               </span>
             </td>
-            <td className={td}>{paidDate ? `Đã cọc ${formatDate(toISODate(new Date(paidDate)))}` : '1 ngày sau khi gửi đơn'}</td>
+            <td className={td}>{paidDate ? `Đã cọc ${formatDay(paidDate)}` : '1 ngày sau khi gửi đơn'}</td>
             <td className={td}>VNPay (trực tuyến)</td>
           </tr>
           <tr>
@@ -138,6 +141,11 @@ function ScheduleTable({ percent, onPercent, error, deposit, rest, locked, paidD
           </tr>
         </tbody>
       </table>
+      {depositError && (
+        <p role="alert" data-field-error className="border-t border-line bg-warn-soft px-3 py-2 text-[12.5px] text-destructive">
+          {depositError}
+        </p>
+      )}
       <p className="border-t border-line bg-surface-2 px-3 py-2 text-[12.5px] text-muted-foreground">Hệ thống chỉ ghi nhận khoản cọc qua VNPay.</p>
     </div>
   )
@@ -167,14 +175,23 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   const [showRequest, setShowRequest] = useState(true)
   // Hộp xác nhận trước khi gửi đơn, gửi bản cập nhật hoặc lưu chỉnh sửa
   const [confirmSend, setConfirmSend] = useState(false)
+  // Sửa sau cọc: nội dung thay đổi, khách sẽ thấy (lưu vào OrderRevisions AfterDeposit)
+  const [changeNote, setChangeNote] = useState('')
 
   const busy = save.isPending
   const dirty = !sameValues(values, initial)
   const items = filledItems(values.items)
   const total = totalOf(items)
-  const deposit = locked ? order!.depositAmount : depositEstimate(total, values.depositPercent)
+  const deposit = locked ? order!.depositAmount : depositOf(total, values.depositPercent)
+  // Quy tắc kiểm khi Gửi đơn / Cập nhật đơn / Chỉnh sửa; Lưu nháp chỉ cần ngày sự kiện
+  const rules = {
+    minTotal: locked ? order!.depositAmount : undefined,
+    changeNote: locked ? changeNote : undefined,
+    originalEventDate: mode.kind === 'resend' || mode.kind === 'edit' ? mode.order.eventDate : undefined,
+    deposit: !locked,
+  }
   const errors: OrderErrors = checked
-    ? validateOrder(values, { minTotal: locked ? order!.depositAmount : undefined })
+    ? validateOrder(values, rules)
     : needDate
       ? validateDraft(values)
       : {}
@@ -197,7 +214,10 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
         if (e instanceof ApiError && e.code === 'WEDDING_NOT_SET') {
           setNoWedding(true)
           setFormError('Khách chưa điền thông tin đám cưới nên chưa tạo đơn được.')
-        } else setFormError(e.message || 'Không lưu được đơn. Dữ liệu vẫn được giữ, vui lòng thử lại.')
+        } else {
+          const first = e instanceof ApiError && e.details && typeof e.details === 'object' ? Object.values(e.details as Record<string, unknown>).find((v) => typeof v === 'string') : undefined
+          setFormError(e.message ? `${e.message}${first ? ` ${first}` : ''}` : 'Không lưu được đơn. Dữ liệu vẫn được giữ, vui lòng thử lại.')
+        }
       },
     })
   }
@@ -218,7 +238,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
     setFormError('')
     setNoWedding(false)
     setChecked(true)
-    if (Object.keys(validateOrder(values, { minTotal: locked ? order!.depositAmount : undefined })).length) {
+    if (Object.keys(validateOrder(values, rules)).length) {
       scrollToError()
       return
     }
@@ -231,7 +251,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
 
   function doSend() {
     const content = toContent(values)
-    if (mode.kind === 'edit') run({ kind: 'edit', orderId: mode.order.id, content }, true)
+    if (mode.kind === 'edit') run({ kind: 'edit', orderId: mode.order.id, content, changeNote: changeNote.trim() }, true)
     else if (mode.kind === 'resend') run({ kind: 'send', orderId: mode.order.id, content, resend: true }, true)
     else if (mode.kind === 'draft') run({ kind: 'send', orderId: mode.order.id, content, resend: false }, true)
     else run({ kind: 'create', conversationId, content, send: true }, true)
@@ -321,7 +341,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
             <button type="button" onClick={() => setShowRequest((s) => !s)} aria-expanded={showRequest} className="flex w-full items-center gap-2 text-left text-warn">
               <MessageSquare className="size-4" />
               <strong className="font-semibold">Khách yêu cầu chỉnh sửa</strong>
-              <span className="text-[12.5px] text-muted-foreground">{formatDate(toISODate(new Date(request.createdDate)))}</span>
+              <span className="text-[12.5px] text-muted-foreground">{formatDay(request.createdDate)}</span>
               <ChevronDown className={cn('ml-auto size-4 transition-transform', !showRequest && '-rotate-90')} />
             </button>
             {showRequest && (
@@ -334,6 +354,24 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
         )}
 
         <fieldset disabled={busy} className="min-w-0">
+          {locked && (
+            <Section title="Nội dung thay đổi" hint="Khách sẽ thấy nội dung này trên đơn">
+              <textarea
+                rows={2}
+                aria-label="Nội dung thay đổi (khách sẽ thấy)"
+                aria-invalid={errors.changeNote ? true : undefined}
+                className={cn(controlClass, 'h-auto py-2 leading-relaxed')}
+                placeholder="VD: Tăng từ 20 lên 22 bàn theo yêu cầu của khách."
+                value={changeNote}
+                onChange={(e) => setChangeNote(e.target.value)}
+              />
+              {errors.changeNote && (
+                <span role="alert" data-field-error className="mt-1 block text-xs text-destructive">
+                  {errors.changeNote}
+                </span>
+              )}
+            </Section>
+          )}
           <Section title="Thông tin chung" hint={`Gắn với cuộc trò chuyện của ${customer.name} · sửa trên đơn không đổi tài khoản khách`}>
             <div className="grid grid-cols-3 gap-x-4 gap-y-3 max-[900px]:grid-cols-2 max-sm:grid-cols-1">
               <Field label="Tên khách hàng *" error={errors.customerName}>
@@ -387,6 +425,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
               percent={values.depositPercent}
               onPercent={(depositPercent) => set({ depositPercent })}
               error={errors.depositPercent}
+              depositError={errors.deposit}
               deposit={deposit}
               rest={Math.max(0, total - deposit)}
               locked={locked}

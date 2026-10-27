@@ -1,6 +1,6 @@
 import { canPay, daysToDue, formatPeriod, stateOf } from '@/features/commissions/calc'
-import { eventPassed, openRevision } from '@/features/vendorOrders/calc'
-import { msToDeadline, URGENT_HOURS } from '@/features/vendorOrders/summary'
+import { eventPassed } from '@/features/vendorOrders/calc'
+import { isUpcoming, msToDeadline, URGENT_HOURS } from '@/features/vendorOrders/summary'
 import { addDaysYmd, todayVN } from '@/lib/clock'
 import { formatDate } from '@/lib/date'
 import { paths } from '@/routes/paths'
@@ -22,13 +22,14 @@ export function orderStats(orders: Order[]) {
   const pending = orders.filter((o) => o.status === 'Pending')
   const revision = orders.filter((o) => o.status === 'NeedRevision')
   const deposited = orders.filter((o) => o.status === 'Deposited')
-  const upcoming = deposited.filter((o) => o.eventDate >= today)
+  // Cùng định nghĩa với thẻ ở trang Đơn hàng: đã cọc, ngày thực hiện trong 30 ngày tới
+  const upcoming = deposited.filter((o) => isUpcoming(o, today))
   return {
     inProgress: pending.length + revision.length + deposited.length,
     pending: pending.length,
     revision: revision.length,
     deposited: deposited.length,
-    /** Đã cọc, chưa tới ngày thực hiện */
+    /** Đã cọc, ngày thực hiện trong 30 ngày tới */
     upcoming: upcoming.length,
     upcomingValue: upcoming.reduce((s, o) => s + o.totalAmount, 0),
     /** Đã cọc và đã qua ngày thực hiện: chờ NCC đánh dấu hoàn thành */
@@ -70,13 +71,6 @@ export function todoItems({ orders, conversations, packages, statements }: TodoI
   if (revision.length) {
     const o = one(revision)
     items.push({ key: 'revision', count: revision.length, label: 'đơn khách yêu cầu chỉnh sửa', hint: codes(revision), href: o ? chatHref(o.conversationId) : ordersHref('status=NeedRevision'), urgent: true })
-  }
-
-  // Khách yêu cầu sửa đơn đã cọc
-  const afterDeposit = orders.filter((o) => o.status === 'Deposited' && openRevision(o))
-  if (afterDeposit.length) {
-    const o = one(afterDeposit)
-    items.push({ key: 'afterDeposit', count: afterDeposit.length, label: 'yêu cầu sửa đơn đã đặt cọc', hint: codes(afterDeposit), href: o ? orderHref(o) : ordersHref('status=Deposited'), urgent: true })
   }
 
   // Đơn đã qua ngày thực hiện: đánh dấu hoàn thành (hệ thống tự hoàn thành sau 7 ngày)
@@ -132,7 +126,7 @@ export function todoItems({ orders, conversations, packages, statements }: TodoI
 export function upcomingOrders(orders: Order[], limit = 5) {
   const today = todayVN()
   return orders
-    .filter((o) => o.status === 'Deposited' && o.eventDate >= today)
+    .filter((o) => isUpcoming(o, today))
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate))
     .slice(0, limit)
     .map((o) => ({ order: o, daysLeft: Math.round((Date.parse(o.eventDate) - Date.parse(today)) / 86_400_000) }))

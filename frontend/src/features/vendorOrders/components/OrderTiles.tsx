@@ -6,7 +6,7 @@ import type { OrderListQuery } from '@/types/vendorOrder'
 import type { orderTiles } from '../summary'
 
 type Tiles = ReturnType<typeof orderTiles>
-type Patch = Partial<Pick<OrderListQuery, 'status' | 'from' | 'to'>>
+type Patch = Partial<Pick<OrderListQuery, 'status' | 'from' | 'to' | 'depositFrom' | 'depositTo'>>
 
 interface OrderTilesProps {
   tiles: Tiles
@@ -14,7 +14,9 @@ interface OrderTilesProps {
   onFilter: (patch: Patch) => void
 }
 
-const same = (q: OrderListQuery, f: Patch) => q.status === f.status && (q.from ?? undefined) === f.from && (q.to ?? undefined) === f.to
+const CLEAR: Patch = { status: undefined, from: undefined, to: undefined, depositFrom: undefined, depositTo: undefined }
+const same = (q: OrderListQuery, f: Patch) =>
+  q.status === f.status && (q.from ?? undefined) === f.from && (q.to ?? undefined) === f.to && (q.depositFrom ?? undefined) === f.depositFrom && (q.depositTo ?? undefined) === f.depositTo
 
 /**
  * Bốn thẻ số liệu đầu trang Quản lý đơn hàng; bấm thẻ thì lọc danh sách tương ứng, bấm lần nữa để bỏ lọc.
@@ -49,7 +51,7 @@ export function OrderTiles({ tiles: t, query, onFilter }: OrderTilesProps) {
     {
       key: 'deposited',
       filter: t.filters.deposited,
-      card: <StatCard icon={Wallet} label="Giá trị đơn đã cọc trong tháng" value={formatMoney(t.depositedThisMonthValue)} tone="text-sage" foot={`${t.depositedThisMonth} đơn khách đặt cọc trong tháng này`} />,
+      card: <StatCard icon={Wallet} label="Đặt cọc trong tháng" value={formatMoney(t.depositedThisMonthValue)} tone="text-sage" foot={`${t.depositedThisMonth} đơn có ngày cọc trong tháng này, gồm cả đã hoàn thành`} />,
     },
   ]
   return (
@@ -61,7 +63,7 @@ export function OrderTiles({ tiles: t, query, onFilter }: OrderTilesProps) {
             key={key}
             type="button"
             aria-pressed={on}
-            onClick={() => onFilter(on ? { status: undefined, from: undefined, to: undefined } : filter)}
+            onClick={() => onFilter(on ? CLEAR : filter)}
             className={cn('block h-full min-w-0 rounded-md text-left transition-shadow hover:shadow-portal-lift focus-visible:outline-2 focus-visible:outline-gold/60 [&>div]:h-full', on && 'ring-2 ring-gold/55')}
           >
             {card}

@@ -27,7 +27,7 @@ export function OrderActions({ order: o, onOpenForm, onView, onViewInvoice }: Or
             key={a.key}
             size="sm"
             variant={a.primary ? 'default' : 'outline'}
-            className={a.primary ? '' : 'border-line-strong'}
+            className={a.primary ? '' : a.danger ? 'border-warn/60 text-warn hover:bg-warn-soft hover:text-warn' : 'border-line-strong'}
             disabled={busy && (a.key === 'complete' || a.key === 'invoice')}
             onClick={() => run(a.key, o)}
           >

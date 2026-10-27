@@ -110,7 +110,7 @@ Cùng bảng `Conversations` / `Messages` với phía cặp đôi: mỗi cặp (
 | `lastMessage` | Tin gần nhất (kể cả tin hệ thống); `orderCode` có với tin liên quan đơn |
 | `latestOrder` | Đơn **đã gửi** mới nhất của hội thoại (bỏ qua bản nháp): mọi trạng thái trừ `Draft`. Dùng cho nhãn trạng thái và nút "Xem đơn" |
 | `hasDraftOrder` | Có đơn `Draft` |
-| `needsAction` | Cần NCC xử lý: có đơn `Draft`, `NeedRevision`, đơn `Deposited` có yêu cầu sửa sau cọc đang `Requested`, hoặc đơn `Deposited` đã qua `eventDate` (chờ đánh dấu hoàn thành) |
+| `needsAction` | Cần NCC xử lý: có đơn `Draft`, `NeedRevision`, hoặc đơn `Deposited` đã qua `eventDate` (chờ đánh dấu hoàn thành) |
 | `orderCodes` | Mã mọi đơn của hội thoại, để tìm theo mã đơn |
 
 Nhãn trạng thái trong danh sách hội thoại (FE suy từ `latestOrder.status`): `Pending` Chờ cọc, `NeedRevision` Cần sửa, `Deposited` Đã cọc, `Completed` Hoàn thành, `Expired` Hết hạn, `Cancelled` Đã hủy; chỉ có bản nháp thì "Bản nháp".
@@ -136,12 +136,12 @@ Nhãn trạng thái trong danh sách hội thoại (FE suy từ `latestOrder.sta
 | `type` | Khi nào | Hiển thị |
 |---|---|---|
 | `Text` | Tin nhắn thường, và tin hệ thống | Bong bóng (tin hệ thống: dòng nhỏ ở giữa, nền xanh nhạt) |
-| `Order` | NCC gửi hoặc gửi lại đơn, hoặc sửa đơn sau cọc | Thẻ đơn (đọc dữ liệu trực tiếp từ `Orders`, không phải bản chụp). `orderId` bắt buộc |
+| `Order` | NCC gửi hoặc gửi lại đơn, hoặc Chỉnh sửa đơn sau cọc | Thẻ đơn (đọc dữ liệu trực tiếp từ `Orders`, không phải bản chụp). `orderId` bắt buộc |
 | `DepositReceipt` | Cọc thành công | Thẻ "Giấy xác nhận cọc {mã}: đã nhận … cho đơn …" kèm nút Xem. `orderId` bắt buộc |
 | `FinalInvoice` | NCC xuất hóa đơn cuối | Thẻ "Hóa đơn {mã} cho đơn …" kèm nút Xem. `orderId` bắt buộc |
 
-- Các tin hệ thống (`sender = SYSTEM`, `type = Text`): khách yêu cầu chỉnh sửa đơn, đơn hết hạn đặt cọc, khách hủy đơn, đơn hoàn thành.
-- **Quy ước nội dung tin khi khách yêu cầu chỉnh sửa** (cả trước và sau cọc; backend làm theo, **chỉ một tin hệ thống**, không thêm tin của khách): `Khách yêu cầu chỉnh sửa đơn {OrderCode}: {các nội dung thay đổi, nối bằng ", "} · "{RequestNote}"`. Ví dụ: `Khách yêu cầu chỉnh sửa đơn DH26100002: Đổi số lượng, Đổi ngày thực hiện · "Giảm từ 20 xuống 15 bàn nhé."`. Nhãn nội dung theo `OrderRevisionChanges.ChangeType`: Item "Đổi hạng mục", Quantity "Đổi số lượng", EventDate "Đổi ngày thực hiện", Other "Khác". Thiếu một phần thì bỏ phần đó (không có nội dung chọn thì chỉ còn lời nhắn; không có lời nhắn thì chỉ còn nội dung). Thẻ đơn vẫn có hộp cam "Khách yêu cầu: …" đọc từ `OrderRevisions`.
+- Các tin hệ thống (`sender = SYSTEM`, `type = Text`): khách yêu cầu chỉnh sửa đơn (chỉ trước cọc), đơn hết hạn đặt cọc, **NCC hủy đơn** (`NCC đã hủy đơn {OrderCode} · Lý do: {nhãn lý do}[ · {ghi chú}]`), đơn hoàn thành.
+- **Quy ước nội dung tin khi khách yêu cầu chỉnh sửa** (chỉ trước cọc, vì sau cọc khách không có yêu cầu chỉnh sửa; backend làm theo, **chỉ một tin hệ thống**, không thêm tin của khách): `Khách yêu cầu chỉnh sửa đơn {OrderCode}: {các nội dung thay đổi, nối bằng ", "} · "{RequestNote}"`. Ví dụ: `Khách yêu cầu chỉnh sửa đơn DH26100002: Đổi số lượng, Đổi ngày thực hiện · "Giảm từ 20 xuống 15 bàn nhé."`. Nhãn nội dung theo `OrderRevisionChanges.ChangeType`: Item "Đổi hạng mục", Quantity "Đổi số lượng", EventDate "Đổi ngày thực hiện", Other "Khác". Thiếu một phần thì bỏ phần đó (không có nội dung chọn thì chỉ còn lời nhắn; không có lời nhắn thì chỉ còn nội dung). Thẻ đơn vẫn có hộp cam "Khách yêu cầu: …" đọc từ `OrderRevisions`.
 - **Người gửi các tin loại đơn:** `DepositReceipt` do hệ thống gửi (`SenderId` rỗng); `FinalInvoice` do NCC gửi (`SenderId` = tài khoản NCC); `Order` do NCC gửi.
 - Bản nháp đơn **không** tạo tin; khách không thấy.
 - Gửi lại đơn tạo thêm một thẻ `Order` mới; FE thu gọn các thẻ cũ của cùng đơn thành "Đơn … đã được cập nhật, xem bản mới nhất bên dưới".
@@ -167,7 +167,7 @@ Chưa có websocket: FE hỏi lại định kỳ (2,5 giây khi đang mở trang
 
 ## Ghi chú về dữ liệu giả
 
-`frontend/src/mocks/vendorOrders.ts` mô phỏng đúng các quy tắc trên (tính tiền, hạn cọc, hết hạn, tự hoàn thành, hoa hồng, hóa đơn). Nút **"Giả lập khách"** (đặt cọc, yêu cầu chỉnh sửa trước hoặc sau cọc, hủy sau cọc, nhắn tin) và **"Giả lập thời gian"** (tua nhanh để thử hết hạn, hoàn thành) **chỉ có khi dùng dữ liệu giả**, không nằm trong hợp đồng.
+`frontend/src/mocks/vendorOrders.ts` mô phỏng đúng các quy tắc trên (tính tiền, hạn cọc, hết hạn, tự hoàn thành, hoa hồng, hóa đơn). Nút **"Giả lập khách"** (đặt cọc, yêu cầu chỉnh sửa trước cọc, nhắn tin) và **"Giả lập thời gian"** (tua nhanh để thử hết hạn, hoàn thành) **chỉ có khi dùng dữ liệu giả**, không nằm trong hợp đồng.
 
 ## Cần chốt (phía NCC)
 

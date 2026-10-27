@@ -19,6 +19,9 @@
 9. **Làm tròn tiền cọc đến 100.000đ:** cần làm đúng quy tắc (tạm làm tròn gần nhất, xem mục "Chưa chốt" của CHOT); hiện `deposit_amount` chưa được xác nhận có làm tròn.
 10. **Gửi lại đơn `Pending`/`NeedRevision`** phải đặt lại `DepositDueDate` = +1 ngày và thêm tin `Order` mới (hiện ghi đè và ghi thay đổi vào tin hội thoại).
 11. Thanh toán cọc VNPay đang **giả lập** (`POST /payments` ghi nhận ngay). Cần tích hợp VNPay thật theo CSDL mục 9.6.
+12. **Hủy đơn đổi sang NCC hủy** (nhóm đã quyết hai giai đoạn): thêm `POST /vendors/me/orders/:id/cancel` body `{ reason: CUSTOMER_REQUEST | VENDOR_UNABLE, note? }`. Chỉ khi `Deposited` và hôm nay (giờ VN) < `EventDate`; lỗi `422 ORDER_NOT_CANCELLABLE`. Ghi `CancelledDate`, `CancelReason`, thêm tin hệ thống "NCC đã hủy đơn {mã} · Lý do: …", không tạo hoa hồng. (Endpoint `POST …/cancel` cũ của NCC cho `Draft/Pending/NeedRevision` cần bỏ như mục 7.)
+13. **CSDL cần thêm `Orders.CancelReason`** (CHECK: `CUSTOMER_REQUEST`, `VENDOR_UNABLE`), và nên có `Orders.CancelNote` (TEXT, tùy chọn). Sửa `database.md` mục 9.5: luồng "Deposited → Khách hủy → Cancelled" thành "NCC hủy (trước EventDate)"; trạng thái `Cancelled` "Khách hủy sau khi đã cọc, mất cọc" thành "NCC hủy sau khi đã cọc (khách mất cọc hoặc NCC hoàn cọc ngoài hệ thống)"; mục 9.8 "Không tính hoa hồng" giữ nguyên.
+14. **Yêu cầu chỉnh sửa sau cọc của khách bỏ.** `OrderRevisions` loại `AfterDeposit` do **NCC tạo** khi Chỉnh sửa (`PATCH /vendors/me/orders/:id` nhận thêm `changeNote` bắt buộc, lưu vào `RequestNote`), trạng thái `Applied` luôn. Sửa `database.md` mục 9.5 ("Sau cọc: đơn vẫn ở Deposited, yêu cầu của khách ghi OrderRevisions Requested") và đoạn tương ứng ở mục 9.5 dưới bảng trạng thái.
 
 ### Tin nhắn (`chat`) — hợp đồng: [chat.md](chat.md) phần NCC
 
@@ -48,6 +51,12 @@
 2. "Xóa" gói theo CSDL thực chất là `Hidden`; hiện có `DELETE` xóa hẳn bản nháp.
 
 ### Chung
+
+- **Giới hạn 100 đơn ở FE:** Tổng quan và 4 thẻ số liệu trang Đơn hàng đang tự tính từ tối đa 100 đơn mới nhất (trang lớn nhất API cho phép), sẽ thiếu số khi NCC có hơn 100 đơn (đơn cũ đã cọc chưa hoàn tất có thể rơi khỏi danh sách). Cần **endpoint tổng hợp** `GET /vendors/me/orders/summary` (chi tiết ở [orders.md](orders.md), mục "Việc backend cần thêm cho trang Quản lý đơn hàng"). FE chưa sửa việc này.
+- Danh sách đơn cần thêm bộ lọc `depositFrom`, `depositTo` (ngày cọc) cho thẻ "Đặt cọc trong tháng".
+- **Tiền cọc:** làm tròn gần nhất đến 100.000đ, **tối thiểu 100.000đ**, và chặn Gửi đơn khi tiền cọc ≥ tổng đơn ("Tổng đơn quá nhỏ để đặt cọc", `400 VALIDATION_ERROR` `details.deposit`). Hiện backend chưa có (xem [orders.md](orders.md) mục Quy tắc nghiệp vụ).
+- **Ngày thực hiện:** Gửi đơn, Tạo lại đơn, Chỉnh sửa sau cọc phải từ hôm nay trở đi (giờ VN), nếu không `422 EVENT_DATE_IN_PAST`; giữ nguyên ngày đang có thì không kiểm; Lưu nháp không chặn.
+- **Tự hoàn thành:** job hằng ngày phải ghi `CompletedDate` = cuối ngày `EventDate` + 7 (giờ VN) chứ không phải lúc job chạy, để hoa hồng vào đúng bảng kê tháng.
 
 - Chưa có API đọc `Notifications` cho NCC (`notifications.md` còn trống). Chuông thông báo để sau.
 
