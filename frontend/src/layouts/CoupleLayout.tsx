@@ -9,7 +9,7 @@ import { compareStore } from '@/features/compare/store'
 import { ChatPanel } from '@/features/chat/components/ChatPanel'
 import { useUnreadMessages } from '@/features/chat/hooks'
 import { useFavorites } from '@/features/favorites/hooks'
-import { WeddingSetupDialog } from '@/features/weddings/components/WeddingDialogs'
+import { previewWeddingSetup, WeddingSetupDialog } from '@/features/weddings/components/WeddingDialogs'
 import { usePlan } from '@/features/weddings/hooks'
 import { ChatPanelResume, ReplacePlanDialog } from '@/features/weddings/planActions'
 import { cn } from '@/lib/utils'
@@ -84,14 +84,19 @@ function Header() {
   // Trang Dịch vụ cưới: lúc còn ở đầu trang, header nằm trên dải ảnh (trong suốt, chữ trắng); cuộn qua dải ảnh thì về header sáng
   const onPhotoPage = pathname === paths.services
   const [atTop, setAtTop] = useState(true)
+  const [pastTop, setPastTop] = useState(false)
   useEffect(() => {
-    if (!onPhotoPage) return
-    const update = () => setAtTop(window.scrollY < 300)
+    const update = () => {
+      setAtTop(window.scrollY < 300)
+      setPastTop(window.scrollY > 8)
+    }
     update()
     window.addEventListener('scroll', update, { passive: true })
     return () => window.removeEventListener('scroll', update)
-  }, [onPhotoPage])
+  }, [])
   const onPhoto = onPhotoPage && atTop
+  // Đã cuộn khỏi đầu trang: viền vàng + bóng đậm để header tách khỏi các thẻ cùng màu kem bên dưới
+  const scrolled = !onPhoto && pastTop
 
   // "Dịch vụ cưới" sáng cả khi đang xem chi tiết dịch vụ
   const isServices = pathname === paths.services || pathname.startsWith('/services/')
@@ -120,7 +125,13 @@ function Header() {
   return (
     // Thanh dính cách đỉnh 12px, kính mờ: nội dung cuộn qua bị làm mờ hẳn
     <header className={cn('sticky top-3 z-30 px-3', onPhoto && 'header-on-photo')}>
-      <div className={cn('mx-auto max-w-content rounded-3xl border border-line bg-header backdrop-blur-[14px] transition-colors duration-300', !onPhoto && 'shadow-sm')}>
+      <div
+        className={cn(
+          'mx-auto max-w-content rounded-3xl border border-line bg-header backdrop-blur-[14px] transition-[background-color,border-color,box-shadow] duration-300',
+          !onPhoto && 'shadow-header',
+          scrolled && 'border-gold-500/45 shadow-[0_12px_32px_rgb(var(--shadow-rgb)/0.2)]',
+        )}
+      >
         <div className="flex items-center gap-4 px-3.5 py-2">
           <Brand />
 
@@ -229,6 +240,11 @@ export function CoupleLayout() {
   const isChat = useMatch(paths.chat) !== null
   // Chi tiết dịch vụ trên điện thoại (< 900px) có thanh nhắn tin cố định dưới đáy: ẩn nút nổi để không đè lên
   const isServiceDetail = useMatch('/services/:serviceId') !== null
+  // Dev: thêm ?setup-wedding vào URL để mở hộp "Thiết lập thông tin đám cưới" mà làm giao diện
+  const { search } = useLocation()
+  useEffect(() => {
+    if (import.meta.env.DEV && new URLSearchParams(search).has('setup-wedding')) previewWeddingSetup()
+  }, [search])
 
   return (
     <div className="flex min-h-dvh flex-col">

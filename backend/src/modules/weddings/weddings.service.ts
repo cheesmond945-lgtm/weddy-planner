@@ -11,6 +11,8 @@ const fail = (code: string, message: string, status: number, details?: unknown):
 export type PlanStatus = 'PLANNED' | 'DISCUSSING' | 'AWAITING_DEPOSIT' | 'CONFIRMED';
 
 export interface WeddingInputBody {
+  groomName?: string;
+  brideName?: string;
   date?: string;
   location?: string;
   guestCount?: number | null;
@@ -18,6 +20,11 @@ export interface WeddingInputBody {
   styles?: string[];
   categorySlugs?: string[];
 }
+
+/** NCC chỉ có ở Hà Nội nên form không hỏi khu vực; vẫn lưu vào city để gợi ý AI lọc theo khu vực. */
+const DEFAULT_CITY = 'Hà Nội';
+/** Tên cô dâu do bản cũ tự điền khi tạo đám cưới (lúc form chưa hỏi tên); trả về rỗng để form bắt nhập lại. */
+const NAME_PLACEHOLDER = '(chưa cập nhật)';
 
 const todayVN = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
 
@@ -52,6 +59,8 @@ export class WeddingsService {
     const { slugById } = await this.categoryMaps();
     return {
       id: w.id,
+      groomName: w.groom_name === NAME_PLACEHOLDER ? '' : w.groom_name,
+      brideName: w.bride_name === NAME_PLACEHOLDER ? '' : w.bride_name,
       date: ymd(w.wedding_date),
       location: w.city,
       guestCount: w.guest_count,
@@ -68,12 +77,16 @@ export class WeddingsService {
 
   async saveMine(userId: string, body: WeddingInputBody) {
     const errors: Record<string, string> = {};
+    // Tên cô dâu, chú rể không bắt buộc; bỏ trống thì lưu chuỗi rỗng (cột NOT NULL)
+    const groomName = typeof body.groomName === 'string' ? body.groomName.trim() : '';
+    if (groomName.length > 100) errors.groomName = 'Tối đa 100 ký tự.';
+    const brideName = typeof body.brideName === 'string' ? body.brideName.trim() : '';
+    if (brideName.length > 100) errors.brideName = 'Tối đa 100 ký tự.';
     const date = typeof body.date === 'string' ? body.date : '';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) errors.date = 'Chọn ngày tổ chức.';
     else if (date <= todayVN()) errors.date = 'Ngày tổ chức phải sau hôm nay.';
-    const location = body.location?.trim() ?? '';
-    if (!location) errors.location = 'Chọn khu vực.';
-    else if (location.length > 100) errors.location = 'Tối đa 100 ký tự.';
+    const location = body.location?.trim() || DEFAULT_CITY;
+    if (location.length > 100) errors.location = 'Tối đa 100 ký tự.';
     const budget = Number(body.budget);
     if (!Number.isInteger(budget) || budget <= 0) errors.budget = 'Ngân sách phải là số nguyên dương.';
     const guest = body.guestCount === null || body.guestCount === undefined ? null : Number(body.guestCount);
@@ -85,18 +98,18 @@ export class WeddingsService {
 
     const { idBySlug } = await this.categoryMaps();
     const slugs = [...new Set(body.categorySlugs ?? [])];
-    if (slugs.some((s) => !idBySlug.has(s))) errors.categorySlugs = 'Hạng mục không hợp lệ.';
+    if (!slugs.length) errors.categorySlugs = 'Vui lòng chọn ít nhất 1 dịch vụ';
+    else if (slugs.some((s) => !idBySlug.has(s))) errors.categorySlugs = 'Hạng mục không hợp lệ.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin đám cưới chưa hợp lệ.', 400, errors);
 
     const existing = await this.prisma.weddings.findUnique({ where: { user_id: userId } });
-    const data = { wedding_date: new Date(date), city: location, guest_count: guest!, budget, style: style || null, updated_date: new Date() };
+    const data = { groom_name: groomName, bride_name: brideName, wedding_date: new Date(date), city: location, guest_count: guest!, budget, style: style || null, updated_date: new Date() };
     let weddingId: string;
     if (existing) {
       weddingId = existing.id;
       await this.prisma.weddings.update({ where: { id: weddingId }, data });
     } else {
-      const user = await this.prisma.users.findUnique({ where: { id: userId }, select: { full_name: true } });
-      const created = await this.prisma.weddings.create({ data: { ...data, user_id: userId, groom_name: user?.full_name ?? '', bride_name: '(chưa cập nhật)' } });
+      const created = await this.prisma.weddings.create({ data: { ...data, user_id: userId } });
       weddingId = created.id;
     }
     await this.prisma.$transaction([

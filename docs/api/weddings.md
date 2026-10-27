@@ -15,6 +15,8 @@ Role cho mọi endpoint: **COUPLE**. Mỗi cặp đôi có **một** đám cư�
 ```json
 {
   "id": "wd-1",
+  "groomName": "Nguyễn Văn An",
+  "brideName": "Trần Thị Bình",
   "date": "2027-02-15",
   "location": "Hà Nội",
   "guestCount": 300,
@@ -27,11 +29,12 @@ Role cho mọi endpoint: **COUPLE**. Mỗi cặp đôi có **một** đám cư�
 | Trường | Quy tắc |
 |---|---|
 | `date` | Ngày, bắt buộc, sau hôm nay |
-| `location` | Bắt buộc, một giá trị trong `GET /services/locations` |
+| `groomName`, `brideName` | Không bắt buộc (có thể là chuỗi rỗng), tối đa 100 ký tự |
+| `location` | Không bắt buộc, bỏ trống thì BE gán `"Hà Nội"` (NCC chỉ có ở Hà Nội nên form không hỏi). Vẫn trả về để gợi ý AI lọc theo khu vực |
 | `guestCount` | Số nguyên ≥ 1 hoặc `null` (không bắt buộc) |
 | `budget` | Đồng, bắt buộc, > 0 |
 | `styles` | Mảng, giá trị trong `GET /services/styles`, có thể rỗng |
-| `categorySlugs` | Hạng mục muốn dùng, `slug` trong `GET /categories`, có thể rỗng |
+| `categorySlugs` | Hạng mục muốn dùng, `slug` trong `GET /categories`, ít nhất 1 |
 
 ### GET /weddings/me
 Response 200: `{ "data": Wedding }`, hoặc `{ "data": null }` khi chưa thiết lập (FE dựa vào đây để mở hộp thiết lập sau lần đăng nhập đầu).

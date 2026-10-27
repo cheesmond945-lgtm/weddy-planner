@@ -44,7 +44,9 @@ export interface ServicePackage {
   imageUrl?: string | null
   /** Thẻ phong cách của gói (Hiện đại, Pha lê...) */
   tags?: string[]
-  /** Đơn vị tính giá: "gói" (mặc định), "mâm"... */
+  /** Số bàn tối thiểu phải đặt (nhà hàng), null khi gói không ghi */
+  minTables?: number | null
+  /** Đơn vị tính giá: "gói" (mặc định), "bàn"... */
   unit?: string
   /** Nhãn ưu đãi trên ảnh gói (CSDL chưa có, để sẵn cho sau) */
   promotion?: string | null

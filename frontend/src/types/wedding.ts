@@ -7,8 +7,11 @@ import type { Order } from './order'
 
 export interface Wedding {
   id: string
+  groomName: string
+  brideName: string
   /** Ngày tổ chức, "YYYY-MM-DD" */
   date: string
+  /** Khu vực; NCC chỉ có ở Hà Nội nên form không hỏi, BE gán mặc định "Hà Nội" */
   location: string
   /** Sức chứa dự kiến (khách) */
   guestCount: number | null
@@ -19,7 +22,7 @@ export interface Wedding {
   categorySlugs: string[]
 }
 
-export type WeddingInput = Omit<Wedding, 'id'>
+export type WeddingInput = Omit<Wedding, 'id' | 'location'>
 
 // ---- Timeline (4.2, 4.4) ----
 

@@ -210,6 +210,11 @@ function PackageInfo({ pkg }: { pkg: ServicePackage }) {
         <span className="text-2xl font-semibold text-gold-700">{formatMoney(pkg.price)}</span>
         <span className="text-[13px] text-ink-2">/ {pkg.unit ?? 'gói'}</span>
       </p>
+      {!!pkg.minTables && (
+        <p className="mt-1.5 text-sm text-ink-2">
+          Đặt tối thiểu <b className="font-semibold text-ink">{pkg.minTables} bàn</b>
+        </p>
+      )}
       {description && <p className="mt-4 text-[15px] leading-[1.7] text-ink-2">{description}</p>}
       {!!pkg.includes?.length && (
         <>

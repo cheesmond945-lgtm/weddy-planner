@@ -235,10 +235,10 @@ export const mockPlanning = {
   saveWedding: (input: WeddingInput): Wedding =>
     write((data) => {
       if (!input.date || parseDate(input.date) <= today()) throw new ApiError(400, 'VALIDATION_ERROR', 'Ngày tổ chức phải sau hôm nay.')
-      if (!input.location) throw new ApiError(400, 'VALIDATION_ERROR', 'Vui lòng chọn địa điểm tổ chức.')
       if (!(input.budget > 0)) throw new ApiError(400, 'VALIDATION_ERROR', 'Vui lòng nhập tổng ngân sách lớn hơn 0.')
+      if (!input.categorySlugs.length) throw new ApiError(400, 'VALIDATION_ERROR', 'Vui lòng chọn ít nhất 1 dịch vụ')
       const first = !data.wedding
-      data.wedding = { id: data.wedding?.id ?? nextId(data, 'wd'), ...input, startDate: data.wedding?.startDate ?? toISODate(today()) }
+      data.wedding = { id: data.wedding?.id ?? nextId(data, 'wd'), ...input, location: 'Hà Nội', startDate: data.wedding?.startDate ?? toISODate(today()) }
       if (first) {
         data.tasks = DEFAULT_TASKS.map(([title, f, done], i) => ({ id: i + 1, title, f, done, custom: false }))
         data.nextTaskId = DEFAULT_TASKS.length + 1

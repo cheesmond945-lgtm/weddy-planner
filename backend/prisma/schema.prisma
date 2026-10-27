@@ -330,6 +330,7 @@ model service_packages {
   price                 Decimal                 @db.Decimal(18, 2)
   capacity              Int?
   status                String                  @default("Draft") @db.VarChar(20)
+  min_tables            Int?
   created_date          DateTime                @default(now()) @db.Timestamptz(6)
   updated_date          DateTime                @default(now()) @db.Timestamptz(6)
   package_albums        package_albums[]

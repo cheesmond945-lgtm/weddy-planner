@@ -14,7 +14,7 @@
   --muted: var(--ink-2);
   --line: #e9dfcb;
   --line-soft: #f0e7d6;
-  --header-bg: rgba(255, 253, 248, 0.85);
+  --header-bg: rgba(255, 253, 248, 0.94);
   /* Nền mờ sau modal (.mb trong prototype) */
   --overlay: rgba(10, 18, 19, 0.55);
 
