@@ -14,10 +14,10 @@ interface OtpStepProps {
 }
 
 /** ngoc.tran@example.com -> ng***@example.com */
-const maskEmail = (e: string) => e.replace(/^(.{1,2})[^@]*(@.*)$/, '$1***$2')
+export const maskEmail = (e: string) => e.replace(/^(.{1,2})[^@]*(@.*)$/, '$1***$2')
 
 /** Đếm ngược theo giây, về 0 thì dừng. */
-function useCountdown(seconds: number, key: unknown) {
+export function useCountdown(seconds: number, key: unknown) {
   const [left, setLeft] = useState(seconds)
   useEffect(() => {
     setLeft(seconds)

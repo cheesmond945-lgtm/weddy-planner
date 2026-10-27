@@ -5,6 +5,7 @@ import { CoupleLayout } from '@/layouts/CoupleLayout'
 import { VendorLayout } from '@/layouts/VendorLayout'
 import ForbiddenPage from '@/pages/ForbiddenPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+import AdminAccountPage from '@/pages/admin/AdminAccountPage'
 import AdminCatalogPage from '@/pages/admin/AdminCatalogPage'
 import AdminCommissionsPage from '@/pages/admin/AdminCommissionsPage'
 import AdminConsultationRequestsPage from '@/pages/admin/AdminConsultationRequestsPage'
@@ -114,6 +115,7 @@ export const router = createBrowserRouter([
           { path: '/admin/payments/:id', element: <AdminPaymentDetailPage /> },
           { path: paths.admin.commissions, element: <AdminCommissionsPage /> },
           { path: paths.admin.users, element: <AdminUsersPage /> },
+          { path: paths.admin.account, element: <AdminAccountPage /> },
         ],
       },
     ],

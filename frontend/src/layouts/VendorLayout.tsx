@@ -192,7 +192,7 @@ function Header({ onOpenMenu, onLogout }: { onOpenMenu: () => void; onLogout: ()
   const detail = current && current.to === paths.vendor.catalog && pathname !== current.to ? (pathname === paths.vendor.packageNew ? 'Thêm gói dịch vụ' : 'Chi tiết gói dịch vụ') : null
 
   return (
-    <header className="sticky top-0 z-30 flex h-[62px] items-center gap-3.5 bg-header px-4 backdrop-blur-[10px] min-[901px]:px-7">
+    <header className="sticky top-0 z-30 flex h-[62px] items-center gap-3.5 border-b border-line bg-header px-4 backdrop-blur-[10px] min-[901px]:px-7">
       <button
         type="button"
         onClick={onOpenMenu}

@@ -59,6 +59,11 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
   }
   const needCategory = !user && v.role === 'VENDOR'
   const locked = !!preset?.locked
+  // Sửa NCC: đổi được email (NCC mất email cũ); khách hàng, quản trị viên tự đổi trong tài khoản của mình
+  const emailEditable = !user || user.role === 'VENDOR'
+  const emailChanged = !!user && v.email.trim().toLowerCase() !== user.email.toLowerCase()
+  const [verified, setVerified] = useState(false)
+  const [verifyError, setVerifyError] = useState('')
 
   function submit() {
     const e: Errors = {}
@@ -68,7 +73,8 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
     if (!v.role) e.role = 'Chọn vai trò người dùng.'
     if (needCategory && !v.categoryId) e.categoryId = 'Chọn lĩnh vực cung cấp.'
     setErrors(e)
-    if (Object.keys(e).length) return
+    setVerifyError(emailChanged && !verified ? 'Xác nhận đã xác minh nhà cung cấp qua số điện thoại trước khi đổi email.' : '')
+    if (Object.keys(e).length || (emailChanged && !verified)) return
     setFormError('')
     const body: SaveUserBody = {
       username: v.username.trim(),
@@ -77,6 +83,7 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
       role: v.role as Role,
       categoryId: needCategory ? v.categoryId : undefined,
       consultationId: preset?.consultationId,
+      identityVerified: emailChanged ? verified : undefined,
     }
     save.mutate(body, {
       onSuccess: (u) => {
@@ -87,8 +94,11 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
       },
       onError: (err) => {
         const code = err instanceof ApiError ? err.code : ''
+        const details = err instanceof ApiError && err.details && typeof err.details === 'object' ? (err.details as Errors & { identityVerified?: string }) : {}
         if (code === 'EMAIL_ALREADY_EXISTS') setErrors({ email: err.message })
         else if (code === 'PHONE_ALREADY_EXISTS') setErrors({ phone: err.message })
+        else if (details.identityVerified) setVerifyError(details.identityVerified)
+        else if (Object.keys(details).length) setErrors(details)
         else setFormError(err.message)
       },
     })
@@ -101,7 +111,7 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
         open
         size="md"
         onRequestClose={onClose}
-        title="Đã tạo tài khoản"
+        title={user ? 'Đã đổi email đăng nhập' : 'Đã tạo tài khoản'}
         subtitle="Chưa gửi được email nên mật khẩu hiện ở đây, chỉ hiện một lần. Hãy gửi cho người dùng, họ có thể đổi mật khẩu sau khi đăng nhập."
         footer={<Button onClick={onClose}>Đóng</Button>}
       >
@@ -161,8 +171,8 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
         <Field label={<>Tên đăng nhập <b className="text-destructive">*</b></>} error={errors.username}>
           <Input className={controlClass} placeholder="Tên đăng nhập" aria-invalid={errors.username ? true : undefined} disabled={locked} value={v.username} onChange={(e) => set({ username: e.target.value })} />
         </Field>
-        <Field label={<>Email <b className="text-destructive">*</b></>} error={errors.email} hint={user ? 'Email là thông tin đăng nhập nên không sửa được.' : undefined}>
-          <Input className={controlClass} type="email" placeholder="Email" aria-invalid={errors.email ? true : undefined} disabled={!!user} value={v.email} onChange={(e) => set({ email: e.target.value })} />
+        <Field label={<>Email <b className="text-destructive">*</b></>} error={errors.email} hint={user && !emailEditable ? 'Email là thông tin đăng nhập, người dùng tự đổi trong tài khoản của mình.' : undefined}>
+          <Input className={controlClass} type="email" placeholder="Email" aria-invalid={errors.email ? true : undefined} disabled={!emailEditable} value={v.email} onChange={(e) => set({ email: e.target.value })} />
         </Field>
         <Field label={<>Số điện thoại <b className="text-destructive">*</b></>} error={errors.phone}>
           <Input className={controlClass} type="tel" inputMode="numeric" placeholder="Số điện thoại" aria-invalid={errors.phone ? true : undefined} value={v.phone} onChange={(e) => set({ phone: e.target.value })} />
@@ -172,7 +182,8 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
             <option value="" disabled>
               Vai trò người dùng
             </option>
-            {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
+            {/* Tài khoản cặp đôi do khách tự đăng ký, Admin không tạo */}
+            {(Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== 'COUPLE' || r === v.role).map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABEL[r]}
               </option>
@@ -192,6 +203,31 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
               ))}
             </select>
           </Field>
+        )}
+        {/* Đổi email NCC: cảnh báo hệ quả và bắt xác nhận đã xác minh qua SĐT */}
+        {emailChanged && (
+          <div className="col-span-full grid gap-3 rounded-md border border-gold/30 bg-gold-soft px-4 py-3 text-[13px] text-gold-ink">
+            <p>
+              Đổi email đăng nhập từ <b className="break-all">{user?.email}</b> sang <b className="break-all">{v.email.trim()}</b>: mật khẩu cũ sẽ hết hiệu lực, hệ thống gửi mật khẩu mới tới email mới và
+              gửi thông báo về email cũ. Thao tác được ghi lại kèm tài khoản quản trị của bạn.
+            </p>
+            <label className="flex items-start gap-2.5 text-[13.5px] text-ink">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 flex-none accent-gold"
+                checked={verified}
+                onChange={(e) => (setVerified(e.target.checked), setVerifyError(''))}
+              />
+              <span>
+                Tôi đã gọi tới số điện thoại đăng ký <b>{user?.phone ?? '—'}</b> và xác minh đúng là nhà cung cấp yêu cầu đổi email.
+              </span>
+            </label>
+            {verifyError && (
+              <p role="alert" className="text-destructive">
+                {verifyError}
+              </p>
+            )}
+          </div>
         )}
       </fieldset>
     </PanelDialog>

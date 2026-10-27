@@ -1,6 +1,6 @@
 import { Check } from 'lucide-react'
-import { formatMoney } from '@/lib/format'
 import type { ServiceAlbum, ServiceDetail } from '@/types/catalog'
+import { formatUnitPrice, isTablePriced, tableNote } from '../price'
 import { DetailCard } from './DetailCard'
 
 /** Tab "Thông tin chung": giới thiệu, gói dịch vụ, bộ sưu tập (2.2). */
@@ -29,7 +29,15 @@ export function ServiceInfoPanel({ service, onOpenGallery }: { service: ServiceD
                 <b className="font-semibold">{p.name}</b>
                 <div className="text-[13px] text-muted-foreground">{p.description}</div>
               </div>
-              <b className="shrink-0 font-semibold">{formatMoney(p.price)}</b>
+              <div className="shrink-0 text-right">
+                <b className="font-semibold whitespace-nowrap">{formatUnitPrice(p.price, service)}</b>
+                {isTablePriced(service) && (
+                  <small className="block text-xs text-muted-foreground">
+                    {tableNote(p.minTables)}
+                    {p.capacity ? ` · tối đa ${p.capacity} khách` : ''}
+                  </small>
+                )}
+              </div>
             </div>
           ))}
         </div>

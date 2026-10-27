@@ -22,7 +22,7 @@ export const hasEditableUpdate = (p: VendorPackage) => p.status === 'PUBLISHED' 
 /** Nội dung NCC đang làm: gói đã đăng có bản cập nhật thì là bản cập nhật, còn lại là chính gói. */
 export function workingCopy(p: VendorPackage): VendorPackage {
   const u = p.status === 'PUBLISHED' ? p.pendingUpdate : null
-  return u ? { ...p, name: u.name, description: u.description, price: u.price, tags: u.tags, capacity: u.capacity, photos: u.photos, coverPublicId: u.coverPublicId } : p
+  return u ? { ...p, name: u.name, description: u.description, price: u.price, tags: u.tags, capacity: u.capacity, minTables: u.minTables ?? null, photos: u.photos, coverPublicId: u.coverPublicId } : p
 }
 
 /** Nhãn phụ cạnh "Đã đăng" khi gói có bản cập nhật. */

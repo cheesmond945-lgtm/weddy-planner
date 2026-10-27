@@ -15,6 +15,7 @@ const ICON: Record<string, LucideIcon> = {
   OrderDeposited: ClipboardList,
   OrderCancelled: ClipboardList,
   OrderCompleted: ClipboardList,
+  OrderAutoCompleteSoon: ClipboardList,
   OrderRevisionRequested: ClipboardList,
 }
 

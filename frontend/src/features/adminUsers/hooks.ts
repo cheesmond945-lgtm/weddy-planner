@@ -29,7 +29,9 @@ export function useSaveUser(id: string | null) {
     mutationFn: (body: SaveUserBody): Promise<AdminUser> => (id ? adminApi.updateUser(id, body) : adminApi.createUser(body)),
     onSuccess: (u) => {
       sync()
-      toast(id ? `Đã cập nhật tài khoản ${u.username}.` : u.emailSent ? `Đã tạo tài khoản ${u.username} và gửi thông tin đăng nhập qua email.` : `Đã tạo tài khoản ${u.username}.`)
+      if (u.emailChanged)
+        toast(u.emailSent ? `Đã cập nhật tài khoản ${u.username} và gửi mật khẩu mới tới ${u.email}.` : `Đã cập nhật tài khoản ${u.username}.`)
+      else toast(id ? `Đã cập nhật tài khoản ${u.username}.` : u.emailSent ? `Đã tạo tài khoản ${u.username} và gửi thông tin đăng nhập qua email.` : `Đã tạo tài khoản ${u.username}.`)
     },
   })
 }

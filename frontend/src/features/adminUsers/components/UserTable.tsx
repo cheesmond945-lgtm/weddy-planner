@@ -49,16 +49,16 @@ export function UserTable({ users, startIndex, onAction }: UserTableProps) {
       </thead>
       <tbody>
         {users.map((u, i) => {
-          const items: RowMenuItem[] = [
-            { label: 'Sửa thông tin', icon: Pencil, onClick: () => onAction(u, 'edit') },
-            ...(u.role === 'ADMIN'
-              ? []
-              : ([
-                  u.status === 'LOCKED' ? { label: 'Mở khóa tài khoản', icon: Unlock, onClick: () => onAction(u, 'unlock') } : { label: 'Khóa tài khoản', icon: Lock, onClick: () => onAction(u, 'lock') },
-                  'separator',
-                  { label: 'Xóa tài khoản', icon: Trash2, danger: true, onClick: () => onAction(u, 'delete') },
-                ] as RowMenuItem[])),
-          ]
+          const edit: RowMenuItem = { label: 'Sửa thông tin', icon: Pencil, onClick: () => onAction(u, 'edit') }
+          const lock: RowMenuItem =
+            u.status === 'LOCKED' ? { label: 'Mở khóa tài khoản', icon: Unlock, onClick: () => onAction(u, 'unlock') } : { label: 'Khóa tài khoản', icon: Lock, onClick: () => onAction(u, 'lock') }
+          // Khách hàng tự đăng ký, tự quản lý thông tin: Admin chỉ khóa / mở khóa, không sửa, không xóa
+          const items: RowMenuItem[] =
+            u.role === 'ADMIN'
+              ? [edit]
+              : u.role === 'COUPLE'
+                ? [lock]
+                : [edit, lock, 'separator', { label: 'Xóa tài khoản', icon: Trash2, danger: true, onClick: () => onAction(u, 'delete') }]
           const st = USER_STATUS[u.status]
           return (
             <tr key={u.id} className="transition-colors last:[&>td]:border-b-0 hover:bg-surface-2">

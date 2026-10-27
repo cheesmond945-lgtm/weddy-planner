@@ -82,7 +82,7 @@ export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSug
             <p className="mt-3">
               Chưa có nhà cung cấp {cat} tại {data.location} trong ngân sách {formatMillions(data.budget)}
               {need ? ' và đủ chỗ' : ''}.
-              {data.cheapest && ` Lựa chọn thấp nhất hiện có là ${data.cheapest.name} (${data.cheapest.location}), từ ${formatMillions(data.cheapest.priceFrom)}.`}
+              {data.cheapest && ` Lựa chọn thấp nhất hiện có là ${data.cheapest.name} (${data.cheapest.location}), từ ${formatMillions(data.cheapest.priceFrom)}${data.cheapest.priceUnit === 'TABLE' ? '/mâm' : ''}.`}
             </p>
             <Button asChild variant="outline" size="sm" className="mt-2.5">
               <Link to={paths.plan}>Điều chỉnh ngân sách hạng mục</Link>

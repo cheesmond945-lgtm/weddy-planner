@@ -15,8 +15,9 @@ import { CommissionsModule } from './modules/commissions/commissions.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ConsultationRequestsModule } from './modules/consultation-requests/consultation-requests.module';
+import { PaymentsGatewayModule } from './modules/payments-gateway/payments-gateway.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, MailModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule],
+  imports: [PrismaModule, StorageModule, MailModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, PaymentsGatewayModule],
 })
 export class AppModule {}

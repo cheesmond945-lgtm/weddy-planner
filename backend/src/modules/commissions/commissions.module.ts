@@ -4,5 +4,5 @@ import { CommissionPaymentsService } from './commission-payments.service';
 import { CommissionRemindersService } from './commission-reminders.service';
 import { CommissionsService } from './commissions.service';
 
-@Module({ controllers: [CommissionsController], providers: [CommissionsService, CommissionRemindersService, CommissionPaymentsService] })
+@Module({ controllers: [CommissionsController], providers: [CommissionsService, CommissionRemindersService, CommissionPaymentsService], exports: [CommissionPaymentsService] })
 export class CommissionsModule {}

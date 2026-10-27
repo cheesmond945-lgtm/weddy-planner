@@ -335,6 +335,8 @@ model service_packages {
   status                String?                 @default("Draft") @db.VarChar(20)
   created_date          DateTime?               @default(now()) @db.Timestamptz(6)
   updated_date          DateTime?               @default(now()) @db.Timestamptz(6)
+  /// Số mâm tối thiểu để được kèm sảnh (Trung tâm tổ chức sự kiện; giá gói là giá mỗi mâm 10 khách, đã gồm sảnh)
+  min_tables            Int?
   package_albums        package_albums[]
   package_tags          package_tags[]
   package_verifications package_verifications[]

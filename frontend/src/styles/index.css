@@ -38,6 +38,12 @@
     outline-offset: 2px;
   }
 
+  /* Edge tự thêm nút xem mật khẩu / xóa ô nhập; ẩn đi vì PasswordInput đã có nút xem riêng */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * {
       animation: none !important;

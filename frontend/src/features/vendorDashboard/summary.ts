@@ -147,7 +147,7 @@ export function todoItems({ orders, conversations, packages, statements, now }: 
       count: 1,
       label: `hoa hồng kỳ ${formatPeriod(s.period)} cần thanh toán`,
       hint: s.isOverdue ? `Quá hạn từ ${formatDate(s.dueDate)}` : `Hạn ${formatDate(s.dueDate)}${days <= 7 ? ` · còn ${days} ngày` : ''}`,
-      href: `${paths.vendor.commissions}?ky=${s.id}&ds=${s.id}`,
+      href: `${paths.vendor.commissions}?ky=${s.id}`,
       urgent: s.isOverdue || days <= 7,
     })
   }

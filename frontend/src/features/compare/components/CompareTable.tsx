@@ -2,7 +2,8 @@ import { Sparkles, Star } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { formatMillions, formatMoney, formatNumber } from '@/lib/format'
+import { formatUnitPrice, isTablePriced, tableNote } from '@/features/catalog/price'
+import { formatMillions, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { ServiceDetail } from '@/types/catalog'
@@ -44,10 +45,11 @@ export function CompareTable({ services, recommendedId, isTie, renderActions }: 
 
   const rows: { label: string; cell: (s: ServiceDetail) => ReactNode }[] = [
     {
-      label: 'Giá từ',
+      label: isTablePriced(services[0]) ? 'Giá mâm từ' : 'Giá từ',
       cell: (s) => (
         <>
-          <b className="font-semibold">{formatMoney(s.priceFrom)}</b>
+          <b className="font-semibold">{formatUnitPrice(s.priceFrom, s)}</b>
+          {isTablePriced(s) && <div className="text-[13px] text-muted-foreground">{tableNote(s.minTables)}</div>}
           {s.priceFrom === minPrice && (
             <>
               <br />
@@ -79,6 +81,7 @@ export function CompareTable({ services, recommendedId, isTie, renderActions }: 
         s.packages.map((p) => (
           <div key={p.id}>
             {p.name}: {formatMillions(p.price)}
+            {isTablePriced(s) && '/mâm'}
           </div>
         )),
     },

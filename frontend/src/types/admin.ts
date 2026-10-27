@@ -157,8 +157,10 @@ export interface AdminUser {
   lastLoginAt: string | null
   /** Chỉ có trong phản hồi tạo tài khoản khi gửi email không được: mật khẩu hệ thống tự sinh, hiện đúng một lần */
   generatedPassword?: string
-  /** Chỉ có trong phản hồi tạo tài khoản: đã gửi thông tin đăng nhập qua email chưa */
+  /** Chỉ có trong phản hồi tạo tài khoản / đổi email NCC: đã gửi thông tin đăng nhập qua email chưa */
   emailSent?: boolean
+  /** Phản hồi sửa NCC: đã đổi email và cấp mật khẩu mới */
+  emailChanged?: boolean
 }
 
 export interface AdminUserStats {
@@ -192,6 +194,8 @@ export interface SaveUserBody {
   categoryId?: string
   /** Tạo từ yêu cầu tư vấn nào (nếu có) */
   consultationId?: string
+  /** Sửa NCC có đổi email: Admin xác nhận đã xác minh danh tính qua SĐT */
+  identityVerified?: boolean
 }
 
 // ---- Duyệt hồ sơ NCC ----
@@ -253,6 +257,8 @@ export interface AdminPackage {
   description: string
   price: number
   capacity: number | null
+  /** Trung tâm sự kiện: số mâm tối thiểu để được kèm sảnh */
+  minTables?: number | null
   tags: string[]
   /** Ảnh theo thứ tự, ảnh đầu là ảnh bìa */
   photos: string[]
@@ -263,7 +269,7 @@ export interface AdminPackage {
   reviewKind: 'INITIAL' | 'UPDATE' | null
   reviewNote: string | null
   /** Bản đang hiển thị với khách khi gói có bản cập nhật đã gửi (các trường trên là bản cập nhật); null nếu không có */
-  published: { name: string; description: string; price: number; capacity: number | null; tags: string[]; photos: string[] } | null
+  published: { name: string; description: string; price: number; capacity: number | null; minTables?: number | null; tags: string[]; photos: string[] } | null
   submittedAt: string | null
   /** Chỉ ở chi tiết: lần gửi trước bị yêu cầu chỉnh sửa (để đối chiếu) */
   lastRevision?: { note: string | null; reviewedAt: string | null } | null

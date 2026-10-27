@@ -43,6 +43,7 @@ export const paths = {
     payment: (id: string) => `/admin/payments/${id}`,
     commissions: '/admin/commissions',
     users: '/admin/users',
+    account: '/admin/account',
   },
 
   forbidden: '/403',

@@ -16,7 +16,7 @@ import type { VendorFile, VendorProfile } from '@/types/vendor'
 import type { VendorPackage } from '@/types/vendorPackage'
 import { canSubmitPackage, isVenue, workingCopy } from '../constants'
 import { usePackageAction, useSavePackage, useSuggestPackageDescription } from '../hooks'
-import { EMPTY_PACKAGE, toFormValues, toRequest, validatePackage, type PackageFormValues } from '../packageForm'
+import { EMPTY_PACKAGE, GUESTS_PER_TABLE, suggestMinTables, toFormValues, toRequest, validatePackage, type PackageFormValues } from '../packageForm'
 import { useListHref } from './PackageHeader'
 import { TagsInput } from './TagsInput'
 
@@ -63,7 +63,7 @@ interface PackageEditorProps {
 
 /**
  * Form gói dịch vụ, hai khung: thông tin gói; hình ảnh dịch vụ (cùng cách trình bày với trang Hồ sơ NCC).
- * Thứ tự: tên gói, giá, tags, sức chứa (trung tâm tổ chức sự kiện), mô tả (có "Tạo với AI"), ảnh.
+ * Thứ tự: tên gói, giá (trung tâm tổ chức sự kiện: giá mỗi mâm), tags, sức chứa và số mâm tối thiểu (trung tâm tổ chức sự kiện), mô tả (có "Tạo với AI"), ảnh.
  * Lưu nháp: cần tên gói và giá. Gửi duyệt: thêm mô tả, ít nhất một ảnh, và hồ sơ đã được duyệt đúng lĩnh vực.
  * Đặt key theo pkg.updatedAt để nạp lại sau khi lưu.
  */
@@ -88,6 +88,10 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
   const off = busy || !!readOnly
   const dirty = JSON.stringify(values) !== JSON.stringify(baseline)
   const errors = checkMode ? validatePackage(values, { mode: checkMode, venue, canSubmit }) : {}
+
+  // Gợi ý số mâm tối thiểu khi đã nhập sức chứa hợp lệ
+  const capacityNum = Number(values.capacity)
+  const suggestedTables = venue && Number.isInteger(capacityNum) && capacityNum >= GUESTS_PER_TABLE ? suggestMinTables(capacityNum) : null
 
   const set = (patch: Partial<PackageFormValues>) => setValues((v) => ({ ...v, ...patch }))
   const input = (invalid?: boolean) => cn(controlClass, off && 'bg-surface-2', invalid && 'border-destructive')
@@ -157,10 +161,14 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
                 error={errors.name}
               />
             </div>
-            <Field label="Giá *" error={errors.price}>
-              <WithUnit unit="đ">
+            <Field
+              label={venue ? 'Giá mỗi mâm *' : 'Giá *'}
+              error={errors.price}
+              hint={venue ? `Mâm ${GUESTS_PER_TABLE} khách, đã gồm sảnh và dịch vụ đi kèm. Khách đặt theo số mâm khi lên đơn.` : undefined}
+            >
+              <WithUnit unit={venue ? 'đ/mâm' : 'đ'}>
                 <MoneyInput
-                  className={cn(input(!!errors.price), 'pr-8 text-right tabular-nums')}
+                  className={cn(input(!!errors.price), venue ? 'pr-16' : 'pr-8', 'text-right tabular-nums')}
                   disabled={off}
                   aria-invalid={errors.price ? true : undefined}
                   value={values.price}
@@ -185,6 +193,39 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
                     aria-invalid={errors.capacity ? true : undefined}
                     value={values.capacity}
                     onChange={(e) => set({ capacity: e.target.value })}
+                  />
+                </WithUnit>
+              </Field>
+            )}
+            {venue && (
+              <Field
+                label="Số mâm tối thiểu"
+                error={errors.minTables}
+                hint={
+                  suggestedTables && String(suggestedTables) !== values.minTables.trim() && !off ? (
+                    <>
+                      Đặt từ số mâm này mới được kèm sảnh.{' '}
+                      <button type="button" onClick={() => set({ minTables: String(suggestedTables) })} className="font-medium text-gold-ink underline underline-offset-2">
+                        Dùng gợi ý {suggestedTables} mâm
+                      </button>
+                    </>
+                  ) : (
+                    'Đặt từ số mâm này mới được kèm sảnh.'
+                  )
+                }
+              >
+                <WithUnit unit="mâm">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    disabled={off}
+                    placeholder={suggestedTables ? `VD: ${suggestedTables}` : 'VD: 20'}
+                    className={cn(input(!!errors.minTables), 'pr-14 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none')}
+                    aria-invalid={errors.minTables ? true : undefined}
+                    value={values.minTables}
+                    onChange={(e) => set({ minTables: e.target.value })}
                   />
                 </WithUnit>
               </Field>

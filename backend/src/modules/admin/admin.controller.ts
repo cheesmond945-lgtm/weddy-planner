@@ -75,9 +75,10 @@ export class AdminController {
     return this.users.create(body ?? {});
   }
 
+  // Sửa NCC có đổi email thì cấp mật khẩu mới gửi tới email mới (cần identityVerified)
   @Patch('users/:id')
-  updateUser(@Param('id') id: string, @Body() body: SaveUserDto) {
-    return this.users.update(id, body ?? {});
+  updateUser(@Req() req: any, @Param('id') id: string, @Body() body: SaveUserDto) {
+    return this.users.update(id, body ?? {}, req.user.sub);
   }
 
   @Post('users/:id/lock')

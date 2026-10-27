@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'node:crypto';
 import { MailService } from '../../integrations/mail/mail.service';
@@ -9,11 +9,23 @@ const ROLE_OUT: Record<string, string> = { Couple: 'COUPLE', Vendor: 'VENDOR', A
 const ROLE_IN: Record<string, string> = { COUPLE: 'Couple', VENDOR: 'Vendor', ADMIN: 'Admin' };
 const PHONE_RE = /^0\d{9}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// Bỏ các ký tự dễ nhầm (0/O, 1/l/I) vì người dùng đọc mật khẩu từ email rồi gõ lại
-const PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+// Bỏ các ký tự dễ nhầm (0/O, 1/l/I) vì người dùng đọc mật khẩu từ email rồi gõ lại; ký tự đặc biệt chọn loại dễ gõ, không lẫn với dấu câu
+const PASSWORD_SETS = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnpqrstuvwxyz', '23456789', '!@#$%&*?'];
+const PASSWORD_CHARS = PASSWORD_SETS.join('');
+const pick = (s: string) => s[randomInt(s.length)];
 
-/** Mật khẩu ngẫu nhiên 12 ký tự, sinh bằng CSPRNG. */
-const generatePassword = () => Array.from({ length: 12 }, () => PASSWORD_CHARS[randomInt(PASSWORD_CHARS.length)]).join('');
+/**
+ * Mật khẩu ngẫu nhiên 12 ký tự, sinh bằng CSPRNG, đạt quy tắc mật khẩu (auth/password-policy.ts):
+ * luôn có ít nhất 1 chữ hoa, 1 chữ thường, 1 chữ số, 1 ký tự đặc biệt, rồi xáo trộn vị trí (Fisher-Yates).
+ */
+const generatePassword = () => {
+  const chars = [...PASSWORD_SETS.map(pick), ...Array.from({ length: 12 - PASSWORD_SETS.length }, () => pick(PASSWORD_CHARS))];
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+};
 
 export interface UserQueryDto {
   q?: string;
@@ -30,6 +42,8 @@ export interface SaveUserDto {
   role?: string;
   categoryId?: string;
   consultationId?: string;
+  /** Sửa NCC có đổi email: Admin xác nhận đã xác minh danh tính qua SĐT */
+  identityVerified?: boolean;
 }
 
 type UserRow = {
@@ -54,6 +68,8 @@ const hasProfile = (u: Pick<UserRow, 'vendor_profiles'>) => {
 /** Quản lý người dùng (bảng users, và vendor_profiles khi tạo tài khoản NCC). */
 @Injectable()
 export class AdminUsersService {
+  private readonly log = new Logger(AdminUsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
@@ -114,6 +130,8 @@ export class AdminUsersService {
     if (!EMAIL_RE.test(email)) errors.email = 'Email chưa hợp lệ.';
     if (!PHONE_RE.test(phone)) errors.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.';
     if (!b.role || !(b.role in ROLE_IN)) errors.role = 'Chọn vai trò người dùng.';
+    // Tài khoản cặp đôi do khách tự đăng ký, Admin không tạo
+    else if (creating && b.role === 'COUPLE') errors.role = 'Tài khoản cặp đôi do khách tự đăng ký, quản trị viên không tạo được.';
     if (creating && b.role === 'VENDOR' && !b.categoryId) errors.categoryId = 'Chọn lĩnh vực cung cấp.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin tài khoản chưa hợp lệ.', 400, errors);
 
@@ -172,21 +190,38 @@ export class AdminUsersService {
       return u;
     });
     // Gửi mật khẩu qua email cho người dùng; chỉ khi gửi không được mới trả về cho Admin để chuyển tay
-    const emailSent = await this.mail.sendAccountCreated(v.email, generatedPassword);
+    const emailSent = await this.mail.sendAccountCredentials(v.email, generatedPassword, 'created');
     const dto = (await this.one(created.id)).dto;
     return emailSent ? { ...dto, emailSent } : { ...dto, emailSent, generatedPassword };
   }
 
-  async update(id: string, b: SaveUserDto) {
+  /**
+   * Sửa tài khoản. Email chỉ đổi được với NCC (hỗ trợ NCC mất quyền dùng email cũ: bị hack, bỏ hộp thư) và Admin phải xác nhận
+   * đã xác minh danh tính qua SĐT (identityVerified). Đổi email thì cấp luôn mật khẩu mới gửi tới email mới, để người đang giữ
+   * email cũ hay mật khẩu cũ không dùng được nữa; báo về email cũ và ghi log Admin nào đổi.
+   * Khách hàng, quản trị viên tự đổi email trong tài khoản của mình (mật khẩu + OTP).
+   */
+  async update(id: string, b: SaveUserDto, actorId: string) {
     const { row } = await this.one(id);
-    // Email là thông tin đăng nhập nên không cho sửa: luôn giữ email hiện tại, bỏ qua giá trị client gửi lên
-    const v = await this.validate({ ...b, email: row.email ?? undefined }, id, false);
+    // Khách hàng tự đăng ký, tự quản lý thông tin: Admin không sửa (tránh đổi email/SĐT để chiếm tài khoản)
+    if (row.role === 'Couple') return fail('CANNOT_EDIT_COUPLE', 'Khách hàng tự quản lý thông tin tài khoản, quản trị viên không sửa được.', 409);
+    const changingEmail = row.role === 'Vendor' && !!b.email && b.email.trim().toLowerCase() !== row.email;
+    const v = await this.validate({ ...b, email: changingEmail ? b.email : (row.email ?? undefined) }, id, false);
     if (ROLE_IN[b.role!] !== row.role) return fail('VALIDATION_ERROR', 'Không đổi vai trò của tài khoản đã tạo.', 400, { role: 'Không đổi được vai trò của tài khoản đã tạo.' });
+    if (changingEmail && !b.identityVerified) return fail('VALIDATION_ERROR', 'Thông tin chưa hợp lệ.', 400, { identityVerified: 'Xác nhận đã xác minh nhà cung cấp qua số điện thoại trước khi đổi email.' });
+
+    const generatedPassword = changingEmail ? generatePassword() : null;
     await this.prisma.users.update({
       where: { id },
-      data: { username: v.username, email: v.email, phone_number: v.phone },
+      data: { username: v.username, email: v.email, phone_number: v.phone, ...(generatedPassword && { password_hash: await bcrypt.hash(generatedPassword, 10) }) },
     });
-    return (await this.one(id)).dto;
+    const dto = (await this.one(id)).dto;
+    if (!generatedPassword) return dto;
+
+    this.log.log(`Admin ${actorId} đổi email đăng nhập của NCC ${id}: ${row.email ?? '(trống)'} -> ${v.email}, cấp mật khẩu mới`);
+    if (row.email) void this.mail.sendEmailChanged(row.email, v.email, true);
+    const emailSent = await this.mail.sendAccountCredentials(v.email, generatedPassword, 'emailChanged');
+    return emailSent ? { ...dto, emailChanged: true, emailSent } : { ...dto, emailChanged: true, emailSent, generatedPassword };
   }
 
   async setStatus(id: string, lock: boolean) {
@@ -199,6 +234,8 @@ export class AdminUsersService {
   async remove(id: string, actorId: string) {
     const { row } = await this.one(id);
     if (row.role === 'Admin' || id === actorId) return fail('CANNOT_DELETE_ADMIN', 'Không thể xóa tài khoản quản trị viên.', 409);
+    // Khách hàng có lịch sử đơn, thanh toán, tin nhắn: chỉ khóa, không xóa
+    if (row.role === 'Couple') return fail('CANNOT_DELETE_COUPLE', 'Không thể xóa tài khoản khách hàng. Hãy khóa tài khoản thay vì xóa.', 409);
     // Chỉ xóa được tài khoản chưa từng đăng nhập và chưa có hồ sơ. Không bao giờ xóa ảnh hồ sơ, ảnh gói dịch vụ.
     if (row.last_login_at) return fail('USER_HAS_LOGGED_IN', 'Tài khoản đã từng đăng nhập nên không thể xóa. Hãy khóa tài khoản thay vì xóa.', 409);
     if (hasProfile(row)) return fail('USER_HAS_PROFILE', 'Nhà cung cấp đã tạo hồ sơ nên không thể xóa. Hãy khóa tài khoản thay vì xóa.', 409);

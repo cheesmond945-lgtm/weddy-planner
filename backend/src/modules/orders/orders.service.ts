@@ -1,5 +1,6 @@
-import { HttpException, Injectable } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
+import { buildPaymentUrl, frontendUrl, parseTxnRef, txnRefOf, verifyResult, vnpayLive, type IpnCode, type VnpayResult } from '../../integrations/vnpay/vnpay';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Paginated } from '../../common/utils/pagination';
 import { notify, postMessage } from '../chat/chat-messages';
@@ -26,6 +27,8 @@ const fail = (code: string, message: string, status: number, details?: unknown):
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PHONE = /^[0-9 +().-]{9,15}$/;
 const money = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+/** NCC quên xác nhận thu đủ: bấy nhiêu ngày sau ngày sự kiện thì hệ thống tự hoàn thành đơn (cưới ngày 20 thì ngày 27). */
+export const AUTO_COMPLETE_DAYS = 7;
 
 export interface ContentBody {
   customerName?: string;
@@ -60,6 +63,8 @@ export interface ListQuery {
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ---------- Tiện ích ----------
@@ -241,27 +246,92 @@ export class OrdersService {
   }
 
   /**
-   * Đặt cọc. Chưa tích hợp cổng VNPay thật (cần tài khoản merchant), nên chạy chế độ giả lập: ghi nhận thanh toán
-   * thành công ngay. Đặt PAYMENT_MODE khác "simulate" thì từ chối cho tới khi có tích hợp.
+   * Đặt cọc (docs/api/payments.md).
+   * - VNPay thật (integrations/vnpay): trả URL VNPay đã ký; VNPay đưa khách về /plan/deal/:orderId kèm kết quả (FE gọi confirmDeposit)
+   *   và gọi IPN (ipnDeposit). Cả hai ghi nhận qua markDepositPaid, chỉ ghi một lần.
+   * - Giả lập (mặc định): ghi nhận thành công ngay.
    */
-  async createDeposit(userId: string, orderId: string) {
-    if ((process.env.PAYMENT_MODE ?? 'simulate') !== 'simulate') return fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VNPay.', 501);
+  async createDeposit(userId: string, orderId: string, method: string, ip: string) {
     const o = await this.ownedByCouple(userId, orderId);
     if (o.status !== 'Pending') return fail('ORDER_NOT_PAYABLE', 'Đơn không ở trạng thái chờ đặt cọc.', 409);
-
-    const now = new Date();
-    const transactionCode = String(randomInt(10_000_000, 99_999_999));
-    const receiptCode = await this.nextCode('XNC', 'receipt');
     const deposit = Number(o.deposit_amount);
-    const payment = await this.prisma.payments.upsert({
-      where: { order_id: orderId },
-      create: { order_id: orderId, status: 'Paid', transaction_code: transactionCode, paid_date: now },
-      update: { status: 'Paid', transaction_code: transactionCode, paid_date: now },
+
+    if (vnpayLive()) {
+      // Dòng thanh toán chưa trả (giữ nguyên nếu đã có), để IPN và trang quay về cùng ghi vào
+      const payment = await this.prisma.payments.upsert({ where: { order_id: orderId }, create: { order_id: orderId, status: 'Unpaid' }, update: {} });
+      const paymentUrl = buildPaymentUrl({
+        txnRef: txnRefOf('DEPOSIT', orderId),
+        amount: deposit,
+        orderInfo: `Dat coc don ${o.order_code}`,
+        ip,
+        method,
+        returnUrl: `${frontendUrl()}/plan/deal/${orderId}`,
+      });
+      return { paymentId: payment.id, paymentUrl };
+    }
+
+    await this.markDepositPaid(o, String(randomInt(10_000_000, 99_999_999)), new Date());
+    const payment = await this.prisma.payments.findUniqueOrThrow({ where: { order_id: orderId } });
+    return { paymentId: payment.id, paymentUrl: `/plan/deal/${orderId}?vnp_ResponseCode=00` };
+  }
+
+  /** VNPay đưa khách quay về trang đơn: kiểm tra chữ ký, số tiền rồi ghi nhận đặt cọc (nếu IPN chưa ghi). */
+  async confirmDeposit(userId: string, q: Record<string, string>) {
+    if (!vnpayLive()) return fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VNPay.', 501);
+    const r = verifyResult(q);
+    if (!r.valid) return fail('PAYMENT_SIGNATURE_INVALID', 'Kết quả thanh toán không hợp lệ (sai chữ ký).', 400);
+    const t = parseTxnRef(r.txnRef);
+    if (t?.kind !== 'DEPOSIT') return fail('PAYMENT_INTENT_NOT_FOUND', 'Mã giao dịch không hợp lệ.', 400);
+    const o = await this.ownedByCouple(userId, t.id);
+    if (!r.success) return { status: 'FAILED' as const, message: r.message };
+    if (Math.round(Number(o.deposit_amount)) !== Math.round(r.amount)) return fail('PAYMENT_AMOUNT_MISMATCH', 'Số tiền thanh toán không khớp tiền cọc.', 409);
+    const res = await this.markDepositPaid(o, r.transactionNo, r.paidAt);
+    if (res === 'NOT_PENDING') {
+      return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái trong lúc thanh toán. Vui lòng liên hệ WebPlan để được hỗ trợ hoàn tiền.' };
+    }
+    return { status: 'PAID' as const, message: 'Đặt cọc thành công.' };
+  }
+
+  /** IPN của VNPay cho giao dịch đặt cọc (chữ ký đã kiểm ở PaymentsGatewayController). */
+  async ipnDeposit(orderId: string, r: VnpayResult): Promise<IpnCode> {
+    const o = await this.prisma.orders.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
+    if (!o) return '01';
+    if (Math.round(Number(o.deposit_amount)) !== Math.round(r.amount)) return '04';
+    if (o.status === 'Deposited' || o.status === 'Completed') return '02';
+    // Giao dịch thất bại: không ghi gì, chỉ xác nhận đã nhận thông báo
+    if (!r.success) return '00';
+    const res = await this.markDepositPaid(o, r.transactionNo, r.paidAt);
+    return res === 'PAID' ? '00' : '02';
+  }
+
+  /**
+   * Ghi nhận đã cọc: đơn sang Deposited, lưu giao dịch, giấy xác nhận cọc, timeline, tin nhắn, báo NCC.
+   * Chỉ đơn còn chờ cọc mới được ghi (trang quay về và IPN có thể đến cùng lúc). Đơn đã bị hủy / hết hạn trong lúc khách
+   * đang thanh toán thì không ghi, trả NOT_PENDING để báo hoàn tiền.
+   */
+  private async markDepositPaid(o: OrderRow, transactionCode: string, paidAt: Date): Promise<'PAID' | 'ALREADY' | 'NOT_PENDING'> {
+    const orderId = o.id;
+    const taken = await this.prisma.payments.findUnique({ where: { transaction_code: transactionCode }, select: { order_id: true } });
+    const txCode = taken && taken.order_id !== orderId ? `${transactionCode}-${orderId.slice(0, 4)}` : transactionCode;
+    const receiptCode = await this.nextCode('XNC', 'receipt');
+    const done = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.orders.updateMany({ where: { id: orderId, status: 'Pending' }, data: { status: 'Deposited' } });
+      if (!count) return false;
+      await tx.payments.upsert({
+        where: { order_id: orderId },
+        create: { order_id: orderId, status: 'Paid', transaction_code: txCode, paid_date: paidAt },
+        update: { status: 'Paid', transaction_code: txCode, paid_date: paidAt },
+      });
+      await tx.invoices.create({ data: { order_id: orderId, invoice_code: receiptCode, type: 'DepositReceipt' } });
+      return true;
     });
-    await this.prisma.$transaction([
-      this.prisma.orders.update({ where: { id: orderId }, data: { status: 'Deposited' } }),
-      this.prisma.invoices.create({ data: { order_id: orderId, invoice_code: receiptCode, type: 'DepositReceipt' } }),
-    ]);
+    if (!done) {
+      const now = await this.prisma.orders.findUnique({ where: { id: orderId }, select: { status: true } });
+      if (now?.status === 'Deposited' || now?.status === 'Completed') return 'ALREADY';
+      this.logger.warn(`Khách đã trả cọc (mã ${txCode}) cho đơn ${o.order_code} nhưng đơn đang ở trạng thái ${now?.status}: cần hoàn tiền thủ công.`);
+      return 'NOT_PENDING';
+    }
+    const deposit = Number(o.deposit_amount);
 
     await onOrderDeposited(this.prisma, { id: o.id, wedding_id: o.wedding_id!, vendor_id: o.vendor_id!, event_date: o.event_date! });
 
@@ -284,7 +354,7 @@ export class OrdersService {
       referenceType: 'Order',
       referenceId: orderId,
     });
-    return { paymentId: payment.id, paymentUrl: `/plan/deal/${orderId}?vnp_ResponseCode=00` };
+    return 'PAID';
   }
 
   // ================= Phía nhà cung cấp =================
@@ -441,6 +511,37 @@ export class OrdersService {
     if (Number.isNaN(paidAt.getTime())) errors.paidAt = 'Thời điểm nhận tiền không hợp lệ.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Khoản thu chưa hợp lệ.', 400, errors);
 
+    await this.complete(vendor, order, paidAt, false);
+    return this.serviceOrderOf(id);
+  }
+
+  /**
+   * NCC quên xác nhận thu đủ: đơn đã cọc qua AUTO_COMPLETE_DAYS ngày sau ngày sự kiện (giờ VN) thì hệ thống tự hoàn thành,
+   * coi như đã thu đủ phần còn lại vào lúc tự hoàn thành, và tính hoa hồng như khi NCC tự xác nhận (kỳ đã thanh toán thì dồn kỳ sau).
+   * Trả về số đơn đã tự hoàn thành.
+   */
+  async autoCompleteOverdue(now = new Date()) {
+    const cutoff = new Date(`${ymdVN(new Date(now.getTime() - AUTO_COMPLETE_DAYS * 86_400_000))}T00:00:00Z`);
+    const due = await this.prisma.orders.findMany({ where: { status: 'Deposited', event_date: { lte: cutoff } }, include: ORDER_INCLUDE });
+    let done = 0;
+    for (const order of due) {
+      const vendor = order.vendor_id ? await this.prisma.vendor_profiles.findUnique({ where: { id: order.vendor_id }, select: { id: true, category_id: true, business_name: true } }) : null;
+      if (!vendor?.category_id) continue;
+      // Một đơn lỗi (VD NCC vừa tự xác nhận cùng lúc) không chặn các đơn còn lại
+      try {
+        await this.complete(vendor, order, now, true);
+        done++;
+      } catch {
+        continue;
+      }
+    }
+    return done;
+  }
+
+  /** Đơn hoàn thành: lập hóa đơn cuối, tính hoa hồng vào bảng kê, nhắn vào hội thoại và báo cặp đôi (tự động thì báo cả NCC). */
+  private async complete(vendor: { id: string; category_id: string | null }, order: OrderRow, paidAt: Date, auto: boolean) {
+    const id = order.id;
+    const total = Number(order.total_amount);
     const category = await this.prisma.service_categories.findUniqueOrThrow({ where: { id: vendor.category_id! } });
     const rate = Number(category.commission_rate);
     const commission = Math.round((total * rate) / 100);
@@ -457,7 +558,9 @@ export class OrdersService {
     const invoiceCode = await this.nextCode('HD', 'final');
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.orders.update({ where: { id }, data: { status: 'Completed', completed_date: paidAt } });
+      // Chỉ đơn còn ở trạng thái đã cọc (job tự hoàn thành và NCC bấm cùng lúc thì chỉ một bên ghi)
+      const { count } = await tx.orders.updateMany({ where: { id, status: 'Deposited' }, data: { status: 'Completed', completed_date: paidAt } });
+      if (!count) return fail('ORDER_NOT_PAYABLE', 'Đơn đã thu đủ.', 409);
       await tx.invoices.create({ data: { order_id: id, invoice_code: invoiceCode, type: 'FinalInvoice' } });
       const st = await tx.commission_statements.upsert({
         where: { vendor_id_period_month: { vendor_id: vendor.id, period_month: periodStart } },
@@ -476,7 +579,9 @@ export class OrdersService {
         type: 'FinalInvoice',
         orderId: id,
         isRead: true,
-        content: `Hóa đơn ${invoiceCode}: đã thu đủ đơn ${order.order_code}, tổng ${money(total)}. Đơn hoàn thành.`,
+        content: auto
+          ? `Hóa đơn ${invoiceCode}: đơn ${order.order_code} (tổng ${money(total)}) được hệ thống tự hoàn thành ${AUTO_COMPLETE_DAYS} ngày sau ngày sự kiện.`
+          : `Hóa đơn ${invoiceCode}: đã thu đủ đơn ${order.order_code}, tổng ${money(total)}. Đơn hoàn thành.`,
       });
     }
     await notify(this.prisma, {
@@ -487,7 +592,19 @@ export class OrdersService {
       referenceType: 'Order',
       referenceId: id,
     });
-    return this.serviceOrderOf(id);
+    if (auto && order.vendor_profiles?.user_id) {
+      await notify(this.prisma, {
+        userId: order.vendor_profiles.user_id,
+        type: 'OrderCompleted',
+        title: 'Hệ thống đã tự hoàn thành đơn',
+        content: `Đơn ${order.order_code} (${order.customer_name}) chưa được xác nhận thu đủ sau ${AUTO_COMPLETE_DAYS} ngày kể từ ngày sự kiện ${ymd(order.event_date)
+          .split('-')
+          .reverse()
+          .join('/')} nên hệ thống đã tự hoàn thành. Hoa hồng ${money(commission)} được tính vào kỳ ${ymd(periodStart).slice(5, 7)}/${ymd(periodStart).slice(0, 4)}.`,
+        referenceType: 'Order',
+        referenceId: id,
+      });
+    }
   }
 
   async cancel(userId: string, id: string, reason: string) {

@@ -30,6 +30,7 @@ function toVendorPackage(p: AdminPackage): VendorPackage {
     pendingUpdate: null,
     tags: p.tags,
     capacity: p.capacity,
+    minTables: p.minTables ?? null,
     photos: p.photos.map((url, i) => ({ url, publicId: url, fileName: `Ảnh ${i + 1}`, size: 0, mimeType: 'image/jpeg' })),
     coverPublicId: p.photos[0] ?? null,
     updatedAt: p.submittedAt ?? '',
@@ -44,6 +45,7 @@ function changesOf(p: AdminPackage) {
   if (old.name !== p.name) list.push(`Tên gói: “${old.name}” → “${p.name}”`)
   if (old.price !== p.price) list.push(`Giá: ${formatMoney(old.price)} → ${formatMoney(p.price)}`)
   if (old.capacity !== p.capacity) list.push(`Sức chứa: ${old.capacity ? `${old.capacity} khách` : '—'} → ${p.capacity ? `${p.capacity} khách` : '—'}`)
+  if ((old.minTables ?? null) !== (p.minTables ?? null)) list.push(`Số mâm tối thiểu: ${old.minTables ? `${old.minTables} mâm` : '—'} → ${p.minTables ? `${p.minTables} mâm` : '—'}`)
   if ([...old.tags].sort().join() !== [...p.tags].sort().join()) list.push(`Tags: ${old.tags.join(', ') || '—'} → ${p.tags.join(', ') || '—'}`)
   if (old.description !== p.description) list.push('Mô tả')
   if (old.photos.join() !== p.photos.join()) {

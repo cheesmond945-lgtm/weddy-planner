@@ -56,8 +56,15 @@ export interface VerifyRegisterOtpRequest {
   otp: string
 }
 
+/** Trường không gửi thì giữ nguyên. Email không đổi ở đây mà qua đổi email (mật khẩu + OTP) */
 export interface UpdateProfileRequest {
-  name: string
-  email: string | null
-  phone: string | null
+  name?: string
+  username?: string
+  phone?: string | null
+}
+
+/** Đổi email đăng nhập, bước 1: BE gửi OTP tới email mới (phản hồi OtpSent) */
+export interface ChangeEmailRequest {
+  currentPassword: string
+  newEmail: string
 }

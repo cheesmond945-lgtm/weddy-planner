@@ -1,6 +1,6 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ServicesService, categoryRank, categorySlug } from '../catalog/services.service';
+import { ServicesService, categoryRank, categorySlug, estimateCost } from '../catalog/services.service';
 import { ORDER_INCLUDE, toCoupleOrder, ymd } from '../orders/order-mapping';
 import { onWeddingCategories } from './timeline-hooks';
 
@@ -159,18 +159,19 @@ export class WeddingsService {
   /** Mặc định của một PlanItem khi chưa có đơn: gói rẻ nhất (đầu tiên) của NCC. */
   private async firstPackages(vendorIds: string[]) {
     const pkgs = await this.prisma.service_packages.findMany({ where: { vendor_id: { in: vendorIds }, status: 'Approved' }, orderBy: [{ price: 'asc' }, { id: 'asc' }] });
-    const map = new Map<string, { name: string; price: number }>();
-    for (const p of pkgs) if (p.vendor_id && !map.has(p.vendor_id)) map.set(p.vendor_id, { name: p.name ?? '', price: Number(p.price) });
+    const map = new Map<string, { name: string; price: number; minTables: number | null }>();
+    for (const p of pkgs) if (p.vendor_id && !map.has(p.vendor_id)) map.set(p.vendor_id, { name: p.name ?? '', price: Number(p.price), minTables: p.min_tables });
     return map;
   }
 
   private async buildItems(userId: string, weddingId: string, only?: string[]) {
     let vendors = await this.vendorsInPlan(weddingId);
     if (only) vendors = vendors.filter((v) => only.includes(v.id));
-    const [statuses, summaries, firsts] = await Promise.all([
+    const [statuses, summaries, firsts, wedding] = await Promise.all([
       this.statuses(userId, weddingId, vendors),
       this.services.summaries(vendors.map((v) => v.id)),
       this.firstPackages(vendors.map((v) => v.id)),
+      this.prisma.weddings.findUnique({ where: { id: weddingId }, select: { guest_count: true } }),
     ]);
     const sumById = new Map(summaries.map((s) => [s.id, s]));
     return vendors
@@ -179,6 +180,9 @@ export class WeddingsService {
         const st = statuses.get(v.id)!;
         const first = firsts.get(v.id);
         const order = st.order;
+        // Chưa có đơn: ước tính từ gói rẻ nhất (giá theo mâm thì nhân số mâm theo số khách, không dưới số mâm tối thiểu).
+        // Có đơn: tổng tiền đơn (đã gồm số mâm thực tế NCC lên đơn).
+        const estimate = first ? estimateCost(v.slug, first.price, first.minTables, wedding?.guest_count) : null;
         return {
           slug: v.slug,
           item: {
@@ -186,7 +190,9 @@ export class WeddingsService {
             service: sumById.get(v.id)!,
             status: st.status,
             packageName: order?.order_items[0]?.item_name ?? first?.name ?? '',
-            price: order ? Number(order.total_amount) : (first?.price ?? 0),
+            price: order ? Number(order.total_amount) : (estimate?.total ?? 0),
+            /** Chưa có đơn, giá theo mâm: giá mỗi mâm và số mâm đã dùng để ước tính */
+            estimate: !order && first && estimate?.tables ? { unitPrice: first.price, tables: estimate.tables, minTables: first.minTables } : null,
             order: order && st.conversationId ? toCoupleOrder(order, st.conversationId) : null,
           },
         };

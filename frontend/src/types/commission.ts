@@ -37,6 +37,8 @@ export interface CommissionLine {
   orderCode: string
   customerName: string
   eventDate: string
+  /** Ngày đơn hoàn thành (YYYY-MM-DD, giờ VN): NCC xác nhận thu đủ hoặc hệ thống tự hoàn thành */
+  completedDate?: string | null
   category: CategoryRef
   /** Tỷ lệ áp dụng, số nguyên phần trăm (lưu lại để đổi tỷ lệ sau không ảnh hưởng kỳ cũ) */
   rate: number

@@ -27,6 +27,8 @@ export interface VendorPackage extends ServicePackage {
   tags: string[]
   /** Sức chứa tối đa (khách), chỉ dùng cho nhà hàng */
   capacity: number | null
+  /** Trung tâm sự kiện: số mâm tối thiểu để được kèm sảnh (giá gói là giá mỗi mâm 10 khách) */
+  minTables?: number | null
   /** Bộ ảnh của gói, theo thứ tự hiển thị */
   photos: VendorFile[]
   /** publicId của ảnh bìa; null thì dùng ảnh đầu tiên */
@@ -44,6 +46,7 @@ export interface PackageUpdate {
   price: number
   tags: string[]
   capacity: number | null
+  minTables?: number | null
   photos: VendorFile[]
   coverPublicId: string | null
   savedAt: string
@@ -56,6 +59,7 @@ export interface SavePackageRequest {
   price: number
   tags: string[]
   capacity: number | null
+  minTables: number | null
   photos: VendorFile[]
   coverPublicId: string | null
 }

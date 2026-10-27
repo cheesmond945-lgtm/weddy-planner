@@ -2,7 +2,7 @@ import { Controller, Get, HttpException, Query, Req, UseGuards } from '@nestjs/c
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ServicesService } from '../catalog/services.service';
+import { ServicesService, estimateCost } from '../catalog/services.service';
 import { recommend } from './recommend';
 
 const fail = (code: string, message: string, status: number): never => {
@@ -29,7 +29,8 @@ export class CompareController {
     // Thông tin đám cưới của người gọi (có thể chưa thiết lập)
     const w = await this.prisma.weddings.findUnique({ where: { user_id: req.user.sub } });
     const rec = recommend(
-      items.map((s) => ({ id: s.id, price: s.priceFrom, rating: s.rating, reviewCount: s.reviewCount, styles: s.styles, city: s.location ?? '', capacity: s.capacity })),
+      // Giá theo mâm: so bằng chi phí ước tính cho số khách (giá mâm × số mâm), để khớp ngân sách hạng mục
+      items.map((s) => ({ id: s.id, price: estimateCost(slug, s.priceFrom, s.minTables, w?.guest_count).total, rating: s.rating, reviewCount: s.reviewCount, styles: s.styles, city: s.location ?? '', capacity: s.capacity })),
       w ? { budget: Number(w.budget), guestCount: w.guest_count, city: w.city, styles: w.style ? w.style.split(',').map((x) => x.trim()).filter(Boolean) : [] } : null,
       slug,
     );

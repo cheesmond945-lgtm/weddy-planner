@@ -3,7 +3,7 @@ import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
 import { ALBUM_BUCKET, StorageService } from '../../integrations/storage/storage.service';
-import { categorySlug } from '../catalog/services.service';
+import { GUESTS_PER_TABLE, categorySlug } from '../catalog/services.service';
 import { fileNameOfPath, mimeOfPath } from './vendor-files';
 import { hasChanges, livePhotos, liveSnapshot, openUpdate, UPDATE_STATUS_OUT, type PackageSnapshot } from './package-update';
 
@@ -13,6 +13,8 @@ export interface SavePackageBody {
   price?: number | null;
   tags?: string[];
   capacity?: number | null;
+  /** Trung tâm sự kiện: số mâm tối thiểu để được kèm sảnh (giá gói là giá mỗi mâm) */
+  minTables?: number | null;
   photos?: { publicId: string }[];
   coverPublicId?: string | null;
 }
@@ -84,6 +86,7 @@ export class VendorPackagesService {
       reviewNote: p.status === 'NeedRevision' ? (p.package_verifications[0]?.admin_note ?? null) : upd?.status === 'NeedRevision' ? upd.admin_note : null,
       tags: live.tags,
       capacity: live.capacity,
+      minTables: live.minTables ?? null,
       photos: await this.files(live.photos),
       coverPublicId: live.cover,
       /** Bản cập nhật của gói đã đăng (khách vẫn thấy bản đang đăng ở các trường trên cho tới khi Admin duyệt) */
@@ -95,6 +98,7 @@ export class VendorPackagesService {
             price: upd.data.price,
             tags: upd.data.tags,
             capacity: upd.data.capacity,
+            minTables: upd.data.minTables ?? null,
             photos: await this.files(upd.data.photos),
             coverPublicId: upd.data.cover,
             savedAt: upd.data.savedAt,
@@ -128,8 +132,14 @@ export class VendorPackagesService {
 
     const price = toInt(body.price);
     const capacity = isRestaurant ? toInt(body.capacity) : null;
+    const minTables = isRestaurant ? toInt(body.minTables) : null;
     if (price === null || !Number.isInteger(price) || price <= 0) errors.price = 'Giá phải là số nguyên dương.';
     if (capacity !== null && (!Number.isInteger(capacity) || capacity <= 0)) errors.capacity = 'Sức chứa phải là số nguyên dương.';
+    if (minTables !== null && (!Number.isInteger(minTables) || minTables <= 0)) errors.minTables = 'Số mâm tối thiểu phải là số nguyên dương.';
+    // Mỗi mâm 10 khách: số mâm tối thiểu không vượt quá số mâm sảnh chứa được
+    else if (minTables !== null && capacity !== null && Number.isInteger(capacity) && minTables * GUESTS_PER_TABLE > capacity) {
+      errors.minTables = `Sảnh ${capacity} khách chứa tối đa ${Math.floor(capacity / GUESTS_PER_TABLE)} mâm.`;
+    }
 
     // Tag viết hoa chữ cái đầu, không trùng
     const tags = [...new Set((body.tags ?? []).map((t) => String(t).trim()).filter(Boolean).map((t) => t.charAt(0).toLocaleUpperCase('vi') + t.slice(1)))];
@@ -145,7 +155,7 @@ export class VendorPackagesService {
 
     if (Object.keys(errors).length) fail('VALIDATION_ERROR', 'Thông tin gói chưa hợp lệ.', 400, errors);
     const cover = body.coverPublicId && photos.includes(body.coverPublicId) ? body.coverPublicId : (photos[0] ?? null);
-    return { name, description, price: price as number, capacity, tags, photos, cover };
+    return { name, description, price: price as number, capacity, minTables, tags, photos, cover };
   }
 
   private albumRows(packageId: string, photos: string[], cover: string | null) {
@@ -161,7 +171,7 @@ export class VendorPackagesService {
     const d = this.parse(body, categorySlug(vendor.service_categories.name) === 'nha-hang', vendor.id, new Set());
     const created = await this.prisma.$transaction(async (tx) => {
       const p = await tx.service_packages.create({
-        data: { vendor_id: vendor.id, name: d.name, description: d.description, price: d.price, capacity: d.capacity, status: 'Draft' },
+        data: { vendor_id: vendor.id, name: d.name, description: d.description, price: d.price, capacity: d.capacity, min_tables: d.minTables, status: 'Draft' },
       });
       if (d.tags.length) await tx.package_tags.createMany({ data: d.tags.map((tag) => ({ package_id: p.id, tag })) });
       if (d.photos.length) await tx.package_albums.createMany({ data: this.albumRows(p.id, d.photos, d.cover) });
@@ -208,7 +218,7 @@ export class VendorPackagesService {
     await this.prisma.$transaction([
       this.prisma.service_packages.update({
         where: { id },
-        data: { name: d.name, description: d.description, price: d.price, capacity: d.capacity },
+        data: { name: d.name, description: d.description, price: d.price, capacity: d.capacity, min_tables: d.minTables },
       }),
       this.prisma.package_tags.deleteMany({ where: { package_id: id } }),
       this.prisma.package_tags.createMany({ data: d.tags.map((tag) => ({ package_id: id, tag })) }),
@@ -230,6 +240,7 @@ export class VendorPackagesService {
       description: d.description,
       price: d.price,
       capacity: d.capacity,
+      minTables: d.minTables,
       tags: d.tags,
       photos: d.photos,
       cover: d.cover,

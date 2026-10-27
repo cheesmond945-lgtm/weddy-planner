@@ -96,7 +96,7 @@ export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] 
                   }}
                   className={cn(
                     'flex w-full items-center gap-2.5 rounded-sm px-2.5 py-[9px] text-left text-[13.5px] outline-none [&_svg]:size-4',
-                    it.danger ? 'text-warn hover:bg-warn-soft focus:bg-warn-soft' : 'text-ink hover:bg-gold-soft hover:text-gold-ink focus:bg-gold-soft focus:text-gold-ink [&_svg]:text-muted-foreground',
+                    it.danger ? 'text-warn hover:bg-warn-soft focus-visible:bg-warn-soft' : 'text-ink hover:bg-gold-soft hover:text-gold-ink focus-visible:bg-gold-soft focus-visible:text-gold-ink [&_svg]:text-muted-foreground',
                   )}
                 >
                   <it.icon />

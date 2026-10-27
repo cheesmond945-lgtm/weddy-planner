@@ -73,8 +73,10 @@ export interface PlanItem {
   status: PlanItemStatus
   /** Tên gói đang tính (gói đầu tiên, hoặc gói trong đơn NCC gửi) */
   packageName: string
-  /** Giá đang tính, đồng */
+  /** Giá đang tính, đồng: có đơn thì tổng đơn; chưa có thì ước tính từ gói rẻ nhất (giá theo mâm thì × số mâm) */
   price: number
+  /** Chưa có đơn và giá theo mâm: giá mỗi mâm, số mâm dùng để ước tính (theo số khách, không dưới số mâm tối thiểu) */
+  estimate?: { unitPrice: number; tables: number; minTables: number | null } | null
   /** Đơn dịch vụ mới nhất NCC gửi (nếu có) */
   order: Order | null
 }

@@ -191,6 +191,7 @@ export class AdminReviewsService {
       description: shown.description,
       price: shown.price,
       capacity: shown.capacity,
+      minTables: shown.minTables ?? null,
       tags: shown.tags,
       photos: shown.photos.map((u) => this.storage.publicAlbumUrl(u)),
       category: catRef(p.vendor_profiles!.service_categories),
@@ -263,7 +264,7 @@ export class AdminReviewsService {
           : [
               this.prisma.service_packages.update({
                 where: { id },
-                data: { name: s.name, description: s.description, price: s.price, capacity: s.capacity, updated_date: new Date() },
+                data: { name: s.name, description: s.description, price: s.price, capacity: s.capacity, min_tables: s.minTables ?? null, updated_date: new Date() },
               }),
               this.prisma.package_tags.deleteMany({ where: { package_id: id } }),
               this.prisma.package_tags.createMany({ data: s.tags.map((tag) => ({ package_id: id, tag })) }),

@@ -1,4 +1,5 @@
 import type {
+  ChangeEmailRequest,
   ChangePasswordRequest,
   LoginRequest,
   OtpSent,
@@ -33,4 +34,14 @@ export const authApi = {
   /** Đổi mật khẩu khi đang đăng nhập (quy tắc ở features/auth/passwordRules.ts) */
   changePassword: (body: ChangePasswordRequest): Promise<null> =>
     http.post('/auth/me/password', body),
+
+  /** Đổi email đăng nhập: bước 1 gửi OTP tới email mới, bước 2 nhập OTP */
+  requestEmailChange: (body: ChangeEmailRequest): Promise<OtpSent> =>
+    http.post('/auth/me/email', body),
+
+  resendEmailChangeOtp: (): Promise<OtpSent> =>
+    http.post('/auth/me/email/resend-otp'),
+
+  verifyEmailChange: (otp: string): Promise<SessionUser> =>
+    http.post('/auth/me/email/verify-otp', { otp }),
 }

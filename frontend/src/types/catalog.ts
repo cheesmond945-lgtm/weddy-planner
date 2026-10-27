@@ -23,6 +23,10 @@ export interface ServiceSummary {
   location: string
   /** Giá thấp nhất trong các gói, đơn vị đồng */
   priceFrom: number
+  /** TABLE: giá mỗi mâm 10 khách, đã gồm sảnh (trung tâm sự kiện); PACKAGE: giá trọn gói. Thiếu thì coi là PACKAGE */
+  priceUnit?: 'TABLE' | 'PACKAGE'
+  /** Giá theo mâm: số mâm tối thiểu của gói rẻ nhất để được kèm sảnh */
+  minTables?: number | null
   /** Điểm đánh giá lấy từ Google Maps */
   rating: number
   reviewCount: number
@@ -34,6 +38,10 @@ export interface ServicePackage {
   name: string
   description: string
   price: number
+  /** Sức chứa (khách), chỉ có ở trung tâm sự kiện */
+  capacity?: number | null
+  /** Giá theo mâm: số mâm tối thiểu để được kèm sảnh */
+  minTables?: number | null
 }
 
 export interface ServiceAlbum {

@@ -29,6 +29,20 @@ const slugify = (s: string) =>
 
 export const categorySlug = (name: string | null) => (name ? (CATEGORY_SLUGS[name] ?? slugify(name)) : '');
 
+/**
+ * Trung tâm tổ chức sự kiện báo giá theo mâm (menu cho 10 khách), đã gồm sảnh và dịch vụ đi kèm;
+ * đặt từ số mâm tối thiểu (service_packages.min_tables) mới được kèm sảnh. Các danh mục khác: giá trọn gói.
+ */
+export const TABLE_PRICED_SLUGS = ['nha-hang'];
+export const GUESTS_PER_TABLE = 10;
+export const priceUnitOf = (slug: string) => (TABLE_PRICED_SLUGS.includes(slug) ? ('TABLE' as const) : ('PACKAGE' as const));
+/** Số mâm cần đặt: đủ chỗ cho số khách, không dưới số mâm tối thiểu của sảnh, ít nhất 1. */
+export const tablesFor = (guests: number | null | undefined, minTables: number | null | undefined) =>
+  Math.max(Math.ceil((guests ?? 0) / GUESTS_PER_TABLE), minTables ?? 0, 1);
+/** Chi phí ước tính của một gói cho đám cưới: giá theo mâm thì nhân số mâm, giá trọn gói thì giữ nguyên. */
+export const estimateCost = (slug: string, price: number, minTables: number | null | undefined, guests: number | null | undefined) =>
+  priceUnitOf(slug) === 'TABLE' ? { total: price * tablesFor(guests, minTables), tables: tablesFor(guests, minTables) } : { total: price, tables: null };
+
 /** Thứ tự hiển thị danh mục (như prototype): các slug lạ xếp cuối. */
 export const CATEGORY_ORDER = ['nha-hang', 'decor', 'trang-phuc', 'makeup', 'chup-anh', 'co-cuoi', 'hoa-cuoi'];
 export const categoryRank = (slug: string) => {
@@ -67,12 +81,17 @@ export class ServicesService {
   private summarize(v: Awaited<ReturnType<ServicesService['loadVisible']>>[number]) {
     const prices = v.service_packages.map((p) => Number(p.price));
     const cover = v.service_packages.flatMap((p) => p.package_albums)[0];
+    const slug = categorySlug(v.service_categories!.name);
     return {
       id: v.id,
       name: v.business_name,
-      category: { id: v.service_categories!.id, slug: categorySlug(v.service_categories!.name), name: v.service_categories!.name ?? '' },
+      category: { id: v.service_categories!.id, slug, name: v.service_categories!.name ?? '' },
       location: v.city,
       priceFrom: Math.min(...prices),
+      /** TABLE: giá mỗi mâm 10 khách, đã gồm sảnh; PACKAGE: giá trọn gói */
+      priceUnit: priceUnitOf(slug),
+      /** Số mâm tối thiểu của gói rẻ nhất (gói xếp theo giá tăng dần) */
+      minTables: v.service_packages[0]?.min_tables ?? null,
       rating: 0,
       reviewCount: 0,
       coverImageUrl: cover ? this.img(cover.url) : '',
@@ -168,7 +187,7 @@ export class ServicesService {
       isVerified: true,
       isGuaranteed: false,
       images: [...covers, ...others].slice(0, 60).map((a) => this.img(a.url)),
-      packages: v.service_packages.map((p) => ({ id: p.id, name: p.name, description: p.description, price: Number(p.price) })),
+      packages: v.service_packages.map((p) => ({ id: p.id, name: p.name, description: p.description, price: Number(p.price), capacity: p.capacity, minTables: p.min_tables })),
       albums: v.service_packages.map((p) => ({
         id: p.id,
         title: p.name,

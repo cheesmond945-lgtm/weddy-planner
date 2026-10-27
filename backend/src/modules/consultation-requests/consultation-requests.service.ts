@@ -42,7 +42,7 @@ export class ConsultationRequestsService {
     // Số điện thoại (kênh liên hệ Zalo) đã có yêu cầu thì không tạo thêm, không ghi đè: chống gửi trùng và chống dùng số người khác.
     // Email trùng yêu cầu cũ thì vẫn cho gửi, vì đây là cách nhà cung cấp gửi lại khi nhập sai số điện thoại; Admin xóa bản sai.
     if (await this.prisma.consultation_requests.findFirst({ where: { phone_number: phone } })) {
-      return fail('CONSULTATION_ALREADY_EXISTS', `Số điện thoại này đã gửi yêu cầu trước đó. Chúng tôi sẽ liên hệ qua Zalo số ${phone}. Nếu cần thay đổi email hay thông tin khác, bạn vui lòng báo khi chúng tôi liên hệ.`, 409);
+      return fail('CONSULTATION_ALREADY_EXISTS', 'Số điện thoại này đã gửi yêu cầu. Vui lòng chờ chúng tôi liên hệ.', 409);
     }
 
     const created = await this.prisma.consultation_requests.create({

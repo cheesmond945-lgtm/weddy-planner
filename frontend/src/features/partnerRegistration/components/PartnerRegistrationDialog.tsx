@@ -25,7 +25,7 @@ const Row = ({ label, children }: { label: string; children: string | undefined 
 
 /**
  * Form "Đăng ký thông tin" để nhà cung cấp xin tư vấn hợp tác. Yêu cầu gửi lên sẽ hiện ở trang Yêu cầu tư vấn của Admin.
- * Số điện thoại đã gửi thì không gửi lại được; muốn đổi thông tin thì báo Admin qua Zalo (ngoài hệ thống).
+ * Số điện thoại đã gửi thì không gửi lại được; muốn đổi thông tin thì báo Admin khi được liên hệ (ngoài hệ thống).
  * Đang gắn ở header Admin để thử; sau này đặt ở header giao diện khách hàng.
  */
 export function PartnerRegistrationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -101,7 +101,7 @@ export function PartnerRegistrationDialog({ open, onOpenChange }: { open: boolea
             </span>
             <DialogTitle className="text-[26px] leading-tight">Đã gửi đăng ký</DialogTitle>
             <DialogDescription className="text-[14px] leading-relaxed text-muted-foreground">
-              Cảm ơn bạn đã quan tâm. Chúng tôi sẽ liên hệ qua Zalo số <b className="text-ink">{v.phone}</b> và gửi thông tin tài khoản tới <b className="text-ink">{v.email}</b>. Nếu cần
+              Cảm ơn bạn đã quan tâm. Chúng tôi sẽ liên hệ qua số <b className="text-ink">{v.phone}</b> và gửi thông tin tài khoản tới <b className="text-ink">{v.email}</b>. Nếu cần
               thay đổi email hay thông tin khác, bạn vui lòng báo khi chúng tôi liên hệ.
             </DialogDescription>
             <dl className="mt-2 grid w-full gap-1.5 rounded-md bg-surface-2 px-4 py-3 text-[13.5px]">
@@ -119,7 +119,7 @@ export function PartnerRegistrationDialog({ open, onOpenChange }: { open: boolea
             <DialogDescription className="mt-2 text-[14px] leading-relaxed text-muted-foreground">Vui lòng kiểm tra kỹ thông tin trước khi gửi.</DialogDescription>
             <div className="mt-5 grid gap-3 rounded-md border border-gold/30 bg-gold-soft px-5 py-4 text-[14px] text-gold-ink">
               <p>
-                Chúng tôi sẽ liên hệ qua <b>Zalo số</b>
+                Chúng tôi sẽ liên hệ qua <b>số điện thoại</b>
                 <span className="mt-0.5 block text-[22px] font-semibold tabular-nums">{v.phone}</span>
               </p>
               <p>
@@ -175,7 +175,7 @@ export function PartnerRegistrationDialog({ open, onOpenChange }: { open: boolea
                 <Field label="Người liên hệ" error={errors.contactName}>
                   <Input className={controlClass} placeholder="Họ và tên" maxLength={100} aria-invalid={errors.contactName ? true : undefined} value={v.contactName} onChange={(e) => set({ contactName: e.target.value })} />
                 </Field>
-                <Field label="Số điện thoại / Zalo" error={errors.phone}>
+                <Field label="Số điện thoại" error={errors.phone}>
                   <Input className={controlClass} type="tel" inputMode="numeric" placeholder="09xx..." aria-invalid={errors.phone ? true : undefined} value={v.phone} onChange={(e) => set({ phone: e.target.value })} />
                 </Field>
               </div>

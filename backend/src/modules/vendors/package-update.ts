@@ -9,6 +9,8 @@ export interface PackageSnapshot {
   description: string;
   price: number;
   capacity: number | null;
+  /** Số mâm tối thiểu (trung tâm sự kiện). Snapshot lưu trước khi có trường này thì thiếu: coi là null */
+  minTables?: number | null;
   tags: string[];
   /** Đường dẫn ảnh trong bucket album, theo thứ tự hiển thị */
   photos: string[];
@@ -23,6 +25,7 @@ type PackageRow<V extends VerificationRow = VerificationRow> = {
   description: string | null;
   price: Prisma.Decimal | null;
   capacity: number | null;
+  min_tables: number | null;
   package_tags: { tag: string }[];
   package_albums: { url: string | null; is_cover: boolean | null }[];
   package_verifications: V[];
@@ -55,6 +58,7 @@ export function liveSnapshot(p: PackageRow): Omit<PackageSnapshot, 'savedAt'> {
     description: p.description ?? '',
     price: Number(p.price ?? 0),
     capacity: p.capacity,
+    minTables: p.min_tables,
     tags: p.package_tags.map((t) => t.tag),
     photos: livePhotos(p),
     cover: cover?.url ?? null,
@@ -69,6 +73,7 @@ export function hasChanges(live: Omit<PackageSnapshot, 'savedAt'>, s: PackageSna
     live.description !== s.description ||
     live.price !== s.price ||
     live.capacity !== s.capacity ||
+    (live.minTables ?? null) !== (s.minTables ?? null) ||
     tags(live.tags) !== tags(s.tags) ||
     live.photos.join('\n') !== s.photos.join('\n') ||
     live.cover !== s.cover

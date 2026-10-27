@@ -101,6 +101,8 @@ export class CommissionsService {
         orderCode: o.order_code,
         customerName: o.customer_name,
         eventDate: ymd(o.event_date),
+        /** Ngày đơn hoàn thành (NCC xác nhận thu đủ hoặc hệ thống tự hoàn thành), giờ VN */
+        completedDate: o.completed_date ? ymdVN(o.completed_date) : null,
         category: cat,
         rate: Number(c.rate),
         baseAmount: Number(c.order_amount),

@@ -13,7 +13,9 @@ Phạm vi: cặp đôi đặt cọc cho đơn dịch vụ (mục 7.3).
 3. VNPay gọi **IPN** về BE (`GET /payments/vnpay/ipn`). BE **kiểm tra chữ ký**, số tiền, trạng thái; nếu thành công: đơn → `PAID`, kế hoạch → `CONFIRMED`, mở việc chi tiết trên timeline, thêm tin hệ thống "Đã ghi nhận đặt cọc <số tiền>. Dịch vụ được chốt." vào hội thoại.
 4. VNPay đưa người dùng về `VNPAY_RETURN_URL` = trang FE `/plan/deal/:orderId?vnp_ResponseCode=…`. FE gọi `GET /orders/:id`: `PAID` → "Đặt cọc thành công"; chưa `PAID` và mã khác `00` → báo "Thanh toán chưa thành công" và cho thử lại.
 
-> FE **không** coi `vnp_ResponseCode` trên URL là bằng chứng đã trả tiền; chỉ dựa vào trạng thái đơn do BE cập nhật từ IPN.
+> FE **không** coi `vnp_ResponseCode` trên URL là bằng chứng đã trả tiền; chỉ dựa vào trạng thái đơn do BE cập nhật.
+
+> **Triển khai thật** (`backend/src/integrations/vnpay/vnpay.ts`, dùng chung với hoa hồng NCC): bật khi có `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` và `PAYMENT_MODE` khác `simulate`, ngược lại chạy giả lập (ghi nhận ngay). Vì chạy cục bộ VNPay không gọi IPN được, ngoài IPN còn có **`POST /payments/vnpay/confirm`** (Role: COUPLE, body = các tham số `vnp_*` trên URL quay về): trang `/plan/deal/:orderId` thấy `vnp_SecureHash` thì gửi lên, BE kiểm chữ ký HMAC-SHA512, mã phản hồi, số tiền rồi ghi nhận, trả `{ status: PAID | FAILED, message }`. IPN và confirm ghi nhận chung một chỗ, chỉ ghi một lần (đơn còn chờ cọc mới chuyển sang đã cọc). Đơn bị hủy / hết hạn trong lúc khách đang trả: không ghi, báo liên hệ hoàn tiền và ghi log. `vnp_TxnRef` = `D`/`C` (đặt cọc / hoa hồng) + id 32 ký tự hex + thời điểm; `method` → `vnp_BankCode` (`VNPAYQR`, `VNBANK`, `INTCARD`). IPN trả `00` ghi nhận xong, `01` không thấy, `02` đã xử lý, `04` sai số tiền, `97` sai chữ ký, `99` lỗi khác.
 
 ### POST /payments
 Role: **COUPLE**, đơn của mình, đơn đang `SENT`.

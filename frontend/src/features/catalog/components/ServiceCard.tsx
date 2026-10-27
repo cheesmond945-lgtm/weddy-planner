@@ -5,6 +5,7 @@ import { formatMoney } from '@/lib/format'
 import { useReveal } from '@/lib/useReveal'
 import { paths } from '@/routes/paths'
 import type { ServiceSummary } from '@/types/catalog'
+import { isTablePriced } from '../price'
 import { RatingMeta } from './RatingMeta'
 
 interface ServiceCardProps {
@@ -47,6 +48,7 @@ export function ServiceCard({ service, index = 0, imageAction, extraActions, bad
         <RatingMeta location={service.location} rating={service.rating} reviewCount={service.reviewCount} />
         <div className="text-[11px] text-muted-foreground">
           Từ <b className="text-sm font-semibold text-ink">{formatMoney(service.priceFrom)}</b>
+          {isTablePriced(service) && '/mâm · đã gồm sảnh'}
         </div>
         <div className="mt-auto flex gap-[7px] pt-2">
           <Button asChild size="sm" className="min-h-[34px] flex-1 rounded-[9px] text-[10px]">
