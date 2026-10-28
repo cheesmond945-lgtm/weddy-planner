@@ -8,7 +8,7 @@
 > - Mỗi đơn chỉ có **hai đợt**: đặt cọc theo `rate` % (khách trả qua cổng thanh toán) và phần còn lại (khách trả trực tiếp, NCC bấm xác nhận đã thu đủ thì đơn `Completed`, lập hóa đơn và tính hoa hồng).
 > - Không có phiên bản đơn (`versions` tối đa 1; gửi lại thì ghi đè và ghi các thay đổi vào tin hội thoại), không có phương án điều chỉnh (`POST .../adjustments` trả 409 `ORDER_NOT_ADJUSTABLE`), không lưu minh chứng thanh toán, không lưu nháp cho đơn đã gửi.
 > - Trạng thái: `Draft`→`DRAFT`, `Pending`→`AWAITING_CONFIRMATION` (chờ đặt cọc), `NeedRevision`→`REVISION_REQUESTED`, `Deposited`/`Completed`→`CONFIRMED` (+ `DEPOSIT_PAID`/`PAID`), `Expired`/`Cancelled`→`CANCELLED`. Phía cặp đôi thêm `CANCELLED`.
-> - `POST /payments` chạy **giả lập** (ghi nhận thanh toán thành công ngay) vì chưa có tài khoản VNPay; đặt `PAYMENT_MODE` khác `simulate` để tắt.
+> - `POST /payments` trả mã QR VietQR; tiền cọc được SePay xác nhận (xem [payments.md](payments.md)).
 > - Số lượng dòng báo giá phải là số nguyên; `code` đơn dạng `DH<YYMM><số>`.
 
 Phạm vi: cặp đôi xem đơn dịch vụ NCC gửi trong khung chat và yêu cầu chỉnh sửa (mục 7.3). NCC tạo/sửa đơn làm khi tới phần NCC. Đặt cọc: xem [payments.md](payments.md).
@@ -98,7 +98,7 @@ Theo quyết định của nhóm, đơn phía NCC theo prototype NCC và đặt 
 | `packageName` | tên dòng đầu (`lines[0].name`) |
 | `serviceDate` | `eventDate` của phiên bản hiện hành |
 
-**Thanh toán (kết hợp, theo quyết định của nhóm):** đợt 1 (đặt cọc) khách trả qua VNPay như [payments.md](payments.md), BE tự ghi nhận khi IPN thành công; các đợt sau trả ngoài hệ thống (chuyển khoản, tiền mặt), NCC tự ghi nhận. `POST /payments` của cặp đôi khi chuyển sang đơn mới lấy số tiền từ `installments[0].amount` và chỉ cho khi `status = CONFIRMED`, đợt cọc chưa thu. **Cần sửa `payments.md` cùng bạn làm phần cặp đôi.**
+**Thanh toán (kết hợp, theo quyết định của nhóm):** đợt 1 (đặt cọc) khách trả qua VietQR như [payments.md](payments.md), BE tự ghi nhận khi SePay xác nhận đã nhận tiền; các đợt sau trả ngoài hệ thống (chuyển khoản, tiền mặt), NCC tự ghi nhận. `POST /payments` của cặp đôi khi chuyển sang đơn mới lấy số tiền từ `installments[0].amount` và chỉ cho khi `status = CONFIRMED`, đợt cọc chưa thu. **Cần sửa `payments.md` cùng bạn làm phần cặp đôi.**
 
 ## Kiểu dữ liệu
 
@@ -140,7 +140,7 @@ Theo quyết định của nhóm, đơn phía NCC theo prototype NCC và đặt 
     { "id": "l-1", "packageId": "DV101", "name": "Tiệc cưới – Menu A", "unit": "Bàn", "quantity": 22, "unitPrice": 4000000, "isPolicyFee": false }
   ],
   "installments": [
-    { "id": "i-1", "name": "Đợt 1 – Đặt cọc", "rate": 20, "amount": 18440000, "dueDate": "2026-10-25", "method": "VNPAY", "note": null },
+    { "id": "i-1", "name": "Đợt 1 – Đặt cọc", "rate": 20, "amount": 18440000, "dueDate": "2026-10-25", "method": "VIETQR", "note": null },
     { "id": "i-2", "name": "Đợt 2 – Thanh toán còn lại", "rate": 80, "amount": 73760000, "dueDate": "2026-12-06", "method": "CASH", "note": "Thanh toán trong ngày tiệc" }
   ]
 }
@@ -152,14 +152,14 @@ Theo quyết định của nhóm, đơn phía NCC theo prototype NCC và đặt 
 | `lines[].packageId` | Gói đã đăng dùng để điền nhanh (nếu có), xem [catalog.md](catalog.md) phần Nhà cung cấp |
 | `lines[].quantity` | Số > 0, có thể lẻ |
 | `lines[].isPolicyFee` | Phí theo chính sách (thêm khi điều chỉnh) |
-| `installments[0]` | Luôn là đặt cọc, `method = VNPAY` |
+| `installments[0]` | Luôn là đặt cọc, `method = VIETQR` |
 | `installments[].rate` | **Số nguyên phần trăm** (0–100, theo README mục 4, nhóm đã chốt); `null` khi nhập số tiền trực tiếp. Số tiền = làm tròn `total × rate / 100`; khi mọi đợt có tỷ lệ và cộng đủ 100%, **đợt cuối nhận phần tiền lẻ còn lại** để tổng các đợt bằng tổng đơn |
-| `installments[].method` | `VNPAY` (chỉ đợt 1), `BANK_TRANSFER`, `CASH` |
+| `installments[].method` | `VIETQR` (chỉ đợt 1), `BANK_TRANSFER`, `CASH` |
 | `totalAmount`, `paidAmount`, `paymentStatus` | BE tính |
 | `draft` | Chỉ NCC thấy. `kind = NEW`: đơn chưa gửi lần nào; `EDIT`: bản sửa của đơn đã gửi, phiên bản đang gửi giữ nguyên |
 | `history` | Câu hiển thị sẵn, mới nhất cuối |
 
-`OrderPayment`: `{ id, installmentId, installmentName, amount, paidAt, method, plannedMethod, recordedBy: "SYSTEM" | "VENDOR", proofFile: VendorFile | null, note }`. `method` là **hình thức thanh toán thực tế**: `VNPAY` (khách trả trực tuyến, `recordedBy = SYSTEM`), `BANK_TRANSFER` hoặc `CASH` (khách trả trực tiếp, `recordedBy = VENDOR`). `plannedMethod`: phương thức dự kiến của đợt, để đối chiếu. `proofFile`: ảnh / PDF minh chứng ([vendors.md](vendors.md), upload với `purpose = PAYMENT_PROOF`).
+`OrderPayment`: `{ id, installmentId, installmentName, amount, paidAt, method, plannedMethod, recordedBy: "SYSTEM" | "VENDOR", proofFile: VendorFile | null, note }`. `method` là **hình thức thanh toán thực tế**: `VIETQR` (khách trả trực tuyến, `recordedBy = SYSTEM`), `BANK_TRANSFER` hoặc `CASH` (khách trả trực tiếp, `recordedBy = VENDOR`). `plannedMethod`: phương thức dự kiến của đợt, để đối chiếu. `proofFile`: ảnh / PDF minh chứng ([vendors.md](vendors.md), upload với `purpose = PAYMENT_PROOF`).
 `OrderAdjustment`: `{ id, status, reason, proposedAt, before, after, beforeTotal, afterTotal, paidAmount, customerNote, customerNoteAt, resultVersion, revisionOf, forRequest }` (`before`, `after` là `OrderContent`; `forRequest`: yêu cầu điều chỉnh của khách mà phương án đáp ứng).
 `ServiceOrder.cancellation`: `{ reason, cancelledAt }` khi `CANCELLED`, ngược lại `null`.
 
@@ -286,7 +286,7 @@ Lỗi: 400 `VALIDATION_ERROR`, 400 `ORDER_NO_CHANGES`, 404 `ORDER_NOT_FOUND`, 40
 ### POST /vendors/me/orders/:id/payments
 Role: VENDOR
 
-NCC ghi nhận một khoản khách **trả trực tiếp** (chuyển khoản, tiền mặt) cho một đợt bất kỳ, **kể cả đợt đặt cọc** khi khách không trả qua VNPay. Cọc trả qua VNPay vẫn là cách mặc định và do hệ thống tự ghi nhận ([payments.md](payments.md)), NCC không ghi nhận lại. Chỉ khi `status = CONFIRMED`. Được ghi nhận nhiều lần cho một đợt; vượt số còn phải thu thì đơn thành `OVERPAID`, hệ thống không tự đánh dấu đã hoàn.
+NCC ghi nhận một khoản khách **trả trực tiếp** (chuyển khoản, tiền mặt) cho một đợt bất kỳ, **kể cả đợt đặt cọc** khi khách không trả qua VietQR. Cọc trả qua VietQR vẫn là cách mặc định và do hệ thống tự ghi nhận ([payments.md](payments.md)), NCC không ghi nhận lại. Chỉ khi `status = CONFIRMED`. Được ghi nhận nhiều lần cho một đợt; vượt số còn phải thu thì đơn thành `OVERPAID`, hệ thống không tự đánh dấu đã hoàn.
 
 Request
 
@@ -301,11 +301,11 @@ Request
 }
 ```
 
-`method` (hình thức thanh toán): `BANK_TRANSFER` hoặc `CASH`; `VNPAY` chỉ do hệ thống ghi. `proofFile`, `note` tùy chọn (`null`). BE tính lại `paidAmount`, `paymentStatus`, thêm lịch sử và tin `PAYMENT_RECORDED` (SYSTEM) "Đã ghi nhận 64.000.000đ · Đợt 2 – Thanh toán còn lại · Tiền mặt".
+`method` (hình thức thanh toán): `BANK_TRANSFER` hoặc `CASH`; `VIETQR` chỉ do hệ thống ghi. `proofFile`, `note` tùy chọn (`null`). BE tính lại `paidAmount`, `paymentStatus`, thêm lịch sử và tin `PAYMENT_RECORDED` (SYSTEM) "Đã ghi nhận 64.000.000đ · Đợt 2 – Thanh toán còn lại · Tiền mặt".
 
 Response 200: `{ "data": ServiceOrder }`
 
-Lỗi: 400 `VALIDATION_ERROR` (đợt không có trong phiên bản hiện hành, số tiền ≤ 0, phương thức VNPay), 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_PAYABLE` (chưa `CONFIRMED`)
+Lỗi: 400 `VALIDATION_ERROR` (đợt không có trong phiên bản hiện hành, số tiền ≤ 0, phương thức VietQR), 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_PAYABLE` (chưa `CONFIRMED`)
 
 ### POST /vendors/me/orders/:id/adjustments
 Role: VENDOR
@@ -356,9 +356,9 @@ Lỗi: 400 `VALIDATION_ERROR` (thiếu lý do), 404 `ORDER_NOT_FOUND`, 409 `ORDE
 
 ## Khác biệt với prototype NCC
 
-- Đợt 1 (đặt cọc) luôn qua VNPay theo quyết định thanh toán kết hợp; prototype cho chọn Chuyển khoản / Tiền mặt cho mọi đợt.
+- Đợt 1 (đặt cọc) luôn qua VietQR theo quyết định thanh toán kết hợp; prototype cho chọn Chuyển khoản / Tiền mặt cho mọi đợt.
 - Bỏ nút đính kèm tệp trong ô soạn tin (prototype chỉ ghi tên tệp vào tin, chưa có upload).
 - Bỏ ô chọn khách khi tạo đơn ngoài chat ("Thêm đơn hàng" ở trang đơn hàng): đơn luôn tạo trong một hội thoại.
 - Tỷ lệ đợt là số nguyên (prototype cho số lẻ, có nút "Dồn vào đợt cuối"); đợt cuối tự nhận phần tiền lẻ.
-- Ghi nhận thanh toán có thêm tệp minh chứng và hình thức thanh toán; cọc mặc định qua VNPay (hệ thống ghi nhận), NCC chỉ ghi nhận cọc khi khách trả trực tiếp.
+- Ghi nhận thanh toán có thêm tệp minh chứng và hình thức thanh toán; cọc mặc định qua VietQR (hệ thống ghi nhận), NCC chỉ ghi nhận cọc khi khách trả trực tiếp.
 - Thêm luồng hủy đơn (prototype chỉ có nhãn "Đã hủy").

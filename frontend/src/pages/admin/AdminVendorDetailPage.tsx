@@ -1,4 +1,4 @@
-import { Check, LoaderCircle, MessageSquareWarning } from 'lucide-react'
+import { Check, Eye, EyeOff, LoaderCircle, MessageSquareWarning } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { formatDateTime } from '@/features/adminShared/format'
 import { AdminConfirm } from '@/features/adminShared/components/AdminConfirm'
 import { ReviewKindBadge } from '@/features/adminVendors/components/ReviewKindBadge'
-import { useAdminVendor, useReviewVendor } from '@/features/adminVendors/hooks'
+import { useAdminVendor, useReviewVendor, useToggleVendorHidden } from '@/features/adminVendors/hooks'
 import { controlClass, Notice } from '@/features/vendors/components/FormParts'
 import { ProfileStatusBadge } from '@/features/vendors/components/ProfileStatus'
 import { VendorProfileForm } from '@/features/vendors/components/VendorProfileForm'
@@ -26,6 +26,7 @@ function toProfile(v: AdminVendor): VendorProfile {
     taxCode: v.taxCode,
     representativeName: v.representativeName,
     category: v.category,
+    commissionRate: null,
     verifiedCategory: v.status === 'VERIFIED' ? v.category : null,
     province: v.province,
     ward: v.ward,
@@ -53,10 +54,11 @@ export default function AdminVendorDetailPage() {
   const navigate = useNavigate()
   const { data: v, isPending, isError, error, refetch } = useAdminVendor(id)
   const review = useReviewVendor()
+  const toggleHidden = useToggleVendorHidden()
   const [asking, setAsking] = useState(false)
   const [note, setNote] = useState('')
   const [formError, setFormError] = useState('')
-  const [confirm, setConfirm] = useState<'approve' | 'revision' | null>(null)
+  const [confirm, setConfirm] = useState<'approve' | 'revision' | 'hide' | 'unhide' | null>(null)
 
   if (isPending) return <div aria-busy="true" aria-label="Đang tải hồ sơ" className="mx-auto h-[560px] max-w-[980px] animate-pulse rounded-md bg-muted" />
   if (isError || !v) {
@@ -96,7 +98,37 @@ export default function AdminVendorDetailPage() {
     else review.mutate({ id: v!.id, note: note.trim() }, done)
   }
 
-  const actions = pending && (
+  /** Sau khi Admin xác nhận trong popup: ẩn hoặc hiện lại hồ sơ, ở lại trang để thấy trạng thái mới. */
+  function submitToggleHidden() {
+    toggleHidden.mutate({ id: v!.id, hide: confirm === 'hide' }, { onSuccess: () => setConfirm(null), onError: (e: Error) => (setConfirm(null), setFormError(e.message)) })
+  }
+
+  // Hồ sơ đã duyệt: nút Ẩn hồ sơ; hồ sơ đang ẩn: nút Hiện lại. Chỉ Admin có các nút này.
+  const hideActions =
+    (v.status === 'VERIFIED' || v.status === 'HIDDEN') && (
+      <div className="grid gap-3">
+        {formError && (
+          <p role="alert" className="text-[13px] text-destructive">
+            {formError}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>button]:flex-1">
+          {v.status === 'VERIFIED' ? (
+            <Button type="button" variant="outline" className="h-10 border-warn/50 text-warn hover:bg-warn-soft" onClick={() => (setFormError(''), setConfirm('hide'))} disabled={toggleHidden.isPending}>
+              <EyeOff />
+              Ẩn hồ sơ
+            </Button>
+          ) : (
+            <Button type="button" variant="success" className="h-10" onClick={() => (setFormError(''), setConfirm('unhide'))} disabled={toggleHidden.isPending}>
+              <Eye />
+              Hiện lại hồ sơ
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+
+  const actions = pending ? (
     <div className="grid gap-3">
       {asking && (
         <label className="grid gap-1.5 rounded-md border border-warn/35 bg-warn-soft px-4 py-3.5">
@@ -142,6 +174,8 @@ export default function AdminVendorDetailPage() {
         )}
       </div>
     </div>
+  ) : (
+    hideActions
   )
 
   return (
@@ -176,6 +210,11 @@ export default function AdminVendorDetailPage() {
           </p>
         </Notice>
       )}
+      {v.status === 'HIDDEN' && (
+        <Notice tone="warn" title="Hồ sơ đang được ẩn">
+          Hồ sơ và toàn bộ gói dịch vụ của nhà cung cấp không còn hiển thị với khách. Nhà cung cấp vẫn đăng nhập để hoàn thành đơn đã cọc và thanh toán hoa hồng. Bấm “Hiện lại hồ sơ” để hiển thị lại.
+        </Notice>
+      )}
       {pending && missing.length > 0 && (
         <Notice tone="warn" title={`Hồ sơ còn thiếu: ${missing.join(', ')}.`}>
           Cân nhắc yêu cầu chỉnh sửa / bổ sung trước khi phê duyệt.
@@ -183,6 +222,35 @@ export default function AdminVendorDetailPage() {
       )}
 
       <VendorProfileForm profile={toProfile(v)} reviewMode actions={actions} />
+
+      <AdminConfirm
+        open={confirm === 'hide'}
+        onOpenChange={(o) => !o && !toggleHidden.isPending && setConfirm(null)}
+        icon={EyeOff}
+        confirmIcon={EyeOff}
+        title="Ẩn hồ sơ này?"
+        confirmLabel="Ẩn hồ sơ"
+        danger
+        pending={toggleHidden.isPending}
+        notice="Toàn bộ gói dịch vụ của nhà cung cấp cũng ngừng hiển thị với khách, khách không đặt cọc được đơn mới. Các đơn đã cọc và hoa hồng vẫn xử lý bình thường. Nhà cung cấp sẽ nhận được thông báo."
+        onConfirm={submitToggleHidden}
+      >
+        Hồ sơ của <strong className="text-ink">{v.businessName}</strong> sẽ chuyển sang trạng thái Đã ẩn.
+      </AdminConfirm>
+
+      <AdminConfirm
+        open={confirm === 'unhide'}
+        onOpenChange={(o) => !o && !toggleHidden.isPending && setConfirm(null)}
+        icon={Eye}
+        confirmIcon={Eye}
+        title="Hiện lại hồ sơ này?"
+        confirmLabel="Hiện lại"
+        pending={toggleHidden.isPending}
+        notice="Hồ sơ và các gói dịch vụ sẽ hiển thị lại với khách như trước khi ẩn. Nhà cung cấp sẽ nhận được thông báo."
+        onConfirm={submitToggleHidden}
+      >
+        Hồ sơ của <strong className="text-ink">{v.businessName}</strong> sẽ trở lại trạng thái Đã duyệt.
+      </AdminConfirm>
 
       <AdminConfirm
         open={confirm === 'approve'}

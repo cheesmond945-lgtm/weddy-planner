@@ -243,7 +243,7 @@ export interface AdminVendorList {
   /** Số hồ sơ khớp bộ lọc (để phân trang) */
   total: number
   /** Số hồ sơ theo trạng thái trong phạm vi tìm kiếm và lĩnh vực hiện tại, hiện trên các nhãn trạng thái */
-  counts: { ALL: number; PENDING: number; NEEDS_REVISION: number; VERIFIED: number }
+  counts: { ALL: number; PENDING: number; NEEDS_REVISION: number; VERIFIED: number; HIDDEN: number }
 }
 
 // ---- Duyệt gói dịch vụ ----

@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { CalendarClock, CircleCheck, CreditCard, LoaderCircle, ShieldCheck } from 'lucide-react'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { CommissionStatement, CommissionStatementSummary } from '@/types/commission'
 import { formatPeriod } from '../constants'
+import type { PayInfo } from '@/types/payment'
 import { usePayCommission } from '../hooks'
+import { PayCommissionDialog } from './PayCommissionDialog'
 
 const dayNo = (ymd: string) => Math.floor(new Date(`${ymd}T00:00:00Z`).getTime() / 86_400_000)
 const todayVN = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10)
@@ -13,10 +16,11 @@ const payableFrom = (closingDate: string) => new Date(dayNo(closingDate) * 86_40
 
 /**
  * Khối nổi bật của kỳ đang xem: hoa hồng cần thanh toán, số đơn / doanh thu / tỷ lệ, hạn thanh toán,
- * nút thanh toán VNPay.
+ * nút thanh toán VietQR.
  */
 export function PeriodHero({ summary, detail }: { summary: CommissionStatementSummary; detail?: CommissionStatement }) {
   const pay = usePayCommission()
+  const [qr, setQr] = useState<PayInfo | null>(null)
   const s = summary
   const open = s.status === 'OPEN'
   const paid = s.status === 'PAID'
@@ -101,7 +105,7 @@ export function PeriodHero({ summary, detail }: { summary: CommissionStatementSu
               <button
                 type="button"
                 disabled={!payable || pay.isPending}
-                onClick={() => pay.mutate(s.id)}
+                onClick={() => pay.mutate(s.id, { onSuccess: setQr })}
                 className={cn(
                   'inline-flex h-12 w-full items-center justify-center gap-2 rounded-pill bg-(image:--gold-grad) px-6 text-[14.5px] font-semibold text-gold-on transition-[filter,transform,opacity] duration-200',
                   payable ? 'shadow-[0_10px_24px_-12px_rgba(169,130,58,0.6)] hover:brightness-105 active:scale-[0.99]' : 'cursor-not-allowed opacity-45',
@@ -112,12 +116,13 @@ export function PeriodHero({ summary, detail }: { summary: CommissionStatementSu
               </button>
               <p className="flex items-center justify-center gap-1.5 text-[11.5px] text-muted-foreground">
                 <ShieldCheck className="size-3.5 text-gold-ink" />
-                Thanh toán an toàn qua cổng VNPay
+                Thanh toán bằng chuyển khoản VietQR, tự động xác nhận
               </p>
             </div>
           )}
         </div>
       </div>
+      <PayCommissionDialog statementId={s.id} info={qr} onClose={() => setQr(null)} />
     </section>
   )
 }

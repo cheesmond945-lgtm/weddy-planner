@@ -151,3 +151,28 @@
   font-family: var(--sans);
   letter-spacing: -0.01em;
 }
+
+/* Bảng màu vàng của NCC cho hộp thoại điều khoản phía khách (hộp thoại render ngoài vùng NCC nên tự khai báo lại) */
+.gold-palette {
+  --gold: #a9823a;
+  --gold-soft: #f6eedd;
+  --gold-ink: #7c5a1e;
+  --gold-grad: linear-gradient(135deg, #b88d3f 0%, #d9b86e 38%, #f0dda6 52%, #c9a157 68%, #a57a31 100%);
+  --gold-on: #2a1d07;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .gold-palette {
+    --gold: #d4af66;
+    --gold-soft: #2b2519;
+    --gold-ink: #e8cb8c;
+    --gold-grad: linear-gradient(135deg, #b8904a 0%, #ddbe78 38%, #f3e1ae 52%, #cfa75e 68%, #a9803a 100%);
+    --gold-on: #1e1505;
+  }
+}
+:root[data-theme='dark'] .gold-palette {
+  --gold: #d4af66;
+  --gold-soft: #2b2519;
+  --gold-ink: #e8cb8c;
+  --gold-grad: linear-gradient(135deg, #b8904a 0%, #ddbe78 38%, #f3e1ae 52%, #cfa75e 68%, #a9803a 100%);
+  --gold-on: #1e1505;
+}

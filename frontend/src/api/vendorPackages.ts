@@ -1,3 +1,4 @@
+import type { AiSuggestion } from '@/types/ai'
 import type { SavePackageRequest, VendorPackage } from '@/types/vendorPackage'
 import { http } from './client'
 
@@ -6,7 +7,7 @@ export const vendorPackagesApi = {
   list: (): Promise<VendorPackage[]> => (http.get('/vendors/me/packages')),
 
   /** Gợi ý đoạn mô tả (nút "Tạo với AI") */
-  suggestDescription: (body: { name: string | null; tags: string[]; price: number | null; capacity: number | null }): Promise<{ description: string }> =>
+  suggestDescription: (body: { style: string; name: string | null; tags: string[]; price: number | null; capacity: number | null }): Promise<AiSuggestion> =>
     http.post('/vendors/me/packages/suggest-description', body),
 
   get: (id: string): Promise<VendorPackage> => (http.get(`/vendors/me/packages/${id}`)),

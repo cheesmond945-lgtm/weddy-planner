@@ -12,7 +12,7 @@ Giao diện tiếng Việt. Tiền tệ đồng. Tên hiển thị trên giao di
 | Validate | class-validator (BE), Zod (FE nếu cần) |
 | Auth | JWT + phân quyền theo role |
 | Lưu ảnh | Cloudinary (BE cấp chữ ký upload) |
-| Khác | VNPay (đặt cọc), LLM (sinh timeline), gửi email, Docker Compose cho Postgres |
+| Khác | VietQR + SePay (đặt cọc, hoa hồng), LLM (sinh timeline), gửi email, Docker Compose cho Postgres |
 
 ## Vai trò
 Couple (cặp đôi), Vendor (NCC), Admin. NCC không tự đăng ký: gửi yêu cầu tư vấn, Admin duyệt, hệ thống gửi email link tạo tài khoản, NCC đặt mật khẩu lần đầu.
@@ -53,7 +53,7 @@ Nếu các nguồn mâu thuẫn nhau, DỪNG và hỏi tôi, không tự chọn.
 - Mỗi module một thư mục: controller, service, dto. Module gọi nhau qua service, không truy vấn chéo bảng của module khác.
 - Truy cập DB qua PrismaService. Không sửa tay thư mục migrations.
 - Role kiểm tra bằng JwtAuthGuard và RolesGuard. Response bọc bằng interceptor, lỗi bắt bằng filter.
-- Dịch vụ bên ngoài (Cloudinary, LLM, mail, VNPay) nằm trong integrations/, mỗi cái một module.
+- Dịch vụ bên ngoài (Cloudinary, LLM, mail, VietQR/SePay) nằm trong integrations/, mỗi cái một module.
 - Việc chạy định kỳ (hết hạn cọc, bảng kê hoa hồng tháng) nằm trong jobs/.
 
 ## Git
@@ -62,7 +62,7 @@ Nếu các nguồn mâu thuẫn nhau, DỪNG và hỏi tôi, không tự chọn.
 
 ## Bảo mật
 - Không commit .env hoặc khóa bí mật. Chỉ cập nhật .env.example (không chứa khóa thật).
-- Kiểm tra chữ ký callback VNPay. Upload ảnh dùng chữ ký do BE cấp.
+- Xác nhận thanh toán bằng cách gọi API giao dịch của SePay, không tin kết quả từ trình duyệt. Upload ảnh dùng chữ ký do BE cấp.
 
 ## Không được làm
 - Thêm thư viện mới khi chưa hỏi.

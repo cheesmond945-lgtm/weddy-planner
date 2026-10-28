@@ -141,7 +141,14 @@ Kỳ mới nhất trước, cùng kỳ theo tên NCC. Response 200: `{ "data": {
 
 FE nút **Xuất dữ liệu** gọi endpoint này với `pageSize = 5000` rồi tạo tệp CSV phía trình duyệt.
 
-Bảng kê chỉ chuyển sang `PAID` khi NCC thanh toán qua VNPay (xem [commissions.md](commissions.md)); Admin chỉ xem, không có thao tác ghi nhận thủ công.
+Bảng kê chuyển sang `PAID` khi NCC thanh toán qua VietQR và SePay xác nhận đã nhận tiền (xem [payments.md](payments.md)); Admin còn có thể ghi nhận thủ công qua `POST /admin/commissions/:id/record-payment`.
+
+### POST /admin/vendors/:id/hide và /unhide
+Role: ADMIN. Chỉ Admin ẩn / hiện lại hồ sơ, NCC không có nút nào.
+
+- `hide`: hồ sơ `Approved` (`VERIFIED`) sang `Hidden` (`HIDDEN`). Gói dịch vụ giữ nguyên trạng thái nhưng ngừng hiển thị với khách (danh mục chỉ lấy NCC `Approved`). Báo NCC (`VendorHidden`). Lỗi 409 `VENDOR_NOT_HIDEABLE` nếu hồ sơ không ở `Approved`.
+- `unhide`: `Hidden` về `Approved`, gói hiển thị lại như cũ. Báo NCC (`VendorUnhidden`). Lỗi 409 `VENDOR_NOT_HIDDEN`.
+- Khi hồ sơ `Hidden`: NCC vẫn đăng nhập, xử lý đơn đã cọc, hoa hồng; không sửa hồ sơ (409 `VENDOR_PROFILE_HIDDEN`), không ẩn / khôi phục gói (409 `VENDOR_HIDDEN`), không gửi đơn mới; khách không đặt cọc được đơn chưa cọc (409 `VENDOR_HIDDEN`). Cần ràng buộc DB `vendor_profiles_status_check` có `'Hidden'` (xem `backend/prisma/manual/2026-10-vendor-profile-hidden.sql`).
 
 ## Cần chốt
 

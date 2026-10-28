@@ -38,7 +38,7 @@ export function InstallmentsEditor({ installments, onChange, total, errors }: In
       method: fallback.method!,
       note: null,
     })
-    const d = { ...base(deposit, { id: 'deposit', name: 'Đợt 1 – Đặt cọc', method: 'VNPAY' }), rate: nextRate, dueDate }
+    const d = { ...base(deposit, { id: 'deposit', name: 'Đợt 1 – Đặt cọc', method: 'VIETQR' }), rate: nextRate, dueDate }
     const r = { ...base(rest, { id: 'final', name: 'Đợt 2 – Thanh toán còn lại', method: 'CASH' }), rate: nextRate === null ? null : 100 - nextRate, dueDate: rest?.dueDate ?? '' }
     onChange(rebalance([d, r], total))
   }
@@ -102,7 +102,7 @@ export function InstallmentsEditor({ installments, onChange, total, errors }: In
                 />
                 {err(errors[`inst:${deposit?.id}:dueDate`])}
               </td>
-              <td className={cn(td, 'pt-3 text-[13px] text-muted-foreground')}>{PAYMENT_METHOD_LABEL.VNPAY}</td>
+              <td className={cn(td, 'pt-3 text-[13px] text-muted-foreground')}>{PAYMENT_METHOD_LABEL.VIETQR}</td>
             </tr>
             <tr>
               <td className={cn(td, 'pt-3 text-[13.5px]')}>Đợt 2 – Thanh toán còn lại</td>

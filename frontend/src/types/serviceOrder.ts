@@ -17,10 +17,10 @@ export const PAYMENT_STATUSES = ['UNPAID', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', '
 export type OrderPaymentStatus = (typeof PAYMENT_STATUSES)[number]
 
 /**
- * Phương thức của một đợt. Đợt 1 (đặt cọc) khách trả qua VNPay (docs/api/payments.md);
+ * Phương thức của một đợt. Đợt 1 (đặt cọc) khách trả qua VietQR (docs/api/payments.md);
  * các đợt sau trả ngoài hệ thống bằng chuyển khoản hoặc tiền mặt, NCC tự ghi nhận.
  */
-export const PAYMENT_METHODS = ['VNPAY', 'BANK_TRANSFER', 'CASH'] as const
+export const PAYMENT_METHODS = ['VIETQR', 'BANK_TRANSFER', 'CASH'] as const
 export type OrderPaymentMethod = (typeof PAYMENT_METHODS)[number]
 
 /** Một dòng báo giá. */
@@ -92,7 +92,7 @@ export interface OrderRevisionRequest {
   requestedAt: string
 }
 
-/** Khoản đã thu thực tế. Cọc qua VNPay do hệ thống ghi nhận; khoản khác NCC tự ghi nhận. */
+/** Khoản đã thu thực tế. Cọc qua VietQR do hệ thống ghi nhận; khoản khác NCC tự ghi nhận. */
 export interface OrderPayment {
   id: string
   installmentId: string

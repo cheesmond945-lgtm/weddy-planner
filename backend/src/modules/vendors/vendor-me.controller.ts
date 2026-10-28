@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query, Req, UploadedFile, Us
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AiQuotaService } from '../../integrations/ai/ai-quota.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateProfileBody, VendorProfileService } from './vendor-profile.service';
 
@@ -10,7 +11,7 @@ import { UpdateProfileBody, VendorProfileService } from './vendor-profile.servic
 @Roles('Vendor')
 @Controller('vendors/me')
 export class VendorMeController {
-  constructor(private readonly profile: VendorProfileService, private readonly notifications: NotificationsService) {}
+  constructor(private readonly profile: VendorProfileService, private readonly notifications: NotificationsService, private readonly quota: AiQuotaService) {}
 
   @Get('profile')
   getProfile(@Req() req: any) {
@@ -27,8 +28,14 @@ export class VendorMeController {
     return this.profile.save(req.user.sub, body ?? {}, true);
   }
 
+  /** Số lượt "Tạo với AI" còn lại hôm nay của NCC (dùng chung cho hồ sơ và gói). */
+  @Get('ai-quota')
+  aiQuota(@Req() req: any) {
+    return this.quota.status(req.user.sub);
+  }
+
   @Post('profile/suggest-description')
-  suggestDescription(@Req() req: any, @Body() body: { businessName?: string | null; ward?: string | null; province?: string | null; hint?: string | null }) {
+  suggestDescription(@Req() req: any, @Body() body: { style?: string; businessName?: string | null; ward?: string | null; province?: string | null; hint?: string | null }) {
     return this.profile.suggestDescription(req.user.sub, body ?? {});
   }
 

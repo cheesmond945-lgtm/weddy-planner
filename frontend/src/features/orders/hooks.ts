@@ -3,7 +3,6 @@ import { ordersApi, paymentsApi } from '@/api/orders'
 import { toast } from '@/components/ui/toast'
 import { planningKeys, useRefreshPlanning } from '@/features/weddings/hooks'
 import { useAuth } from '@/store/auth'
-import type { PaymentMethod } from '@/types/order'
 
 export function useOrder(id: string, options?: { poll?: boolean }) {
   const { user } = useAuth()
@@ -13,6 +12,12 @@ export function useOrder(id: string, options?: { poll?: boolean }) {
     enabled: !!id && user?.role === 'COUPLE',
     refetchInterval: options?.poll ? 2500 : false,
   })
+}
+
+/** Dịch vụ của đơn (trang thanh toán cọc): không phụ thuộc NCC có đang hiển thị trong danh mục hay không. */
+export function useOrderService(orderId: string) {
+  const { user } = useAuth()
+  return useQuery({ queryKey: ['order-service', user?.id, orderId] as const, queryFn: () => ordersApi.getService(orderId), enabled: !!orderId && user?.role === 'COUPLE' })
 }
 
 export function useRequestRevision() {
@@ -28,15 +33,6 @@ export function useRequestRevision() {
 
 export function useCreateDeposit() {
   return useMutation({
-    mutationFn: ({ orderId, method }: { orderId: string; method: PaymentMethod }) => paymentsApi.createDeposit(orderId, method),
-  })
-}
-
-/** VNPay đưa khách quay về trang đơn: xác nhận kết quả với backend rồi tải lại đơn, kế hoạch, timeline. */
-export function useConfirmDeposit() {
-  const refresh = useRefreshPlanning()
-  return useMutation({
-    mutationFn: paymentsApi.confirmDeposit,
-    onSettled: () => refresh(),
+    mutationFn: (orderId: string) => paymentsApi.createDeposit(orderId),
   })
 }

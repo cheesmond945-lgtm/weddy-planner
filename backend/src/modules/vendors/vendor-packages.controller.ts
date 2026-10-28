@@ -16,7 +16,7 @@ export class VendorPackagesController {
   }
 
   @Post('suggest-description')
-  suggestDescription(@Req() req: any, @Body() body: { name?: string | null; tags?: string[]; price?: number | null; capacity?: number | null }) {
+  suggestDescription(@Req() req: any, @Body() body: { style?: string; name?: string | null; tags?: string[]; price?: number | null; capacity?: number | null }) {
     return this.packages.suggestDescription(req.user.sub, body ?? {});
   }
 

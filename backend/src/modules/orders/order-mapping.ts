@@ -13,7 +13,7 @@ export const ORDER_INCLUDE = {
   order_revisions: { orderBy: { created_date: 'desc' as const } },
   invoices: true,
   weddings: { select: { user_id: true } },
-  vendor_profiles: { select: { id: true, user_id: true } },
+  vendor_profiles: { select: { id: true, user_id: true, status: true } },
 } satisfies Prisma.ordersInclude;
 
 export type OrderRow = Prisma.ordersGetPayload<{ include: typeof ORDER_INCLUDE }>;
@@ -53,7 +53,7 @@ export interface OrderContentDto {
   eventDate: string;
   note: string | null;
   lines: { id: string; packageId: string | null; name: string; unit: string; quantity: number; unitPrice: number; isPolicyFee: boolean }[];
-  installments: { id: string; name: string; rate: number | null; amount: number; dueDate: string; method: 'VNPAY' | 'BANK_TRANSFER' | 'CASH'; note: string | null }[];
+  installments: { id: string; name: string; rate: number | null; amount: number; dueDate: string; method: 'VIETQR' | 'BANK_TRANSFER' | 'CASH'; note: string | null }[];
 }
 
 export function contentOf(o: OrderRow): OrderContentDto {
@@ -81,7 +81,7 @@ export function contentOf(o: OrderRow): OrderContentDto {
         rate: percent,
         amount: deposit,
         dueDate: o.deposit_due_date ? ymdVN(o.deposit_due_date) : ymd(o.event_date),
-        method: 'VNPAY',
+        method: 'VIETQR',
         note: null,
       },
       { id: 'final', name: 'Đợt 2 – Thanh toán còn lại', rate: Math.round((100 - percent) * 100) / 100, amount: total - deposit, dueDate: ymd(o.event_date), method: 'CASH', note: null },
@@ -133,8 +133,8 @@ export function toServiceOrder(o: OrderRow, conversationId: string, cancelReason
     installmentName: string;
     amount: number;
     paidAt: string;
-    method: 'VNPAY' | 'BANK_TRANSFER' | 'CASH';
-    plannedMethod: 'VNPAY' | 'BANK_TRANSFER' | 'CASH';
+    method: 'VIETQR' | 'BANK_TRANSFER' | 'CASH';
+    plannedMethod: 'VIETQR' | 'BANK_TRANSFER' | 'CASH';
     recordedBy: 'SYSTEM' | 'VENDOR';
     proofFile: null;
     note: null;
@@ -146,8 +146,8 @@ export function toServiceOrder(o: OrderRow, conversationId: string, cancelReason
       installmentName: content.installments[0].name,
       amount: deposit,
       paidAt: (o.payments!.paid_date ?? createdAt).toISOString(),
-      method: 'VNPAY',
-      plannedMethod: 'VNPAY',
+      method: 'VIETQR',
+      plannedMethod: 'VIETQR',
       recordedBy: 'SYSTEM',
       proofFile: null,
       note: null,

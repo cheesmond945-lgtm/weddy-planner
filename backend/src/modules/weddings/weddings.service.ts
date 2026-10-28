@@ -169,7 +169,7 @@ export class WeddingsService {
     if (only) vendors = vendors.filter((v) => only.includes(v.id));
     const [statuses, summaries, firsts, wedding] = await Promise.all([
       this.statuses(userId, weddingId, vendors),
-      this.services.summaries(vendors.map((v) => v.id)),
+      this.services.summaries(vendors.map((v) => v.id), userId),
       this.firstPackages(vendors.map((v) => v.id)),
       this.prisma.weddings.findUnique({ where: { id: weddingId }, select: { guest_count: true } }),
     ]);

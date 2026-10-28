@@ -30,9 +30,9 @@ export const scheduledOf = (insts: OrderInstallment[]) => insts.reduce((s, i) =>
 
 export const newLine = (): OrderLine => ({ id: uid('l'), packageId: null, name: '', unit: '', quantity: 0, unitPrice: 0, isPolicyFee: false })
 
-/** Đợt mới: đợt đầu là đặt cọc (VNPay); đợt sau nhận phần còn thiếu. */
+/** Đợt mới: đợt đầu là đặt cọc (VietQR); đợt sau nhận phần còn thiếu. */
 /**
- * Đợt mới: đợt đầu là đặt cọc (VNPay). Nếu các đợt hiện có đều theo tỷ lệ và chưa đủ 100% thì đợt mới nhận phần %
+ * Đợt mới: đợt đầu là đặt cọc (VietQR). Nếu các đợt hiện có đều theo tỷ lệ và chưa đủ 100% thì đợt mới nhận phần %
  * còn lại, ngược lại nhận phần tiền còn thiếu.
  */
 export function newInstallment(index: number, total: number, current: OrderInstallment[]): OrderInstallment {
@@ -44,7 +44,7 @@ export function newInstallment(index: number, total: number, current: OrderInsta
     rate: allRated && restRate > 0 ? restRate : null,
     amount: index === 0 ? 0 : Math.max(0, total - scheduledOf(current)),
     dueDate: '',
-    method: index === 0 ? 'VNPAY' : 'BANK_TRANSFER',
+    method: index === 0 ? 'VIETQR' : 'BANK_TRANSFER',
     note: null,
   }
   return inst
@@ -82,7 +82,7 @@ export function emptyContent(customer?: { name: string; phone: string }): OrderC
     note: null,
     lines: [newLine()],
     installments: [
-      { id: 'deposit', name: 'Đợt 1 – Đặt cọc', rate: 30, amount: 0, dueDate: '', method: 'VNPAY', note: null },
+      { id: 'deposit', name: 'Đợt 1 – Đặt cọc', rate: 30, amount: 0, dueDate: '', method: 'VIETQR', note: null },
       { id: 'final', name: 'Đợt 2 – Thanh toán còn lại', rate: 70, amount: 0, dueDate: '', method: 'CASH', note: null },
     ],
   }

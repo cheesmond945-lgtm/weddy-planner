@@ -1,4 +1,6 @@
 import { Lock, Pencil, Send, Sparkles } from 'lucide-react'
+import { AiWriteDialog } from '@/components/AiWriteDialog'
+import { vendorsApi } from '@/api/vendors'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { FormField } from '@/components/FormField'
 import { ApiError } from '@/api'
@@ -6,11 +8,12 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import type { VendorDocument, VendorFile, VendorProfile } from '@/types/vendor'
-import { documentSlotsOf, isProfileReadOnly, PHOTO_LABEL, PHOTO_TYPE, photosRequired } from '../constants'
-import { useSaveVendorProfile, useSuggestDescription } from '../hooks'
+import { documentSlotsOf, isProfileReadOnly, PHOTO_LABEL, PHOTO_TYPE, PROFILE_AI_STYLES, photosRequired } from '../constants'
+import { useSaveVendorProfile } from '../hooks'
 import { MAX_DESCRIPTION, toFormValues, toRequest, mapsUrlFromAddress, validateProfile, type ProfileErrors, type ProfileFormValues } from '../profileForm'
 import { ConfirmDialog } from './ConfirmDialog'
 import { controlClass, Field, FormSection } from './FormParts'
+import { PartnerTermsDialog } from './PartnerTermsDialog'
 import { PhotoAlbumCard } from './PhotoAlbumCard'
 import { TimeCombobox } from './TimeCombobox'
 import { UnsavedChangesGuard } from './UnsavedChangesGuard'
@@ -43,15 +46,17 @@ const cols = (n: number) => ({ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr)
  */
 export function VendorProfileForm({ profile, reviewMode, actions }: { profile: VendorProfile; reviewMode?: boolean; actions?: ReactNode }) {
   const save = useSaveVendorProfile()
-  const suggest = useSuggestDescription()
   const baseline = useMemo(() => toFormValues(profile), [profile])
   const [values, setValues] = useState(baseline)
   // Sau lần bấm đầu tiên thì kiểm tra lại theo từng lần sửa (như prototype)
   const [checkMode, setCheckMode] = useState<'draft' | 'submit' | null>(null)
   // Bản cập nhật bị yêu cầu chỉnh sửa: mở sẵn chế độ sửa để NCC sửa ngay
   const [updating, setUpdating] = useState(profile.revisionRequested)
-  const [confirmAi, setConfirmAi] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const [confirmSubmit, setConfirmSubmit] = useState(false)
+  // Đồng ý Điều khoản hợp tác: phải tích mới nộp được hồ sơ duyệt hoặc gửi cập nhật
+  const [agreed, setAgreed] = useState(false)
+  const [termsOpen, setTermsOpen] = useState(false)
 
   const verified = profile.status === 'VERIFIED'
   // reviewMode: Admin xem hồ sơ trong đúng bố cục của NCC, mọi ô chỉ đọc, nút bấm do `actions` quyết định
@@ -100,7 +105,7 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
 
   function doSave(submit: boolean) {
     save.mutate(
-      { body: toRequest(values), submit, verified },
+      { body: { ...toRequest(values), ...(submit && { agreedToTerms: agreed }) }, submit, verified },
       {
         onError: (err) => {
           const details = err instanceof ApiError && err.details && typeof err.details === 'object' ? (err.details as Record<string, string>) : null
@@ -124,13 +129,6 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
     setValues(baseline)
     setCheckMode(null)
     setUpdating(false)
-  }
-
-  function generate() {
-    suggest.mutate(
-      { businessName: values.businessName.trim() || null, ward: values.ward.trim() || null, province: values.province.trim() || null },
-      { onSuccess: ({ description }) => set({ description }) },
-    )
   }
 
   const setDocuments = (type: VendorDocument['type'], files: VendorFile[]) =>
@@ -272,11 +270,11 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
                     type="button"
                     variant="outline"
                     className="h-9 rounded-pill border-line-strong px-4"
-                    disabled={displayOff || suggest.isPending}
-                    onClick={() => (values.description.trim() ? setConfirmAi(true) : generate())}
+                    disabled={displayOff}
+                    onClick={() => setAiOpen(true)}
                   >
                     <Sparkles className="text-[#7c3aed]" />
-                    {suggest.isPending ? 'Đang tạo…' : 'Tạo với AI'}
+                    Tạo với AI
                   </Button>
                 )}
               </div>
@@ -338,13 +336,25 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
       {reviewMode ? (
         actions
       ) : (
+      <>
+      {!readOnly && (!verified || updating) && (
+        <label className="mb-3 flex cursor-pointer items-start justify-end gap-2 text-sm max-sm:justify-start">
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-[3px] accent-primary" />
+          <span>
+            Tôi đã đọc và đồng ý{' '}
+            <button type="button" className="font-medium text-gold-ink underline underline-offset-2" onClick={() => setTermsOpen(true)}>
+              Điều khoản hợp tác
+            </button>
+          </span>
+        </label>
+      )}
       <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>button]:flex-1">
         {!readOnly && !verified && (
           <>
             <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={() => handleSave(false)}>
               {profile.status === 'NEEDS_REVISION' ? 'Lưu' : 'Lưu nháp'}
             </Button>
-            <Button type="submit" className="h-10" disabled={busy}>
+            <Button type="submit" className="h-10" disabled={busy || !agreed}>
               {busy ? (
                 'Đang gửi…'
               ) : (
@@ -374,7 +384,7 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
             <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={cancelUpdate}>
               Hủy
             </Button>
-            <Button type="submit" className="h-10" disabled={busy}>
+            <Button type="submit" className="h-10" disabled={busy || !agreed}>
               {busy ? (
                 'Đang gửi…'
               ) : (
@@ -387,7 +397,13 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
           </>
         )}
       </div>
+      </>
       )}
+      <PartnerTermsDialog
+        open={termsOpen}
+        onOpenChange={setTermsOpen}
+        vars={{ businessName: values.businessName || profile.businessName, categoryName: category?.name ?? null, commissionRate: profile.commissionRate }}
+      />
 
       <ConfirmDialog
         open={confirmSubmit}
@@ -402,9 +418,21 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
           <p>Sau khi gửi, hồ sơ chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý. Bạn đã kiểm tra kỹ thông tin và giấy tờ chưa?</p>
         )}
       </ConfirmDialog>
-      <ConfirmDialog open={confirmAi} onOpenChange={setConfirmAi} title="Thay phần giới thiệu hiện tại?" confirmLabel="Tạo mới" onConfirm={generate}>
-        <p>Nội dung bạn đã nhập trong ô Giới thiệu sẽ được thay bằng đoạn do AI gợi ý.</p>
-      </ConfirmDialog>
+      <AiWriteDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        fieldName="Giới thiệu"
+        facts={[
+          values.businessName.trim() ? `Tên đơn vị: ${values.businessName.trim()}` : '',
+          category?.name ? `Lĩnh vực: ${category.name}` : '',
+          [values.ward.trim(), values.province.trim()].filter(Boolean).length ? `Khu vực: ${[values.ward.trim(), values.province.trim()].filter(Boolean).join(', ')}` : '',
+          values.openTime && values.closeTime ? `Giờ làm việc: ${values.openTime} - ${values.closeTime}` : '',
+        ].filter(Boolean)}
+        blocked={values.businessName.trim() ? null : 'Hãy nhập Tên doanh nghiệp trước để AI có thông tin thật mà viết.'}
+        styles={PROFILE_AI_STYLES}
+        write={(style) => vendorsApi.suggestDescription({ style, businessName: values.businessName.trim() || null, ward: values.ward.trim() || null, province: values.province.trim() || null })}
+        onUse={(description) => set({ description })}
+      />
       <UnsavedChangesGuard when={dirty && !readOnly && !busy} />
     </form>
   )

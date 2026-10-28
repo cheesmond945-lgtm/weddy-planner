@@ -59,9 +59,17 @@ export const categoryRank = (slug: string) => {
 export class ServicesService {
   constructor(private readonly prisma: PrismaService, private readonly storage: StorageService) {}
 
-  private async loadVisible() {
+  /**
+   * NCC khách nhìn thấy: hồ sơ Approved, tài khoản Active, có gói Approved.
+   * `alsoHidden`: id các NCC đang bị ẩn (Hidden) vẫn được trả về, dành cho cặp đôi đã có đơn với NCC đó (xem withOrderWith).
+   */
+  private async loadVisible(alsoHidden: string[] = []) {
     return this.prisma.vendor_profiles.findMany({
-      where: { status: 'Approved', users: { status: 'Active' }, service_packages: { some: { status: 'Approved' } } },
+      where: {
+        users: { status: 'Active' },
+        service_packages: { some: { status: 'Approved' } },
+        OR: [{ status: 'Approved' }, ...(alsoHidden.length ? [{ status: 'Hidden', id: { in: alsoHidden } }] : [])],
+      },
       orderBy: [{ created_date: 'asc' }, { id: 'asc' }],
       include: {
         service_categories: { select: { id: true, name: true } },
@@ -95,13 +103,30 @@ export class ServicesService {
       rating: 0,
       reviewCount: 0,
       coverImageUrl: cover ? this.img(cover.url) : '',
+      /** NCC đang bị Admin ẩn (chỉ thấy được với cặp đôi đã có đơn): tạm ngừng nhận đơn mới */
+      paused: v.status === 'Hidden',
     };
   }
 
   /** Dịch vụ dạng thẻ của các NCC đang hiển thị (NCC bị ẩn thì bỏ qua). */
-  async summaries(ids: string[]) {
+  /**
+   * Trong `ids`, các NCC đang bị ẩn nhưng cặp đôi `coupleUserId` đã có đơn (không tính nháp): vẫn phải thấy để theo dõi đơn đã tạo / đã cọc.
+   */
+  private async withOrderWith(coupleUserId: string, ids: string[]) {
+    if (!ids.length) return [];
+    const rows = await this.prisma.orders.findMany({
+      where: { vendor_id: { in: ids }, status: { not: 'Draft' }, weddings: { user_id: coupleUserId } },
+      select: { vendor_id: true },
+      distinct: ['vendor_id'],
+    });
+    return rows.flatMap((r) => (r.vendor_id ? [r.vendor_id] : []));
+  }
+
+  /** `forCouple`: thêm cả NCC đang bị ẩn mà cặp đôi này đã có đơn (kế hoạch, hội thoại của họ). */
+  async summaries(ids: string[], forCouple?: string) {
     const wanted = new Set(ids);
-    return (await this.loadVisible()).filter((v) => wanted.has(v.id)).map((v) => this.summarize(v));
+    const hidden = forCouple ? await this.withOrderWith(forCouple, ids) : [];
+    return (await this.loadVisible(hidden)).filter((v) => wanted.has(v.id)).map((v) => this.summarize(v));
   }
 
   async isVisible(id: string) {
@@ -165,8 +190,9 @@ export class ServicesService {
     return Paginated.of(rows, items.length, { page, pageSize });
   }
 
-  async detail(id: string) {
-    const v = (await this.loadVisible()).find((x) => x.id === id);
+  /** `includeHidden`: chỉ truyền true khi người gọi đã kiểm tra cặp đôi có đơn với NCC này (OrdersService.serviceOf). */
+  async detail(id: string, includeHidden = false) {
+    const v = (await this.loadVisible(includeHidden ? [id] : [])).find((x) => x.id === id);
     if (!v) throw new HttpException({ code: 'SERVICE_NOT_FOUND', message: 'Không tìm thấy dịch vụ.' }, 404);
 
     const prices = v.service_packages.map((p) => Number(p.price));

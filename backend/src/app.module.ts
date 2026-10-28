@@ -12,12 +12,12 @@ import { WeddingsModule } from './modules/weddings/weddings.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { CommissionsModule } from './modules/commissions/commissions.module';
+import { AiModule } from './integrations/ai/ai.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ConsultationRequestsModule } from './modules/consultation-requests/consultation-requests.module';
-import { PaymentsGatewayModule } from './modules/payments-gateway/payments-gateway.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, MailModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, PaymentsGatewayModule],
+  imports: [PrismaModule, AiModule, StorageModule, MailModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule],
 })
 export class AppModule {}

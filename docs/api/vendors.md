@@ -185,6 +185,7 @@ Request: `UpdateVendorProfileRequest`, kiểm tra như `PATCH` và thêm:
 - Bắt buộc: `businessName`, `taxCode`, `representativeName`, `district`, `address`. Tài khoản chưa được gán lĩnh vực (dữ liệu lỗi) thì trả `400`, NCC liên hệ WebPlan.
 - `taxCode`: 10 chữ số, hoặc 10 + 3 số chi nhánh (`0312345678`, `0312345678-001`).
 - Đủ giấy tờ và ảnh cơ sở theo lĩnh vực (mục Luật theo lĩnh vực).
+- `agreedToTerms: true` (đã tích "Tôi đã đọc và đồng ý Điều khoản hợp tác"), thiếu thì 400 `VALIDATION_ERROR` với `details.agreedToTerms`. Chỉ kiểm tra, **không lưu vào CSDL**. Áp dụng cả khi NCC đã duyệt gửi cập nhật. Toàn văn điều khoản nằm ở FE (`features/vendors/partnerTerms.ts`), điền `{{TEN_DOANH_NGHIEP}}` từ `businessName`, `{{TEN_LOAI_DICH_VU}}` từ `category.name`, `{{TY_LE}}` từ `commissionRate` (= `service_categories.commission_rate`) của `VendorProfile`.
 
 Response 200: `{ "data": VendorProfile }`
 

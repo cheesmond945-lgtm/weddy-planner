@@ -1,7 +1,8 @@
 import { HttpException, Injectable, Logger } from '@nestjs/common';
-import { randomInt } from 'node:crypto';
-import { buildPaymentUrl, frontendUrl, parseTxnRef, txnRefOf, verifyResult, vnpayLive, type IpnCode, type VnpayResult } from '../../integrations/vnpay/vnpay';
+import { buildPayInfo, depositContent, vietqrConfig } from '../../integrations/vietqr/vietqr';
+import { SepayService } from '../../integrations/vietqr/sepay.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ServicesService } from '../catalog/services.service';
 import { Paginated } from '../../common/utils/pagination';
 import { notify, postMessage } from '../chat/chat-messages';
 import { onOrderDeposited } from '../weddings/timeline-hooks';
@@ -65,12 +66,12 @@ export interface ListQuery {
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly sepay: SepayService, private readonly services: ServicesService) {}
 
   // ---------- Tiện ích ----------
 
   private async vendorOf(userId: string) {
-    const v = await this.prisma.vendor_profiles.findUnique({ where: { user_id: userId }, select: { id: true, category_id: true, business_name: true } });
+    const v = await this.prisma.vendor_profiles.findUnique({ where: { user_id: userId }, select: { id: true, category_id: true, business_name: true, status: true } });
     return v ?? fail('VENDOR_PROFILE_NOT_FOUND', 'Tài khoản chưa có hồ sơ nhà cung cấp.', 404);
   }
 
@@ -184,7 +185,7 @@ export class OrdersService {
   private asContent(p: ParsedContent): OrderContentDto {
     const deposit = this.depositOf(p);
     return this.dtoOf(p, [
-      { id: 'deposit', name: 'Đợt 1 – Đặt cọc', rate: p.percent, amount: deposit, dueDate: p.depositDue ?? p.eventDate, method: 'VNPAY', note: null },
+      { id: 'deposit', name: 'Đợt 1 – Đặt cọc', rate: p.percent, amount: deposit, dueDate: p.depositDue ?? p.eventDate, method: 'VIETQR', note: null },
       { id: 'final', name: 'Đợt 2 – Thanh toán còn lại', rate: 100 - p.percent, amount: p.total - deposit, dueDate: p.eventDate, method: 'CASH', note: null },
     ]);
   }
@@ -212,6 +213,12 @@ export class OrdersService {
   private async ownedByCouple(userId: string, id: string) {
     const o = UUID.test(id) ? await this.prisma.orders.findFirst({ where: { id, weddings: { user_id: userId }, status: { not: 'Draft' } }, include: ORDER_INCLUDE }) : null;
     return o ?? fail('ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.', 404);
+  }
+
+  /** Chi tiết dịch vụ của đơn, kể cả khi NCC đang bị ẩn (cặp đôi có đơn thì vẫn xem được để thanh toán / theo dõi). */
+  async serviceOfOrder(userId: string, id: string) {
+    const o = await this.ownedByCouple(userId, id);
+    return this.services.detail(o.vendor_profiles!.id, true);
   }
 
   async getForCouple(userId: string, id: string) {
@@ -246,62 +253,34 @@ export class OrdersService {
   }
 
   /**
-   * Đặt cọc (docs/api/payments.md).
-   * - VNPay thật (integrations/vnpay): trả URL VNPay đã ký; VNPay đưa khách về /plan/deal/:orderId kèm kết quả (FE gọi confirmDeposit)
-   *   và gọi IPN (ipnDeposit). Cả hai ghi nhận qua markDepositPaid, chỉ ghi một lần.
-   * - Giả lập (mặc định): ghi nhận thành công ngay.
+   * Đặt cọc qua VietQR + SePay (docs/api/payments.md): trả mã QR với số tiền cọc lấy từ DB và nội dung "EVERLY" + mã đơn.
+   * Tiền chỉ được ghi nhận ở checkDeposit, sau khi SePay xác nhận đã nhận đúng nội dung và số tiền.
    */
-  async createDeposit(userId: string, orderId: string, method: string, ip: string) {
+  async createDeposit(userId: string, orderId: string) {
+    const cfg = vietqrConfig() ?? fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VietQR.', 501);
     const o = await this.ownedByCouple(userId, orderId);
     if (o.status !== 'Pending') return fail('ORDER_NOT_PAYABLE', 'Đơn không ở trạng thái chờ đặt cọc.', 409);
+    if (o.vendor_profiles?.status === 'Hidden') return fail('VENDOR_HIDDEN', 'Nhà cung cấp tạm ngừng nhận đơn mới nên chưa đặt cọc được.', 409);
     const deposit = Number(o.deposit_amount);
-
-    if (vnpayLive()) {
-      // Dòng thanh toán chưa trả (giữ nguyên nếu đã có), để IPN và trang quay về cùng ghi vào
-      const payment = await this.prisma.payments.upsert({ where: { order_id: orderId }, create: { order_id: orderId, status: 'Unpaid' }, update: {} });
-      const paymentUrl = buildPaymentUrl({
-        txnRef: txnRefOf('DEPOSIT', orderId),
-        amount: deposit,
-        orderInfo: `Dat coc don ${o.order_code}`,
-        ip,
-        method,
-        returnUrl: `${frontendUrl()}/plan/deal/${orderId}`,
-      });
-      return { paymentId: payment.id, paymentUrl };
-    }
-
-    await this.markDepositPaid(o, String(randomInt(10_000_000, 99_999_999)), new Date());
-    const payment = await this.prisma.payments.findUniqueOrThrow({ where: { order_id: orderId } });
-    return { paymentId: payment.id, paymentUrl: `/plan/deal/${orderId}?vnp_ResponseCode=00` };
+    if (!(deposit > 0)) return fail('ORDER_NOT_PAYABLE', 'Đơn chưa có số tiền cọc.', 409);
+    // Dòng thanh toán chưa trả (giữ nguyên nếu đã có)
+    const payment = await this.prisma.payments.upsert({ where: { order_id: orderId }, create: { order_id: orderId, status: 'Unpaid' }, update: {} });
+    return { paymentId: payment.id, ...buildPayInfo(cfg, { amount: deposit, content: depositContent(o.order_code!) }) };
   }
 
-  /** VNPay đưa khách quay về trang đơn: kiểm tra chữ ký, số tiền rồi ghi nhận đặt cọc (nếu IPN chưa ghi). */
-  async confirmDeposit(userId: string, q: Record<string, string>) {
-    if (!vnpayLive()) return fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VNPay.', 501);
-    const r = verifyResult(q);
-    if (!r.valid) return fail('PAYMENT_SIGNATURE_INVALID', 'Kết quả thanh toán không hợp lệ (sai chữ ký).', 400);
-    const t = parseTxnRef(r.txnRef);
-    if (t?.kind !== 'DEPOSIT') return fail('PAYMENT_INTENT_NOT_FOUND', 'Mã giao dịch không hợp lệ.', 400);
-    const o = await this.ownedByCouple(userId, t.id);
-    if (!r.success) return { status: 'FAILED' as const, message: r.message };
-    if (Math.round(Number(o.deposit_amount)) !== Math.round(r.amount)) return fail('PAYMENT_AMOUNT_MISMATCH', 'Số tiền thanh toán không khớp tiền cọc.', 409);
-    const res = await this.markDepositPaid(o, r.transactionNo, r.paidAt);
+  /** Hỏi SePay xem đã nhận đủ tiền cọc chưa; có thì ghi nhận đặt cọc (chỉ một lần). */
+  async checkDeposit(userId: string, orderId: string) {
+    if (!vietqrConfig()) return fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VietQR.', 501);
+    const o = await this.ownedByCouple(userId, orderId);
+    if (o.status === 'Deposited' || o.status === 'Completed') return { status: 'PAID' as const, message: 'Đơn đã được đặt cọc.' };
+    if (o.status !== 'Pending') return fail('ORDER_NOT_PAYABLE', 'Đơn không ở trạng thái chờ đặt cọc.', 409);
+    const txn = await this.sepay.findPayment(depositContent(o.order_code!), Number(o.deposit_amount));
+    if (!txn) return { status: 'PENDING' as const, message: 'Chưa nhận được tiền. Nếu bạn vừa chuyển khoản, vui lòng đợi ít giây.' };
+    const res = await this.markDepositPaid(o, txn.id, txn.paidAt);
     if (res === 'NOT_PENDING') {
       return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái trong lúc thanh toán. Vui lòng liên hệ WebPlan để được hỗ trợ hoàn tiền.' };
     }
     return { status: 'PAID' as const, message: 'Đặt cọc thành công.' };
-  }
-
-  /** IPN của VNPay cho giao dịch đặt cọc (chữ ký đã kiểm ở PaymentsGatewayController). */
-  async ipnDeposit(orderId: string, r: VnpayResult): Promise<IpnCode> {
-    const o = await this.prisma.orders.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
-    if (!o) return '01';
-    if (Math.round(Number(o.deposit_amount)) !== Math.round(r.amount)) return '04';
-    if (o.status === 'Deposited' || o.status === 'Completed') return '02';
-    // Giao dịch thất bại: không ghi gì, chỉ xác nhận đã nhận thông báo
-    if (!r.success) return '00';
-    const res = await this.markDepositPaid(o, r.transactionNo, r.paidAt);
-    return res === 'PAID' ? '00' : '02';
   }
 
   /**
@@ -433,7 +412,8 @@ export class OrdersService {
   }
 
   async send(userId: string, id: string, body: { content?: ContentBody }) {
-    const { order } = await this.ownedByVendor(userId, id);
+    const { vendor, order } = await this.ownedByVendor(userId, id);
+    if (vendor.status === 'Hidden') return fail('VENDOR_HIDDEN', 'Hồ sơ đang bị ẩn nên chưa gửi đơn mới được. Vui lòng liên hệ Everly.', 409);
     if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status ?? '')) {
       return fail('ORDER_NOT_REVISABLE', order.status === 'Deposited' || order.status === 'Completed' ? 'Đơn đã đặt cọc, không sửa và gửi lại được.' : 'Đơn đã hủy hoặc hết hạn.', 409);
     }

@@ -118,9 +118,9 @@ export interface SubmitCommissionPaymentBody {
   note: string | null
 }
 
-/** Kết quả ghi nhận sau khi quay về từ VNPay. */
+/** Kết quả kiểm tra thanh toán hoa hồng với SePay. */
 export interface CommissionPaymentResult {
-  status: 'PAID' | 'FAILED'
+  status: 'PAID' | 'PENDING'
   /** Mã bảng kê (DSMMYYYY) khi PAID */
   statementId?: string
   transactionCode?: string | null

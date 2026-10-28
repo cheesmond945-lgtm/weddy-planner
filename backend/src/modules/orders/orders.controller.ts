@@ -15,13 +15,19 @@ export class CoupleOrdersController {
     return this.orders.getForCouple(req.user.sub, id);
   }
 
+  /** Dịch vụ của đơn (kể cả khi NCC đang bị ẩn). */
+  @Get(':id/service')
+  service(@Req() req: any, @Param('id') id: string) {
+    return this.orders.serviceOfOrder(req.user.sub, id);
+  }
+
   @Post(':id/revision-requests')
   requestRevision(@Req() req: any, @Param('id') id: string, @Body() body: { note?: string }) {
     return this.orders.requestRevision(req.user.sub, id, body?.note ?? '');
   }
 }
 
-/** Đặt cọc (docs/api/payments.md). VNPay thật hoặc giả lập: xem OrdersService.createDeposit. */
+/** Đặt cọc qua VietQR + SePay (docs/api/payments.md): xem OrdersService.createDeposit. */
 @UseGuards(JwtAuthGuard)
 @Roles('Couple')
 @Controller('payments')
@@ -29,14 +35,14 @@ export class PaymentsController {
   constructor(private readonly orders: OrdersService) {}
 
   @Post()
-  create(@Req() req: any, @Body() body: { orderId?: string; method?: string }) {
-    return this.orders.createDeposit(req.user.sub, String(body?.orderId ?? ''), String(body?.method ?? ''), req.ip);
+  create(@Req() req: any, @Body() body: { orderId?: string }) {
+    return this.orders.createDeposit(req.user.sub, String(body?.orderId ?? ''));
   }
 
-  /** Kết quả VNPay quay về trang đơn (body = các tham số vnp_* trên URL quay về). */
-  @Post('vnpay/confirm')
-  confirm(@Req() req: any, @Body() body: Record<string, string>) {
-    return this.orders.confirmDeposit(req.user.sub, body ?? {});
+  /** Kiểm tra với SePay đã nhận đủ tiền cọc chưa và ghi nhận nếu đã nhận. */
+  @Post('check')
+  check(@Req() req: any, @Body() body: { orderId?: string }) {
+    return this.orders.checkDeposit(req.user.sub, String(body?.orderId ?? ''));
   }
 }
 

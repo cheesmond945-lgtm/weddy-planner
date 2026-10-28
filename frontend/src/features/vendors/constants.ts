@@ -1,3 +1,5 @@
+import { Briefcase, Gem, Smile } from 'lucide-react'
+import type { AiStyleOption } from '@/components/AiWriteDialog'
 import type { BadgeTone } from '@/components/Badge'
 import type { VendorDocumentType, VendorPhotoType, VendorProfile, VendorProfileStatus } from '@/types/vendor'
 
@@ -7,11 +9,12 @@ export const PROFILE_STATUS: Record<VendorProfileStatus, { label: string; tone: 
   PENDING: { label: 'Chờ duyệt', tone: 'info' },
   NEEDS_REVISION: { label: 'Cần chỉnh sửa / bổ sung', tone: 'warn' },
   VERIFIED: { label: 'Đã duyệt', tone: 'done' },
+  HIDDEN: { label: 'Đã ẩn', tone: 'wait' },
 }
 
-/** Chờ duyệt lần đầu, hoặc đã duyệt mà đang chờ Admin kiểm tra bản cập nhật: hồ sơ chỉ đọc, không có nút nào. */
+/** Chờ duyệt lần đầu, bị Admin ẩn, hoặc đã duyệt mà đang chờ Admin kiểm tra bản cập nhật: hồ sơ chỉ đọc, không có nút nào. */
 export const isProfileReadOnly = (p: Pick<VendorProfile, 'status' | 'pendingReview'>) =>
-  p.status === 'PENDING' || (p.status === 'VERIFIED' && p.pendingReview)
+  p.status === 'PENDING' || p.status === 'HIDDEN' || (p.status === 'VERIFIED' && p.pendingReview)
 
 /** Lĩnh vực nhà hàng (slug danh mục) cần thêm giấy ATTP và bắt buộc ảnh cơ sở. */
 export const RESTAURANT_SLUG = 'nha-hang'
@@ -52,3 +55,10 @@ export const DOCUMENT_TYPES = [...IMAGE_TYPES, 'application/pdf']
 export function formatFileSize(bytes: number) {
   return bytes > 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
+
+/** Giọng văn cho phần Giới thiệu hồ sơ (NCC tự giới thiệu). Id khớp PROFILE_STYLES ở backend. */
+export const PROFILE_AI_STYLES: AiStyleOption[] = [
+  { id: 'professional', label: 'Chuyên nghiệp', hint: 'Lịch sự, rõ ràng, đáng tin cậy', icon: Briefcase },
+  { id: 'warm', label: 'Ấm áp', hint: 'Thân thiện, gần gũi như đang trò chuyện', icon: Smile },
+  { id: 'elegant', label: 'Tinh tế', hint: 'Thanh lịch, giàu hình ảnh, cảm giác cao cấp', icon: Gem },
+]

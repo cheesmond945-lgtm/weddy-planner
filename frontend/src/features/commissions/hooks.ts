@@ -49,13 +49,10 @@ export function useSubmitCommissionPayment(id: string) {
   })
 }
 
-/** Bấm "Thanh toán": lấy URL VNPay rồi chuyển trình duyệt sang đó. */
+/** Bấm "Thanh toán": lấy mã QR VietQR để hiện trong hộp thoại. */
 export function usePayCommission() {
   return useMutation({
     mutationFn: (id: string) => commissionsApi.pay(id),
-    onSuccess: ({ paymentUrl }) => {
-      window.location.href = paymentUrl
-    },
     onError: (e) => toast(e.message),
   })
 }

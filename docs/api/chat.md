@@ -139,7 +139,7 @@ Cùng bảng hội thoại / tin nhắn với phía cặp đôi. Mỗi hội tho
 | `ORDER_RESENT` | `SYSTEM` | NCC cập nhật và gửi lại đơn | `orderId`, `orderVersion` (mới), `changes` |
 | `ORDER_REVISION_REQUESTED` | `COUPLE` | Khách yêu cầu chỉnh sửa đơn | `orderId`, `orderVersion`, `text` (nội dung yêu cầu) |
 | `ORDER_CONFIRMED` | `COUPLE` | Khách xác nhận đơn | `orderId`, `orderVersion` |
-| `PAYMENT_RECORDED` | `SYSTEM` | Ghi nhận một khoản đã thu (cọc VNPay hoặc NCC ghi nhận) | `orderId`, `text` (câu hiển thị sẵn) |
+| `PAYMENT_RECORDED` | `SYSTEM` | Ghi nhận một khoản đã thu (cọc VietQR hoặc NCC ghi nhận) | `orderId`, `text` (câu hiển thị sẵn) |
 | `ADJUSTMENT_PROPOSED` | `VENDOR` | NCC gửi phương án điều chỉnh | `orderId`, `adjustmentId` |
 | `ADJUSTMENT_REQUESTED` | `COUPLE` | Khách đề nghị điều chỉnh đơn đã xác nhận | `orderId`, `text` |
 | `ADJUSTMENT_REVISION_REQUESTED` | `COUPLE` | Khách yêu cầu sửa phương án điều chỉnh | `orderId`, `adjustmentId`, `text` |
@@ -184,7 +184,7 @@ Như phía cặp đôi: FE hỏi lại mỗi 2,5 giây `GET /vendors/me/conversa
 
 ## Ghi chú về dữ liệu giả (phía NCC)
 
-`mocks/vendorChat.ts` tách riêng với `mocks/chat.ts` của phía cặp đôi (hai bên chưa thấy tin của nhau khi dùng mock). Khi `VITE_USE_MOCK=true`, khung chat có nút **Giả lập khách** (nhắn tin, xác nhận đơn, yêu cầu chỉnh sửa, đặt cọc VNPay, yêu cầu điều chỉnh, đồng ý / yêu cầu sửa phương án) trên đơn mới nhất của hội thoại. Nút này **chỉ có trong mock**; BE không làm.
+`mocks/vendorChat.ts` tách riêng với `mocks/chat.ts` của phía cặp đôi (hai bên chưa thấy tin của nhau khi dùng mock). Khi `VITE_USE_MOCK=true`, khung chat có nút **Giả lập khách** (nhắn tin, xác nhận đơn, yêu cầu chỉnh sửa, đặt cọc VietQR, yêu cầu điều chỉnh, đồng ý / yêu cầu sửa phương án) trên đơn mới nhất của hội thoại. Nút này **chỉ có trong mock**; BE không làm.
 
 ## Cần chốt (phía NCC)
 

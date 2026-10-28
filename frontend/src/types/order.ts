@@ -1,3 +1,4 @@
+import type { PayInfo } from './payment'
 /*
  * CHỜ ĐỐI CHIẾU docs/database.md và docs/state-diagrams.md (trạng thái đơn, thanh toán).
  * Hợp đồng: docs/api/orders.md, docs/api/payments.md
@@ -24,10 +25,6 @@ export interface Order {
   paidAt: string | null
 }
 
-export type PaymentMethod = 'VNPAY_QR' | 'VNPAY_ATM' | 'INTERNATIONAL_CARD'
-
-export interface PaymentCreated {
+export interface PaymentCreated extends PayInfo {
   paymentId: string
-  /** Chuyển trình duyệt tới địa chỉ này (cổng VNPay) */
-  paymentUrl: string
 }

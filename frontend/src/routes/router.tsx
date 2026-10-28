@@ -5,6 +5,8 @@ import { CoupleLayout } from '@/layouts/CoupleLayout'
 import { VendorLayout } from '@/layouts/VendorLayout'
 import ForbiddenPage from '@/pages/ForbiddenPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+import DepositTermsPreviewPage from '@/pages/preview/DepositTermsPreviewPage'
+import TermsPreviewPage from '@/pages/preview/TermsPreviewPage'
 import AdminAccountPage from '@/pages/admin/AdminAccountPage'
 import AdminCatalogPage from '@/pages/admin/AdminCatalogPage'
 import AdminCommissionsPage from '@/pages/admin/AdminCommissionsPage'
@@ -31,8 +33,6 @@ import TimelinePage from '@/pages/couple/TimelinePage'
 import VendorCatalogPage from '@/pages/vendor/VendorCatalogPage'
 import VendorChatPage from '@/pages/vendor/VendorChatPage'
 import VendorCommissionsPage from '@/pages/vendor/VendorCommissionsPage'
-import VendorVnpayReturnPage from '@/pages/vendor/VendorVnpayReturnPage'
-import VendorVnpaySandboxPage from '@/pages/vendor/VendorVnpaySandboxPage'
 import VendorDashboardPage from '@/pages/vendor/VendorDashboardPage'
 import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
 import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
@@ -42,6 +42,9 @@ import { RequireRole } from './RequireRole'
 import { paths } from './paths'
 
 export const router = createBrowserRouter([
+  // TẠM THỜI: xem thử điều khoản, xóa sau
+  { path: '/preview/terms', element: <TermsPreviewPage /> },
+  { path: '/preview/deposit-terms', element: <DepositTermsPreviewPage /> },
   // Phía cặp đôi
   {
     element: <CoupleLayout />,
@@ -90,8 +93,6 @@ export const router = createBrowserRouter([
           { path: paths.vendor.orders, element: <VendorOrdersPage /> },
           { path: paths.vendor.chat, element: <VendorChatPage /> },
           { path: paths.vendor.commissions, element: <VendorCommissionsPage /> },
-          { path: '/vendor/commissions/vnpay-sandbox', element: <VendorVnpaySandboxPage /> },
-          { path: '/vendor/commissions/vnpay-return', element: <VendorVnpayReturnPage /> },
         ],
       },
     ],

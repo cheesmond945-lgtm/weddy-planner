@@ -36,6 +36,12 @@ export function ProfileStatusNotice({ profile }: { profile: VendorProfile }) {
           <p>Hồ sơ và các gói của bạn vẫn hiển thị trong lúc bạn chỉnh sửa. Sửa xong bấm “Gửi cập nhật” để Admin kiểm tra lại.</p>
         </Notice>
       ) : null
+    case 'HIDDEN':
+      return (
+        <Notice tone="warn" title="Hồ sơ và các gói dịch vụ của bạn đang được ẩn khỏi nền tảng.">
+          <p>Bạn vẫn xử lý được các đơn đã đặt cọc và thanh toán hoa hồng. Liên hệ Everly nếu cần hiển thị lại.</p>
+        </Notice>
+      )
     case 'PENDING':
       return (
         <Notice

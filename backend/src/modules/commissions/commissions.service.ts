@@ -87,9 +87,9 @@ export class CommissionsService {
       const o = c.orders;
       const total = Number(o.total_amount);
       const deposit = Number(o.deposit_amount);
-      const payments: { paymentId: string; installmentName: string; paidAt: string; method: 'VNPAY' | 'BANK_TRANSFER' | 'CASH'; amount: number }[] = [];
+      const payments: { paymentId: string; installmentName: string; paidAt: string; method: 'VIETQR' | 'BANK_TRANSFER' | 'CASH'; amount: number }[] = [];
       if (o.payments?.status === 'Paid' && o.payments.paid_date) {
-        payments.push({ paymentId: o.payments.id, installmentName: 'Đợt 1 – Đặt cọc', paidAt: o.payments.paid_date.toISOString(), method: 'VNPAY', amount: deposit });
+        payments.push({ paymentId: o.payments.id, installmentName: 'Đợt 1 – Đặt cọc', paidAt: o.payments.paid_date.toISOString(), method: 'VIETQR', amount: deposit });
       }
       if (o.completed_date) {
         payments.push({ paymentId: `final-${o.id}`, installmentName: 'Đợt 2 – Thanh toán còn lại', paidAt: o.completed_date.toISOString(), method: 'CASH', amount: total - deposit });

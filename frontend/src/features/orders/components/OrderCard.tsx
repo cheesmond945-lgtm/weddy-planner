@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { formatMoney } from '@/lib/format'
 import { paths } from '@/routes/paths'
 import type { Order } from '@/types/order'
 import { useOrder } from '../hooks'
+import { DepositTermsDialog } from './DepositTermsDialog'
 
 interface OrderCardProps {
   orderId: string
@@ -19,6 +20,7 @@ interface OrderCardProps {
 export function OrderCard({ orderId, categorySlug, onRevise }: OrderCardProps) {
   const { data: o } = useOrder(orderId, { poll: true })
   const navigate = useNavigate()
+  const [termsOpen, setTermsOpen] = useState(false)
 
   if (!o) return <div className="h-[230px] w-[min(360px,100%)] animate-pulse self-start rounded-[22px] bg-muted" />
 
@@ -68,14 +70,20 @@ export function OrderCard({ orderId, categorySlug, onRevise }: OrderCardProps) {
       )}
       {o.status === 'CANCELLED' && <div className="mt-2.5 text-[13px] font-semibold text-warn">Đơn đã bị hủy hoặc hết hạn đặt cọc.</div>}
       {o.status === 'SENT' && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="success" onClick={() => navigate(paths.deal(o.id))}>
-            Xác nhận &amp; thanh toán cọc
-          </Button>
-          <Button variant="outline" onClick={() => onRevise(o)}>
-            Yêu cầu chỉnh sửa
-          </Button>
-        </div>
+        <>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="success" onClick={() => navigate(paths.deal(o.id))}>
+              Xác nhận &amp; thanh toán cọc
+            </Button>
+            <Button variant="outline" onClick={() => onRevise(o)}>
+              Yêu cầu chỉnh sửa
+            </Button>
+          </div>
+          <button type="button" className="mt-2.5 text-xs text-muted-foreground underline underline-offset-2 hover:text-ink" onClick={() => setTermsOpen(true)}>
+            Xem điều khoản đặt dịch vụ
+          </button>
+          <DepositTermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
+        </>
       )}
     </div>
   )

@@ -161,7 +161,7 @@ export class AdminPaymentsService {
   }
 
   /**
-   * Admin ghi nhận đã thanh toán khi NCC chuyển khoản ngoài hệ thống (vd tài khoản bị khóa nên không thanh toán qua VNPay được):
+   * Admin ghi nhận đã thanh toán khi NCC chuyển khoản ngoài hệ thống (vd tài khoản bị khóa nên không thanh toán qua VietQR được):
    * nhập mã và ngày giao dịch; `unlock` thì mở khóa tài khoản NCC. Báo NCC kết quả.
    */
   async recordPayment(id: string, body: RecordPaymentDto) {

@@ -20,7 +20,7 @@ const card = 'rounded-md border border-line bg-surface px-7 pt-[26px] pb-6 shado
 
 /**
  * Chi tiết thanh toán một bảng kê hoa hồng: nhà cung cấp, kỳ, doanh thu, tỷ lệ, tiền hoa hồng, hạn, ngày thanh toán, mã giao dịch.
- * Ngày thanh toán và mã giao dịch do hệ thống ghi khi NCC thanh toán qua VNPay. Bảng kê đã chốt mà chưa thanh toán thì Admin
+ * Ngày thanh toán và mã giao dịch do hệ thống ghi khi NCC thanh toán qua VietQR. Bảng kê đã chốt mà chưa thanh toán thì Admin
  * nhập thẳng hai ô này để ghi nhận khi NCC chuyển khoản trực tiếp (vd tài khoản bị khóa vì quá hạn), có thể mở khóa tài khoản luôn.
  */
 export default function AdminPaymentDetailPage() {
@@ -100,7 +100,7 @@ export default function AdminPaymentDetailPage() {
       />
 
       {recordable && (
-        <Notice tone="info" title="Nhà cung cấp chuyển khoản trực tiếp cho WebPlan (ví dụ tài khoản bị khóa nên không thanh toán qua VNPay được)? Nhập ngày thanh toán và mã giao dịch rồi bấm “Ghi nhận đã thanh toán”." />
+        <Notice tone="info" title="Nhà cung cấp chuyển khoản trực tiếp cho WebPlan (ví dụ tài khoản bị khóa nên không thanh toán qua VietQR được)? Nhập ngày thanh toán và mã giao dịch rồi bấm “Ghi nhận đã thanh toán”." />
       )}
 
       <div className={card}>

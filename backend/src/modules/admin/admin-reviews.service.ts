@@ -8,7 +8,7 @@ import { livePhotos, liveSnapshot, openUpdate } from '../vendors/package-update'
 import { parseHours } from '../vendors/working-hours';
 import { fail, matches, UUID } from './admin-common';
 
-const VENDOR_STATUS_OUT: Record<string, string> = { Draft: 'NOT_SUBMITTED', Pending: 'PENDING', NeedRevision: 'NEEDS_REVISION', Approved: 'VERIFIED' };
+const VENDOR_STATUS_OUT: Record<string, string> = { Draft: 'NOT_SUBMITTED', Pending: 'PENDING', NeedRevision: 'NEEDS_REVISION', Approved: 'VERIFIED', Hidden: 'HIDDEN' };
 const PACKAGE_STATUS_OUT: Record<string, string> = { Pending: 'PENDING', NeedRevision: 'NEEDS_REVISION', Approved: 'PUBLISHED', Hidden: 'HIDDEN' };
 const DOC_OUT: Record<string, string> = { BusinessLicense: 'BUSINESS_LICENSE', FireSafety: 'FIRE_SAFETY', FoodSafety: 'FOOD_SAFETY', SkillCertificate: 'SKILL_CERTIFICATE' };
 const MAX_NOTE = 1000;
@@ -95,8 +95,8 @@ export class AdminReviewsService {
     const days = Math.trunc(Number(q.days)) || 0;
     const since = days > 0 ? Date.now() - days * 86_400_000 : 0;
     const scoped = inScope.filter((v) => !since || new Date(v.submittedAt).getTime() >= since);
-    const counts = { ALL: scoped.length, PENDING: 0, NEEDS_REVISION: 0, VERIFIED: 0 };
-    for (const v of scoped) if (v.status in counts) counts[v.status as 'PENDING' | 'NEEDS_REVISION' | 'VERIFIED']++;
+    const counts = { ALL: scoped.length, PENDING: 0, NEEDS_REVISION: 0, VERIFIED: 0, HIDDEN: 0 };
+    for (const v of scoped) if (v.status in counts) counts[v.status as 'PENDING' | 'NEEDS_REVISION' | 'VERIFIED' | 'HIDDEN']++;
 
     const dir = q.sort === 'oldest' ? 1 : -1;
     const rows = scoped.filter((v) => !q.status || v.status === q.status).sort((a, b) => dir * a.submittedAt.localeCompare(b.submittedAt) || (a.businessName ?? '').localeCompare(b.businessName ?? '', 'vi'));
@@ -157,6 +157,49 @@ export class AdminReviewsService {
       referenceType: 'VendorProfile',
       referenceId: id,
     });
+    return this.getVendor(id);
+  }
+
+  /**
+   * Admin ẩn hồ sơ đã duyệt (NCC dừng hợp tác hoặc bị xử lý): hồ sơ sang Hidden, toàn bộ gói của NCC ngừng hiển thị với khách
+   * (danh mục chỉ lấy NCC Approved). Gói giữ nguyên trạng thái nên "Hiện lại" là mọi thứ trở lại như cũ.
+   * NCC vẫn đăng nhập để hoàn thành đơn đã cọc và thanh toán hoa hồng (Điều 13 Điều khoản hợp tác).
+   */
+  async hideVendor(id: string) {
+    const v = UUID.test(id) ? (await this.loadVendors({ id }))[0] : undefined;
+    if (!v) return fail('VENDOR_NOT_FOUND', 'Không tìm thấy hồ sơ nhà cung cấp.', 404);
+    if (v.status !== 'Approved') return fail('VENDOR_NOT_HIDEABLE', 'Chỉ ẩn được hồ sơ đã duyệt.', 409);
+    const { count } = await this.prisma.vendor_profiles.updateMany({ where: { id, status: 'Approved' }, data: { status: 'Hidden', updated_date: new Date() } });
+    if (!count) return fail('VENDOR_NOT_HIDEABLE', 'Chỉ ẩn được hồ sơ đã duyệt.', 409);
+    if (v.user_id) {
+      await notify(this.prisma, {
+        userId: v.user_id,
+        type: 'VendorHidden',
+        title: 'Hồ sơ đã được ẩn',
+        content: 'Hồ sơ và các gói dịch vụ của bạn đã được ẩn khỏi nền tảng. Bạn vẫn đăng nhập để hoàn thành các đơn đã đặt cọc và thanh toán hoa hồng. Liên hệ Everly nếu cần hiển thị lại.',
+        referenceType: 'VendorProfile',
+        referenceId: id,
+      });
+    }
+    return this.getVendor(id);
+  }
+
+  /** Admin hiện lại hồ sơ đã ẩn: sang Approved, các gói hiển thị lại như trước khi ẩn. */
+  async unhideVendor(id: string) {
+    const v = UUID.test(id) ? (await this.loadVendors({ id }))[0] : undefined;
+    if (!v) return fail('VENDOR_NOT_FOUND', 'Không tìm thấy hồ sơ nhà cung cấp.', 404);
+    const { count } = await this.prisma.vendor_profiles.updateMany({ where: { id, status: 'Hidden' }, data: { status: 'Approved', updated_date: new Date() } });
+    if (!count) return fail('VENDOR_NOT_HIDDEN', 'Hồ sơ không ở trạng thái đang ẩn.', 409);
+    if (v.user_id) {
+      await notify(this.prisma, {
+        userId: v.user_id,
+        type: 'VendorUnhidden',
+        title: 'Hồ sơ đã hiển thị lại',
+        content: 'Hồ sơ và các gói dịch vụ của bạn đã được hiển thị lại trên nền tảng.',
+        referenceType: 'VendorProfile',
+        referenceId: id,
+      });
+    }
     return this.getVendor(id);
   }
 

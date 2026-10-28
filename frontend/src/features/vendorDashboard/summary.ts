@@ -37,7 +37,7 @@ export function orderStats(orders: ServiceOrder[], now: Date) {
     awaiting,
     revision,
     awaitingDeposit,
-    /** Đã thu thực tế trong tháng hiện tại (giờ VN), cả VNPay lẫn NCC ghi nhận */
+    /** Đã thu thực tế trong tháng hiện tại (giờ VN), cả VietQR lẫn NCC ghi nhận */
     collectedThisMonth: payments.filter((p) => periodOfInstant(p.paidAt) === month).reduce((s, p) => s + p.amount, 0),
     /** Đã thu thực tế mọi thời điểm (thẻ "Đã thu thực tế" của prototype) */
     collectedTotal: payments.reduce((s, p) => s + p.amount, 0),

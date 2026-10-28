@@ -31,6 +31,8 @@ export interface ServiceSummary {
   rating: number
   reviewCount: number
   coverImageUrl: string
+  /** NCC đang bị Admin ẩn nhưng bạn đã có đơn với họ: tạm ngừng nhận đơn mới */
+  paused?: boolean
 }
 
 export interface ServicePackage {

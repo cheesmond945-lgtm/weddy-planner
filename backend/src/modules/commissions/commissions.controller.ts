@@ -16,27 +16,21 @@ export class CommissionsController {
     return this.commissions.list(req.user.sub);
   }
 
-  /** Kết quả quay về từ VNPay (body = các tham số vnp_* trên URL quay về). */
-  @Post('vnpay/confirm')
-  confirmPayment(@Req() req: any, @Body() body: Record<string, string>) {
-    return this.payments.confirm(req.user.sub, body ?? {});
-  }
-
-  /** Thông tin lượt thanh toán của trang VNPay giả lập. */
-  @Get('vnpay/intent/:ref')
-  intent(@Req() req: any, @Param('ref') ref: string) {
-    return this.payments.intent(req.user.sub, ref);
-  }
-
   @Get(':id')
   get(@Req() req: any, @Param('id') id: string) {
     return this.commissions.get(req.user.sub, id);
   }
 
-  /** Bắt đầu thanh toán hoa hồng qua VNPay: trả URL để chuyển trình duyệt tới. */
+  /** Bắt đầu thanh toán hoa hồng qua VietQR: trả mã QR, số tiền và nội dung chuyển khoản. */
   @Post(':id/pay')
   pay(@Req() req: any, @Param('id') id: string) {
-    return this.payments.pay(req.user.sub, id, req.ip);
+    return this.payments.pay(req.user.sub, id);
+  }
+
+  /** Kiểm tra với SePay đã nhận đủ hoa hồng chưa và ghi nhận nếu đã nhận. */
+  @Post(':id/check')
+  check(@Req() req: any, @Param('id') id: string) {
+    return this.payments.check(req.user.sub, id);
   }
 
   @Post(':id/payments')

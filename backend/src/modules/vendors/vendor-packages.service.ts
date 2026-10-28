@@ -1,9 +1,12 @@
 import { HttpException, Injectable } from '@nestjs/common';
+import { AiQuotaService } from '../../integrations/ai/ai-quota.service';
+import { GeminiService } from '../../integrations/ai/gemini.service';
+import { PACKAGE_STYLES, pickStyle } from '../../integrations/ai/writing-styles';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
 import { ALBUM_BUCKET, StorageService } from '../../integrations/storage/storage.service';
-import { GUESTS_PER_TABLE, categorySlug } from '../catalog/services.service';
+import { GUESTS_PER_TABLE, categorySlug, priceUnitOf } from '../catalog/services.service';
 import { fileNameOfPath, mimeOfPath } from './vendor-files';
 import { hasChanges, livePhotos, liveSnapshot, openUpdate, UPDATE_STATUS_OUT, type PackageSnapshot } from './package-update';
 
@@ -34,7 +37,7 @@ type PackageRow = NonNullable<Awaited<ReturnType<VendorPackagesService['loadOwne
 
 @Injectable()
 export class VendorPackagesService {
-  constructor(private readonly prisma: PrismaService, private readonly storage: StorageService) {}
+  constructor(private readonly prisma: PrismaService, private readonly storage: StorageService, private readonly gemini: GeminiService, private readonly quota: AiQuotaService) {}
 
   private async vendorOf(userId: string) {
     const v = await this.prisma.vendor_profiles.findUnique({
@@ -181,16 +184,44 @@ export class VendorPackagesService {
   }
 
   /**
-   * Gợi ý đoạn mô tả gói từ tên, tags, giá, sức chứa. Chưa nối mô hình AI (integrations/ai còn trống):
-   * dựng đoạn mẫu để NCC chỉnh lại.
+   * Gợi ý đoạn mô tả gói từ tên, tags, giá, sức chứa, viết bằng Gemini (integrations/ai). Chỉ dùng thông tin NCC đã nhập, không bịa thêm.
+   * Gemini lỗi hoặc chưa cấu hình thì dựng đoạn mẫu (`aiUsed: false`).
    */
-  async suggestDescription(userId: string, body: { name?: string | null; tags?: string[]; price?: number | null; capacity?: number | null }) {
+  async suggestDescription(userId: string, body: { style?: string; name?: string | null; tags?: string[]; price?: number | null; capacity?: number | null }) {
     const vendor = await this.vendorOf(userId);
-    const name = body.name?.trim() || 'Gói dịch vụ này';
+    this.quota.assertAvailable(userId);
+    const style = pickStyle(PACKAGE_STYLES, body.style);
+    const name = body.name?.trim() ?? '';
     const field = vendor.service_categories.name.toLowerCase();
     const tags = (body.tags ?? []).map((t) => String(t).trim()).filter(Boolean).slice(0, 5);
     const price = Number(body.price);
     const capacity = Number(body.capacity);
+    if (!name || !(tags.length || price > 0 || capacity > 0)) {
+      return fail('AI_NOT_ENOUGH_INFO', 'Hãy nhập tên gói và ít nhất một trong: giá, sức chứa, phong cách (tags) rồi mới tạo với AI, để AI có thông tin thật mà viết.', 400);
+    }
+    const perTable = priceUnitOf(categorySlug(vendor.service_categories.name)) === 'TABLE';
+    const money = price > 0 ? `${price.toLocaleString('vi-VN')}đ${perTable ? '/mâm (mỗi mâm 10 khách)' : ''}` : null;
+
+    const system =
+      'Bạn là biên tập viên nội dung cho nền tảng đặt dịch vụ cưới Everly. Viết phần mô tả một gói dịch vụ bằng tiếng Việt, một đoạn văn liền mạch dài khoảng 50 đến 90 từ. ' +
+      `${style.instruction} Nói với cặp đôi, trung thực. ` +
+      'BẮT BUỘC nêu cụ thể tên gói và mọi thông tin có trong dữ liệu (phong cách, sức chứa, giá). Mỗi câu phải mang ít nhất một thông tin cụ thể từ dữ liệu; không viết câu chung chung có thể áp cho gói nào cũng được. ' +
+      'Giá trong dữ liệu là giá khởi điểm, không phải giá cố định: khi nhắc tới giá PHẢI viết "giá chỉ từ ..." hoặc "chỉ từ ...", tuyệt đối không viết như giá cố định (không dùng "với mức giá ...", "chi phí ...", "chỉ với ..."). ' +
+      'Không mở đầu bằng lời chào. Không nhắc tên nhà cung cấp hay thương hiệu. TUYỆT ĐỐI không bịa hạng mục, quà tặng, ưu đãi, cam kết hay con số không có trong dữ liệu. ' +
+      'Không dùng markdown, tiêu đề, gạch đầu dòng, emoji hay dấu ngoặc kép. Chỉ trả về đoạn văn.';
+    const prompt = [
+      `Tên gói: ${name}`,
+      `Lĩnh vực: ${field}`,
+      tags.length ? `Phong cách / điểm nhấn: ${tags.join(', ')}` : null,
+      capacity > 0 ? `Sức chứa: khoảng ${capacity} khách` : null,
+      money ? `Giá chỉ từ: ${money}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const ai = await this.gemini.write(system, prompt);
+    if (ai) return { description: ai, aiUsed: true, ...this.quota.consume(userId) };
+
     const parts = [
       `${name} là gói ${field} dành cho tiệc cưới, được thiết kế gọn gàng và dễ tùy chỉnh theo nhu cầu của cặp đôi.`,
       tags.length ? `Điểm nhấn: ${tags.join(', ')}.` : null,
@@ -198,7 +229,7 @@ export class VendorPackagesService {
       price > 0 ? `Giá từ ${price.toLocaleString('vi-VN')}đ, có thể điều chỉnh theo yêu cầu cụ thể.` : null,
       'Liên hệ để được tư vấn chi tiết và nhận báo giá phù hợp.',
     ];
-    return { description: parts.filter(Boolean).join(' ') };
+    return { description: parts.filter(Boolean).join(' '), aiUsed: false, ...this.quota.status(userId) };
   }
 
   /**
@@ -350,6 +381,7 @@ export class VendorPackagesService {
   }
 
   private async move(userId: string, id: string, from: string, to: string, message: string) {
+    if ((await this.vendorOf(userId)).status === 'Hidden') return fail('VENDOR_HIDDEN', 'Hồ sơ đang bị ẩn nên chưa thay đổi hiển thị gói được. Vui lòng liên hệ Everly.', 409);
     const { pkg } = await this.loadOwned(userId, id);
     if (pkg.status !== from) return fail('CONFLICT', message, 409);
     if (openUpdate(pkg)?.status === 'Pending') return fail('CONFLICT', 'Gói đang chờ duyệt bản cập nhật, không thể ẩn lúc này.', 409);

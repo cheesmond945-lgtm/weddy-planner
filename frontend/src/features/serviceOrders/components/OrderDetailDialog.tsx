@@ -280,7 +280,7 @@ export function OrderDetailDialog({ order, version, onClose, actions }: OrderDet
                         p.proofFile.fileName
                       )
                     ) : (
-                      <span className="text-muted-foreground">{p.recordedBy === 'SYSTEM' ? 'VNPay' : '—'}</span>
+                      <span className="text-muted-foreground">{p.recordedBy === 'SYSTEM' ? 'VietQR' : '—'}</span>
                     )}
                   </td>
                 </tr>

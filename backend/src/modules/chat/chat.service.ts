@@ -84,7 +84,7 @@ export class ChatService {
     const vendors = await this.prisma.vendor_profiles.findMany({ where: { user_id: { in: present(convs.map((c) => c.vendor_id)) } }, select: { id: true, user_id: true } });
     const vendorByUser = new Map(vendors.map((v) => [v.user_id, v]));
     const [summaries, statuses, lasts] = await Promise.all([
-      this.services.summaries(vendors.map((v) => v.id)),
+      this.services.summaries(vendors.map((v) => v.id), userId),
       this.weddings.planStatusMap(userId, vendors),
       this.prisma.messages.findMany({ where: { conversation_id: { in: convs.map((c) => c.id) } }, orderBy: { sent_date: 'desc' } }),
     ]);
@@ -95,7 +95,7 @@ export class ChatService {
     return convs.flatMap((c) => {
       const v = vendorByUser.get(c.vendor_id);
       const service = v && sumById.get(v.id);
-      if (!v || !service) return []; // NCC đã bị ẩn
+      if (!v || !service) return []; // NCC không còn hiển thị và không có đơn nào với cặp đôi này
       const last = lastByConv.get(c.id);
       return [
         {

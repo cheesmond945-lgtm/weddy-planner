@@ -1,4 +1,5 @@
 import type { CommissionPaymentResult, CommissionStatement, CommissionStatementSummary, SubmitCommissionPaymentBody } from '@/types/commission'
+import type { PayInfo } from '@/types/payment'
 import { http } from './client'
 
 /**
@@ -10,14 +11,11 @@ export const commissionsApi = {
 
   get: (id: string): Promise<CommissionStatement> => (http.get(`/vendors/me/commissions/${id}`)),
 
-  /** Bắt đầu thanh toán hoa hồng qua VNPay: trả URL để chuyển trình duyệt tới (cổng VNPay thật, hoặc trang giả lập khi chưa cấu hình). */
-  pay: (id: string): Promise<{ mode: 'LIVE' | 'SIMULATE'; paymentUrl: string }> => http.post(`/vendors/me/commissions/${id}/pay`),
+  /** Mã QR VietQR cho hoa hồng (số tiền lấy từ bảng kê, nội dung EVHH + mã bảng kê) */
+  pay: (id: string): Promise<PayInfo> => http.post(`/vendors/me/commissions/${id}/pay`),
 
-  /** Gửi kết quả quay về từ VNPay (các tham số vnp_* trên URL) để backend kiểm tra và ghi nhận. */
-  confirmPayment: (params: Record<string, string>): Promise<CommissionPaymentResult> => http.post('/vendors/me/commissions/vnpay/confirm', params),
-
-  /** Thông tin lượt thanh toán cho trang VNPay giả lập. */
-  intent: (ref: string): Promise<{ code: string; amount: number; vendorName: string; expiresAt: string }> => http.get(`/vendors/me/commissions/vnpay/intent/${ref}`),
+  /** Backend hỏi SePay đã nhận đủ hoa hồng chưa và ghi nhận nếu đã nhận */
+  check: (id: string): Promise<CommissionPaymentResult> => http.post(`/vendors/me/commissions/${id}/check`),
 
   submitPayment: (id: string, body: SubmitCommissionPaymentBody): Promise<CommissionStatement> =>
     http.post(`/vendors/me/commissions/${id}/payments`, body),

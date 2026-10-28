@@ -1,3 +1,4 @@
+import type { AiQuota, AiSuggestion } from '@/types/ai'
 import type { UpdateVendorProfileRequest, VendorFile, VendorNotificationList, VendorProfile, VendorUploadPurpose } from '@/types/vendor'
 import { http } from './client'
 
@@ -15,8 +16,11 @@ export const vendorsApi = {
     http.post('/vendors/me/profile/submit', body),
 
   /** Gợi ý đoạn giới thiệu (nút "Tạo với AI") */
-  suggestDescription: (body: { businessName: string | null; ward: string | null; province: string | null; hint?: string | null }): Promise<{ description: string }> =>
+  suggestDescription: (body: { style: string; businessName: string | null; ward: string | null; province: string | null; hint?: string | null }): Promise<AiSuggestion> =>
     http.post('/vendors/me/profile/suggest-description', body),
+
+  /** Số lượt Tạo với AI còn lại hôm nay (dùng chung cho hồ sơ và gói) */
+  aiQuota: (): Promise<AiQuota> => http.get('/vendors/me/ai-quota'),
 
   listNotifications: (): Promise<VendorNotificationList> => http.get('/vendors/me/notifications', { query: { limit: 20 } }),
   readNotification: (id: string): Promise<null> => http.post(`/vendors/me/notifications/${id}/read`),

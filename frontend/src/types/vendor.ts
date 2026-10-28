@@ -6,7 +6,7 @@
 import type { CategoryRef } from './catalog'
 
 /** Trạng thái hồ sơ NCC. Nhãn tiếng Việt ở features/vendors/constants.ts. */
-export const VENDOR_PROFILE_STATUSES = ['NOT_SUBMITTED', 'PENDING', 'NEEDS_REVISION', 'VERIFIED'] as const
+export const VENDOR_PROFILE_STATUSES = ['NOT_SUBMITTED', 'PENDING', 'NEEDS_REVISION', 'VERIFIED', 'HIDDEN'] as const
 export type VendorProfileStatus = (typeof VENDOR_PROFILE_STATUSES)[number]
 
 /** Loại giấy tờ: kinh doanh, phòng cháy chữa cháy, an toàn thực phẩm, chứng chỉ tay nghề (tùy chọn). Mỗi loại một tệp. */
@@ -46,6 +46,8 @@ export interface VendorProfile {
    * NCC chỉ xem, không đổi được. null chỉ khi tài khoản chưa được gán (dữ liệu lỗi).
    */
   category: CategoryRef | null
+  /** Tỷ lệ hoa hồng (%) của lĩnh vực, điền vào Điều khoản hợp tác. null khi chưa cấu hình */
+  commissionRate: number | null
   /** Lĩnh vực đã được Admin xác minh. null khi chưa xác minh lần nào */
   verifiedCategory: CategoryRef | null
   /** Tỉnh / thành phố (cột city), NCC tự nhập */
@@ -88,6 +90,8 @@ export interface UpdateVendorProfileRequest {
   description: string | null
   documents: VendorDocument[]
   photos: VendorPhoto[]
+  /** Đã tích "Đồng ý Điều khoản hợp tác": bắt buộc true khi nộp hồ sơ duyệt, backend chỉ kiểm tra, không lưu */
+  agreedToTerms?: boolean
 }
 
 /** Mục đích upload, quyết định thư mục và định dạng được nhận. */

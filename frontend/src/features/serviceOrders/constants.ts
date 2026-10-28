@@ -24,12 +24,12 @@ export const PAYMENT_STATUS: Record<OrderPaymentStatus, { label: string; tone: B
 }
 
 export const PAYMENT_METHOD_LABEL: Record<OrderPaymentMethod, string> = {
-  VNPAY: 'VNPay (trực tuyến)',
+  VIETQR: 'VietQR (trực tuyến)',
   BANK_TRANSFER: 'Chuyển khoản',
   CASH: 'Tiền mặt',
 }
 
-/** Phương thức chọn được cho các đợt sau đặt cọc (đợt đặt cọc luôn qua VNPay). */
+/** Phương thức chọn được cho các đợt sau đặt cọc (đợt đặt cọc luôn qua VietQR). */
 export const OFFLINE_METHODS: OrderPaymentMethod[] = ['BANK_TRANSFER', 'CASH']
 
 export const ADJUSTMENT_STATUS: Record<AdjustmentStatus, { label: string; tone: BadgeTone }> = {
