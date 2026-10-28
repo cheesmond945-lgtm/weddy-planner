@@ -159,6 +159,13 @@ export const mockChat = {
 
   getOrder: (id: string): Order => effective(findOrder(read(), id)),
 
+  /** Đơn của khách (bỏ bản nháp), mới nhất trước, kèm lĩnh vực của NCC (trang Kế hoạch). */
+  listOrders: (): Order[] =>
+    read()
+      .orders.filter((o) => o.status !== 'Draft')
+      .map((o) => ({ ...effective(o), category: o.serviceId ? mockCatalog.getSummary(o.serviceId).category : undefined }))
+      .reverse(),
+
   /** Khách yêu cầu chỉnh sửa (chỉ khi Pending): ghi OrderRevisions BeforeDeposit/Requested kèm nội dung đổi, CHỈ MỘT tin hệ thống. */
   requestRevision: (orderId: string, body: { changes: RevisionChangeType[]; note: string }): Order => {
     const userId = currentUserId()

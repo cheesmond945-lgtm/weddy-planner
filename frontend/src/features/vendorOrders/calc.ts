@@ -47,9 +47,10 @@ export function valuesOfOrder(o: Order): OrderFormValues {
   }
 }
 
-/** "Tạo lại đơn" (đơn hết hạn): chép hạng mục và ghi chú, mã đơn mới, ngày sự kiện nhập lại. */
+/** "Tạo lại đơn" (đơn hết hạn, đã hủy): giữ nguyên thông tin đơn cũ, mã đơn mới. Ngày sự kiện đã qua thì để trống cho NCC nhập lại. */
 export function valuesFromOrder(o: Order): OrderFormValues {
-  return { ...valuesOfOrder(o), eventDate: '' }
+  const v = valuesOfOrder(o)
+  return { ...v, eventDate: v.eventDate >= todayVN() ? v.eventDate : '' }
 }
 
 /** Bỏ `key`, gọn dòng trống: nội dung gửi lên API. */
@@ -114,8 +115,15 @@ export function formatDayTime(iso: string) {
   return `${t.h}:${t.mi} ${t.d}/${t.mo}/${t.y}`
 }
 
-/** Yêu cầu chỉnh sửa của khách đang chờ NCC (chỉ có trước cọc: đơn NeedRevision). */
+/** Yêu cầu chỉnh sửa của khách đang chờ NCC: trước cọc (đơn NeedRevision) hoặc sau cọc (đơn vẫn Deposited, AfterDeposit). */
 export const openRevision = (o: Pick<Order, 'revisions'>): OrderRevision | undefined => o.revisions.find((r) => r.status === 'Requested')
+
+/**
+ * Khách được gửi yêu cầu chỉnh sửa: đơn chờ cọc; hoặc đơn đã cọc, còn trước ngày thực hiện, chưa có yêu cầu đang chờ
+ * (tiền cọc giữ nguyên, NCC áp dụng bằng "Chỉnh sửa" hoặc từ chối).
+ */
+export const canRequestRevision = (o: Pick<Order, 'status' | 'eventDate' | 'revisions'>) =>
+  o.status === 'Pending' || (o.status === 'Deposited' && todayVN() < o.eventDate && !openRevision(o))
 
 /** "Đổi số lượng, Đổi ngày thực hiện" */
 export const changesLabel = (r: Pick<OrderRevision, 'changes'>) => r.changes.map((c) => CHANGE_LABEL[c]).join(', ')
@@ -139,6 +147,7 @@ export function orderHint(o: Order): { text: string; tone: 'info' | 'warn' | 'ok
     case 'Expired':
       return { text: 'Đơn hết hạn vì khách chưa cọc.', tone: 'info' }
     case 'Deposited':
+      if (req) return { text: `Khách yêu cầu chỉnh sửa (tiền cọc giữ nguyên): ${[changesLabel(req), req.requestNote].filter(Boolean).join(' · ')}`, tone: 'warn' }
       return {
         text: eventPassed(o) ? 'Đã qua ngày thực hiện. Bấm Hoàn tất khi đã xong dịch vụ.' : `Đã nhận cọc. Thực hiện ngày ${formatDate(o.eventDate)}.`,
         tone: eventPassed(o) ? 'warn' : 'ok',

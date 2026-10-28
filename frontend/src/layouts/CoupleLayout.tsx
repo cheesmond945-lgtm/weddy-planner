@@ -7,11 +7,12 @@ import { toast } from '@/components/ui/toast'
 import { ProfileDialog } from '@/features/auth/components/ProfileDialog'
 import { compareStore } from '@/features/compare/store'
 import { ChatPanel } from '@/features/chat/components/ChatPanel'
-import { useUnreadMessages } from '@/features/chat/hooks'
+import { useConversations, useUnreadMessages } from '@/features/chat/hooks'
+import { useService } from '@/features/catalog/hooks'
 import { useFavorites } from '@/features/favorites/hooks'
 import { WeddingSetupDialog } from '@/features/weddings/components/WeddingDialogs'
 import { usePlan } from '@/features/weddings/hooks'
-import { ChatPanelResume, ReplacePlanDialog } from '@/features/weddings/planActions'
+import { ChatPanelResume, ReplacePlanDialog, usePlanActions } from '@/features/weddings/planActions'
 import { cn } from '@/lib/utils'
 import { NotificationBell, PartnerButton, UserMenu } from './HeaderActions'
 import { homeOf, paths } from '@/routes/paths'
@@ -185,8 +186,24 @@ function Header() {
 
 function QuickActions({ hideClassName }: { hideClassName?: string }) {
   const requireLogin = useRequireLogin()
+  const { user } = useAuth()
   const { favorites } = useFavorites()
   const unreadMessages = useUnreadMessages()
+  // Đang xem trang một NCC: nút Tin nhắn mở đúng hội thoại với NCC đó, thay vì hội thoại mới nhất trong danh sách
+  const serviceId = useMatch('/services/:serviceId')?.params.serviceId ?? ''
+  const { data: conversations } = useConversations()
+  const { data: service } = useService(serviceId)
+  const { openChat } = usePlanActions()
+  const current = serviceId ? conversations?.find((c) => c.service.id === serviceId) : undefined
+  const chatHref = current ? `${paths.chat}?c=${encodeURIComponent(current.id)}` : paths.chat
+  const onChat = (e: MouseEvent) => {
+    if (!user) return requireLogin(chatHref)(e)
+    // Chưa từng nhắn với NCC đang xem: mở khung chat như nút "Nhắn tin với NCC" của trang
+    if (serviceId && !current && service && user.role === 'COUPLE') {
+      e.preventDefault()
+      void openChat(service)
+    }
+  }
   const base =
     'relative grid size-[46px] place-items-center rounded-full border shadow-fab transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-fab-hover max-sm:size-[42px] [&_svg]:size-[23px]'
   return (
@@ -202,10 +219,10 @@ function QuickActions({ hideClassName }: { hideClassName?: string }) {
         <QuickCount value={favorites.length} />
       </Link>
       <Link
-        to={paths.chat}
-        onClick={requireLogin(paths.chat)}
+        to={chatHref}
+        onClick={onChat}
         aria-label={unreadMessages ? `Tin nhắn, ${unreadMessages} chưa đọc` : 'Tin nhắn'}
-        title="Tin nhắn"
+        title={service && serviceId ? `Nhắn tin với ${service.name}` : 'Tin nhắn'}
         className={cn(base, 'btn-gold border-transparent')}
       >
         <MessageCircle />

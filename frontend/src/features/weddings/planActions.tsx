@@ -134,6 +134,8 @@ export function usePlanActions() {
           const packageName = before?.packageName || null
           await withReplace(service, (replace) => chatApi.start(service.id, replace), (conv, replaced) => {
             if (replaced) toast('Đã thay dịch vụ trong kế hoạch')
+            // Hạng mục đã có NCC khác chờ cọc / đã chốt: vẫn nhắn tin tư vấn được, NCC này không vào kế hoạch
+            else if (!conv.planStatus) toast(`Hạng mục này đã có nhà cung cấp chờ cọc hoặc đã chốt nên ${service.name} không được thêm vào kế hoạch. Bạn vẫn nhắn tin tư vấn bình thường.`)
             void refresh()
             chatPanel.open({
               conversation: conv,

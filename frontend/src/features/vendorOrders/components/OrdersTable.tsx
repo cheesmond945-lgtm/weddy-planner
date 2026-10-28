@@ -1,4 +1,4 @@
-import { Ban, CheckCheck, ChevronLeft, ChevronRight, Copy, Eye, FilePen, FileText, Pencil, type LucideIcon } from 'lucide-react'
+import { Ban, CheckCheck, ChevronLeft, ChevronRight, Copy, Eye, FilePen, FileText, MessageSquareX, Pencil, type LucideIcon } from 'lucide-react'
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ const ICON: Record<ActionKey, LucideIcon> = {
   continue: FilePen,
   resend: Pencil,
   edit: Pencil,
+  reject: MessageSquareX,
   again: Copy,
   complete: CheckCheck,
   invoice: FileText,

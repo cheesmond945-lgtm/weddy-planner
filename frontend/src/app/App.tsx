@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/toast'
 import { router } from '@/routes/router'
 import { paths } from '@/routes/paths'
 import { queryClient } from './queryClient'
+import { RealtimeBridge } from './RealtimeBridge'
 
 // API trả 401: phiên đã bị xóa trong src/api, đưa người dùng về trang đăng nhập
 setUnauthorizedHandler(() => {
@@ -15,6 +16,7 @@ setUnauthorizedHandler(() => {
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <RealtimeBridge />
       <RouterProvider router={router} />
       <Toaster />
     </QueryClientProvider>

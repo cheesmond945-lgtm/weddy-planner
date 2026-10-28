@@ -7,6 +7,8 @@
  */
 export const DEPOSIT_ROUNDING = 100_000
 export const DEPOSIT_MIN = 100_000
+/** Tỷ lệ cọc tối thiểu khi gửi đơn (%), như backend (order-rules.ts). Đợt 1 cọc qua VNPay, đợt 2 tiền mặt trả NCC. */
+export const DEPOSIT_PERCENT_MIN = 10
 
 export function depositOf(total: number, percent: number): number {
   if (!(percent > 0 && percent < 100) || !(total > 0)) return 0

@@ -141,9 +141,27 @@ export class OrdersService {
     return toOrderDto(o, await this.conversationOf(o));
   }
 
+  /** Mọi đơn đã gửi của khách (không có bản nháp), mới nhất trước; trang Kế hoạch của khách hiện dưới từng hạng mục theo `category`. */
+  async listForCouple(userId: string, q: { status?: string }) {
+    await this.jobs.sweep({ coupleId: userId });
+    const where: Prisma.ordersWhereInput = { weddings: { user_id: userId }, status: { not: 'Draft' } };
+    if (q.status) {
+      if (!(ORDER_STATUSES as readonly string[]).includes(q.status) || q.status === 'Draft') return fail('VALIDATION_ERROR', 'Trạng thái đơn không hợp lệ.', 400, { status: 'Trạng thái đơn không hợp lệ.' });
+      where.status = q.status;
+    }
+    const [rows, convs] = await Promise.all([
+      this.prisma.orders.findMany({ where, include: ORDER_INCLUDE, orderBy: [{ created_date: 'desc' }, { order_code: 'desc' }], take: 200 }),
+      this.prisma.conversations.findMany({ where: { couple_id: userId }, select: { id: true, vendor_id: true } }),
+    ]);
+    const convByVendor = new Map(convs.map((c) => [c.vendor_id, c.id]));
+    return rows.map((o) => toOrderDto(o, convByVendor.get(o.vendor_profiles.user_id) ?? ''));
+  }
+
   /**
-   * Khách yêu cầu chỉnh sửa (CHỈ khi Pending). Bốn ô chọn là tùy chọn, nội dung chi tiết bắt buộc.
-   * Pending -> NeedRevision, ghi OrderRevisions (BeforeDeposit, Requested) kèm OrderRevisionChanges, và CHỈ MỘT tin hệ thống.
+   * Khách yêu cầu chỉnh sửa. Bốn ô chọn là tùy chọn, nội dung chi tiết bắt buộc. Ghi OrderRevisions (Requested) kèm OrderRevisionChanges và CHỈ MỘT tin hệ thống.
+   * - Trước cọc (Pending): Pending -> NeedRevision, BeforeDeposit. NCC "Cập nhật đơn" thì hạn cọc đặt lại 24 giờ.
+   * - Sau cọc (Deposited, còn trước ngày thực hiện, chưa có yêu cầu đang chờ): đơn VẪN Deposited, AfterDeposit.
+   *   NCC "Chỉnh sửa" để áp dụng (tỷ lệ và tiền cọc giữ nguyên) hoặc từ chối.
    */
   async requestRevision(userId: string, id: string, body: { changes?: unknown; note?: string }) {
     const o = await this.ownedByCouple(userId, id);
@@ -152,17 +170,23 @@ export class OrdersService {
     if (!note) return fail('VALIDATION_ERROR', 'Nhập nội dung chi tiết cần chỉnh sửa.', 400, { note: 'Nhập nội dung chi tiết cần chỉnh sửa.' });
     if (rawChanges.some((c) => !(CHANGE_TYPES as readonly unknown[]).includes(c))) return fail('VALIDATION_ERROR', 'Nội dung muốn đổi không hợp lệ.', 400, { changes: `Chọn trong: ${CHANGE_TYPES.join(', ')}.` });
     const changes = CHANGE_TYPES.filter((t) => rawChanges.includes(t)) as ChangeType[];
-    if (o.status !== 'Pending') {
-      return fail('ORDER_NOT_REVISABLE', o.status === 'NeedRevision' ? 'Đơn đang chờ nhà cung cấp chỉnh sửa.' : 'Chỉ yêu cầu chỉnh sửa được đơn đang chờ đặt cọc.', 409);
+    const afterDeposit = o.status === 'Deposited';
+    if (o.status !== 'Pending' && !afterDeposit) {
+      return fail('ORDER_NOT_REVISABLE', o.status === 'NeedRevision' ? 'Đơn đang chờ nhà cung cấp chỉnh sửa.' : 'Chỉ yêu cầu chỉnh sửa được đơn đang chờ đặt cọc hoặc đã đặt cọc.', 409);
     }
+    if (afterDeposit && todayVn() >= ymd(o.event_date)) return fail('ORDER_NOT_REVISABLE', 'Đã đến ngày thực hiện, không gửi yêu cầu chỉnh sửa được nữa. Bạn nhắn nhà cung cấp trong chat nhé.', 409);
 
     await this.prisma.$transaction(async (tx) => {
-      const r = await tx.orders.updateMany({ where: { id, status: 'Pending' }, data: { status: 'NeedRevision' } });
-      if (!r.count) return fail('ORDER_NOT_REVISABLE', 'Đơn không còn ở trạng thái chờ đặt cọc.', 409);
+      if (afterDeposit) {
+        if (await tx.order_revisions.count({ where: { order_id: id, status: 'Requested' } })) return fail('ORDER_NOT_REVISABLE', 'Bạn đã gửi một yêu cầu chỉnh sửa, đang chờ nhà cung cấp xử lý.', 409);
+      } else {
+        const r = await tx.orders.updateMany({ where: { id, status: 'Pending' }, data: { status: 'NeedRevision' } });
+        if (!r.count) return fail('ORDER_NOT_REVISABLE', 'Đơn không còn ở trạng thái chờ đặt cọc.', 409);
+      }
       await tx.order_revisions.create({
         data: {
           order_id: id,
-          revision_type: 'BeforeDeposit',
+          revision_type: afterDeposit ? 'AfterDeposit' : 'BeforeDeposit',
           request_note: note,
           old_total_amount: o.total_amount,
           status: 'Requested',
@@ -173,14 +197,15 @@ export class OrdersService {
 
     const conversationId = await this.conversationOf(o);
     const what = changes.map((c) => CHANGE_LABEL[c]).join(', ');
+    const deposited = afterDeposit ? ' (đã đặt cọc, tiền cọc giữ nguyên)' : '';
     if (conversationId) {
-      await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `Khách yêu cầu chỉnh sửa đơn ${o.order_code}: ${what ? `${what} · ` : ''}"${note}"` });
+      await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `Khách yêu cầu chỉnh sửa đơn ${o.order_code}${deposited}: ${what ? `${what} · ` : ''}"${note}"` });
     }
     await notify(this.prisma, {
       userId: o.vendor_profiles.user_id,
       type: 'OrderRevisionRequested',
       title: 'Khách yêu cầu chỉnh sửa đơn',
-      content: `Khách yêu cầu chỉnh sửa đơn ${o.order_code}: ${what ? `${what} · ` : ''}${note}`,
+      content: `Khách yêu cầu chỉnh sửa đơn ${o.order_code}${deposited}: ${what ? `${what} · ` : ''}${note}`,
       referenceType: 'Order',
       referenceId: id,
     }).catch(() => undefined);
@@ -210,11 +235,17 @@ export class OrdersService {
     }
 
     const now = new Date();
+    // Quá hạn cọc mà chưa kịp quét (quét riêng giãn cách 15 giây): chuyển Expired ngay, không nhận cọc
+    if (o.deposit_due_date && o.deposit_due_date <= now) {
+      this.jobs.forget({ coupleId: userId });
+      await this.jobs.sweep({ coupleId: userId });
+      return fail('ORDER_NOT_PAYABLE', 'Đơn đã hết hạn đặt cọc.', 409);
+    }
     const transactionCode = String(randomInt(10_000_000, 99_999_999));
     const receiptCode = await this.nextCode('XNC');
     const deposit = Number(o.deposit_amount);
     const payment = await this.prisma.$transaction(async (tx) => {
-      const r = await tx.orders.updateMany({ where: { id: orderId, status: 'Pending' }, data: { status: 'Deposited' } });
+      const r = await tx.orders.updateMany({ where: { id: orderId, status: 'Pending', OR: [{ deposit_due_date: null }, { deposit_due_date: { gt: now } }] }, data: { status: 'Deposited' } });
       if (!r.count) return fail('ORDER_NOT_PAYABLE', 'Đơn không còn ở trạng thái chờ đặt cọc.', 409);
       const p = await tx.payments.upsert({
         where: { order_id: orderId },
@@ -370,16 +401,24 @@ export class OrdersService {
     const deposit = depositOf(p.total, p.depositPercent);
     const dueDate = new Date(Date.now() + 24 * HOUR);
     const oldTotal = Number(order.total_amount);
-    const requested = order.order_revisions.find((r) => r.revision_type === 'BeforeDeposit' && r.status === 'Requested');
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.orders.update({ where: { id }, data: { ...this.orderData(p), deposit_amount: deposit, deposit_due_date: dueDate, status: 'Pending' } });
+      // Có điều kiện trạng thái: khách vừa cọc (Deposited) hay đơn vừa hết hạn thì không kéo về Pending
+      const r = await tx.orders.updateMany({
+        where: { id, status: { in: ['Draft', 'Pending', 'NeedRevision'] } },
+        data: { ...this.orderData(p), deposit_amount: deposit, deposit_due_date: dueDate, status: 'Pending' },
+      });
+      if (!r.count) return fail('ORDER_NOT_SENDABLE', 'Đơn vừa đổi trạng thái (khách đã đặt cọc hoặc đơn đã hết hạn). Tải lại để xem.', 409);
       await tx.order_items.deleteMany({ where: { order_id: id } });
       await tx.order_items.createMany({ data: this.itemRows(id, p) });
       if (!order.payments) await tx.payments.create({ data: { order_id: id, status: 'Unpaid' } });
       if (order.status !== 'Draft') {
-        if (requested) await tx.order_revisions.update({ where: { id: requested.id }, data: { status: 'Applied', new_total_amount: p.total, applied_date: new Date() } });
-        else await tx.order_revisions.create({ data: { order_id: id, revision_type: 'BeforeDeposit', request_note: null, old_total_amount: oldTotal, new_total_amount: p.total, status: 'Applied', applied_date: new Date() } });
+        // Đóng mọi yêu cầu của khách đang chờ (đọc trong transaction: khách có thể vừa gửi yêu cầu lúc NCC đang soạn)
+        const applied = await tx.order_revisions.updateMany({
+          where: { order_id: id, revision_type: 'BeforeDeposit', status: 'Requested' },
+          data: { status: 'Applied', new_total_amount: p.total, applied_date: new Date() },
+        });
+        if (!applied.count) await tx.order_revisions.create({ data: { order_id: id, revision_type: 'BeforeDeposit', request_note: null, old_total_amount: oldTotal, new_total_amount: p.total, status: 'Applied', applied_date: new Date() } });
       }
     });
 
@@ -406,7 +445,8 @@ export class OrdersService {
 
   /**
    * Sửa đơn sau cọc (Deposited): hạng mục, ngày, ghi chú. Khóa tỷ lệ và tiền cọc; tên, số điện thoại giữ nguyên.
-   * Bắt buộc "Nội dung thay đổi" (khách thấy). Ghi OrderRevisions AfterDeposit trạng thái Applied luôn; đơn vẫn Deposited.
+   * Bắt buộc "Nội dung thay đổi" (khách thấy). Ghi OrderRevisions AfterDeposit trạng thái Applied; đơn vẫn Deposited.
+   * Khách đang có yêu cầu chỉnh sửa (AfterDeposit, Requested) thì yêu cầu đó cũng thành Applied.
    */
   async editDeposited(userId: string, id: string, body: { content?: ContentInput; changeNote?: string }) {
     const { order } = await this.ownedByVendor(userId, id);
@@ -422,9 +462,14 @@ export class OrdersService {
 
     const changes = changeTypesBetween(current, p);
     await this.prisma.$transaction(async (tx) => {
-      await tx.orders.update({ where: { id }, data: { event_date: new Date(p.eventDate), note: p.note, total_amount: p.total } });
+      const r = await tx.orders.updateMany({ where: { id, status: 'Deposited' }, data: { event_date: new Date(p.eventDate), note: p.note, total_amount: p.total } });
+      if (!r.count) return fail('ORDER_NOT_EDITABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 409);
       await tx.order_items.deleteMany({ where: { order_id: id } });
       await tx.order_items.createMany({ data: this.itemRows(id, p) });
+      await tx.order_revisions.updateMany({
+        where: { order_id: id, revision_type: 'AfterDeposit', status: 'Requested' },
+        data: { status: 'Applied', new_total_amount: p.total, applied_date: new Date() },
+      });
       await tx.order_revisions.create({
         data: {
           order_id: id,
@@ -448,6 +493,32 @@ export class OrdersService {
       type: 'OrderSent',
       title: 'Nhà cung cấp đã cập nhật đơn',
       content: `Đơn ${order.order_code} đã được cập nhật: ${changeNote}`,
+      referenceType: 'Order',
+      referenceId: id,
+    }).catch(() => undefined);
+    return this.dtoOf(id);
+  }
+
+  /**
+   * NCC từ chối yêu cầu chỉnh sửa của khách với đơn đã cọc (AfterDeposit, Requested): yêu cầu thành Rejected, đơn giữ nguyên.
+   * Lý do (tùy chọn) chỉ nằm trong tin hệ thống, không có cột lưu. Trước cọc không có từ chối: NCC "Cập nhật đơn".
+   */
+  async rejectRevision(userId: string, id: string, body: { note?: string }) {
+    const { order } = await this.ownedByVendor(userId, id);
+    if (order.status !== 'Deposited') return fail('REVISION_NOT_FOUND', 'Đơn không có yêu cầu chỉnh sửa đang chờ.', 409);
+    const note = body?.note?.trim() || null;
+    const r = await this.prisma.order_revisions.updateMany({ where: { order_id: id, revision_type: 'AfterDeposit', status: 'Requested' }, data: { status: 'Rejected' } });
+    if (!r.count) return fail('REVISION_NOT_FOUND', 'Đơn không có yêu cầu chỉnh sửa đang chờ.', 409);
+
+    const conversationId = await this.conversationOf(order);
+    if (conversationId) {
+      await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `NCC đã từ chối yêu cầu chỉnh sửa đơn ${order.order_code}${note ? ` · ${note}` : ''}. Đơn giữ nguyên.` });
+    }
+    await notify(this.prisma, {
+      userId: order.weddings.user_id,
+      type: 'OrderRevisionRejected',
+      title: 'Nhà cung cấp từ chối yêu cầu chỉnh sửa',
+      content: `Yêu cầu chỉnh sửa đơn ${order.order_code} không được chấp nhận${note ? `: ${note}` : ''}.`,
       referenceType: 'Order',
       referenceId: id,
     }).catch(() => undefined);

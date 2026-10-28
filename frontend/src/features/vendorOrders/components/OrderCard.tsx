@@ -40,8 +40,8 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
   // Đếm ngược hạn cọc tự chạy (dựng lại mỗi 30 giây, và khi tua đồng hồ giả lập)
   useNow()
   const hint = orderHint(o)
-  // Khách yêu cầu chỉnh sửa (chỉ trước cọc): hộp cam, đơn đang NeedRevision
-  const request = o.status === 'NeedRevision' ? openRevision(o) : undefined
+  // Khách yêu cầu chỉnh sửa: hộp cam. Trước cọc đơn NeedRevision; sau cọc đơn vẫn Deposited (tiền cọc giữ nguyên)
+  const request = o.status === 'NeedRevision' || o.status === 'Deposited' ? openRevision(o) : undefined
   // Vừa cập nhật: Chờ cọc thì lần cập nhật trước cọc, Đã đặt cọc thì lần chỉnh sửa sau cọc; ghi tổng cũ, mới và nội dung thay đổi
   const last = o.revisions[0]
   const updated = last?.status === 'Applied' && ((o.status === 'Pending' && last.revisionType === 'BeforeDeposit') || (o.status === 'Deposited' && last.revisionType === 'AfterDeposit')) ? last : undefined
@@ -104,6 +104,7 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
         <div className="mt-2.5 rounded-md border border-warn/40 bg-warn-soft px-3 py-2.5 text-[13px] leading-relaxed text-ink">
           <MessageSquareWarning className="mr-1.5 -mt-0.5 inline size-4 text-warn" aria-hidden />
           <b className="font-semibold text-warn">Khách yêu cầu:</b> {[changesLabel(request), request.requestNote ? `"${request.requestNote}"` : ''].filter(Boolean).join(' · ')}
+          {o.status === 'Deposited' && <span className="mt-1 block text-[12px] text-muted-foreground">Đơn đã cọc: tiền cọc giữ nguyên. Bấm Chỉnh sửa theo yêu cầu để áp dụng, hoặc Từ chối yêu cầu.</span>}
         </div>
       ) : o.status === 'Pending' ? null : (
         // Chờ cọc: hạn đã có ở dòng "Hạn đặt cọc" phía trên, không nhắc lại bằng ô gợi ý
