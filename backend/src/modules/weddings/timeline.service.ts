@@ -30,7 +30,7 @@ export class TimelineService {
       this.prisma.orders.findMany({ where: { wedding_id: w.id }, select: { id: true, vendor_profiles: { select: { business_name: true } } } }),
     ]);
     const catById = new Map(cats.map((c) => [c.id, { id: c.id, slug: categorySlug(c.name), name: c.name }]));
-    const vendorByOrder = new Map(orders.map((o) => [o.id, o.vendor_profiles.business_name]));
+    const vendorByOrder = new Map(orders.map((o) => [o.id, o.vendor_profiles?.business_name ?? '']));
 
     const items = tasks.map((t) => {
       const category = t.category_id ? (catById.get(t.category_id) ?? null) : null;
@@ -59,9 +59,9 @@ export class TimelineService {
     return { wedding: w, task: t ?? fail('TIMELINE_ITEM_NOT_FOUND', 'Không tìm thấy việc trong timeline.', 404) };
   }
 
-  private checkDue(dueDate: unknown, weddingDate: Date) {
+  private checkDue(dueDate: unknown, weddingDate: Date | null) {
     if (!isDate(dueDate)) return fail('VALIDATION_ERROR', 'Chọn hạn hợp lệ.', 400);
-    if (dueDate < toYmd(todayVNDate()) || dueDate >= toYmd(weddingDate)) {
+    if (!weddingDate || dueDate < toYmd(todayVNDate()) || dueDate >= toYmd(weddingDate)) {
       return fail('DUE_DATE_OUT_OF_RANGE', 'Hạn phải từ hôm nay đến trước ngày cưới.', 400);
     }
     return new Date(dueDate);

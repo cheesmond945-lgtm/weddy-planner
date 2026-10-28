@@ -13,7 +13,8 @@ import { WeddingSetupDialog } from '@/features/weddings/components/WeddingDialog
 import { usePlan } from '@/features/weddings/hooks'
 import { ChatPanelResume, ReplacePlanDialog } from '@/features/weddings/planActions'
 import { cn } from '@/lib/utils'
-import { NotificationBell, PartnerButton, UserMenu } from './HeaderActions'
+import { CoupleNotificationBell } from '@/features/coupleNotifications/components/CoupleNotificationBell'
+import { PartnerButton, UserMenu } from './HeaderActions'
 import { homeOf, paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
 
@@ -148,7 +149,7 @@ function Header() {
             {user && (
               <>
                 {user.role === 'COUPLE' && <PartnerButton />}
-                <NotificationBell />
+                {user.role === 'COUPLE' && <CoupleNotificationBell />}
                 <span aria-hidden className="mx-1 h-7 w-px bg-line" />
                 <UserMenu
                   user={user}

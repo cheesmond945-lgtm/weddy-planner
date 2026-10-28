@@ -1,8 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { isMock } from '@/api'
 import { FormError } from '@/components/FormField'
 import { toast } from '@/components/ui/toast'
-import { MOCK_OTP } from '@/mocks/auth'
 import type { OtpSent, Session } from '@/types/auth'
 import { useForgotPassword, useResendResetOtp, useResetPassword } from '../hooks'
 import { MIN_PASSWORD, forgotPasswordSchema, resetPasswordSchema, validate, type FieldErrors } from '../schemas'
@@ -118,7 +116,6 @@ function ResetStep({ sent, onResent, onBack, onSuccess }: ResetStepProps) {
         value={values.otp}
         onChange={change('otp')}
         error={errors.otp}
-        hint={isMock('auth') ? `Dữ liệu giả: mã OTP là ${MOCK_OTP}.` : undefined}
         autoFocus
       />
       <AuthField

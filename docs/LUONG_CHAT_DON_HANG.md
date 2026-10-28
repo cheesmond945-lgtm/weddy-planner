@@ -4,6 +4,20 @@
 > Viết ngày 28/10/2026 từ **code thật** (nhánh `Chanh`) và các tài liệu trong `docs/`. Chỗ code lệch quy tắc nghiệp vụ đã chốt được đánh dấu **⚠️ LỆCH**. Không chắc thì ghi **chưa xác minh**.
 > Đường dẫn trong file này bấm được trong VS Code (dạng `file:dòng`). Số dòng đúng tại thời điểm viết; code đổi thì lệch vài dòng.
 
+> ### ⚠️ Cập nhật sau khi gộp `main` vào `Chanh` (28/10/2026)
+> Nội dung bên dưới viết trước khi gộp. Các chỗ sau **đã đổi**, đọc kèm bảng này:
+>
+> | Chủ đề | Trước | Sau khi gộp |
+> |---|---|---|
+> | Dữ liệu giả | Có `VITE_USE_MOCK`, `VITE_REAL_APIS`, "Giả lập khách/thời gian" | **Đã gỡ hoàn toàn** (mục D9) |
+> | Thanh toán cọc | Chỉ `simulate`; VNPay thật là ⚠️ G18 | **VNPay thật đã có** ([integrations/vnpay/vnpay.ts](../backend/src/integrations/vnpay/vnpay.ts)): `createDeposit` trả URL, `POST /payments/vnpay/confirm`, IPN `GET /payments/vnpay/ipn` ([payments-gateway](../backend/src/modules/payments-gateway/payments-gateway.controller.ts)); `simulate` vẫn là mặc định khi chưa cấu hình |
+> | Thông báo | `/notifications` dùng chung mọi vai trò, chuông NCC [NotificationMenu] | `/notifications` **chỉ cho khách**; NCC dùng `/vendors/me/notifications`, admin `/admin/notifications`. Chuông khách đã nối ([CoupleNotificationBell](../frontend/src/features/coupleNotifications/components/CoupleNotificationBell.tsx)) nên **G4 đã được xử lý**; chuông NCC là [VendorNotificationBell](../frontend/src/features/vendorNotifications/components/VendorNotificationBell.tsx). Toast tin nhắn NCC ([MessageToaster](../frontend/src/features/notifications/components/MessageToaster.tsx)) vẫn giữ |
+> | Hoa hồng | API `lines`/`pay` kiểu cũ, nộp ngay ở chế độ thử | API của `main`: `GET /vendors/me/commissions` (+ `/:id`), nộp qua VNPay; hạn nộp: backend dùng **ngày 25** tháng sau ([commissions.service.ts](../backend/src/modules/commissions/commissions.service.ts), [order-lifecycle.ts](../backend/src/modules/orders/order-lifecycle.ts)) nhưng hằng số FE `COMMISSION_DUE_DAY` ([constants.ts](../frontend/src/features/commissions/constants.ts)) và chú thích kiểu ghi **ngày 20**: **lệch, hỏi nhóm**; bảng kê đã thanh toán thì hoa hồng đơn hoàn thành sau đó **dồn sang tháng sau** ([order-lifecycle.ts](../backend/src/modules/orders/order-lifecycle.ts) `addCommission`) |
+> | Tự hoàn thành đơn | Job của `Chanh` ([order-jobs.service.ts](../backend/src/modules/orders/order-jobs.service.ts), mặc định tắt) | Giữ job của `Chanh`. Job của `main` (`OrderAutoCompleteService`, chạy mỗi giờ, **nhắc NCC trước 2 ngày**) **không được đưa vào**: nhắc trước 2 ngày hiện **chưa có** |
+> | Schema | Cột bắt buộc | `schema.prisma` của `main` (đã `db pull` lại): hầu hết cột thành nullable; thêm `snapshot`, `min_tables`; code `Chanh` dùng `!` / `?? ''` cho các cột này |
+> | Giá theo mâm (Trung tâm tổ chức sự kiện) | không có | Có: `priceUnit`, `minTables`, [catalog/price.ts](../frontend/src/features/catalog/price.ts) |
+> | Số dòng trong file này | đúng lúc viết | **Lệch** ở orders.service.ts (thêm ~120 dòng VNPay), chat.service.ts, order-lifecycle.ts |
+
 ---
 
 ## QUY TẮC CHO NGƯỜI SỬA
@@ -684,16 +698,13 @@ Cột "Đã cài đặt": **Có** / **Một phần** / **Chưa**. Mã lỗi là 
 | `Admin` vào chat/đơn | `@Roles('Couple','Vendor')` | 403 | **Có** | [chat.controller.ts:11](../backend/src/modules/chat/chat.controller.ts#L11) |
 | Dữ liệu cũ `AfterDeposit` `Requested`/`Rejected` | `toOrderDto` trả mọi `order_revisions`; thẻ chỉ dùng `revisions[0]` đã `Applied`; `openRevision` chỉ lấy `Requested` và chỉ dùng khi đơn `NeedRevision`. Trong "Xem chi tiết": `Requested` hiện "Đang chờ NCC sửa", **`Rejected` hiện nhầm "Đã áp dụng"**. (Theo `LECH_FE_BE.md:18` có 1 dòng `Requested`, 1 dòng `Rejected`; chưa xác minh bằng SELECT) | | **Một phần** (G9) | [order-mapping.ts:58-68](../backend/src/modules/orders/order-mapping.ts#L58), [calc.ts:118](../frontend/src/features/vendorOrders/calc.ts#L118), [OrderDetailDialog.tsx:36-44](../frontend/src/features/vendorOrders/components/OrderDetailDialog.tsx#L36) |
 
-## D9. Mock và thật: cờ `VITE_REAL_APIS`
+## D9. Dữ liệu giả (mock) đã bị gỡ
 
-Cơ chế: `isMock(group) = VITE_USE_MOCK==='true' && !VITE_REAL_APIS.includes(group)` ([api/mock.ts:7](../frontend/src/api/mock.ts#L7), [lib/env.ts:6](../frontend/src/lib/env.ts#L6)). Nhóm cờ dùng trong luồng này (đếm bằng `grep isMock(`): `chat` (khách: hội thoại, tin), `vendorChat` (NCC: hội thoại, tin), `orders` (**cả** đơn phía NCC **lẫn** phía khách, và thanh toán cọc), `commissions`, `notifications` (chuông NCC), `weddings` (kế hoạch khách), `catalog`, `auth`.
+Sau khi gộp `main` (28/10/2026) frontend **không còn chế độ dữ liệu giả**: không còn `VITE_USE_MOCK`, `VITE_REAL_APIS`, `src/mocks/`, `api/mock.ts`, nút "Giả lập khách" và "Giả lập thời gian". Mọi màn hình gọi backend thật; muốn xem luồng phải chạy backend và có dữ liệu trong DB. Đồng hồ NCC ([lib/clock.ts](../frontend/src/lib/clock.ts)) là giờ thật.
 
-- **Để chạy trọn luồng thật** cần bật **`chat,vendorChat,orders,commissions,notifications`** (cùng `auth,catalog` để đăng nhập và xem dịch vụ; nên bật cả `weddings` vì "Nhắn tin với NCC" tự thêm NCC vào kế hoạch **thật**). Mẫu trong [frontend/.env.example](../frontend/.env.example): `VITE_REAL_APIS=catalog,auth,chat,vendorChat,orders,commissions,notifications`. Backend cần `PAYMENT_MODE=simulate` (mặc định khi dev) để cọc chạy được.
-- **`chat`, `vendorChat`, `orders`, `commissions` phải bật/tắt CÙNG NHAU**: hội thoại, đơn, hoa hồng giả dùng chung một kho `localStorage` (`weddy.mock.vendorOrders.*`, `weddy.mock.planning`) ([HUONG_DAN_CHAY.md](../HUONG_DAN_CHAY.md) mục 2).
-- **Chat thật + `orders` mock** (hỏng): tin `Order` có `orderId` là UUID thật; FE khách gọi `mockChat.getOrder(id)` → **404 `ORDER_NOT_FOUND`** ([mocks/chat.ts:100-104,160](../frontend/src/mocks/chat.ts#L100)) nên thẻ đơn **đứng mãi ở khung xám đang tải** ([OrderCard khách:68](../frontend/src/features/orders/components/OrderCard.tsx#L68)). Phía NCC danh sách đơn mock rỗng nên tin `Order` **hiện như tin chữ thường** ([MessageItem.tsx:39](../frontend/src/features/vendorChat/components/MessageItem.tsx#L39)). Nút "Tạo đơn" tạo đơn **giả** trong `localStorage`, không vào DB.
-- **Chat mock + `orders` thật** (ngược lại): `conversationId` giả không khớp DB → `POST /vendors/me/orders` trả 404 `CONVERSATION_NOT_FOUND`. Cũng hỏng.
-- **Chỉ có ở mock:** "Giả lập khách" (đặt cọc, yêu cầu chỉnh sửa, hủy, nhắn tin), "Giả lập thời gian" (tua đồng hồ thử hết hạn, tự hoàn thành), NCC giả tự trả lời và tự gửi đơn khi khách nhắn có chữ "gửi đơn"/"chốt" ([mocks/chat.ts:136-148](../frontend/src/mocks/chat.ts#L136), [api/chat.md](api/chat.md) mục "Ghi chú về dữ liệu giả"). Backend **không có** các hành vi này; thử luồng thật phải mở **hai cửa sổ** (Phần F).
-- Tài liệu cũ: [LECH_FE_BE.md:3](api/LECH_FE_BE.md) còn ghi `VITE_REAL_APIS=catalog,auth`; [HUONG_DAN_CHAY.md](../HUONG_DAN_CHAY.md) mục 2 còn ghi `catalog,auth,chat,vendorChat` và nói đơn hàng vẫn mock. Cả hai **cũ** so với `.env.example` (không xác minh `frontend/.env` của từng người, và không chép).
+- Thử hết hạn cọc hoặc tự hoàn thành bằng dữ liệu thật: dùng các đơn demo ở mục G (DH26100009–13) hoặc nhờ người giữ DB đổi ngày; **không** tự `UPDATE` DB dùng chung.
+- Biến còn lại phía frontend: `VITE_API_URL`, `VITE_CHAT_MODE` ([vite-env.d.ts](../frontend/src/vite-env.d.ts)).
+- Các mục nhắc `VITE_REAL_APIS`, mock, "Giả lập khách" ở phần khác của tài liệu này (Phần A, G27, H30, kịch bản test) là **nội dung cũ**, bỏ qua.
 
 ---
 

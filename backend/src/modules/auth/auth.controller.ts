@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  // POST /api/auth/login  { "identifier": "admin", "password": "Everly@2026" }  (cũ: "login" vẫn được nhận)
+  // POST /api/auth/login  { "identifier": "<tên đăng nhập / email / SĐT>", "password": "..." }  (cũ: "login" vẫn được nhận)
   @Post('login')
   login(@Body() body: { identifier?: string; login?: string; password?: string }) {
     const identifier = (body?.identifier ?? body?.login ?? '').trim();
@@ -53,9 +53,36 @@ export class AuthController {
     return this.auth.me(req.user.sub);
   }
 
+  // POST /api/auth/me/password  { currentPassword, newPassword, confirmPassword }
+  @UseGuards(JwtAuthGuard)
+  @Post('me/password')
+  changePassword(@Req() req: any, @Body() body: { currentPassword?: string; newPassword?: string; confirmPassword?: string }) {
+    return this.auth.changePassword(req.user.sub, body ?? {});
+  }
+
+  // Đổi email đăng nhập: bước 1 { currentPassword, newEmail } gửi OTP tới email mới; bước 2 { otp }
+  @UseGuards(JwtAuthGuard)
+  @Post('me/email')
+  requestEmailChange(@Req() req: any, @Body() body: { currentPassword?: string; newEmail?: string }) {
+    return this.auth.requestEmailChange(req.user.sub, body ?? {});
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('me/email/resend-otp')
+  resendEmailChangeOtp(@Req() req: any) {
+    return this.auth.resendEmailChangeOtp(req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('me/email/verify-otp')
+  verifyEmailChange(@Req() req: any, @Body() body: { otp?: string }) {
+    return this.auth.verifyEmailChange(req.user.sub, body?.otp ?? '');
+  }
+
+  // Sửa họ tên, tên đăng nhập, SĐT (trường không gửi thì giữ nguyên); email đổi qua me/email
   @UseGuards(JwtAuthGuard)
   @Patch('me')
-  updateMe(@Req() req: any, @Body() body: { name?: string | null; email?: string | null; phone?: string | null }) {
+  updateMe(@Req() req: any, @Body() body: { name?: string | null; username?: string | null; email?: string | null; phone?: string | null }) {
     return this.auth.updateProfile(req.user.sub, body ?? {});
   }
 }

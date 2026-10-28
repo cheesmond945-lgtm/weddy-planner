@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/api/auth'
 import { authStore } from '@/store/auth'
 
@@ -23,6 +23,18 @@ export function useVerifyRegisterOtp() {
   return useMutation({
     mutationFn: authApi.verifyRegisterOtp,
     onSuccess: (session) => authStore.setSession(session),
+  })
+}
+
+/** Đổi email bước 2: đúng OTP thì cập nhật người dùng đang đăng nhập và tải lại trang Tài khoản của tôi. */
+export function useVerifyEmailChange() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: authApi.verifyEmailChange,
+    onSuccess: (user) => {
+      authStore.updateUser(user)
+      void qc.invalidateQueries({ queryKey: ['auth', 'me'] })
+    },
   })
 }
 

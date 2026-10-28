@@ -62,6 +62,13 @@ export function useSavePackage() {
     onSuccess: ({ pkg, submitted, submitFailed }) => {
       sync(pkg)
       if (submitFailed) return
+      if (pkg.status === 'PUBLISHED') {
+        return toast(
+          submitted
+            ? `Đã gửi duyệt bản cập nhật “${pkg.name}”. Khách vẫn thấy phiên bản đang đăng cho tới khi Admin duyệt.`
+            : `Đã lưu nháp bản cập nhật cùng ${pkg.pendingUpdate?.photos.length ?? 0} ảnh. Khách vẫn thấy phiên bản đang đăng.`,
+        )
+      }
       toast(
         submitted
           ? `Đã gửi duyệt ${pkg.id}. Dịch vụ chưa công khai cho tới khi Admin duyệt.`
@@ -72,16 +79,17 @@ export function useSavePackage() {
   })
 }
 
-type PackageAction = 'submit' | 'hide' | 'republish' | 'remove'
+type PackageAction = 'submit' | 'hide' | 'republish' | 'remove' | 'discardUpdate'
 
 const DONE: Record<PackageAction, (p: Pick<VendorPackage, 'name'>) => string> = {
   submit: (p) => `Đã gửi duyệt “${p.name}”. Gói chưa công khai cho tới khi được duyệt.`,
   hide: (p) => `Đã ẩn “${p.name}” khỏi danh sách và tìm kiếm công khai.`,
-  republish: (p) => `Đã đăng lại “${p.name}” theo phiên bản đã duyệt.`,
+  republish: (p) => `Đã khôi phục “${p.name}”. Khách đã thấy lại gói này.`,
   remove: () => 'Đã xóa bản nháp.',
+  discardUpdate: (p) => `Đã xóa bản cập nhật nháp. “${p.name}” giữ nguyên phiên bản đang đăng.`,
 }
 
-/** Gửi duyệt, ẩn, đăng lại, xóa bản nháp. */
+/** Gửi duyệt, ẩn, khôi phục, xóa bản nháp, xóa bản cập nhật nháp. */
 export function usePackageAction() {
   const { user } = useAuth()
   const qc = useQueryClient()
@@ -104,4 +112,9 @@ export function usePackageAction() {
     },
     onError: (err) => toast(err.message),
   })
+}
+
+/** "Tạo với AI": gợi ý đoạn mô tả gói từ tên, tags, giá, sức chứa. */
+export function useSuggestPackageDescription() {
+  return useMutation({ mutationFn: vendorPackagesApi.suggestDescription, onError: (err) => toast(err.message) })
 }

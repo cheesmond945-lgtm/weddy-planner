@@ -20,9 +20,15 @@ export const ORDER_INCLUDE = {
 export type OrderRow = Prisma.ordersGetPayload<{ include: typeof ORDER_INCLUDE }>;
 
 /** Ngày thuần (cột @db.Date) -> "YYYY-MM-DD". */
-export const ymd = (d: Date) => d.toISOString().slice(0, 10);
+export const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
 /** Thời điểm (timestamptz) -> "YYYY-MM-DD" theo giờ Việt Nam. */
 export const ymdVN = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+/** Số ngày trả trễ so với hạn (ngày thanh toán theo giờ Việt Nam); null nếu chưa trả hoặc trả đúng hạn. */
+export const lateDaysOf = (due: Date | null, paidAt: Date | null) => {
+  if (!due || !paidAt) return null;
+  const days = Math.round((Date.parse(`${ymdVN(paidAt)}T00:00:00Z`) - Date.parse(`${ymd(due)}T00:00:00Z`)) / 86_400_000);
+  return days > 0 ? days : null;
+};
 
 const REVISION_CHANGE_ORDER = ['Item', 'Quantity', 'EventDate', 'Other'];
 
@@ -34,8 +40,8 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
     id: o.id,
     orderCode: o.order_code,
     conversationId,
-    serviceId: o.vendor_profiles.id,
-    vendorName: o.vendor_profiles.business_name,
+    serviceId: o.vendor_profiles!.id,
+    vendorName: o.vendor_profiles!.business_name!,
     status: o.status,
     customerName: o.customer_name,
     customerPhone: o.customer_phone,
@@ -57,14 +63,14 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
       oldTotalAmount: Number(r.old_total_amount),
       newTotalAmount: r.new_total_amount === null ? null : Number(r.new_total_amount),
       status: r.status,
-      createdDate: r.created_date.toISOString(),
+      createdDate: (r.created_date ?? new Date(0)).toISOString(),
       appliedDate: r.applied_date ? r.applied_date.toISOString() : null,
     })),
-    invoices: o.invoices.map((i) => ({ id: i.id, invoiceCode: i.invoice_code, type: i.type, createdDate: i.created_date.toISOString() })),
+    invoices: o.invoices.map((i) => ({ id: i.id, invoiceCode: i.invoice_code, type: i.type, createdDate: (i.created_date ?? new Date(0)).toISOString() })),
     completedDate: o.completed_date ? o.completed_date.toISOString() : null,
     cancelledDate: o.cancelled_date ? o.cancelled_date.toISOString() : null,
     cancelReason: cancel.cancel_reason ?? null,
-    createdDate: o.created_date.toISOString(),
+    createdDate: (o.created_date ?? new Date(0)).toISOString(),
   };
 }
 

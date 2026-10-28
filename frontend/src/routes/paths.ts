@@ -28,6 +28,7 @@ export const paths = {
     orders: '/vendor/orders',
     chat: '/vendor/chat',
     commissions: '/vendor/commissions',
+    account: '/vendor/account',
   },
 
   // Admin
@@ -35,11 +36,15 @@ export const paths = {
     dashboard: '/admin',
     consultationRequests: '/admin/consultation-requests',
     vendors: '/admin/vendors',
+    vendor: (id: string) => `/admin/vendors/${id}`,
     catalog: '/admin/catalog',
+    package: (id: string) => `/admin/catalog/${id}`,
     orders: '/admin/orders',
     payments: '/admin/payments',
+    payment: (id: string) => `/admin/payments/${id}`,
     commissions: '/admin/commissions',
     users: '/admin/users',
+    account: '/admin/account',
   },
 
   forbidden: '/403',

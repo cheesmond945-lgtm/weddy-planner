@@ -1,6 +1,6 @@
 # API: vendors (hồ sơ nhà cung cấp)
 
-> **Bản nháp** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/vendors.ts`).
+> **Bản nháp** (đã nối backend thật).
 > Quy ước chung: [README.md](README.md).
 > **Chờ đối chiếu `docs/database.md` và `docs/state-diagrams.md`** (hai tài liệu này đang trống): tên thực thể, tên trường, enum và trạng thái hồ sơ đang suy từ prototype NCC (`docs/prototype/prototype_vendor`, màn Hồ sơ nhà cung cấp).
 
@@ -16,27 +16,37 @@ Chưa có: Admin duyệt hồ sơ, yêu cầu bổ sung (làm khi tới phần A
 
 | Enum | Giá trị | Nhãn FE |
 |---|---|---|
-| `VendorProfileStatus` | `NOT_SUBMITTED` | Chưa gửi xác minh |
+| `VendorProfileStatus` | `NOT_SUBMITTED` (DB `Draft`) | Bản nháp |
 | | `PENDING` | Chờ duyệt |
-| | `NEEDS_REVISION` | Cần bổ sung |
-| | `VERIFIED` | Đã xác minh |
+| | `NEEDS_REVISION` | Cần chỉnh sửa / bổ sung (kèm lý do) |
+| | `VERIFIED` (DB `Approved`) | Đã duyệt |
 | `VendorDocumentType` | `BUSINESS_LICENSE` | Giấy tờ kinh doanh |
 | | `FIRE_SAFETY` | Giấy tờ PCCC |
-| | `FOOD_SAFETY` | Giấy tờ ATTP |
-| `VendorPhotoType` | `FRONT` | Ảnh mặt tiền / cơ sở hoạt động |
-| `Weekday` | `MONDAY` … `SUNDAY` | Thứ 2 … Chủ nhật |
+| | `FOOD_SAFETY` | Giấy an toàn vệ sinh thực phẩm |
+| | `SKILL_CERTIFICATE` | Chứng chỉ tay nghề (tùy chọn) |
+| `VendorPhotoType` | `FRONT` | Ảnh cơ sở (`StorefrontPhoto`) |
 
 ### Trạng thái hồ sơ
 
-```
-NOT_SUBMITTED ──submit──▶ PENDING ──Admin duyệt──▶ VERIFIED
-                             │
-                             └──Admin yêu cầu bổ sung──▶ NEEDS_REVISION ──submit──▶ PENDING
-```
+`VendorProfiles.Status` là trạng thái hiện tại của hồ sơ (có hợp lệ để hiển thị hay không). `VendorVerifications.Status` là kết quả của từng lần nộp (cùng nguyên tắc với `Orders` và `OrderRevisions`). Mỗi lần gửi xác minh hoặc gửi cập nhật tạo **một** dòng `VendorVerifications` `Pending`; mỗi hồ sơ tối đa một dòng `Pending` (kiểm tra bằng code).
 
-- Lưu nháp (`PATCH`) **không đổi** trạng thái: `NOT_SUBMITTED` giữ `NOT_SUBMITTED`, `NEEDS_REVISION` giữ `NEEDS_REVISION`.
-- `PENDING` và `VERIFIED`: hồ sơ chỉ đọc, `PATCH` và `submit` trả `409 VENDOR_PROFILE_LOCKED`. Muốn đổi thông tin đã xác minh thì liên hệ Admin (chưa có luồng).
-- Hai bước của Admin chờ chốt ở `state-diagrams.md`.
+**Trước khi duyệt lần đầu (tiền kiểm)**
+
+| Trạng thái | Nhãn góc phải | Nút | Sửa |
+|---|---|---|---|
+| `NOT_SUBMITTED` | Bản nháp | Lưu nháp, Gửi xác minh | Có |
+| `PENDING` | Chờ duyệt | Không có | Chỉ đọc |
+| `NEEDS_REVISION` | Cần chỉnh sửa / bổ sung, kèm lý do | Lưu, Gửi lại xác minh | Có |
+| `VERIFIED` | Đã duyệt | Xem bên dưới | Xem bên dưới |
+
+Lý do chỉnh sửa lấy từ `AdminNote` của dòng xác minh gần nhất (`reviewNote`).
+
+**Sau khi đã duyệt (hậu kiểm)**
+
+- Nhóm **hiển thị** (giới thiệu, giờ làm việc): sửa và lưu ngay (`PATCH`), không cần duyệt.
+- Nhóm **pháp lý** (tên doanh nghiệp, mã số thuế, người đại diện, địa chỉ, phường/xã, tỉnh/thành phố, link Google Maps, ảnh cơ sở, giấy tờ): NCC bấm "Cập nhật hồ sơ", sửa xong bấm "Gửi cập nhật" (`POST …/submit`). Hệ thống ghi **thẳng** dữ liệu mới vào `VendorProfiles` và `VendorDocuments`, giữ `Status = Approved` (NCC và các gói vẫn hiển thị), tạo một dòng xác minh `Pending` và gửi thông báo `VendorUpdated` cho mọi Admin.
+- Trong lúc chờ (`pendingReview = true`): hồ sơ chỉ đọc, nút "Cập nhật hồ sơ" ẩn; `PATCH` và `submit` trả `409 VENDOR_PROFILE_LOCKED`.
+- Admin xử lý ([admin.md](admin.md)): hợp lệ → dòng xác minh `Approved`, hồ sơ giữ `Approved`; không hợp lệ → dòng xác minh `NeedRevision` kèm lý do, **hồ sơ vẫn `Approved` (NCC, gói, đơn, yêu thích vẫn hiển thị)**; `revisionRequested = true` và `reviewNote` là lý do, NCC sửa rồi bấm "Gửi cập nhật" để tạo dòng xác minh `Pending` mới; nghiêm trọng → Admin khóa tài khoản (cách duy nhất để ẩn NCC đã duyệt).
 
 ## Luật theo lĩnh vực
 
@@ -51,8 +61,10 @@ Lĩnh vực cung cấp dùng chung danh mục với phía cặp đôi (`GET /cat
 | Nhà hàng (`slug = nha-hang`) | `BUSINESS_LICENSE`, `FIRE_SAFETY`, `FOOD_SAFETY` | `FRONT`, ít nhất 1 ảnh (bắt buộc) |
 | Lĩnh vực khác | `BUSINESS_LICENSE`, `FIRE_SAFETY` | `FRONT`, tùy chọn |
 
-- Giấy tờ: mỗi loại **một** tệp, PDF hoặc ảnh JPG/PNG/WEBP, tối đa 10MB. Chỉ phục vụ xét duyệt, không công khai.
-- Ảnh cơ sở: chỉ có ảnh mặt tiền (`FRONT`, đã bỏ ảnh sảnh), nhiều ảnh, JPG/PNG/WEBP, tối đa 10MB mỗi ảnh. Tách biệt với album ảnh của gói dịch vụ, không tự công khai.
+`SKILL_CERTIFICATE` (chứng chỉ tay nghề) tùy chọn với mọi lĩnh vực.
+
+- Giấy tờ: mỗi loại một hoặc nhiều tệp (bộ ảnh), ảnh JPG/PNG/WEBP (BE vẫn nhận PDF cũ), tối đa 10MB mỗi tệp. Chỉ phục vụ xét duyệt, không công khai.
+- Ảnh cơ sở: `FRONT`, tối đa 6 ảnh, mỗi ảnh một khung tải, JPG/PNG/WEBP, tối đa 10MB mỗi ảnh. Tách biệt với album ảnh của gói dịch vụ, không tự công khai.
 - Tệp thuộc loại không có trong bộ của lĩnh vực: BE trả `400 VALIDATION_ERROR`.
 
 ## Đối tượng dùng chung
@@ -83,10 +95,12 @@ Lĩnh vực cung cấp dùng chung danh mục với phía cặp đôi (`GET /cat
   "category": { "id": "cat-1", "slug": "nha-hang", "name": "Nhà hàng" },
   "verifiedCategory": null,
   "province": "Hà Nội",
-  "district": "Hai Bà Trưng",
+  "ward": "Bạch Mai",
   "address": "128 Bà Triệu",
   "googleMapsUrl": "https://maps.app.goo.gl/…",
-  "businessHours": { "fromDay": "MONDAY", "toDay": "SUNDAY", "openTime": "09:00", "closeTime": "21:00" },
+  "openTime": "09:00",
+  "closeTime": "21:00",
+  "description": "Nhà hàng tiệc cưới sức chứa 500 khách…",
   "documents": [
     { "type": "BUSINESS_LICENSE", "url": "https://…", "publicId": "…", "fileName": "GPKD-MayPalace.pdf", "size": 820000, "mimeType": "application/pdf" }
   ],
@@ -94,6 +108,7 @@ Lĩnh vực cung cấp dùng chung danh mục với phía cặp đôi (`GET /cat
     { "type": "FRONT", "url": "https://…", "publicId": "…", "fileName": "mat-tien.jpg", "size": 412000, "mimeType": "image/jpeg" }
   ],
   "reviewNote": "Giấy PCCC đã hết hạn, vui lòng tải bản còn hiệu lực.",
+  "pendingReview": false,
   "submittedAt": "2026-10-10T02:30:00.000Z",
   "updatedAt": "2026-10-12T08:15:00.000Z"
 }
@@ -101,13 +116,16 @@ Lĩnh vực cung cấp dùng chung danh mục với phía cặp đôi (`GET /cat
 
 | Trường | Ghi chú |
 |---|---|
-| `businessName`, `taxCode`, `representativeName`, `address`, `district` | `null` khi chưa nhập (hồ sơ mới, lưu nháp dở) |
+| `businessName`, `taxCode`, `representativeName`, `address`, `province`, `ward` | `null` khi chưa nhập (hồ sơ mới, lưu nháp dở) |
 | `category` | **Chỉ đọc.** Lĩnh vực Admin gán khi tạo tài khoản, luôn có. NCC không đổi qua API này |
 | `verifiedCategory` | Lĩnh vực Admin đã xác minh; dùng để cho phép NCC gửi duyệt gói thuộc lĩnh vực đó. `null` khi chưa xác minh lần nào. Vì lĩnh vực không đổi được nên khi có thì trùng `category` |
-| `province` | Hiện chỉ phục vụ Hà Nội, BE luôn trả `"Hà Nội"`, FE không gửi lên |
-| `district` | Một trong 12 quận nội thành Hà Nội (danh sách ở `frontend/src/features/vendors/constants.ts`, BE kiểm tra cùng danh sách) |
-| `businessHours` | Một khung giờ chung, tùy chọn. `openTime`, `closeTime` dạng `HH:mm`, bước 30 phút, `closeTime > openTime`. `null` khi không khai |
+| `province` | Tỉnh / thành phố (cột `city`), NCC tự nhập, không khóa |
+| `ward` | Phường / xã (cột `ward`), chuỗi tự do |
+| `openTime`, `closeTime` | Giờ mở và đóng cửa `HH:mm`, tùy chọn (phải có cả hai hoặc không có, `closeTime > openTime`). BE nối thành chuỗi `09:00–21:00` lưu ở cột `working_hours` và tách lại khi trả về; chuỗi cũ không đúng dạng giờ trả `null` |
+| `description` | Giới thiệu hiển thị cho cặp đôi, tối đa 3000 ký tự, tùy chọn |
 | `reviewNote` | Lý do Admin yêu cầu bổ sung, có khi `NEEDS_REVISION` |
+| `revisionRequested` | `true` khi hồ sơ `VERIFIED` có bản cập nhật gần nhất bị Admin yêu cầu chỉnh sửa (hồ sơ vẫn hiển thị); lý do ở `reviewNote` |
+| `pendingReview` | `true` khi hồ sơ `VERIFIED` đã gửi cập nhật và đang chờ Admin kiểm tra (chỉ đọc) |
 | `submittedAt` | Lần gửi xác minh gần nhất |
 
 `UpdateVendorProfileRequest` (body chung của lưu nháp và gửi xác minh)
@@ -117,18 +135,24 @@ Lĩnh vực cung cấp dùng chung danh mục với phía cặp đôi (`GET /cat
   "businessName": "Công ty TNHH Mây Palace",
   "taxCode": "0312345678",
   "representativeName": "Trần Thu Mây",
-  "district": "Hai Bà Trưng",
+  "province": "Hà Nội",
+  "ward": "Bạch Mai",
   "address": "128 Bà Triệu",
   "googleMapsUrl": null,
-  "businessHours": null,
+  "openTime": "09:00",
+  "closeTime": "21:00",
+  "description": null,
   "documents": [{ "type": "BUSINESS_LICENSE", "url": "…", "publicId": "…", "fileName": "…", "size": 820000, "mimeType": "application/pdf" }],
   "photos": []
 }
 ```
 
-Không có trường lĩnh vực (chỉ đọc, BE bỏ qua `categoryId` nếu client gửi). Gửi **toàn bộ** hồ sơ mỗi lần (không gửi từng phần). `documents`, `photos` là danh sách cuối cùng: tệp không còn trong danh sách là đã bị xóa.
+Không có trường lĩnh vực (chỉ đọc, BE bỏ qua `categoryId` nếu client gửi). Hồ sơ đã duyệt: `PATCH` chỉ ghi `openTime`, `closeTime`, `description` (các trường còn lại bỏ qua); `submit` ghi tất cả. Gửi **toàn bộ** hồ sơ mỗi lần (không gửi từng phần). `documents`, `photos` là danh sách cuối cùng: tệp không còn trong danh sách là đã bị xóa.
 
 ---
+
+### POST /vendors/me/profile/suggest-description
+Role: VENDOR. Nút "Tạo với AI" ở ô Giới thiệu. Body `{ "businessName": "…", "ward": "…", "province": "…", "hint": null }` (mọi trường tùy chọn). Response 200: `{ "data": { "description": "…" } }`. Hiện dựng đoạn mẫu từ tên, lĩnh vực và địa chỉ (chưa gọi mô hình AI), NCC chỉnh lại trước khi lưu.
 
 ### GET /vendors/me/profile
 Role: VENDOR
@@ -146,7 +170,7 @@ Lưu nháp. Không đổi trạng thái.
 
 Request: `UpdateVendorProfileRequest`. Các trường được để trống (`null`), chỉ kiểm tra định dạng của trường đã nhập:
 - `googleMapsUrl`: link Google Maps (`https://maps.app.goo.gl/…`, `https://www.google.com/maps/…`, `https://goo.gl/maps/…`).
-- `businessHours`: đủ 4 trường và `closeTime > openTime`.
+- `openTime`, `closeTime`: dạng `HH:mm`, có cả hai hoặc không có, `closeTime > openTime`.
 
 Response 200: `{ "data": VendorProfile }`
 

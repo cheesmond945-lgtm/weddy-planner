@@ -56,49 +56,6 @@ Lệnh `npm` phải chạy trong `frontend/` hoặc `backend/`. Thư mục gốc
 
 Kiểm tra backend kết nối được DB: mở http://localhost:3000/api/health, kết quả `{"data":{"status":"ok","db":"up"}}`.
 
-### Chế độ dữ liệu giả
-
-`VITE_USE_MOCK=true` trong `frontend/.env`: frontend dùng dữ liệu trong `frontend/src/mocks`, không cần backend.
-
-Tài khoản mẫu (mật khẩu đều là `123456`):
-
-| Vai trò | Đăng nhập bằng |
-|---|---|
-| Cặp đôi | `minh.anh@example.com` hoặc `0901234567` |
-| Nhà cung cấp | `vendor@example.com` |
-| Quản trị viên | `admin@example.com` |
-
-Đăng ký mới: mã OTP giả luôn là `123456`.
-
-Tài khoản cặp đôi mẫu chưa có thông tin đám cưới (đăng nhập lần đầu sẽ hiện hộp thiết lập), nhưng đã có sẵn một hội thoại với Lumi Wedding Studio và một đơn chờ đặt cọc để thử luồng thanh toán.
-
-Nhà cung cấp giả trong khung chat (chỉ có ở chế độ dữ liệu giả):
-
-- tự trả lời theo câu mẫu (hỏi giá, lịch, cọc);
-- nhắn có chữ **"gửi đơn"** hoặc **"chốt"** thì NCC tự gửi đơn dịch vụ;
-- yêu cầu chỉnh sửa đơn thì sau 2 giây NCC tự gửi lại đơn.
-
-Dữ liệu giả lưu trong localStorage của trình duyệt (các key bắt đầu bằng `weddy.mock.`). Xóa các key này (hoặc chạy `localStorage.clear()` trong Console) để về dữ liệu ban đầu.
-
-### Điểm Google Maps (dữ liệu giả)
-
-Điểm và đánh giá Google không lưu ở đâu cả, chỉ nằm trong bộ nhớ khi trang đang mở. Mỗi lần gọi trễ 300–800ms, thỉnh thoảng lỗi 502. Mở Console để xem log `[mock] GET /vendors/…/google-rating`. Cờ thử (gõ trong Console rồi tải lại trang):
-
-| Lệnh | Tác dụng |
-|---|---|
-| `localStorage.setItem('weddy.mock.googleError', '1')` | Luôn lỗi 502 (thử nút Thử lại) |
-| `localStorage.setItem('weddy.mock.googleError', '0')` | Không bao giờ lỗi |
-| `localStorage.removeItem('weddy.mock.googleError')` | Lỗi ngẫu nhiên khoảng 8% (mặc định) |
-
-## Unit test
-
-```bash
-cd frontend
-npm run test
-```
-
-Dùng test runner có sẵn của Node 24 (`node --test`), không cần cài thêm thư viện. File test: `src/**/*.test.ts`.
-
 ## Lệnh hay dùng
 
 | Lệnh | Thư mục | Việc |
@@ -121,7 +78,7 @@ frontend/src/
   routes/      Bảng route, guard theo role, đường dẫn
   pages/       Mỗi file một trang, chỉ ghép thành phần
   features/    Logic nghiệp vụ theo module
-  api/         HTTP client (gắn token, xử lý 401), cờ VITE_USE_MOCK
+  api/         HTTP client (gắn token, xử lý 401)
   store/       Phiên đăng nhập
   styles/      Design tokens và cấu hình Tailwind
 backend/src/

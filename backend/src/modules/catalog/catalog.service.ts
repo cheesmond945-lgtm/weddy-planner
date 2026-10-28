@@ -78,12 +78,12 @@ export class CatalogService {
         capacity: p.capacity,
         coverUrl: p.package_albums[0] ? this.storage.publicAlbumUrl(p.package_albums[0].url) : null,
         vendor: {
-          id: p.vendor_profiles.id,
-          name: p.vendor_profiles.business_name,
-          city: p.vendor_profiles.city,
-          ward: p.vendor_profiles.ward,
+          id: p.vendor_profiles!.id,
+          name: p.vendor_profiles!.business_name,
+          city: p.vendor_profiles!.city,
+          ward: p.vendor_profiles!.ward,
         },
-        category: p.vendor_profiles.service_categories,
+        category: p.vendor_profiles!.service_categories,
       })),
     };
   }

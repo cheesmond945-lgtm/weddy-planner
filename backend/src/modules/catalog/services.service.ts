@@ -17,6 +17,7 @@ export interface ServiceQuery {
 const CATEGORY_SLUGS: Record<string, string> = {
   'Chụp ảnh': 'chup-anh',
   'Hoa cưới': 'hoa-cuoi',
+  'Trang điểm': 'makeup',
   Makeup: 'makeup',
   'Trang phục': 'trang-phuc',
   'Trang trí': 'decor',
@@ -26,7 +27,21 @@ const CATEGORY_SLUGS: Record<string, string> = {
 const slugify = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-export const categorySlug = (name: string) => CATEGORY_SLUGS[name] ?? slugify(name);
+export const categorySlug = (name: string | null) => (name ? (CATEGORY_SLUGS[name] ?? slugify(name)) : '');
+
+/**
+ * Trung tâm tổ chức sự kiện báo giá theo mâm (menu cho 10 khách), đã gồm sảnh và dịch vụ đi kèm;
+ * đặt từ số mâm tối thiểu (service_packages.min_tables) mới được kèm sảnh. Các danh mục khác: giá trọn gói.
+ */
+export const TABLE_PRICED_SLUGS = ['nha-hang'];
+export const GUESTS_PER_TABLE = 10;
+export const priceUnitOf = (slug: string) => (TABLE_PRICED_SLUGS.includes(slug) ? ('TABLE' as const) : ('PACKAGE' as const));
+/** Số mâm cần đặt: đủ chỗ cho số khách, không dưới số mâm tối thiểu của sảnh, ít nhất 1. */
+export const tablesFor = (guests: number | null | undefined, minTables: number | null | undefined) =>
+  Math.max(Math.ceil((guests ?? 0) / GUESTS_PER_TABLE), minTables ?? 0, 1);
+/** Chi phí ước tính của một gói cho đám cưới: giá theo mâm thì nhân số mâm, giá trọn gói thì giữ nguyên. */
+export const estimateCost = (slug: string, price: number, minTables: number | null | undefined, guests: number | null | undefined) =>
+  priceUnitOf(slug) === 'TABLE' ? { total: price * tablesFor(guests, minTables), tables: tablesFor(guests, minTables) } : { total: price, tables: null };
 
 /** Bỏ dấu tiếng Việt và viết thường để so khớp từ khóa: "Cầu Giấy" -> "cau giay". */
 const foldText = (s: string) =>
@@ -76,7 +91,7 @@ export class ServicesService {
     });
   }
 
-  private img(path: string) {
+  private img(path: string | null) {
     return this.storage.publicAlbumUrl(path);
   }
 
@@ -93,14 +108,19 @@ export class ServicesService {
   private summarize(v: Awaited<ReturnType<ServicesService['loadVisible']>>[number]) {
     const prices = v.service_packages.map((p) => Number(p.price));
     const cover = v.service_packages.flatMap((p) => p.package_albums)[0];
+    const slug = categorySlug(v.service_categories!.name);
     return {
       id: v.id,
       name: v.business_name,
-      category: { id: v.service_categories.id, slug: categorySlug(v.service_categories.name), name: v.service_categories.name },
+      category: { id: v.service_categories!.id, slug, name: v.service_categories!.name ?? '' },
       location: v.city,
       address: [v.address, v.ward, v.city].filter(Boolean).join(', '),
       priceFrom: Math.min(...prices),
       priceTo: Math.max(...prices),
+      /** TABLE: giá mỗi mâm 10 khách, đã gồm sảnh; PACKAGE: giá trọn gói */
+      priceUnit: priceUnitOf(slug),
+      /** Số mâm tối thiểu của gói rẻ nhất (gói xếp theo giá tăng dần) */
+      minTables: v.service_packages[0]?.min_tables ?? null,
       rating: 0,
       reviewCount: 0,
       coverImageUrl: cover ? this.img(cover.url) : '',
@@ -194,9 +214,9 @@ export class ServicesService {
       capacity: capacities.length ? Math.max(...capacities) : null,
       styles: tags,
       workingHours: v.working_hours ?? '',
-      packageLayout: packageLayoutOf(categorySlug(v.service_categories.name)),
+      packageLayout: packageLayoutOf(categorySlug(v.service_categories?.name ?? null)),
       // Số điện thoại NCC: dùng khi FE chọn nhắn qua Zalo (VITE_CHAT_MODE=zalo)
-      contactPhone: (await this.prisma.users.findUnique({ where: { id: v.user_id }, select: { phone_number: true } }))?.phone_number ?? null,
+      contactPhone: (await this.prisma.users.findUnique({ where: { id: v.user_id ?? undefined }, select: { phone_number: true } }))?.phone_number ?? null,
       isVerified: true,
       isGuaranteed: false,
       images: [...covers, ...others].slice(0, 60).map((a) => this.img(a.url)),
@@ -207,10 +227,11 @@ export class ServicesService {
         price: Number(p.price),
         capacity: p.capacity,
         // CSDL chưa có cột đơn vị tính: đọc từ mô tả của NCC ("…4.500.000đ/mâm"), không có thì là gói
-        unit: p.description.match(/đ\s*\/\s*(mâm|bàn|khách|người|set|bộ)/i)?.[1].toLowerCase() ?? 'gói',
+        unit: priceUnitOf(categorySlug(v.service_categories?.name ?? null)) === 'TABLE' ? 'mâm' : ((p.description ?? '').match(/đ\s*\/\s*(mâm|bàn|khách|người|set|bộ)/i)?.[1].toLowerCase() ?? 'gói'),
         // Ảnh bìa và thẻ phong cách của gói
         imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null,
         tags: p.package_tags.map((t) => t.tag),
+        minTables: p.min_tables,
       })),
       albums: v.service_packages.map((p) => ({
         id: p.id,

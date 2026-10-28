@@ -32,3 +32,12 @@ export function useCreateDeposit() {
     mutationFn: ({ orderId, method }: { orderId: string; method: PaymentMethod }) => paymentsApi.createDeposit(orderId, method),
   })
 }
+
+/** VNPay đưa khách quay về trang đơn: xác nhận kết quả với backend rồi tải lại đơn, kế hoạch, timeline. */
+export function useConfirmDeposit() {
+  const refresh = useRefreshPlanning()
+  return useMutation({
+    mutationFn: paymentsApi.confirmDeposit,
+    onSettled: () => refresh(),
+  })
+}

@@ -2,7 +2,8 @@ import { Sparkles, Star, TriangleAlert } from 'lucide-react'
 import { Fragment, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { formatMoney, formatNumber } from '@/lib/format'
+import { formatUnitPrice, isTablePriced, tableNote } from '@/features/catalog/price'
+import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { ServiceDetail, ServicePackage } from '@/types/catalog'
@@ -179,7 +180,8 @@ export function CompareTable({ services, recommendedId, isTie, ratings, budget, 
             if (!p) return <Muted>Chưa có gói đăng giá</Muted>
             return (
               <>
-                <b className="font-semibold">{formatMoney(p.price)}</b>
+                <b className="font-semibold">{formatUnitPrice(p.price, s)}</b>
+                {isTablePriced(s) && <div className="text-[13px] text-muted-foreground">{tableNote(p.minTables)}</div>}
                 {p.price === minPrice && (
                   <>
                     <br />

@@ -1,14 +1,14 @@
 import { CalendarCheck, CheckCheck, ClipboardList, Percent } from 'lucide-react'
 import { StatCard } from '@/features/commissions/components/StatCard'
-import { formatPeriod } from '@/features/commissions/calc'
+import { formatPeriod } from '@/features/commissions/constants'
 import { formatMoney } from '@/lib/format'
-import type { CommissionStatement } from '@/types/commission'
+import type { CommissionStatementSummary } from '@/types/commission'
 import type { orderStats } from '../summary'
 
 interface DashboardStatsProps {
   stats: ReturnType<typeof orderStats>
   /** Kỳ hiện tại (OPEN) của bảng kê, cùng số với trang Tài chính & đối soát */
-  currentCommission: CommissionStatement | undefined
+  currentCommission: CommissionStatementSummary | undefined
 }
 
 /** Bốn thẻ số liệu đầu trang (kpi-grid trong prototype NCC). */
@@ -39,8 +39,8 @@ export function DashboardStats({ stats: s, currentCommission: c }: DashboardStat
       <StatCard
         icon={Percent}
         label="Hoa hồng kỳ hiện tại"
-        value={formatMoney(c?.totalAmount ?? 0)}
-        foot={c ? `Tạm tính kỳ ${formatPeriod(c.periodMonth)} · ${c.totalOrders} đơn hoàn thành` : 'Chưa có bảng kê'}
+        value={formatMoney(c?.commissionAmount ?? 0)}
+        foot={c ? `Tạm tính kỳ ${formatPeriod(c.period)} · ${c.orderCount} đơn hoàn thành` : 'Chưa có bảng kê'}
       />
     </div>
   )

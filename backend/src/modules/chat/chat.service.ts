@@ -37,8 +37,8 @@ export class ChatService {
   }
 
   /** Số tin của bên kia mà người xem chưa đọc, theo từng hội thoại. */
-  private async unreadByConversation(convs: { id: string; couple_id: string; vendor_id: string }[], role: ChatRole) {
-    const counterparts = convs.map((c) => (role === 'Couple' ? c.vendor_id : c.couple_id));
+  private async unreadByConversation(convs: { id: string; couple_id: string | null; vendor_id: string | null }[], role: ChatRole) {
+    const counterparts = convs.flatMap((c) => { const id = role === 'Couple' ? c.vendor_id : c.couple_id; return id ? [id] : []; });
     const rows = await this.prisma.messages.groupBy({
       by: ['conversation_id'],
       where: { conversation_id: { in: convs.map((c) => c.id) }, sender_id: { in: counterparts }, is_read: false },
@@ -69,7 +69,7 @@ export class ChatService {
     if (content.length > MAX_TEXT) return fail('VALIDATION_ERROR', `Tin nhắn tối đa ${MAX_TEXT} ký tự.`, 400);
     const m = await postMessage(this.prisma, { conversationId: id, senderId: user.sub, content });
     const toCouple = user.role === 'Vendor';
-    await notifyNewMessage(this.prisma, { userId: toCouple ? conv.couple_id : conv.vendor_id, conversationId: id, from: await this.displayName(user), content });
+    await notifyNewMessage(this.prisma, { userId: (toCouple ? conv.couple_id : conv.vendor_id)!, conversationId: id, from: await this.displayName(user), content });
     return toMessage(m, conv.couple_id);
   }
 
@@ -107,7 +107,7 @@ export class ChatService {
       orderBy: [{ last_message_date: 'desc' }, { created_date: 'desc' }],
       include: lastMessageInclude,
     });
-    const vendors = await this.prisma.vendor_profiles.findMany({ where: { user_id: { in: convs.map((c) => c.vendor_id) } }, select: { id: true, user_id: true } });
+    const vendors = await this.prisma.vendor_profiles.findMany({ where: { user_id: { in: convs.flatMap((c) => (c.vendor_id ? [c.vendor_id] : [])) } }, select: { id: true, user_id: true } });
     const vendorByUser = new Map(vendors.map((v) => [v.user_id, v]));
     const [summaries, statuses, unread, orders] = await Promise.all([
       this.services.summaries(vendors.map((v) => v.id)),
@@ -122,10 +122,10 @@ export class ChatService {
     ]);
     const sumById = new Map(summaries.map((s) => [s.id, s]));
     const latestOrderByVendor = new Map<string, (typeof orders)[number]>();
-    for (const o of orders) if (!latestOrderByVendor.has(o.vendor_id)) latestOrderByVendor.set(o.vendor_id, o);
+    for (const o of orders) if (o.vendor_id && !latestOrderByVendor.has(o.vendor_id)) latestOrderByVendor.set(o.vendor_id, o);
 
     return convs.flatMap((c) => {
-      const v = vendorByUser.get(c.vendor_id);
+      const v = vendorByUser.get(c.vendor_id!);
       const service = v && sumById.get(v.id);
       if (!v || !service) return []; // NCC đã bị ẩn
       const last = c.messages[0];
@@ -146,13 +146,13 @@ export class ChatService {
   async startForCouple(userId: string, serviceId: string, replace: boolean) {
     await this.weddings.addPlanItem(userId, serviceId, replace, true);
     const vendor = await this.prisma.vendor_profiles.findUniqueOrThrow({ where: { id: serviceId }, include: { service_categories: { select: { name: true } } } });
-    let conv = await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: userId, vendor_id: vendor.user_id } } });
+    let conv = await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: userId, vendor_id: vendor.user_id! } } });
     if (!conv) {
       conv = await this.prisma.conversations.create({ data: { couple_id: userId, vendor_id: vendor.user_id, category_id: vendor.category_id } });
       await postMessage(this.prisma, {
         conversationId: conv.id,
         senderId: vendor.user_id,
-        content: `Chào bạn! Mình là ${vendor.business_name}. Bạn cần tư vấn gói nào cho ${vendor.service_categories.name.toLowerCase()}?`,
+        content: `Chào bạn! Mình là ${vendor.business_name}. Bạn cần tư vấn gói nào cho ${(vendor.service_categories?.name ?? 'dịch vụ').toLowerCase()}?`,
         isRead: true,
       });
     }
@@ -169,7 +169,7 @@ export class ChatService {
       orderBy: [{ last_message_date: 'desc' }, { created_date: 'desc' }],
       include: lastMessageInclude,
     });
-    const coupleIds = convs.map((c) => c.couple_id);
+    const coupleIds = convs.flatMap((c) => (c.couple_id ? [c.couple_id] : []));
     const [couples, weddings, orders, unread] = await Promise.all([
       this.prisma.users.findMany({ where: { id: { in: coupleIds } }, select: { id: true, full_name: true, phone_number: true } }),
       this.prisma.weddings.findMany({ where: { user_id: { in: coupleIds } }, select: { user_id: true, groom_name: true, bride_name: true } }),
@@ -185,9 +185,9 @@ export class ChatService {
     const today = todayVn();
 
     return convs.map((c) => {
-      const u = coupleById.get(c.couple_id);
-      const w = weddingByUser.get(c.couple_id);
-      const mine = orders.filter((o) => o.weddings.user_id === c.couple_id);
+      const u = coupleById.get(c.couple_id!);
+      const w = weddingByUser.get(c.couple_id!);
+      const mine = orders.filter((o) => o.weddings!.user_id! === c.couple_id);
       const latestSent = mine.find((o) => o.status !== 'Draft');
       const last = c.messages[0];
       return {
@@ -198,7 +198,7 @@ export class ChatService {
         latestOrder: latestSent ? { id: latestSent.id, orderCode: latestSent.order_code, status: latestSent.status } : null,
         hasDraftOrder: mine.some((o) => o.status === 'Draft'),
         // Cần NCC xử lý: có đơn nháp, đơn cần chỉnh sửa, hoặc đơn đã cọc đã qua ngày thực hiện (chờ đánh dấu hoàn thành)
-        needsAction: mine.some((o) => o.status === 'Draft' || o.status === 'NeedRevision' || (o.status === 'Deposited' && o.event_date.toISOString().slice(0, 10) < today)),
+        needsAction: mine.some((o) => o.status === 'Draft' || o.status === 'NeedRevision' || (o.status === 'Deposited' && o.event_date && o.event_date.toISOString().slice(0, 10) < today)),
         orderCodes: mine.map((o) => o.order_code),
       };
     });

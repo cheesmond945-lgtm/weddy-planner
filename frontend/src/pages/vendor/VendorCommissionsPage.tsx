@@ -1,84 +1,90 @@
-import { Percent, Wallet } from 'lucide-react'
-import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
 import { Button } from '@/components/ui/button'
-import { commissionTiles, withCurrentPeriod } from '@/features/commissions/calc'
-import { CommissionTiles } from '@/features/commissions/components/CommissionTiles'
-import { PayStatementDialog } from '@/features/commissions/components/PayStatementDialog'
-import { StatementDetailDialog } from '@/features/commissions/components/StatementDetailDialog'
+import { PeriodHero } from '@/features/commissions/components/PeriodHero'
+import { PeriodOrders } from '@/features/commissions/components/PeriodOrders'
+import { PeriodSelect } from '@/features/commissions/components/PeriodSelect'
 import { StatementTable } from '@/features/commissions/components/StatementTable'
-import { useCommissions, usePayStatement } from '@/features/commissions/hooks'
-import { todayVN, useNow } from '@/lib/clock'
-import { TimeTravelMenu } from '@/features/vendorOrders/components/TimeTravelMenu'
-import type { CommissionStatement } from '@/types/commission'
+import { useCommissionStatement, useCommissionStatements } from '@/features/commissions/hooks'
 
 /**
- * Tài chính & đối soát: hoa hồng phải nộp WebPlan theo từng tháng (CommissionStatements). Kỳ của tháng hiện tại đang tạm tính;
- * kỳ đã qua và chưa nộp thì nộp một lần qua VNPay. ?ds=<id> mở chi tiết một kỳ.
+ * Tài chính & đối soát: kỳ đang xem (hoa hồng cần thanh toán, hạn, nút thanh toán VNPay), các đơn hoàn thành của kỳ,
+ * và lịch sử các kỳ.
  */
 export default function VendorCommissionsPage() {
-  const { data, isPending, isError, error, refetch } = useCommissions()
-  const pay = usePayStatement()
+  const { data: all, isPending, isError, error, refetch } = useCommissionStatements()
+  // ?nam=<năm> lọc các kỳ theo năm (mặc định năm của kỳ mới nhất); ?ky=<mã bảng kê> chọn kỳ xem,
+  // mặc định kỳ đầu tiên cần thanh toán trong năm, không có thì kỳ mới nhất của năm
   const [params, setParams] = useSearchParams()
-  const [paying, setPaying] = useState<CommissionStatement | null>(null)
+  const years = [...new Set((all ?? []).map((s) => s.period.slice(0, 4)))]
+  const year = years.includes(params.get('nam') ?? '') ? params.get('nam')! : years[0]
+  const statements = (all ?? []).filter((s) => s.period.startsWith(year ?? ''))
+  const selected =
+    statements?.find((s) => s.id === params.get('ky')) ?? statements?.find((s) => s.status === 'UNPAID' && s.commissionAmount > 0) ?? statements?.[0]
+  const detail = useCommissionStatement(selected?.id ?? null)
 
-  // Trạng thái Quá hạn và kỳ hiện tại phụ thuộc ngày hôm nay: dựng lại khi tua giờ giả lập
-  const today = todayVN(useNow())
-  const statements = useMemo(() => (data ? withCurrentPeriod(data.statements, today) : []), [data, today])
-  const tiles = commissionTiles(statements, today)
-  const open = statements.find((s) => s.id === params.get('ds'))
-  const setOpen = (id: string | null) => {
+  function update(patch: Record<string, string | null>) {
     const next = new URLSearchParams(params)
-    if (id) next.set('ds', id)
-    else next.delete('ds')
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v)
+      else next.delete(k)
+    }
     setParams(next, { replace: true })
+  }
+
+  function select(id: string) {
+    update({ ky: id })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (
     <>
       <PageTitle
         title="Tài chính & đối soát"
-        description={
-          <>
-            Hoa hồng phải nộp WebPlan theo từng tháng, tính trên các đơn đã hoàn tất.
-            {data?.rate && (
-              <span className="mt-1.5 flex items-center gap-1.5 text-[13px]">
-                <Percent className="size-3.5" aria-hidden />
-                Tỷ lệ hoa hồng của bạn: <b className="font-semibold text-ink">{data.rate.percent}%</b> ({data.rate.categoryName})
-              </span>
-            )}
-          </>
+        actions={
+          statements?.length ? (
+            <div className="flex flex-wrap items-center gap-2.5">
+              <select
+                aria-label="Năm"
+                value={year}
+                // Đổi năm thì bỏ kỳ đang chọn, trang tự chọn kỳ mặc định của năm đó
+                onChange={(e) => update({ nam: e.target.value, ky: null })}
+                className="h-10 w-[120px] rounded-sm border border-line-strong bg-surface px-3 text-[13.5px] focus:border-gold focus:outline-none"
+              >
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    Năm {y}
+                  </option>
+                ))}
+              </select>
+              <PeriodSelect statements={statements} value={selected?.id ?? ''} onChange={select} />
+            </div>
+          ) : undefined
         }
-        actions={<TimeTravelMenu />}
       />
-
       {isPending ? (
-        <div aria-busy="true" aria-label="Đang tải đối soát" className="h-[420px] animate-pulse rounded-md bg-muted" />
+        <div className="grid gap-5">
+          <div aria-busy="true" aria-label="Đang tải đối soát" className="h-[300px] animate-pulse rounded-lg bg-muted" />
+          <div className="h-[220px] animate-pulse rounded-md bg-muted" />
+        </div>
       ) : isError ? (
         <EmptyState title="Chưa tải được bảng kê" description={error.message} action={<Button onClick={() => refetch()}>Thử lại</Button>} />
+      ) : !selected ? (
+        <EmptyState title="Chưa có bảng kê" description="Chọn lĩnh vực trong Hồ sơ nhà cung cấp để bắt đầu tính hoa hồng." />
       ) : (
         <>
-          <CommissionTiles tiles={tiles} />
-          <section className="min-w-0 overflow-hidden rounded-[22px] border border-line bg-surface shadow-panel">
-            {data.statements.length ? (
-              <StatementTable statements={statements} busy={pay.isPending} onOpen={setOpen} onPay={setPaying} />
-            ) : (
-              <div className="grid place-items-center px-6 py-14 text-center">
-                <span className="mb-3 grid size-14 place-items-center rounded-full bg-gold-soft text-gold-ink">
-                  <Wallet className="size-6" />
-                </span>
-                <h3 className="mb-1.5 text-xl">Chưa có bảng kê hoa hồng</h3>
-                <p className="max-w-[48ch] text-muted-foreground">Bảng kê của tháng được tạo khi bạn bấm Hoàn tất đơn đầu tiên trong tháng. Mỗi tháng nộp một lần, trước ngày 25 tháng sau.</p>
-              </div>
-            )}
+          <PeriodHero summary={selected} detail={detail.data} />
+          <PeriodOrders summary={selected} detail={detail.data} loading={detail.isPending} />
+          <section className="min-w-0 overflow-hidden rounded-md border border-line bg-surface shadow-portal">
+            <header className="px-5 py-[18px]">
+              <h2 className="font-sans text-[15px] font-semibold tracking-normal">Lịch sử đối soát</h2>
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">Bấm vào một kỳ để xem đơn và thanh toán kỳ đó.</p>
+            </header>
+            <StatementTable statements={statements} selectedId={selected.id} onSelect={select} />
           </section>
         </>
       )}
-
-      {open && <StatementDetailDialog key={open.id} statement={open} onClose={() => setOpen(null)} onPay={setPaying} />}
-      <PayStatementDialog statement={paying} onClose={() => setPaying(null)} onConfirm={(s) => pay.mutate(s, { onSuccess: () => setPaying(null) })} />
     </>
   )
 }

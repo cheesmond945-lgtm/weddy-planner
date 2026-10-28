@@ -26,15 +26,17 @@ interface DepositViewProps {
   planStatus: PlanItemStatus | null
   /** Mã kết quả VNPay trên URL quay về (00 = thành công) */
   returnCode: string | null
+  /** Lý do không thành công backend trả về khi xác nhận kết quả VNPay (hủy, hết thời gian, sai chữ ký…) */
+  failMessage?: string | null
 }
 
 /** Thanh toán cọc / Đặt cọc thành công (renderDeal trong prototype). */
-export function DepositView({ order, service, planStatus, returnCode }: DepositViewProps) {
+export function DepositView({ order, service, planStatus, returnCode, failMessage }: DepositViewProps) {
   const navigate = useNavigate()
   const backToChat = () => navigate(`${paths.chat}?c=${order.conversationId}`)
   const paid = order.status === 'Deposited' || order.status === 'Completed'
   const overdue = order.status === 'Pending' && !!order.depositDueDate && new Date(order.depositDueDate).getTime() <= Date.now()
-  const failed = !paid && returnCode !== null && returnCode !== '00'
+  const failed = !paid && ((returnCode !== null && returnCode !== '00') || !!failMessage) ? (failMessage ?? 'Thanh toán chưa thành công.') : null
 
   const summary = (
     <aside className="rounded-lg border border-line bg-surface p-[22px]">
@@ -92,7 +94,7 @@ export function DepositView({ order, service, planStatus, returnCode }: DepositV
   )
 }
 
-function PayForm({ order, service, failed, overdue, onBackToChat }: { order: Order; service: ServiceDetail; failed: boolean; overdue: boolean; onBackToChat: () => void }) {
+function PayForm({ order, service, failed, overdue, onBackToChat }: { order: Order; service: ServiceDetail; failed: string | null; overdue: boolean; onBackToChat: () => void }) {
   const [method, setMethod] = useState<PaymentMethod>('VNPAY_QR')
   const create = useCreateDeposit()
   const navigate = useNavigate()
@@ -121,8 +123,8 @@ function PayForm({ order, service, failed, overdue, onBackToChat }: { order: Ord
       <div className="rounded-md bg-sage-soft px-3.5 py-3 text-sm text-sage">
         Đơn dịch vụ do {service.name} gửi trong khung chat. Bạn kiểm tra lại thông tin bên phải trước khi thanh toán.
       </div>
-      {failed && <div className="rounded-md bg-warn-soft px-4 py-3 font-medium text-warn">Thanh toán chưa thành công. Bạn có thể thử lại.</div>}
       {overdue && <div className="rounded-md bg-warn-soft px-4 py-3 font-medium text-warn">Đơn đã hết hạn đặt cọc.</div>}
+      {failed && <div className="rounded-md bg-warn-soft px-4 py-3 font-medium text-warn">{failed} Bạn có thể thử lại.</div>}
       <fieldset>
         <legend className="mb-1.5 block text-[13px] font-medium">Phương thức thanh toán</legend>
         <div className="flex flex-col gap-2.5">

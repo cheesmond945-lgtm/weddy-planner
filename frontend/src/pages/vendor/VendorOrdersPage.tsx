@@ -13,7 +13,6 @@ import { OrderFormDialog, type OrderFormMode } from '@/features/vendorOrders/com
 import { OrdersTable } from '@/features/vendorOrders/components/OrdersTable'
 import { OrderStatusTabs, OrderToolbar } from '@/features/vendorOrders/components/OrderToolbar'
 import { OrderTiles } from '@/features/vendorOrders/components/OrderTiles'
-import { TimeTravelMenu } from '@/features/vendorOrders/components/TimeTravelMenu'
 import { useOrderPageState } from '@/features/vendorOrders/filters'
 import { useOrder, useOrderCounts, useOrders } from '@/features/vendorOrders/hooks'
 import { orderTiles } from '@/features/vendorOrders/summary'
@@ -65,7 +64,6 @@ export default function VendorOrdersPage() {
 
   const newOrder = (
     <span className="flex flex-wrap items-center gap-2.5">
-      <TimeTravelMenu />
       <Button className="rounded-pill" onClick={() => setCreating(true)}>
         <Plus />
         Tạo đơn

@@ -1,11 +1,11 @@
 import type { LucideIcon } from 'lucide-react'
-import { Building2, ChevronRight, ClipboardList, ExternalLink, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Wallet } from 'lucide-react'
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { Building2, ChevronRight, CircleUserRound, ClipboardList, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Wallet } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, matchPath, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
-import { Button } from '@/components/ui/button'
+import { applySavedTheme, ThemeToggle } from '@/components/ThemeToggle'
 import { toast } from '@/components/ui/toast'
 import { MessageToaster } from '@/features/notifications/components/MessageToaster'
-import { VendorNotificationMenu } from '@/features/notifications/components/NotificationMenu'
+import { VendorNotificationBell } from '@/features/vendorNotifications/components/VendorNotificationBell'
 import { useUnreadCount } from '@/features/vendorChat/hooks'
 import { useIncomingMessageToasts } from '@/features/vendorChat/useIncomingMessageToasts'
 import { cn } from '@/lib/utils'
@@ -24,7 +24,7 @@ const NAV: VendorNavItem[] = [
   { to: paths.vendor.dashboard, label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: paths.vendor.orders, label: 'Quản lý đơn hàng', icon: ClipboardList },
   { to: paths.vendor.chat, label: 'Tin nhắn', icon: MessageSquare },
-  { to: paths.vendor.catalog, label: 'Quản lý dịch vụ', icon: Package },
+  { to: paths.vendor.catalog, label: 'Quản lý gói dịch vụ', icon: Package },
   { to: paths.vendor.commissions, label: 'Tài chính & đối soát', icon: Wallet },
   { to: paths.vendor.profile, label: 'Hồ sơ nhà cung cấp', icon: Building2 },
 ]
@@ -34,8 +34,10 @@ function useVendorPortalTheme() {
   useLayoutEffect(() => {
     const root = document.documentElement
     root.dataset.portal = 'vendor'
+    applySavedTheme()
     return () => {
       delete root.dataset.portal
+      delete root.dataset.theme
     }
   }, [])
 }
@@ -73,6 +75,53 @@ function StudioLogo({ name, onSidebar }: { name: string; onSidebar?: boolean }) 
   )
 }
 
+/** Bấm ảnh đại diện ở header: thả ra menu tài khoản (tên, email, Tài khoản của tôi, Đăng xuất). Bấm ra ngoài hoặc Esc để đóng. */
+function AccountMenu({ onLogout }: { onLogout: () => void }) {
+  const { user } = useAuth()
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(false)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    document.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  if (!user) return null
+  const item = 'flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-left text-[13.5px] text-ink transition-colors hover:bg-surface-2'
+  return (
+    <div ref={box} className="relative">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label="Tài khoản" onClick={() => setOpen((o) => !o)} className="rounded-full focus-visible:outline-2 focus-visible:outline-ring">
+        <StudioLogo name={user.name} />
+      </button>
+      {open && (
+        <div role="menu" className="absolute top-[calc(100%+8px)] right-0 z-40 w-[260px] rounded-md border border-line bg-surface p-1.5 shadow-portal">
+          <div className="border-b border-line px-3 pt-2 pb-2.5">
+            <p className="truncate text-[14px] font-semibold text-ink">{user.name}</p>
+            {user.email && <p className="truncate text-[12.5px] text-muted-foreground">{user.email}</p>}
+          </div>
+          <div className="pt-1.5">
+            <Link role="menuitem" to={paths.vendor.account} onClick={() => setOpen(false)} className={item}>
+              <CircleUserRound className="size-4 text-muted-foreground" />
+              Tài khoản của tôi
+            </Link>
+            <button role="menuitem" type="button" onClick={() => (setOpen(false), onLogout())} className={item}>
+              <LogOut className="size-4 text-muted-foreground" />
+              Đăng xuất
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Chữ WebPlan. trên sidebar, "Plan." ánh vàng (.wordmark trong prototype). */
 function Wordmark() {
   const gold = 'bg-(image:--gold-grad) bg-clip-text text-transparent'
@@ -87,7 +136,7 @@ function Wordmark() {
   )
 }
 
-function Sidebar({ open, onNavigate, onLogout }: { open: boolean; onNavigate: () => void; onLogout: () => void }) {
+function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }) {
   const { user } = useAuth()
   // Số tin chưa đọc trên mục Tin nhắn (nav-count trong prototype)
   const unread = useUnreadCount()
@@ -143,25 +192,17 @@ function Sidebar({ open, onNavigate, onLogout }: { open: boolean; onNavigate: ()
             </strong>
             <p className="truncate text-[11.5px] text-side-muted">{user.email ?? user.phone ?? 'Nhà cung cấp'}</p>
           </div>
-          <button
-            type="button"
-            onClick={onLogout}
-            aria-label="Đăng xuất"
-            title="Đăng xuất"
-            className="grid size-8 flex-none place-items-center rounded-sm text-side-muted transition-colors hover:bg-side-2 hover:text-side-ink"
-          >
-            <LogOut className="size-4" />
-          </button>
         </div>
       )}
     </aside>
   )
 }
 
-function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
-  const { user } = useAuth()
+function Header({ onOpenMenu, onLogout }: { onOpenMenu: () => void; onLogout: () => void }) {
   const { pathname } = useLocation()
   const current = NAV.find(({ to, end }) => matchPath({ path: to, end: !!end }, pathname))
+  // Trang con của mục menu (VD gói dịch vụ): "Quản lý gói dịch vụ > Chi tiết gói dịch vụ"
+  const detail = current && current.to === paths.vendor.catalog && pathname !== current.to ? (pathname === paths.vendor.packageNew ? 'Thêm gói dịch vụ' : 'Chi tiết gói dịch vụ') : null
 
   return (
     <header className="sticky top-0 z-30 flex h-[62px] items-center gap-3.5 border-b border-line bg-header px-4 backdrop-blur-[10px] min-[901px]:px-7">
@@ -174,22 +215,29 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
         <Menu className="size-[18px]" />
       </button>
 
-      <div className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
-        {user && <span className="truncate max-sm:hidden">{user.name}</span>}
-        <ChevronRight className="size-3.5 flex-none max-sm:hidden" />
-        <strong className="truncate font-medium text-ink">{current?.label ?? 'Tổng quan'}</strong>
-      </div>
+      <nav aria-label="Đường dẫn" className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
+        {detail && current ? (
+          <>
+            <Link to={current.to} className="truncate transition-colors hover:text-ink">
+              {current.label}
+            </Link>
+            <ChevronRight aria-hidden className="size-3.5 flex-none" />
+            <strong aria-current="page" className="truncate font-medium text-ink">
+              {detail}
+            </strong>
+          </>
+        ) : (
+          <strong aria-current="page" className="truncate font-medium text-ink">
+            {pathname === paths.vendor.account ? 'Tài khoản của tôi' : (current?.label ?? 'Tổng quan')}
+          </strong>
+        )}
+      </nav>
 
       <div className="ml-auto flex items-center gap-3">
-        <Button asChild variant="outline" size="sm" className="border-line-strong hover:border-gold hover:text-gold-ink max-sm:hidden">
-          <Link to={paths.services}>
-            <ExternalLink />
-            Về website
-          </Link>
-        </Button>
+        <ThemeToggle />
+        <VendorNotificationBell />
         <span aria-hidden className="h-6 w-px bg-line max-sm:hidden" />
-        <VendorNotificationMenu />
-        {user && <StudioLogo name={user.name} />}
+        <AccountMenu onLogout={onLogout} />
       </div>
     </header>
   )
@@ -226,11 +274,11 @@ export function VendorLayout() {
 
   return (
     <div className="min-h-dvh bg-(image:--portal-glow) bg-fixed">
-      <Sidebar open={menuOpen} onNavigate={() => setMenuOpen(false)} onLogout={handleLogout} />
+      <Sidebar open={menuOpen} onNavigate={() => setMenuOpen(false)} />
       {menuOpen && <div aria-hidden className="fixed inset-0 z-39 bg-scrim min-[901px]:hidden" onClick={() => setMenuOpen(false)} />}
 
       <div className="flex min-w-0 flex-col min-[901px]:pl-side">
-        <Header onOpenMenu={() => setMenuOpen(true)} />
+        <Header onOpenMenu={() => setMenuOpen(true)} onLogout={handleLogout} />
         <main className="px-4 pt-[22px] pb-12 min-[901px]:px-7 min-[901px]:pt-[30px] min-[901px]:pb-[60px]">
           {/* key theo trang để chạy hiệu ứng hiện trang mỗi lần chuyển (.page-enter) */}
           <div key={pathname} className="mx-auto max-w-portal animate-in duration-500 fade-in slide-in-from-bottom-3">

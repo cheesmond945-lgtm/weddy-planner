@@ -24,7 +24,7 @@ export class CoupleOrdersController {
   }
 }
 
-/** Đặt cọc (docs/api/payments.md). Chế độ thanh toán theo PAYMENT_MODE: xem paymentMode() trong order-rules.ts. */
+/** Đặt cọc (docs/api/payments.md). VNPay thật hoặc giả lập theo PAYMENT_MODE: xem OrdersService.createDeposit và paymentMode() trong order-rules.ts. */
 @UseGuards(JwtAuthGuard)
 @Roles('Couple')
 @Controller('payments')
@@ -34,7 +34,14 @@ export class PaymentsController {
   @HttpCode(200)
   @Post()
   create(@Req() req: any, @Body() body: { orderId?: string; method?: string }) {
-    return this.orders.createDeposit(req.user.sub, String(body?.orderId ?? ''));
+    return this.orders.createDeposit(req.user.sub, String(body?.orderId ?? ''), String(body?.method ?? ''), req.ip);
+  }
+
+  /** Kết quả VNPay quay về trang đơn (body = các tham số vnp_* trên URL quay về). */
+  @HttpCode(200)
+  @Post('vnpay/confirm')
+  confirm(@Req() req: any, @Body() body: Record<string, string>) {
+    return this.orders.confirmDeposit(req.user.sub, body ?? {});
   }
 }
 

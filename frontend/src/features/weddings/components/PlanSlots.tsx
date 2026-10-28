@@ -112,6 +112,13 @@ export function PlanSlots({ categorySlugs, items, hasWedding }: PlanSlotsProps) 
                   <RatingMeta service={item.service} />
                   <div className="mt-1 text-[13px] text-muted-foreground">
                     {item.packageName}: {formatMoney(item.price)}
+                    {/* Chưa có đơn, giá theo mâm: ghi rõ cách ước tính */}
+                    {item.estimate && (
+                      <span className="block text-xs">
+                        Ước tính {formatMoney(item.estimate.unitPrice)}/mâm × {item.estimate.tables} mâm
+                        {item.estimate.minTables && item.estimate.tables === item.estimate.minTables ? ' (số mâm tối thiểu)' : ''}, đã gồm sảnh
+                      </span>
+                    )}
                   </div>
                   <OrderLine item={item} />
                 </div>
