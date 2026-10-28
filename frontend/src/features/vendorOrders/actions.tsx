@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import type { CancelReason, InvoiceType, Order } from '@/types/vendorOrder'
-import { canCancel, eventPassed } from './calc'
+import { canCancel, eventPassed, openRevision } from './calc'
 import type { OrderFormMode } from './components/OrderFormDialog'
 import { CancelOrderDialog } from './components/CancelOrderDialog'
-import { useCancelOrder, useCompleteOrder, useIssueFinalInvoice } from './hooks'
+import { RejectRevisionDialog } from './components/RejectRevisionDialog'
+import { useCancelOrder, useCompleteOrder, useIssueFinalInvoice, useRejectRevision } from './hooks'
 
-export type ActionKey = 'view' | 'continue' | 'resend' | 'edit' | 'again' | 'complete' | 'invoice' | 'viewInvoice' | 'cancel'
+export type ActionKey = 'view' | 'continue' | 'resend' | 'edit' | 'reject' | 'again' | 'complete' | 'invoice' | 'viewInvoice' | 'cancel'
 
 export interface OrderAction {
   key: ActionKey
@@ -20,18 +21,21 @@ export interface OrderAction {
 /**
  * Thao tác của NCC trên một đơn, theo docs/api/THE_DON_HANG.md mục 4 (dùng chung cho thẻ đơn, màn chi tiết, bảng đơn):
  * Draft: Tiếp tục soạn. Pending: Cập nhật đơn. NeedRevision: Cập nhật đơn (chính). Expired, Cancelled: Tạo lại đơn (chính).
- * Deposited: Chỉnh sửa, Hoàn tất (chỉ khi đã qua ngày sự kiện), Xuất hóa đơn, Hủy đơn (chỉ khi còn trước ngày sự kiện).
+ * Deposited: Chỉnh sửa (chính khi khách đang yêu cầu chỉnh sửa, kèm Từ chối yêu cầu), Hoàn tất (chỉ khi đã qua ngày sự kiện),
+ * Xuất hóa đơn, Hủy đơn (chỉ khi còn trước ngày sự kiện).
  * Completed: Xuất hóa đơn (nếu chưa xuất) hoặc Xem hóa đơn. Đơn chưa cọc tự hết hạn, NCC không hủy.
  */
 export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAction[] {
   const out: OrderAction[] = []
   const hasFinal = o.invoices.some((i) => i.type === 'FinalInvoice')
+  const requested = o.status === 'Deposited' && !!openRevision(o)
   if (opts.withView) out.push({ key: 'view', label: 'Xem chi tiết', primary: false })
   if (o.status === 'Draft') out.push({ key: 'continue', label: 'Tiếp tục soạn', primary: false })
   if (o.status === 'Pending') out.push({ key: 'resend', label: 'Cập nhật đơn', primary: false })
   if (o.status === 'NeedRevision') out.push({ key: 'resend', label: 'Cập nhật đơn', primary: true })
   if (o.status === 'Expired' || o.status === 'Cancelled') out.push({ key: 'again', label: 'Tạo lại đơn', primary: true })
-  if (o.status === 'Deposited') out.push({ key: 'edit', label: 'Chỉnh sửa', primary: false })
+  if (o.status === 'Deposited') out.push({ key: 'edit', label: requested ? 'Chỉnh sửa theo yêu cầu' : 'Chỉnh sửa', primary: requested })
+  if (requested) out.push({ key: 'reject', label: 'Từ chối yêu cầu', primary: false })
   if (o.status === 'Deposited' && eventPassed(o)) out.push({ key: 'complete', label: 'Hoàn tất', primary: true })
   if (o.status === 'Deposited' || o.status === 'Completed') {
     out.push(hasFinal ? { key: 'viewInvoice', label: 'Xem hóa đơn', primary: false } : { key: 'invoice', label: 'Xuất hóa đơn', primary: false })
@@ -42,6 +46,7 @@ export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAct
 
 /** Nút chính trong bảng: chỉ đơn cần NCC xử lý mới có (Cập nhật đơn, Hoàn tất, Tạo lại đơn); đơn khác để trống. */
 export function mainActionKey(o: Order): ActionKey | null {
+  if (o.status === 'Deposited' && openRevision(o)) return 'edit'
   if (o.status === 'Deposited' && eventPassed(o)) return 'complete'
   if (o.status === 'NeedRevision') return 'resend'
   if (o.status === 'Expired' || o.status === 'Cancelled') return 'again'
@@ -66,8 +71,9 @@ export function useOrderActionRunner({ onOpenForm, onView, onViewInvoice }: Runn
   const complete = useCompleteOrder()
   const invoice = useIssueFinalInvoice()
   const cancel = useCancelOrder()
+  const reject = useRejectRevision()
   const [confirm, setConfirm] = useState<{
-    type: 'complete' | 'invoice' | 'again' | 'cancel'
+    type: 'complete' | 'invoice' | 'again' | 'cancel' | 'reject'
     order: Order
   } | null>(null)
 
@@ -81,6 +87,8 @@ export function useOrderActionRunner({ onOpenForm, onView, onViewInvoice }: Runn
         return onOpenForm({ kind: 'resend', order: o })
       case 'edit':
         return onOpenForm({ kind: 'edit', order: o })
+      case 'reject':
+        return setConfirm({ type: 'reject', order: o })
       case 'again':
         return setConfirm({ type: 'again', order: o })
       case 'complete':
@@ -109,8 +117,16 @@ export function useOrderActionRunner({ onOpenForm, onView, onViewInvoice }: Runn
         )}
       </ConfirmDialog>
       <ConfirmDialog open={confirm?.type === 'again'} onOpenChange={close} title="Tạo lại đơn?" confirmLabel="Tạo lại đơn" onConfirm={() => o && onOpenForm({ kind: 'again', from: o })}>
-        <p>Tạo đơn mới với cùng hạng mục, mã đơn mới.</p>
+        <p>Tạo đơn mới với cùng thông tin, mã đơn mới.</p>
       </ConfirmDialog>
+      {confirm?.type === 'reject' && o && (
+        <RejectRevisionDialog
+          order={o}
+          busy={reject.isPending}
+          onClose={() => setConfirm(null)}
+          onConfirm={(note: string) => reject.mutate({ orderId: o.id, note }, { onSuccess: () => setConfirm(null) })}
+        />
+      )}
       {confirm?.type === 'cancel' && o && (
         <CancelOrderDialog
           order={o}
@@ -122,5 +138,5 @@ export function useOrderActionRunner({ onOpenForm, onView, onViewInvoice }: Runn
     </>
   )
 
-  return { run, busy: complete.isPending || invoice.isPending || cancel.isPending, dialogs }
+  return { run, busy: complete.isPending || invoice.isPending || cancel.isPending || reject.isPending, dialogs }
 }

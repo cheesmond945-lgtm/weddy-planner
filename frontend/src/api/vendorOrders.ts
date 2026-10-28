@@ -56,6 +56,12 @@ export const vendorOrdersApi = {
   cancel: (orderId: string, body: { reason: CancelReason; note?: string }): Promise<Order> =>
     isMock('orders') ? mock((u) => mockVendorOrders.cancelOrder(u, orderId, body), 500) : http.post(`/vendors/me/orders/${orderId}/cancel`, body),
 
+  /** Từ chối yêu cầu chỉnh sửa của khách với đơn đã cọc (đơn giữ nguyên). Dữ liệu giả không có yêu cầu sau cọc nên không hỗ trợ. */
+  rejectRevision: (orderId: string, note?: string): Promise<Order> =>
+    isMock('orders')
+      ? Promise.reject(new ApiError(400, 'BAD_REQUEST', 'Chỉ dùng được với dữ liệu thật.'))
+      : http.post(`/vendors/me/orders/${orderId}/revision-requests/reject`, { note }),
+
   /** Hoàn tất đơn (chỉ khi đã qua ngày sự kiện). */
   complete: (orderId: string): Promise<Order> =>
     isMock('orders') ? mock((u) => mockVendorOrders.completeOrder(u, orderId), 400) : http.post(`/vendors/me/orders/${orderId}/complete`),

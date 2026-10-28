@@ -11,12 +11,18 @@ import type { ContentInput } from './order-rules';
 export class CoupleOrdersController {
   constructor(private readonly orders: OrdersService) {}
 
+  /** Mọi đơn đã gửi của khách (không có nháp), cho trang Kế hoạch; lọc tùy chọn theo ?status= */
+  @Get()
+  list(@Req() req: any, @Query('status') status?: string) {
+    return this.orders.listForCouple(req.user.sub, { status });
+  }
+
   @Get(':id')
   get(@Req() req: any, @Param('id') id: string) {
     return this.orders.getForCouple(req.user.sub, id);
   }
 
-  /** Yêu cầu chỉnh sửa (chỉ khi Pending): { changes?: ['Item'|'Quantity'|'EventDate'|'Other'], note } */
+  /** Yêu cầu chỉnh sửa (Pending; hoặc Deposited trước ngày thực hiện, tiền cọc giữ nguyên): { changes?: ['Item'|'Quantity'|'EventDate'|'Other'], note } */
   @HttpCode(200)
   @Post(':id/revision-requests')
   requestRevision(@Req() req: any, @Param('id') id: string, @Body() body: { changes?: unknown; note?: string }) {
@@ -81,6 +87,13 @@ export class VendorOrdersController {
   @Patch(':id')
   edit(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput; changeNote?: string }) {
     return this.orders.editDeposited(req.user.sub, id, body ?? {});
+  }
+
+  /** Từ chối yêu cầu chỉnh sửa của khách với đơn đã cọc: { note? } */
+  @HttpCode(200)
+  @Post(':id/revision-requests/reject')
+  rejectRevision(@Req() req: any, @Param('id') id: string, @Body() body: { note?: string }) {
+    return this.orders.rejectRevision(req.user.sub, id, body ?? {});
   }
 
   @HttpCode(200)

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
-import { changesLabel, depositDeadline, formatDayTime, openRevision } from '@/features/vendorOrders/calc'
+import { canRequestRevision, depositDeadline, formatDayTime } from '@/features/vendorOrders/calc'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
 import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
 import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
@@ -12,6 +12,7 @@ import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { InvoiceType, Order } from '@/types/order'
+import { hintOf, hintTone } from '../hint'
 import { useOrder } from '../hooks'
 
 interface OrderCardProps {
@@ -25,38 +26,6 @@ interface OrderCardProps {
 }
 
 const HOUR = 3_600_000
-
-/** Dòng gợi ý theo trạng thái (docs/THE_DON_PHIA_KHACH.md mục 2); Pending không có ô gợi ý. */
-function hintOf(o: Order): ReactNode {
-  switch (o.status) {
-    case 'NeedRevision': {
-      const r = openRevision(o)
-      return (
-        <>
-          <b className="font-semibold">Đã gửi yêu cầu chỉnh sửa, chờ NCC cập nhật.</b>
-          {r && (
-            <>
-              <br />
-              <span className="text-muted-foreground">Nội dung: {[changesLabel(r), r.requestNote ? `"${r.requestNote}"` : ''].filter(Boolean).join(' · ')}</span>
-            </>
-          )}
-        </>
-      )
-    }
-    case 'Deposited':
-      return 'Đã đặt cọc. Muốn đổi hoặc hủy đơn, bạn nhắn NCC ngay trong chat.'
-    case 'Completed':
-      return 'Đơn đã hoàn thành.'
-    case 'Expired':
-      return 'Đơn đã hết hạn đặt cọc. Nhắn NCC nếu bạn vẫn muốn đặt.'
-    case 'Cancelled':
-      return o.cancelReason === 'VENDOR_UNABLE'
-        ? 'NCC đã hủy đơn vì không thể thực hiện. NCC sẽ hoàn cọc cho bạn.'
-        : `Đơn đã hủy theo yêu cầu của bạn. Khoản cọc ${formatMoney(o.depositAmount)} không được hoàn.`
-    default:
-      return null
-  }
-}
 
 /** Thẻ đơn dịch vụ NCC gửi trong khung chat, nội dung giống phía NCC (docs/THE_DON_PHIA_KHACH.md mục 1, 2). */
 export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessageVendor }: OrderCardProps) {
@@ -120,6 +89,12 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
           Đã cập nhật: tổng {formatMoney(updated.oldTotalAmount)} → {formatMoney(updated.newTotalAmount as number)}
         </div>
       )}
+      {o.status === 'Deposited' && last?.status === 'Applied' && last.revisionType === 'AfterDeposit' && last.requestNote && (
+        <div className="border-b border-dashed border-line py-1.5 text-[12.5px] whitespace-pre-wrap">
+          <span className="text-muted-foreground">Nội dung thay đổi: </span>
+          {last.requestNote}
+        </div>
+      )}
       {row(`Đặt cọc (${Math.round(o.depositPercent * 100) / 100}%)`, <span className="text-gold-700">{formatMoney(o.depositAmount)}</span>)}
       {row('Còn lại', formatMoney(o.totalAmount - o.depositAmount))}
       {o.status === 'Pending' && o.depositDueDate && row('Hạn đặt cọc', <span className={cn(urgent && 'text-warn')}>{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</span>)}
@@ -134,7 +109,7 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
         <div
           className={cn(
             'mt-2.5 rounded-sm px-2.5 py-2 text-[13px] whitespace-pre-wrap',
-            o.status === 'NeedRevision' ? 'bg-[color-mix(in_srgb,var(--gold)_14%,var(--surface))]' : o.status === 'Cancelled' ? 'bg-warn-soft text-warn' : 'bg-sage-soft text-sage',
+            hintTone(o),
           )}
         >
           {hint}
@@ -152,8 +127,8 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
             Xem việc cần làm
           </Button>
         )}
-        {o.status === 'Pending' && (
-          <Button variant="outline" onClick={() => onRevise(o)}>
+        {canRequestRevision(o) && (
+          <Button variant="outline" size={o.status === 'Pending' ? 'default' : 'sm'} onClick={() => onRevise(o)}>
             Yêu cầu chỉnh sửa
           </Button>
         )}

@@ -3,18 +3,25 @@ import { FormError } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { CHANGE_LABEL } from '@/features/vendorOrders/constants'
+import { formatMoney } from '@/lib/format'
 import { REVISION_CHANGE_TYPES, type RevisionChangeType } from '@/types/vendorOrder'
 import type { Order } from '@/types/order'
 import { useRequestRevision } from '../hooks'
 
-/** Yêu cầu chỉnh sửa đơn (chỉ khi Chờ thanh toán cọc): 4 ô chọn tùy chọn, nội dung chi tiết bắt buộc (docs/THE_DON_PHIA_KHACH.md mục 3.2). */
+/**
+ * Yêu cầu chỉnh sửa đơn: 4 ô chọn tùy chọn, nội dung chi tiết bắt buộc (docs/THE_DON_PHIA_KHACH.md mục 3.2).
+ * Chờ thanh toán cọc: đơn chuyển Chờ chỉnh sửa. Đã đặt cọc (trước ngày thực hiện): đơn vẫn Đã đặt cọc, tiền cọc giữ nguyên.
+ */
 export function ReviseOrderDialog({ order, onClose }: { order: Order | null; onClose: () => void }) {
   return (
     <Dialog open={!!order} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{order ? `Yêu cầu chỉnh sửa đơn ${order.orderCode}` : 'Yêu cầu chỉnh sửa đơn'}</DialogTitle>
-          <DialogDescription>Cho nhà cung cấp biết bạn muốn chỉnh sửa gì. Nội dung này hiện trong khung chat và cho nhà cung cấp khi họ cập nhật đơn.</DialogDescription>
+          <DialogDescription>
+            Cho nhà cung cấp biết bạn muốn chỉnh sửa gì. Nội dung này hiện trong khung chat và cho nhà cung cấp khi họ cập nhật đơn.
+            {order?.status === 'Deposited' && ` Đơn đã đặt cọc: khoản cọc ${formatMoney(order.depositAmount)} giữ nguyên, chỉ hạng mục, số lượng, ngày, ghi chú được đổi.`}
+          </DialogDescription>
         </DialogHeader>
         {order && <ReviseForm order={order} onClose={onClose} />}
       </DialogContent>

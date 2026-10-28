@@ -18,7 +18,7 @@ export const planningKeys = {
 /** Gọi sau khi dữ liệu kế hoạch đổi: làm mới kế hoạch, timeline, hội thoại. */
 export function useRefreshPlanning() {
   const qc = useQueryClient()
-  return () => Promise.all(['plan', 'timeline', 'conversations', 'messages', 'order'].map((k) => qc.invalidateQueries({ queryKey: [k] })))
+  return () => Promise.all(['plan', 'timeline', 'conversations', 'messages', 'order', 'orders'].map((k) => qc.invalidateQueries({ queryKey: [k] })))
 }
 
 function useCoupleId() {

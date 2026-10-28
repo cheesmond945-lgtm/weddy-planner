@@ -2,10 +2,11 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { vendorOrdersApi } from '@/api/vendorOrders'
 import { toast } from '@/components/ui/toast'
 import { vendorKeys } from '@/features/vendorOrders/keys'
+import { useLivePoll } from '@/lib/realtime'
 import { useAuth } from '@/store/auth'
 import type { CancelReason, Order, OrderContent, OrderListQuery } from '@/types/vendorOrder'
 
-// Chưa có websocket: hỏi lại định kỳ khi đang mở khung chat (đơn đổi trạng thái khi khách cọc, hết hạn…)
+// Có realtime thì đơn đổi trạng thái (khách cọc, hết hạn…) được đẩy tới; mất kết nối thì hỏi lại định kỳ khi đang mở khung chat
 const POLL_MS = 2500
 
 function useVendorId() {
@@ -32,11 +33,12 @@ export function useSyncOrder() {
 /** Đơn của một hội thoại (gồm bản nháp), để vẽ thẻ đơn trong chat. */
 export function useConversationOrders(conversationId: string | null) {
   const uid = useVendorId()
+  const poll = useLivePoll(POLL_MS)
   return useQuery({
     queryKey: vendorKeys.orders(uid, conversationId ?? ''),
     queryFn: () => vendorOrdersApi.listByConversation(conversationId!),
     enabled: !!uid && !!conversationId,
-    refetchInterval: POLL_MS,
+    refetchInterval: poll,
   })
 }
 
@@ -138,6 +140,19 @@ export function useCancelOrder() {
     onSuccess: (o) => {
       sync(o)
       toast(`Đã hủy đơn ${o.orderCode}.`)
+    },
+    onError: (e) => toast(e.message),
+  })
+}
+
+/** Từ chối yêu cầu chỉnh sửa của khách với đơn đã cọc. */
+export function useRejectRevision() {
+  const sync = useSyncOrder()
+  return useMutation({
+    mutationFn: ({ orderId, note }: { orderId: string; note: string }) => vendorOrdersApi.rejectRevision(orderId, note || undefined),
+    onSuccess: (o) => {
+      sync(o)
+      toast(`Đã từ chối yêu cầu chỉnh sửa đơn ${o.orderCode}. Đơn giữ nguyên.`)
     },
     onError: (e) => toast(e.message),
   })

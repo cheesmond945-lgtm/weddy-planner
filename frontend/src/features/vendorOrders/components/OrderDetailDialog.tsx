@@ -33,19 +33,30 @@ const Item = ({ label, children, full }: { label: string; children: ReactNode; f
 
 const REVISION_TYPE = { BeforeDeposit: 'Trước khi cọc', AfterDeposit: 'Sau khi cọc' }
 
+const REVISION_STATUS = {
+  Requested: { label: 'Đang chờ NCC sửa', tone: 'warn' },
+  Applied: { label: 'Đã áp dụng', tone: 'done' },
+  Rejected: { label: 'NCC đã từ chối', tone: 'neutral' },
+} as const
+
 function RevisionRow({ r }: { r: OrderRevision }) {
   const requested = r.status === 'Requested'
+  // Yêu cầu của khách sau cọc (đang chờ hoặc bị từ chối): ghi chú là của khách, không phải "nội dung thay đổi" của NCC
+  const customerAfterDeposit = r.revisionType === 'AfterDeposit' && r.status !== 'Applied'
+  const status = REVISION_STATUS[r.status] ?? REVISION_STATUS.Applied
   return (
     <li className={cn('rounded-md border border-line px-3.5 py-3 text-[13.5px]', requested && 'border-l-[3px] border-l-warn')}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">
           {formatDayTime(r.createdDate)} · {REVISION_TYPE[r.revisionType]}
         </span>
-        <Badge tone={requested ? 'warn' : 'done'}>{requested ? 'Đang chờ NCC sửa' : 'Đã áp dụng'}</Badge>
+        <Badge tone={status.tone}>{status.label}</Badge>
       </div>
       {r.changes.length > 0 && <p className="mt-1.5 font-medium">{changesLabel(r)}</p>}
       <p className="mt-1 text-muted-foreground">
-        {r.revisionType === 'AfterDeposit'
+        {customerAfterDeposit
+          ? `Khách yêu cầu: ${r.requestNote ?? ''}`
+          : r.revisionType === 'AfterDeposit'
           ? r.requestNote
             ? `Nội dung thay đổi: ${r.requestNote}`
             : 'NCC chỉnh sửa đơn.'

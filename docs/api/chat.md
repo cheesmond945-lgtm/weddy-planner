@@ -93,12 +93,13 @@ Phía cặp đôi: NCC đã bị ẩn thì hội thoại không hiện. FE lọc
 **Chỉ cặp đôi** (NCC: 403). Bắt đầu hoặc mở lại hội thoại với NCC của một dịch vụ. Body `{ "serviceId": "…", "replace": false }`.
 
 - Dịch vụ chưa có trong kế hoạch: tự thêm vào (cùng quy tắc `POST /weddings/me/plan-items`, kể cả 409 `PLAN_CATEGORY_TAKEN` và `replace`).
+- **Hạng mục đã có NCC khác chờ cọc hoặc đã chốt (cập nhật 28/10/2026):** KHÔNG còn lỗi `PLAN_CATEGORY_LOCKED`. Vẫn mở hội thoại để khách tư vấn tự do, chỉ không thêm NCC này vào kế hoạch (`planStatus = null`). Nếu khách cọc đơn của NCC này thì NCC được thêm vào kế hoạch lúc cọc, hạng mục có hai NCC (trang Kế hoạch hiện đủ).
 - Hội thoại mới: tạo kèm lời chào của NCC "Chào bạn! Mình là <tên>. Bạn cần tư vấn gói nào cho <hạng mục>?".
 - Gọi lại với cùng dịch vụ trả về cùng hội thoại.
 
 Response 201: `{ "data": Conversation }`
 
-Lỗi: 404 `SERVICE_NOT_FOUND`, 409 `PLAN_CATEGORY_TAKEN`, 409 `PLAN_CATEGORY_LOCKED` (hạng mục đang chờ cọc hoặc đã chốt với NCC khác).
+Lỗi: 404 `SERVICE_NOT_FOUND`, 409 `WEDDING_NOT_SET`, 409 `PLAN_CATEGORY_TAKEN`. (`POST /weddings/me/plan-items` vẫn trả 409 `PLAN_CATEGORY_LOCKED`: thêm vào kế hoạch thì vẫn bị khóa.)
 
 ### GET /conversations/:id/messages
 Toàn bộ tin của hội thoại, cũ trước. Response 200: `{ "data": Message[] }`
@@ -128,9 +129,17 @@ Khi có tin văn bản mới, **người nhận** có một thông báo (bảng 
 - Người nhận mở hội thoại (`POST …/read`) thì thông báo đó thành đã đọc; tin kế tiếp sẽ báo lại.
 - Lỗi khi ghi thông báo không làm hỏng việc gửi tin.
 
-## Cập nhật tin mới
+## Cập nhật tin mới (realtime)
 
-Chưa có websocket: FE **hỏi lại định kỳ 5 giây** `GET /conversations` và `GET /conversations/:id/messages` khi đang mở trang Tin nhắn (cả hai phía); số tin chưa đọc trên menu và nút chat thưa hơn (15 đến 30 giây). Nếu sau này thêm websocket hoặc SSE thì contract các endpoint trên giữ nguyên.
+**Socket.IO** ở cùng cổng backend, đường dẫn `/socket.io` (`backend/src/modules/realtime`). FE kết nối với `auth: { token: <JWT> }`; token sai hoặc hết hạn thì server gửi `unauthorized` rồi ngắt. Mỗi người dùng vào phòng `user:<id>` và nhận:
+
+| Sự kiện | Dữ liệu | Khi nào |
+|---|---|---|
+| `message` | `{ conversationId, orderId, type }` | Mọi tin mới trong hội thoại của mình: tin chữ, thẻ đơn, tin hệ thống (đơn hết hạn, cọc, sửa, hủy, hoàn thành…). Gửi cho **cả hai bên** |
+| `read` | `{ conversationId }` | Một bên vừa đọc hội thoại (số chưa đọc đổi) |
+| `notification` | `{ type, referenceType, referenceId }` | Có thông báo mới |
+
+Sự kiện chỉ báo "có thay đổi"; FE tải lại đúng truy vấn liên quan qua REST (`frontend/src/app/RealtimeBridge.tsx`), nên contract các endpoint giữ nguyên. Khi đang kết nối, FE chỉ hỏi lại dự phòng mỗi 60 giây; mất kết nối thì hỏi lại như cũ (5 giây khung chat, 15 đến 30 giây số chưa đọc). Chạy nhiều tiến trình backend thì cần adapter Redis cho Socket.IO.
 
 ## Thẻ đơn trong chat
 

@@ -5,9 +5,10 @@
 > Kiểu dữ liệu dùng chung: `src/types/vendorOrder.ts` (7 trạng thái, nhiều hạng mục, DepositPercent, DepositDueDate, revisions, invoices, payment, cancelReason).
 > Prototype hình: canvas "Thẻ đơn phía khách" (các khung 1–8 và Toàn luồng bước 1–10).
 
-**Hai giai đoạn (đã chốt):**
+**Hai giai đoạn (cập nhật 28/10/2026):**
 - **Trước cọc** (Chờ thanh toán cọc, Chờ chỉnh sửa): khách có **Thanh toán cọc** và **Yêu cầu chỉnh sửa**, yêu cầu bao nhiêu lần cũng được.
-- **Sau cọc** (Đã đặt cọc): khách **không có nút sửa hay hủy**. Muốn đổi hoặc hủy thì nhắn NCC trong chat; NCC thao tác trên đơn.
+- **Sau cọc** (Đã đặt cọc, còn trước ngày thực hiện): khách có **Yêu cầu chỉnh sửa** (mỗi lúc một yêu cầu), **tiền cọc không đổi**, đơn vẫn Đã đặt cọc; NCC áp dụng (Chỉnh sửa theo yêu cầu) hoặc Từ chối. Khách **không có nút hủy**: muốn hủy thì nhắn NCC trong chat (hoàn cọc khi hủy gần ngày: chờ quy tắc hệ thống).
+- Khách xem mọi đơn ở trang **Kế hoạch của tôi** (`/plan`): dưới mỗi hạng mục có các đơn của hạng mục đó (đơn hết hạn, đã hủy thu gọn).
 
 ---
 
@@ -51,7 +52,7 @@ Thẻ nằm **bên trái** khung chat (tin của NCC gửi).
 | **Draft** | — | **Khách không thấy thẻ** | — | — |
 | **Pending** | Chờ thanh toán cọc (vàng) | *Không có ô gợi ý* (hạn đã hiện ở dòng "Hạn đặt cọc", đỏ khi < 6 giờ) | **Thanh toán cọc** | Yêu cầu chỉnh sửa · Xem chi tiết |
 | **NeedRevision** | Chờ chỉnh sửa (cam) | "Đã gửi yêu cầu chỉnh sửa, chờ NCC cập nhật." + hộp nhắc lại: "Nội dung: Đổi số lượng · "Giảm còn 15 bàn nhé."" | — | Xem chi tiết |
-| **Deposited** | Đã đặt cọc (xanh lá) | "Đã đặt cọc. Muốn đổi hoặc hủy đơn, bạn nhắn NCC ngay trong chat." | **Xem việc cần làm** (sang timeline) | Xem chi tiết |
+| **Deposited** | Đã đặt cọc (xanh lá) | "Đã đặt cọc. Muốn đổi, bấm Yêu cầu chỉnh sửa (tiền cọc giữ nguyên). Muốn hủy đơn, bạn nhắn NCC ngay trong chat." Đang có yêu cầu chờ NCC: "Đã gửi yêu cầu chỉnh sửa, chờ NCC xử lý. Tiền cọc giữ nguyên." + nội dung | **Xem việc cần làm** (sang timeline) | Yêu cầu chỉnh sửa (trước ngày thực hiện, khi chưa có yêu cầu chờ) · Xem chi tiết |
 | **Completed** | Hoàn thành (xanh đậm) | "Đơn đã hoàn thành." | — | Xem chi tiết · **Xem hóa đơn** (chỉ khi NCC đã xuất) |
 | **Expired** | Đã hết hạn (xám) | "Đơn đã hết hạn đặt cọc. Nhắn NCC nếu bạn vẫn muốn đặt." | — | Xem chi tiết · Nhắn tin cho NCC (cuộn xuống ô nhập) |
 | **Cancelled** | Đã hủy (đỏ nhạt) | Theo `cancelReason`: CUSTOMER_REQUEST → "Đơn đã hủy theo yêu cầu của bạn. Khoản cọc {DepositAmount} không được hoàn." · VENDOR_UNABLE → "NCC đã hủy đơn vì không thể thực hiện. NCC sẽ hoàn cọc cho bạn." | — | Xem chi tiết |
