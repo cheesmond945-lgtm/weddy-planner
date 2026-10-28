@@ -71,6 +71,9 @@ export interface Order {
   /** Mã hiển thị, ví dụ "DH26100004", không đổi dù sửa nhiều lần */
   orderCode: string
   conversationId: string
+  /** Chỉ BE trả (phía khách): id hồ sơ NCC để mở trang dịch vụ, và tên NCC hiện trên thẻ đơn */
+  serviceId?: string
+  vendorName?: string
   status: OrderStatus
   customerName: string
   customerPhone: string
@@ -92,10 +95,9 @@ export interface Order {
   revisions: OrderRevision[]
   invoices: Invoice[]
   completedDate: string | null
-  /** NCC hủy đơn đã cọc (trước ngày sự kiện): ngày hủy, lý do, ghi chú tùy chọn */
+  /** NCC hủy đơn đã cọc (trước ngày sự kiện): ngày hủy và lý do (ghi chú khi hủy chỉ nằm trong tin hệ thống, không lưu) */
   cancelledDate: string | null
   cancelReason: CancelReason | null
-  cancelNote: string | null
   createdDate: string
 }
 

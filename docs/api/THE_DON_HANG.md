@@ -89,7 +89,7 @@ Có `OrderRevisions` loại AfterDeposit đang `Requested` thì thêm nhãn ph�
 | Yêu cầu chỉnh sửa (trước cọc) | Khách | Pending | Chọn nội dung muốn đổi (OrderRevisionChanges: Đổi hạng mục, Đổi số lượng, Đổi ngày thực hiện, Khác) + lời nhắn. Tạo OrderRevisions (BeforeDeposit, Requested); Pending → NeedRevision |
 | Cập nhật đơn | NCC | Pending hoặc NeedRevision. Hộp xác nhận: "Gửi bản cập nhật cho khách? Hạn cọc được đặt lại 24 giờ." | Sửa tự do; OrderRevisions → Applied (ghi tổng mới); về Pending; đặt lại hạn 1 ngày; gửi thẻ mới |
 | Chỉnh sửa | NCC | Deposited. Form có ô bắt buộc **"Nội dung thay đổi (khách sẽ thấy)"**. Hộp xác nhận ghi chú "Tiền cọc đã khóa, tổng mới không thấp hơn tiền cọc." | Sửa hạng mục, ngày, ghi chú. Khóa `DepositPercent`, `DepositAmount`. Tổng mới ≥ tiền đã cọc. Ghi `OrderRevisions` loại `AfterDeposit` trạng thái **`Applied` luôn** (ghi nội dung thay đổi vào `RequestNote`, `OldTotalAmount` → `NewTotalAmount`); gửi thẻ cập nhật vào chat |
-| Hủy đơn | **NCC** | Deposited **và hôm nay < `EventDate`** (giờ VN). Nút viền đỏ. Hộp xác nhận **bắt buộc chọn lý do**: "Khách yêu cầu hủy" (khách mất cọc) hoặc "NCC không thể thực hiện" (NCC hoàn cọc ngoài hệ thống), kèm ghi chú tùy chọn | Deposited → Cancelled, ghi `CancelledDate`, `CancelReason` (`CUSTOMER_REQUEST` / `VENDOR_UNABLE`) và ghi chú; tin hệ thống "NCC đã hủy đơn {mã} · Lý do: …"; không tính hoa hồng; xóa việc chi tiết của dịch vụ trên timeline của khách |
+| Hủy đơn | **NCC** | Deposited **và hôm nay < `EventDate`** (giờ VN). Nút viền đỏ. Hộp xác nhận **bắt buộc chọn lý do**: "Khách yêu cầu hủy" (khách mất cọc) hoặc "NCC không thể thực hiện" (NCC hoàn cọc ngoài hệ thống), kèm ghi chú tùy chọn | Deposited → Cancelled, ghi `CancelledDate`, `CancelReason` (`CUSTOMER_REQUEST` / `VENDOR_UNABLE`); ghi chú tùy chọn chỉ đưa vào tin hệ thống (không lưu cột); tin hệ thống "NCC đã hủy đơn {mã} · Lý do: …"; không tính hoa hồng; xóa việc chi tiết của dịch vụ trên timeline của khách |
 | Hoàn tất | NCC | Deposited và đã qua `EventDate`. Hộp xác nhận: "Xác nhận đơn đã hoàn tất? Hoa hồng của đơn sẽ được tính." | Deposited → Completed, ghi `CompletedDate`; tạo Commissions vào bảng kê tháng. Hệ thống tự làm sau `EventDate` + 7 ngày nếu NCC không bấm |
 | Xuất hóa đơn / Xem hóa đơn | NCC | Deposited hoặc Completed. "Xuất hóa đơn" khi chưa có FinalInvoice, đã xuất thì thành "Xem hóa đơn" | Tạo Invoices FinalInvoice (mỗi đơn một), gửi tin `FinalInvoice` vào chat |
 | Tạo lại đơn | NCC | Expired hoặc Cancelled (CSDL mục 9.5). Hộp xác nhận: "Tạo đơn mới với cùng hạng mục, mã đơn mới." | Mở form Tạo đơn, điền sẵn hạng mục và ghi chú của đơn cũ, mã đơn mới |
@@ -112,7 +112,7 @@ Có `OrderRevisions` loại AfterDeposit đang `Requested` thì thêm nhãn ph�
 ## 6. Điểm cần nhóm chốt
 
 1. **Đã chốt:** đơn hết hạn cọc (Expired) bị khóa, muốn tiếp tục thì NCC **tạo đơn mới** (mã mới) bằng nút "Tạo lại đơn", theo CSDL mục 9.5. Cần sửa câu ở CSDL mục 9.6 ("NCC phải gửi lại để có hạn mới") thành "NCC tạo đơn mới (mã mới) để khách cọc lại".
-2. **Đã chốt:** NCC hủy đơn sau cọc (trước `EventDate`), bắt buộc chọn lý do. CSDL cần thêm `Orders.CancelReason` (và ghi chú tùy chọn), xem `LECH_FE_BE.md`.
+2. **Đã chốt:** NCC hủy đơn sau cọc (trước `EventDate`), bắt buộc chọn lý do. CSDL đã có `Orders.CancelReason`; ghi chú tùy chọn chỉ nằm trong tin hệ thống (cột `CancelNote` đã bị bỏ theo quyết định nhóm 27/10/2026).
 
 ---
 

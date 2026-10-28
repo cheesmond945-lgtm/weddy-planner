@@ -30,6 +30,6 @@ export default function DealPage() {
   }
   if (!order.data || !service.data) return <div className="h-[360px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải" />
 
-  const planStatus = plan?.items.find((i) => i.id === order.data.planItemId)?.status ?? null
+  const planStatus = plan?.items.find((i) => i.service.id === order.data.serviceId)?.status ?? null
   return <DepositView order={order.data} service={service.data} planStatus={planStatus} returnCode={params.get('vnp_ResponseCode')} />
 }

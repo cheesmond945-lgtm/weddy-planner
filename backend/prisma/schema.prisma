@@ -214,6 +214,7 @@ model orders {
   note             String?
   completed_date   DateTime?         @db.Timestamptz(6)
   cancelled_date   DateTime?         @db.Timestamptz(6)
+  cancel_reason    String?           @db.VarChar(20)
   created_date     DateTime          @default(now()) @db.Timestamptz(6)
   commissions      commissions?
   invoices         invoices[]

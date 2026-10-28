@@ -20,10 +20,15 @@ export function useVendorConversations(pollMs = POLL_MS) {
   return useQuery({ queryKey: vendorKeys.conversations(uid), queryFn: vendorConversationsApi.list, enabled: !!uid, refetchInterval: pollMs })
 }
 
-/** Tổng số tin chưa đọc (mục "Tin nhắn" trên sidebar). */
+/** Tổng số tin chưa đọc bằng endpoint riêng (nhẹ hơn tải cả danh sách), hỏi lại 15 giây; React Query dừng khi tab bị ẩn. */
+export function useUnreadQuery() {
+  const uid = useVendorId()
+  return useQuery({ queryKey: vendorKeys.unread(uid), queryFn: vendorConversationsApi.unreadCount, enabled: !!uid, refetchInterval: 15_000 })
+}
+
+/** Tổng số tin chưa đọc (mục "Tin nhắn" trên sidebar, tiêu đề tab). */
 export function useUnreadCount() {
-  const { data } = useVendorConversations(15_000)
-  return data?.reduce((s, c) => s + c.unreadCount, 0) ?? 0
+  return useUnreadQuery().data ?? 0
 }
 
 export function useVendorMessages(conversationId: string | null) {
@@ -42,7 +47,10 @@ export function useMarkRead() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: vendorConversationsApi.markRead,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: vendorKeys.conversations(uid) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: vendorKeys.conversations(uid) })
+      void qc.invalidateQueries({ queryKey: vendorKeys.unread(uid) })
+    },
   })
 }
 

@@ -1,13 +1,14 @@
 import { ApiError } from '@/api/client'
 import { addDays, toISODate, today } from '@/lib/date'
+import { CHANGE_LABEL } from '@/features/vendorOrders/constants'
 import type { Conversation, Message } from '@/types/chat'
-import type { Order, PaymentCreated, PaymentMethod } from '@/types/order'
+import type { Order, PaymentCreated, PaymentMethod, RevisionChangeType } from '@/types/order'
 import { mockCatalog } from './catalog'
-import { currentUserId, nextId, read, write, type UserData } from './db'
+import { currentUserId, mockOrder, nextId, read, write, type UserData } from './db'
 import { addToPlan, openServiceTasks } from './planning'
 
 /*
- * Hội thoại, đơn dịch vụ và đặt cọc giả.
+ * Hội thoại, đơn dịch vụ và đặt cọc giả (cùng DTO đơn với phía NCC: types/vendorOrder.ts, 7 trạng thái).
  * "NCC giả" (chỉ có trong mock, không có nút nào trên giao diện):
  * - trả lời tự động theo câu mẫu của prototype;
  * - tự gửi đơn khi cặp đôi nhắn có "gửi đơn" / "chốt";
@@ -16,6 +17,8 @@ import { addToPlan, openServiceTasks } from './planning'
 
 const fm = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`
 const now = () => new Date().toISOString()
+const HOUR = 3_600_000
+const DEPOSIT_HOURS = 24
 
 function pushMessage(data: UserData, conversationId: string, m: Pick<Message, 'sender' | 'type' | 'content'> & { orderId?: string | null }) {
   const msg: Message = { id: nextId(data, 'm'), conversationId, orderId: null, isRead: true, sentDate: now(), ...m }
@@ -29,12 +32,22 @@ function findConversation(data: UserData, id: string) {
   return c
 }
 
+/** Đơn Pending quá hạn cọc thì coi là Expired khi đọc (như job hết hạn của backend). */
+const effective = (o: Order): Order => (o.status === 'Pending' && o.depositDueDate && new Date(o.depositDueDate).getTime() < Date.now() ? { ...o, status: 'Expired' } : o)
+
+const ordersOfService = (data: UserData, serviceId: string) => data.orders.filter((o) => o.serviceId === serviceId)
+
 function toConversation(data: UserData, c: UserData['conversations'][number]): Conversation {
   const last = data.messages.filter((m) => m.conversationId === c.id).at(-1)
+  const latest = ordersOfService(data, c.serviceId)
+    .filter((o) => o.status !== 'Draft')
+    .at(-1)
+  const lo = latest ? effective(latest) : null
   return {
     id: c.id,
     service: mockCatalog.getSummary(c.serviceId),
     planStatus: data.planItems.find((p) => p.serviceId === c.serviceId)?.status ?? null,
+    latestOrder: lo ? { id: lo.id, orderCode: lo.orderCode, status: lo.status, depositDueDate: lo.depositDueDate } : null,
     // Dữ liệu giả không theo dõi đã đọc: NCC giả trả lời ngay khi khách đang mở khung chat
     unreadCount: 0,
     lastMessage: last ? { sender: last.sender, type: last.type, content: last.content, sentDate: last.sentDate } : null,
@@ -46,7 +59,7 @@ function cannedReply(text: string, serviceId: string) {
   const l = text.toLowerCase()
   if (/giá|bao nhiêu|chi phí/.test(l)) return `Giá gói cơ bản bên mình từ ${fm(mockCatalog.getService(serviceId).priceFrom)}. Bạn cho mình biết ngân sách để tư vấn gói phù hợp nhé.`
   if (/lịch|ngày|trống/.test(l)) return 'Bạn gửi giúp mình ngày tổ chức, bên mình kiểm tra lịch và phản hồi ngay.'
-  if (/cọc|thanh toán/.test(l)) return 'Khi hai bên thống nhất, bên mình sẽ gửi đơn dịch vụ ngay trong khung chat để bạn xác nhận và đặt cọc 10% giá trị gói.'
+  if (/cọc|thanh toán/.test(l)) return 'Khi hai bên thống nhất, bên mình sẽ gửi đơn dịch vụ ngay trong khung chat để bạn xác nhận và đặt cọc.'
   return 'Cảm ơn bạn! Bên mình sẽ gửi thông tin chi tiết và xác nhận lại với bạn trong ít phút.'
 }
 
@@ -55,32 +68,38 @@ function vendorSendOrder(data: UserData, conversationId: string) {
   const c = findConversation(data, conversationId)
   const plan = data.planItems.find((p) => p.serviceId === c.serviceId)
   if (!plan || plan.status === 'CONFIRMED') return
-  const existing = data.orders.find((o) => o.planItemId === plan.id && o.status !== 'PAID')
+  const vendorName = mockCatalog.getService(c.serviceId).name
+  const existing = ordersOfService(data, c.serviceId).find((o) => o.status === 'Pending' || o.status === 'NeedRevision')
+  const dueDate = new Date(Date.now() + DEPOSIT_HOURS * HOUR).toISOString()
   if (existing) {
-    Object.assign(existing, { status: 'SENT', revisionNote: null })
-    pushMessage(data, c.id, { sender: 'SYSTEM', type: 'Text', content: 'Nhà cung cấp đã cập nhật đơn dịch vụ. Bạn xem lại và thanh toán cọc.' })
+    // Cập nhật đơn: về Pending, hạn cọc đặt lại, yêu cầu của khách thành Applied
+    const open = existing.revisions.find((r) => r.status === 'Requested')
+    if (open) Object.assign(open, { status: 'Applied', newTotalAmount: existing.totalAmount, appliedDate: now() })
+    Object.assign(existing, { status: 'Pending', depositDueDate: dueDate })
+    pushMessage(data, c.id, { sender: 'VENDOR', type: 'Order', content: `Đơn dịch vụ ${existing.orderCode} đã được cập nhật.`, orderId: existing.id })
   } else {
     const pkg = mockCatalog.getService(c.serviceId).packages[0]
-    const order: Order = {
+    const order = mockOrder({
       id: nextId(data, 'od'),
-      code: `#${String(data.orders.length + 1).padStart(3, '0')}`,
-      planItemId: plan.id, serviceId: c.serviceId, conversationId: c.id,
-      packageName: pkg.name,
-      serviceDate: data.wedding?.date ?? toISODate(addDays(today(), 60)),
-      totalAmount: pkg.price,
-      depositAmount: Math.round((pkg.price * 0.1) / 1e5) * 1e5,
-      status: 'SENT', revisionNote: null, paidAt: null,
-    }
+      orderCode: `DH${new Date().toISOString().slice(2, 7).replace('-', '')}${String(data.orders.length + 1).padStart(4, '0')}`,
+      conversationId: c.id,
+      serviceId: c.serviceId,
+      vendorName,
+      status: 'Pending',
+      eventDate: data.wedding?.date ?? toISODate(addDays(today(), 60)),
+      items: [{ itemName: pkg.name, unit: 'Gói', quantity: 1, unitPrice: pkg.price }],
+      depositPercent: 30,
+      depositDueDate: dueDate,
+    })
     data.orders.push(order)
-    pushMessage(data, c.id, { sender: 'VENDOR', type: 'Order', content: 'Nhà cung cấp đã gửi đơn dịch vụ', orderId: order.id })
-    pushMessage(data, c.id, { sender: 'SYSTEM', type: 'Text', content: 'Nhà cung cấp đã gửi đơn dịch vụ. Bạn xem lại và thanh toán cọc.' })
+    pushMessage(data, c.id, { sender: 'VENDOR', type: 'Order', content: `Đơn dịch vụ ${order.orderCode}: tổng ${fm(order.totalAmount)}, đặt cọc ${order.depositPercent}% = ${fm(order.depositAmount)}.`, orderId: order.id })
   }
   plan.status = 'AWAITING_DEPOSIT'
 }
 
 function findOrder(data: UserData, id: string) {
   const o = data.orders.find((x) => x.id === id)
-  if (!o) throw new ApiError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn dịch vụ.')
+  if (!o || o.status === 'Draft') throw new ApiError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn dịch vụ.')
   return o
 }
 
@@ -138,22 +157,35 @@ export const mockChat = {
     return null
   },
 
-  getOrder: (id: string): Order => findOrder(read(), id),
+  getOrder: (id: string): Order => effective(findOrder(read(), id)),
 
-  requestRevision: (orderId: string, note: string): Order => {
+  /** Khách yêu cầu chỉnh sửa (chỉ khi Pending): ghi OrderRevisions BeforeDeposit/Requested kèm nội dung đổi, CHỈ MỘT tin hệ thống. */
+  requestRevision: (orderId: string, body: { changes: RevisionChangeType[]; note: string }): Order => {
     const userId = currentUserId()
     const order = write((data) => {
       const o = findOrder(data, orderId)
-      if (o.status !== 'SENT') throw new ApiError(409, 'ORDER_NOT_REVISABLE', 'Đơn này không yêu cầu chỉnh sửa được.')
-      if (!note.trim()) throw new ApiError(400, 'VALIDATION_ERROR', 'Vui lòng ghi rõ nội dung cần chỉnh sửa để nhà cung cấp biết.')
-      Object.assign(o, { status: 'REVISION_REQUESTED', revisionNote: note.trim() })
-      const plan = data.planItems.find((p) => p.id === o.planItemId)
+      if (effective(o).status !== 'Pending') throw new ApiError(409, 'ORDER_NOT_REVISABLE', 'Chỉ yêu cầu chỉnh sửa được đơn đang chờ đặt cọc.')
+      const note = body.note.trim()
+      if (!note) throw new ApiError(400, 'VALIDATION_ERROR', 'Vui lòng ghi rõ nội dung chi tiết cần chỉnh sửa để nhà cung cấp biết.')
+      o.status = 'NeedRevision'
+      o.revisions.unshift({
+        id: nextId(data, 'rv'),
+        revisionType: 'BeforeDeposit',
+        requestNote: note,
+        changes: body.changes,
+        oldTotalAmount: o.totalAmount,
+        newTotalAmount: null,
+        status: 'Requested',
+        createdDate: now(),
+        appliedDate: null,
+      })
+      const plan = data.planItems.find((p) => p.serviceId === o.serviceId)
       if (plan) plan.status = 'DISCUSSING'
-      pushMessage(data, o.conversationId, { sender: 'COUPLE', type: 'Text', content: `Yêu cầu chỉnh sửa đơn ${o.code}:\n${note.trim()}` })
-      pushMessage(data, o.conversationId, { sender: 'SYSTEM', type: 'Text', content: 'Đã gửi yêu cầu chỉnh sửa cho nhà cung cấp. Nhà cung cấp sẽ gửi lại đơn đã cập nhật.' })
+      const what = body.changes.map((c) => CHANGE_LABEL[c]).join(', ')
+      pushMessage(data, o.conversationId, { sender: 'SYSTEM', type: 'Text', content: `Khách yêu cầu chỉnh sửa đơn ${o.orderCode}: ${what ? `${what} · ` : ''}"${note}"`, orderId: o.id })
       return { ...o }
     })
-    // NCC giả gửi lại đơn sau 2 giây
+    // NCC giả cập nhật và gửi lại đơn sau 2 giây
     setTimeout(() => write((data) => vendorSendOrder(data, order.conversationId), userId), 2000)
     return order
   },
@@ -162,12 +194,22 @@ export const mockChat = {
   createPayment: (orderId: string, _method: PaymentMethod): PaymentCreated =>
     write((data) => {
       const o = findOrder(data, orderId)
-      if (o.status !== 'SENT') throw new ApiError(409, 'ORDER_NOT_PAYABLE', 'Chưa có đơn dịch vụ cần thanh toán.')
-      Object.assign(o, { status: 'PAID', paidAt: now() })
-      const plan = data.planItems.find((p) => p.id === o.planItemId)!
-      plan.status = 'CONFIRMED'
-      openServiceTasks(data, plan.id)
-      pushMessage(data, o.conversationId, { sender: 'SYSTEM', type: 'Text', content: `Đã ghi nhận đặt cọc ${fm(o.depositAmount)}. Dịch vụ được chốt.` })
+      if (effective(o).status !== 'Pending') throw new ApiError(409, 'ORDER_NOT_PAYABLE', 'Chưa có đơn dịch vụ cần thanh toán.')
+      const paidDate = now()
+      const receiptCode = `XNC${new Date().toISOString().slice(2, 7).replace('-', '')}${String(data.orders.length + 1).padStart(4, '0')}`
+      Object.assign(o, { status: 'Deposited', payment: { status: 'Paid', paidDate, transactionCode: String(Math.floor(10_000_000 + Math.random() * 89_999_999)) } })
+      o.invoices.push({ id: nextId(data, 'iv'), invoiceCode: receiptCode, type: 'DepositReceipt', createdDate: paidDate })
+      const plan = data.planItems.find((p) => p.serviceId === o.serviceId)
+      if (plan) {
+        plan.status = 'CONFIRMED'
+        openServiceTasks(data, plan.id)
+      }
+      pushMessage(data, o.conversationId, {
+        sender: 'SYSTEM',
+        type: 'DepositReceipt',
+        orderId: o.id,
+        content: `Giấy xác nhận cọc ${receiptCode}: đã nhận ${fm(o.depositAmount)} cho đơn ${o.orderCode}. Số còn lại ${fm(o.totalAmount - o.depositAmount)} thanh toán trực tiếp với NCC.`,
+      })
       return { paymentId: nextId(data, 'pay'), paymentUrl: `/plan/deal/${o.id}?vnp_ResponseCode=00` }
     }),
 }

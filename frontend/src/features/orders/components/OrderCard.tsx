@@ -1,26 +1,75 @@
 import type { ReactNode } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
-import { ORDER_STATUS } from '@/features/weddings/status'
+import { changesLabel, depositDeadline, formatDayTime, openRevision } from '@/features/vendorOrders/calc'
+import { ORDER_STATUS } from '@/features/vendorOrders/constants'
+import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
+import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
-import type { Order } from '@/types/order'
+import type { InvoiceType, Order } from '@/types/order'
 import { useOrder } from '../hooks'
 
 interface OrderCardProps {
   orderId: string
   categorySlug: string
+  /** Thẻ mới nhất của đơn: gửi lại thì các thẻ cũ thu gọn thành một dòng */
+  isLatest: boolean
   onRevise: (order: Order) => void
+  /** Nhắn tin cho NCC (đưa con trỏ về ô nhập tin) */
+  onMessageVendor: () => void
 }
 
-/** Thẻ đơn dịch vụ NCC gửi trong khung chat (orderHtml trong prototype, 7.3). */
-export function OrderCard({ orderId, categorySlug, onRevise }: OrderCardProps) {
-  const { data: o } = useOrder(orderId, { poll: true })
+const HOUR = 3_600_000
+
+/** Dòng gợi ý theo trạng thái (docs/THE_DON_PHIA_KHACH.md mục 2); Pending không có ô gợi ý. */
+function hintOf(o: Order): ReactNode {
+  switch (o.status) {
+    case 'NeedRevision': {
+      const r = openRevision(o)
+      return (
+        <>
+          <b className="font-semibold">Đã gửi yêu cầu chỉnh sửa, chờ NCC cập nhật.</b>
+          {r && (
+            <>
+              <br />
+              <span className="text-muted-foreground">Nội dung: {[changesLabel(r), r.requestNote ? `"${r.requestNote}"` : ''].filter(Boolean).join(' · ')}</span>
+            </>
+          )}
+        </>
+      )
+    }
+    case 'Deposited':
+      return 'Đã đặt cọc. Muốn đổi hoặc hủy đơn, bạn nhắn NCC ngay trong chat.'
+    case 'Completed':
+      return 'Đơn đã hoàn thành.'
+    case 'Expired':
+      return 'Đơn đã hết hạn đặt cọc. Nhắn NCC nếu bạn vẫn muốn đặt.'
+    case 'Cancelled':
+      return o.cancelReason === 'VENDOR_UNABLE'
+        ? 'NCC đã hủy đơn vì không thể thực hiện. NCC sẽ hoàn cọc cho bạn.'
+        : `Đơn đã hủy theo yêu cầu của bạn. Khoản cọc ${formatMoney(o.depositAmount)} không được hoàn.`
+    default:
+      return null
+  }
+}
+
+/** Thẻ đơn dịch vụ NCC gửi trong khung chat, nội dung giống phía NCC (docs/THE_DON_PHIA_KHACH.md mục 1, 2). */
+export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessageVendor }: OrderCardProps) {
+  const { data: o } = useOrder(orderId, { poll: isLatest })
   const navigate = useNavigate()
+  const [detail, setDetail] = useState(false)
+  const [invoice, setInvoice] = useState<InvoiceType | null>(null)
 
   if (!o) return <div className="h-[230px] w-[min(360px,100%)] animate-pulse self-start rounded-[22px] bg-muted" />
+  if (o.status === 'Draft') return null
+  if (!isLatest) {
+    return <p className="self-center rounded-pill bg-bg px-3.5 py-1.5 text-center text-[12.5px] text-muted-foreground">Đơn {o.orderCode} đã được cập nhật, xem bản mới nhất bên dưới</p>
+  }
 
   const status = ORDER_STATUS[o.status]
   const row = (label: string, value: ReactNode) => (
@@ -30,53 +79,101 @@ export function OrderCard({ orderId, categorySlug, onRevise }: OrderCardProps) {
     </div>
   )
 
+  const shown = o.items.slice(0, 2)
+  const more = o.items.length - shown.length
+  const dueMs = o.depositDueDate ? new Date(o.depositDueDate).getTime() - Date.now() : null
+  const overdue = o.status === 'Pending' && dueMs !== null && dueMs <= 0
+  const urgent = o.status === 'Pending' && dueMs !== null && dueMs < 6 * HOUR
+  const paidDate = o.payment?.status === 'Paid' ? o.payment.paidDate : null
+  const last = o.revisions[0]
+  const updated = last && last.status === 'Applied' && last.newTotalAmount !== null && last.newTotalAmount !== last.oldTotalAmount ? last : null
+  const hint = hintOf(o)
+  const finalInvoice = o.invoices.some((i) => i.type === 'FinalInvoice')
+
   return (
-    <div className="w-[min(360px,100%)] self-start rounded-[22px] rounded-bl-[4px] border border-line bg-surface px-5 py-[18px] shadow-bubble">
-      <div className="mb-2 flex items-center justify-between gap-2.5 font-semibold">
-        <span>Đơn dịch vụ {o.code}</span>
+    <div data-order={o.id} className="w-[min(360px,100%)] self-start rounded-[22px] rounded-bl-[4px] border border-line bg-surface px-5 py-[18px] shadow-bubble">
+      <div className="flex items-center justify-between gap-2.5 font-semibold">
+        <span>Đơn dịch vụ {o.orderCode}</span>
         <Badge tone={status.tone}>{status.label}</Badge>
       </div>
-      {row('Gói dịch vụ', o.packageName)}
-      {row('Ngày thực hiện', formatDate(o.serviceDate))}
-      {row('Tổng giá trị', formatMoney(o.totalAmount))}
-      {row('Cần cọc trước', <span className="text-gold-700">{formatMoney(o.depositAmount)}</span>)}
-      {row(
-        'Còn lại',
-        <>
-          {formatMoney(o.totalAmount - o.depositAmount)} <span className="font-normal text-muted-foreground">(thanh toán trực tiếp cho NCC)</span>
-        </>,
-      )}
+      {o.vendorName && <div className="mt-0.5 mb-2 text-[13px] text-muted-foreground">{o.vendorName}</div>}
 
-      {o.status === 'PAID' && (
-        <>
-          <div className="mt-2.5 text-[13px] font-semibold text-sage">Đã thanh toán cọc {formatMoney(o.depositAmount)}</div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate(`${paths.timeline}?category=${categorySlug}`)}>
-              Xem việc cần làm
-            </Button>
+      <div className="mb-1">
+        {shown.map((i) => (
+          <div key={i.id} className="border-b border-dashed border-line py-1.5 text-[13px]">
+            <div className="flex justify-between gap-3">
+              <span className="font-medium">{i.itemName}</span>
+              <b className="text-right font-semibold whitespace-nowrap">{formatMoney(i.amount)}</b>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {i.quantity} {i.unit} × {formatMoney(i.unitPrice)}
+            </div>
           </div>
-        </>
-      )}
-      {o.status === 'REVISION_REQUESTED' && (
-        <div className="mt-2.5 rounded-sm bg-[color-mix(in_srgb,var(--gold)_14%,var(--surface))] px-2.5 py-2 text-[13px] whitespace-pre-wrap">
-          <b className="font-semibold">Bạn đã yêu cầu chỉnh sửa:</b>
-          <br />
-          {o.revisionNote}
-          <br />
-          <span className="text-muted-foreground">Chờ nhà cung cấp gửi lại đơn.</span>
+        ))}
+        {more > 0 && <div className="border-b border-dashed border-line py-1.5 text-xs text-muted-foreground">và {more} hạng mục khác</div>}
+      </div>
+
+      {row('Ngày thực hiện', formatDate(o.eventDate))}
+      {row('Tổng giá trị', formatMoney(o.totalAmount))}
+      {updated && (
+        <div className="border-b border-dashed border-line py-1.5 text-[12.5px] text-gold-700">
+          Đã cập nhật: tổng {formatMoney(updated.oldTotalAmount)} → {formatMoney(updated.newTotalAmount as number)}
         </div>
       )}
-      {o.status === 'CANCELLED' && <div className="mt-2.5 text-[13px] font-semibold text-warn">Đơn đã bị hủy hoặc hết hạn đặt cọc.</div>}
-      {o.status === 'SENT' && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="success" onClick={() => navigate(paths.deal(o.id))}>
-            Xác nhận &amp; thanh toán cọc
+      {row(`Đặt cọc (${Math.round(o.depositPercent * 100) / 100}%)`, <span className="text-gold-700">{formatMoney(o.depositAmount)}</span>)}
+      {row('Còn lại', formatMoney(o.totalAmount - o.depositAmount))}
+      {o.status === 'Pending' && o.depositDueDate && row('Hạn đặt cọc', <span className={cn(urgent && 'text-warn')}>{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</span>)}
+      {paidDate && (
+        <div className="mt-2.5 text-[13px] font-semibold text-sage">
+          Đã thanh toán cọc {formatMoney(o.depositAmount)} · {formatDayTime(paidDate)}
+        </div>
+      )}
+      {o.note && <div className="mt-2 text-[13px] whitespace-pre-wrap">Ghi chú: {o.note}</div>}
+
+      {hint && (
+        <div
+          className={cn(
+            'mt-2.5 rounded-sm px-2.5 py-2 text-[13px] whitespace-pre-wrap',
+            o.status === 'NeedRevision' ? 'bg-[color-mix(in_srgb,var(--gold)_14%,var(--surface))]' : o.status === 'Cancelled' ? 'bg-warn-soft text-warn' : 'bg-sage-soft text-sage',
+          )}
+        >
+          {hint}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {o.status === 'Pending' && (
+          <Button variant="success" disabled={overdue} onClick={() => navigate(paths.deal(o.id))}>
+            {overdue ? 'Đơn đã hết hạn đặt cọc' : 'Thanh toán cọc'}
           </Button>
+        )}
+        {o.status === 'Deposited' && (
+          <Button variant="outline" size="sm" onClick={() => navigate(`${paths.timeline}?category=${categorySlug}`)}>
+            Xem việc cần làm
+          </Button>
+        )}
+        {o.status === 'Pending' && (
           <Button variant="outline" onClick={() => onRevise(o)}>
             Yêu cầu chỉnh sửa
           </Button>
-        </div>
-      )}
+        )}
+        <Button variant="outline" size={o.status === 'Pending' ? 'default' : 'sm'} onClick={() => setDetail(true)}>
+          Xem chi tiết
+        </Button>
+        {o.status === 'Completed' && finalInvoice && (
+          <Button variant="outline" size="sm" onClick={() => setInvoice('FinalInvoice')}>
+            Xem hóa đơn
+          </Button>
+        )}
+        {o.status === 'Expired' && (
+          <Button variant="outline" size="sm" onClick={onMessageVendor}>
+            Nhắn tin cho NCC
+          </Button>
+        )}
+      </div>
+
+      {detail && <OrderDetailDialog order={o} viewer="couple" onClose={() => setDetail(false)} onViewInvoice={(_, type) => setInvoice(type)} />}
+      {invoice && <InvoiceDialog order={o} type={invoice} vendorName={o.vendorName} onClose={() => setInvoice(null)} />}
     </div>
   )
 }

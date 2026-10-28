@@ -31,12 +31,12 @@ function OrderLine({ item }: { item: PlanItem }) {
   return (
     <div className="mt-2 flex flex-wrap gap-x-[18px] gap-y-1 border-t border-dashed border-line pt-2 text-[13px] text-muted-foreground">
       <span>
-        Đơn <b className="font-semibold text-ink">{o.code}</b>
+        Đơn <b className="font-semibold text-ink">{o.orderCode}</b>
       </span>
       <span>
-        Thực hiện <b className="font-semibold text-ink">{formatDate(o.serviceDate)}</b>
+        Thực hiện <b className="font-semibold text-ink">{formatDate(o.eventDate)}</b>
       </span>
-      {o.status === 'PAID' ? (
+      {o.status === 'Deposited' || o.status === 'Completed' ? (
         <>
           <span>
             Đã cọc <b className="font-semibold text-ink">{formatMoney(o.depositAmount)}</b>
@@ -55,9 +55,9 @@ function OrderLine({ item }: { item: PlanItem }) {
           </span>
         </>
       )}
-      {o.status === 'REVISION_REQUESTED' && (
+      {o.status === 'NeedRevision' && (
         <span className="basis-full rounded-md bg-[color-mix(in_srgb,var(--gold)_14%,var(--surface))] px-2.5 py-1.5 text-ink">
-          Bạn đã yêu cầu chỉnh sửa: {o.revisionNote}. Chờ nhà cung cấp gửi lại đơn.
+          Bạn đã yêu cầu chỉnh sửa: {o.revisions.find((r) => r.status === 'Requested')?.requestNote ?? ''}. Chờ nhà cung cấp gửi lại đơn.
         </span>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CommissionsService } from './commissions.service';
@@ -15,13 +15,14 @@ export class CommissionsController {
     return this.commissions.list(req.user.sub);
   }
 
-  @Get(':id')
-  get(@Req() req: any, @Param('id') id: string) {
-    return this.commissions.get(req.user.sub, id);
+  @Get(':id/lines')
+  lines(@Req() req: any, @Param('id') id: string) {
+    return this.commissions.lines(req.user.sub, id);
   }
 
-  @Post(':id/payments')
-  submitPayment() {
-    return this.commissions.submitPayment();
+  @HttpCode(200)
+  @Post(':id/pay')
+  pay(@Req() req: any, @Param('id') id: string) {
+    return this.commissions.pay(req.user.sub, id);
   }
 }

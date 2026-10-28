@@ -3,7 +3,7 @@ import { ordersApi, paymentsApi } from '@/api/orders'
 import { toast } from '@/components/ui/toast'
 import { planningKeys, useRefreshPlanning } from '@/features/weddings/hooks'
 import { useAuth } from '@/store/auth'
-import type { PaymentMethod } from '@/types/order'
+import type { PaymentMethod, RevisionChangeType } from '@/types/order'
 
 export function useOrder(id: string, options?: { poll?: boolean }) {
   const { user } = useAuth()
@@ -11,18 +11,19 @@ export function useOrder(id: string, options?: { poll?: boolean }) {
     queryKey: planningKeys.order(user?.id, id),
     queryFn: () => ordersApi.get(id),
     enabled: !!id && user?.role === 'COUPLE',
-    refetchInterval: options?.poll ? 2500 : false,
+    refetchInterval: options?.poll ? 5000 : false,
   })
 }
 
 export function useRequestRevision() {
   const refresh = useRefreshPlanning()
   return useMutation({
-    mutationFn: ({ orderId, note }: { orderId: string; note: string }) => ordersApi.requestRevision(orderId, note),
+    mutationFn: ({ orderId, changes, note }: { orderId: string; changes: RevisionChangeType[]; note: string }) => ordersApi.requestRevision(orderId, { changes, note }),
     onSuccess: () => {
       toast('Đã gửi yêu cầu chỉnh sửa cho nhà cung cấp')
       void refresh()
     },
+    onError: (e) => toast(e.message),
   })
 }
 

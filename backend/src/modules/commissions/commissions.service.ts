@@ -1,24 +1,16 @@
-import { HttpException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { categorySlug } from '../catalog/services.service';
-import { ymd, ymdVN } from '../orders/order-mapping';
+import { ymd } from '../orders/order-mapping';
+import { UUID, fail, paymentMode, ymdVn } from '../orders/order-rules';
 
 /*
- * Hoa hồng NCC trả WebPlan (docs/api/commissions.md), theo mô hình của CSDL:
- * - Một bảng kê cho mỗi NCC mỗi tháng; đơn vào kỳ của THÁNG HOÀN THÀNH (khi NCC thu đủ phần còn lại).
- * - Tỷ lệ lấy từ service_categories.commission_rate, lưu cố định vào từng dòng (commissions.rate).
- * - Bảng kê chỉ có hai trạng thái Unpaid/Paid do Admin ghi nhận (mã giao dịch, ngày trả); không có minh chứng NCC tự gửi.
+ * Hoa hồng NCC trả WebPlan (docs/api/commissions.md, docs/database.md mục 9.8):
+ * - Một bảng kê cho mỗi NCC mỗi tháng; đơn vào kỳ của THÁNG HOÀN THÀNH (tạo khi đơn Completed, xem orders/order-lifecycle.ts).
+ * - Tỷ lệ lấy từ service_categories.commission_rate, chụp vào từng dòng (commissions.rate).
+ * - Chỉ hai trạng thái lưu Unpaid/Paid. "Đang tạm tính" và "Quá hạn" không lưu, giao diện tính từ ngày hiện tại.
+ * - NCC nộp MỘT lần cho cả bảng kê (VNPay). Chưa tích hợp VNPay: chế độ thử (PAYMENT_MODE=simulate) ghi nhận nộp thành công ngay.
  */
-const fail = (code: string, message: string, status: number): never => {
-  throw new HttpException({ code, message }, status);
-};
-
-const codeOf = (period: string) => `DS${period.slice(5, 7)}${period.slice(0, 4)}`;
-const monthVN = (d = new Date()) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 7);
-const lastDay = (period: string) => {
-  const [y, m] = period.split('-').map(Number);
-  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
-};
 
 @Injectable()
 export class CommissionsService {
@@ -29,102 +21,77 @@ export class CommissionsService {
     return v ?? fail('VENDOR_PROFILE_NOT_FOUND', 'Tài khoản chưa có hồ sơ nhà cung cấp.', 404);
   }
 
-  private summaryOf(s: { period: string; total_orders: number; due_date: Date; status: string; paid_date: Date | null }, base: number, commission: number) {
-    const current = s.period === monthVN();
-    const paid = s.status === 'Paid';
-    const today = ymdVN(new Date());
+  private statementDto(s: { id: string; period_month: Date; total_orders: number; total_amount: unknown; due_date: Date; status: string; paid_date: Date | null; transaction_code: string | null; created_date: Date }) {
     return {
-      id: codeOf(s.period),
-      code: codeOf(s.period),
-      period: s.period,
-      status: current && !paid ? 'OPEN' : paid ? 'PAID' : 'UNPAID',
-      orderCount: s.total_orders,
-      supplementCount: 0,
-      baseAmount: base,
-      commissionAmount: commission,
-      paidAmount: paid ? commission : 0,
-      pendingAmount: 0,
-      closingDate: lastDay(s.period),
+      id: s.id,
+      periodMonth: ymd(s.period_month).slice(0, 7),
+      totalOrders: s.total_orders,
+      totalAmount: Number(s.total_amount),
       dueDate: ymd(s.due_date),
-      isOverdue: !current && !paid && ymd(s.due_date) < today,
+      status: s.status,
+      paidDate: s.paid_date ? s.paid_date.toISOString() : null,
+      transactionCode: s.transaction_code,
+      createdDate: s.created_date.toISOString(),
     };
   }
 
+  /** Tỷ lệ hiện hành của NCC và mọi bảng kê, mới nhất trước. Tháng hiện tại chưa có bảng kê thì giao diện tự dựng dòng 0 đồng. */
   async list(userId: string) {
     const v = await this.vendorOf(userId);
-    const rows = await this.prisma.commission_statements.findMany({ where: { vendor_id: v.id }, include: { commissions: true }, orderBy: { period_month: 'desc' } });
-    const out = rows.map((r) =>
-      this.summaryOf({ period: ymd(r.period_month).slice(0, 7), total_orders: r.total_orders, due_date: r.due_date, status: r.status, paid_date: r.paid_date }, r.commissions.reduce((s, c) => s + Number(c.order_amount), 0), Number(r.total_amount)),
-    );
-    const now = monthVN();
-    if (!out.some((s) => s.period === now)) {
-      const [y, m] = now.split('-').map(Number);
-      out.unshift(this.summaryOf({ period: now, total_orders: 0, due_date: new Date(Date.UTC(y, m, 25)), status: 'Unpaid', paid_date: null }, 0, 0));
-    }
-    return out;
-  }
-
-  async get(userId: string, id: string) {
-    const v = await this.vendorOf(userId);
-    const m = /^DS(\d{2})(\d{4})$/.exec(id);
-    if (!m) return fail('COMMISSION_STATEMENT_NOT_FOUND', 'Không tìm thấy bảng kê.', 404);
-    const period = `${m[2]}-${m[1]}`;
-    const row = await this.prisma.commission_statements.findUnique({
-      where: { vendor_id_period_month: { vendor_id: v.id, period_month: new Date(`${period}-01`) } },
-      include: { commissions: { include: { orders: { include: { payments: true } } }, orderBy: { created_date: 'asc' } } },
-    });
-    const summary = row
-      ? this.summaryOf({ period, total_orders: row.total_orders, due_date: row.due_date, status: row.status, paid_date: row.paid_date }, row.commissions.reduce((s, c) => s + Number(c.order_amount), 0), Number(row.total_amount))
-      : period === monthVN()
-        ? (await this.list(userId)).find((s) => s.period === period)!
-        : fail('COMMISSION_STATEMENT_NOT_FOUND', 'Không tìm thấy bảng kê.', 404);
-
-    const cat = { id: v.service_categories.id, slug: categorySlug(v.service_categories.name), name: v.service_categories.name };
-    const lines = (row?.commissions ?? []).map((c) => {
-      const o = c.orders;
-      const total = Number(o.total_amount);
-      const deposit = Number(o.deposit_amount);
-      const payments: { paymentId: string; installmentName: string; paidAt: string; method: 'VNPAY' | 'BANK_TRANSFER' | 'CASH'; amount: number }[] = [];
-      if (o.payments?.status === 'Paid' && o.payments.paid_date) {
-        payments.push({ paymentId: o.payments.id, installmentName: 'Đợt 1 – Đặt cọc', paidAt: o.payments.paid_date.toISOString(), method: 'VNPAY', amount: deposit });
-      }
-      if (o.completed_date) {
-        payments.push({ paymentId: `final-${o.id}`, installmentName: 'Đợt 2 – Thanh toán còn lại', paidAt: o.completed_date.toISOString(), method: 'CASH', amount: total - deposit });
-      }
-      return {
-        id: c.id,
-        kind: 'ORDER',
-        orderId: o.id,
-        orderCode: o.order_code,
-        customerName: o.customer_name,
-        eventDate: ymd(o.event_date),
-        category: cat,
-        rate: Number(c.rate),
-        baseAmount: Number(c.order_amount),
-        commissionAmount: Number(c.amount),
-        payments,
-        originPeriod: null,
-      };
-    });
-
-    const paid = row?.status === 'Paid';
+    const rows = await this.prisma.commission_statements.findMany({ where: { vendor_id: v.id }, orderBy: { period_month: 'desc' } });
     return {
-      ...summary,
-      lines,
-      payments: paid
-        ? [{ id: row!.id, amount: Number(row!.total_amount), proofFile: null, note: row!.transaction_code ? `Mã giao dịch ${row!.transaction_code}` : null, submittedAt: (row!.paid_date ?? row!.created_date).toISOString(), status: 'CONFIRMED', reviewedAt: (row!.paid_date ?? row!.created_date).toISOString(), reviewNote: null }]
-        : [],
-      transfer: {
-        accountName: process.env.WEBPLAN_ACCOUNT_NAME ?? 'WEBPLAN DEMO',
-        bankName: process.env.WEBPLAN_BANK_NAME ?? 'Ngân hàng mẫu',
-        accountNumber: process.env.WEBPLAN_ACCOUNT_NUMBER ?? 'DEMO-000000 · Không dùng chuyển tiền',
-        content: `${summary.code} — ${v.business_name}`,
-      },
+      rate: v.service_categories ? { percent: Number(v.service_categories.commission_rate), categoryName: v.service_categories.name } : null,
+      statements: rows.map((r) => this.statementDto(r)),
     };
   }
 
-  /** CSDL không lưu minh chứng NCC gửi; Admin là người ghi nhận khoản đã trả (mã giao dịch, ngày trả). */
-  submitPayment() {
-    throw new HttpException({ code: 'COMMISSION_NOT_PAYABLE', message: 'Thanh toán hoa hồng do quản trị viên WebPlan ghi nhận sau khi nhận chuyển khoản.' }, 409);
+  private async ownedStatement(userId: string, id: string) {
+    const v = await this.vendorOf(userId);
+    const st = UUID.test(id) ? await this.prisma.commission_statements.findFirst({ where: { id, vendor_id: v.id } }) : null;
+    return st ?? fail('COMMISSION_STATEMENT_NOT_FOUND', 'Không tìm thấy bảng kê.', 404);
+  }
+
+  /** Hoa hồng từng đơn của một bảng kê, mới hoàn tất trước. */
+  async lines(userId: string, id: string) {
+    const st = await this.ownedStatement(userId, id);
+    const rows = await this.prisma.commissions.findMany({
+      where: { statement_id: st.id },
+      include: { orders: { select: { id: true, order_code: true, customer_name: true, completed_date: true } } },
+    });
+    return rows
+      .map((c) => ({
+        id: c.id,
+        orderId: c.orders.id,
+        orderCode: c.orders.order_code,
+        customerName: c.orders.customer_name,
+        completedDate: (c.orders.completed_date ?? c.created_date).toISOString(),
+        orderAmount: Number(c.order_amount),
+        rate: Number(c.rate),
+        amount: Number(c.amount),
+      }))
+      .sort((a, b) => b.completedDate.localeCompare(a.completedDate));
+  }
+
+  /**
+   * Nộp một lần cho cả bảng kê: Unpaid, kỳ đã kết thúc (tháng hiện tại giờ VN lớn hơn tháng của bảng kê), tổng > 0.
+   * Chế độ thử (PAYMENT_MODE=simulate): ghi nhận thành công ngay, trả { paymentUrl: null, statement }. VNPay thật chưa có: 501.
+   */
+  async pay(userId: string, id: string) {
+    if (paymentMode() !== 'simulate') {
+      return fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VNPay. Đặt PAYMENT_MODE=simulate để dùng thanh toán thử.', 501);
+    }
+    const st = await this.ownedStatement(userId, id);
+    if (st.status === 'Paid') return fail('COMMISSION_ALREADY_PAID', 'Bảng kê đã nộp.', 409);
+    const period = ymd(st.period_month).slice(0, 7);
+    if (period >= ymdVn(new Date()).slice(0, 7) || !(Number(st.total_amount) > 0)) {
+      return fail('COMMISSION_NOT_PAYABLE', 'Chỉ nộp được bảng kê của kỳ đã kết thúc và có hoa hồng.', 409);
+    }
+    const r = await this.prisma.commission_statements.updateMany({
+      where: { id: st.id, status: 'Unpaid' },
+      data: { status: 'Paid', paid_date: new Date(), transaction_code: `HH${randomInt(10_000_000, 99_999_999)}` },
+    });
+    if (!r.count) return fail('COMMISSION_ALREADY_PAID', 'Bảng kê đã nộp.', 409);
+    const done = await this.prisma.commission_statements.findUniqueOrThrow({ where: { id: st.id } });
+    return { paymentUrl: null, statement: this.statementDto(done) };
   }
 }

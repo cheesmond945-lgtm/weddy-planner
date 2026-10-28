@@ -13,12 +13,12 @@ const TITLE: Record<InvoiceType, string> = { DepositReceipt: 'Giấy xác nhận
  * Xem giấy xác nhận cọc hoặc hóa đơn cuối của đơn (Invoices). Đọc thông tin từ đơn và hồ sơ NCC, không lưu bản chụp riêng.
  * Đây không phải hóa đơn điện tử theo quy định thuế (CSDL mục 9.7).
  */
-export function InvoiceDialog({ order: o, type, onClose }: { order: Order; type: InvoiceType; onClose: () => void }) {
+export function InvoiceDialog({ order: o, type, onClose, vendorName: vendorNameProp }: { order: Order; type: InvoiceType; onClose: () => void; vendorName?: string }) {
   const { data: profile } = useVendorProfile()
   const { user } = useAuth()
   const inv = o.invoices.find((i) => i.type === type)
   const rest = o.totalAmount - o.depositAmount
-  const vendorName = profile?.businessName ?? user?.name ?? 'Nhà cung cấp'
+  const vendorName = vendorNameProp ?? profile?.businessName ?? user?.name ?? 'Nhà cung cấp'
   const th = 'border-y border-line bg-surface-2 px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase'
   const td = 'px-3 py-2 align-top text-[13.5px]'
 

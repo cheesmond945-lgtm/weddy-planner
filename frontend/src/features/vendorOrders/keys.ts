@@ -2,6 +2,8 @@
 export const vendorKeys = {
   all: (userId: string | undefined) => ['vendor', userId] as const,
   conversations: (userId: string | undefined) => ['vendor', userId, 'conversations'] as const,
+  /** Tổng tin chưa đọc (huy hiệu menu Tin nhắn) */
+  unread: (userId: string | undefined) => ['vendor', userId, 'unread'] as const,
   messages: (userId: string | undefined, conversationId: string) => ['vendor', userId, 'messages', conversationId] as const,
   /** Đơn của một hội thoại (vẽ thẻ đơn) */
   orders: (userId: string | undefined, conversationId: string) => ['vendor', userId, 'orders', conversationId] as const,

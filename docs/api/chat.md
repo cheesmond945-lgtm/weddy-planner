@@ -34,7 +34,7 @@ Role: **Couple** hoặc **Vendor**. Không đăng nhập: 401. Sai vai trò: 403
 | `orderId` | Có với `Order`, `DepositReceipt`, `FinalInvoice`, còn lại `null` |
 | `content` | Nội dung chữ; với `Order` là câu mô tả ngắn |
 | `isRead`, `sentDate` | `Messages.IsRead`, `Messages.SentDate` |
-| `order` | **Phần thêm**, chỉ có khi tin có `orderId`: `orderCode` và `status` thô của đơn (7 trạng thái `Draft`, `Pending`, `NeedRevision`, `Deposited`, `Completed`, `Expired`, `Cancelled`). Để FE vẽ ô đơn gọn "Đơn {mã} · {trạng thái}" khi chưa đọc được đơn đầy đủ |
+| `order` | **Phần thêm**, chỉ có khi tin có `orderId`: `orderCode` và `status` thô của đơn (7 trạng thái `Draft`, `Pending`, `NeedRevision`, `Deposited`, `Completed`, `Expired`, `Cancelled`). Mã và trạng thái đơn đi kèm tin, tiện cho danh sách và thông báo |
 
 Tin hệ thống (`sender = SYSTEM`) luôn có `type = Text`, trừ `DepositReceipt` do hệ thống gửi. Khách yêu cầu chỉnh sửa đơn, đơn hết hạn, NCC hủy đơn, đơn hoàn thành đều là tin `Text` hệ thống: xem [CHOT_NGHIEP_VU_NCC.md](../CHOT_NGHIEP_VU_NCC.md) mục 5 và [THE_DON_HANG.md](THE_DON_HANG.md) mục 5.
 
@@ -46,9 +46,12 @@ Tin hệ thống (`sender = SYSTEM`) luôn có `type = Text`, trừ `DepositRece
   "service": { "id": "8f9dfd27-…", "name": "Ha Vy Wedding & Event", "…": "ServiceSummary" },
   "planStatus": "AWAITING_DEPOSIT",
   "unreadCount": 2,
-  "lastMessage": { "sender": "VENDOR", "type": "Text", "content": "Còn lịch bạn nhé", "sentDate": "2026-10-17T08:10:00.000Z", "orderCode": null }
+  "lastMessage": { "sender": "VENDOR", "type": "Text", "content": "Còn lịch bạn nhé", "sentDate": "2026-10-17T08:10:00.000Z", "orderCode": null },
+  "latestOrder": { "id": "5d1c8b1e-…", "orderCode": "DH26100009", "status": "Pending", "depositDueDate": "2026-10-28T03:41:00.000Z" }
 }
 ```
+
+`latestOrder`: đơn **đã gửi** mới nhất với NCC này (bỏ bản nháp), hoặc `null`. Giao diện dùng cho nhãn trạng thái đơn trong danh sách hội thoại (Chờ cọc, Chờ chỉnh sửa, Đã cọc, Hoàn thành, Hết hạn, Đã hủy; chấm đỏ khi `Pending` còn dưới 6 giờ). Nhãn "Đã cọc" theo `planStatus` không còn dùng trong danh sách.
 
 ### `VendorConversation` (phía NCC)
 
@@ -109,6 +112,9 @@ Gửi tin văn bản. Body `{ "text": "Cho mình hỏi giá bao nhiêu?" }`. Res
 
 Lỗi: 400 `VALIDATION_ERROR` (tin rỗng hoặc quá 2000 ký tự), 404 `CONVERSATION_NOT_FOUND`.
 
+### GET /conversations/unread-count
+Tổng số tin của bên kia mà người xem chưa đọc, ở mọi hội thoại (bỏ qua tin hệ thống và tin của chính mình). Response 200: `{ "data": { "count": 2 } }`. Bí danh phía NCC: `GET /vendors/me/conversations/unread-count`. Dùng cho huy hiệu menu Tin nhắn và tiêu đề tab "(2) Tin nhắn · WebPlan"; FE hỏi lại 15 giây và dừng khi tab bị ẩn.
+
 ### POST /conversations/:id/read
 Người xem đã mở hội thoại: các tin của bên kia thành đã đọc (`unreadCount = 0`) và thông báo `NewMessage` của hội thoại đó thành đã đọc. FE gọi khi mở hội thoại và khi có tin mới lúc đang mở. Response 201: `{ "data": null }`
 
@@ -126,9 +132,11 @@ Khi có tin văn bản mới, **người nhận** có một thông báo (bảng 
 
 Chưa có websocket: FE **hỏi lại định kỳ 5 giây** `GET /conversations` và `GET /conversations/:id/messages` khi đang mở trang Tin nhắn (cả hai phía); số tin chưa đọc trên menu và nút chat thưa hơn (15 đến 30 giây). Nếu sau này thêm websocket hoặc SSE thì contract các endpoint trên giữ nguyên.
 
-## Thẻ đơn trong chat (giai đoạn 1)
+## Thẻ đơn trong chat
 
-Tin `Order` hiện **ô đơn gọn** "Đơn {mã} · {trạng thái}" ở cả hai bên khi chat dùng backend thật mà API đơn hàng còn là dữ liệu giả. Phía NCC lúc đó ẩn nút "Tạo đơn" (thay bằng dòng "Tạo đơn sẽ bật khi nối backend đơn hàng"). Việc còn thiếu ở backend đơn hàng: xem [LECH_FE_BE.md](LECH_FE_BE.md).
+Tin `Order`, `DepositReceipt`, `FinalInvoice` có `orderId`; FE lấy đơn đầy đủ bằng `GET /orders/:id` (khách) hoặc `GET /vendors/me/orders?conversationId=…` (NCC) để vẽ thẻ (nội dung giống nhau hai bên, chỉ khác nút: [THE_DON_HANG.md](THE_DON_HANG.md), [THE_DON_PHIA_KHACH.md](../THE_DON_PHIA_KHACH.md)). Gửi lại đơn tạo thẻ `Order` mới, các thẻ cũ của cùng đơn thu gọn.
+
+Tin hệ thống về đơn lưu **một bản chữ trung tính**, FE đổi cách xưng hô theo vai trò: lưu "Khách yêu cầu chỉnh sửa đơn …" (khách thấy "Bạn đã yêu cầu chỉnh sửa đơn …"), lưu "NCC đã hủy đơn … · Lý do: …" (khách thấy "{tên NCC} đã hủy đơn … · Lý do: …"), "Đơn … đã hết hạn đặt cọc.", "Đơn … đã hoàn thành.".
 
 ## Ghi chú về dữ liệu giả
 

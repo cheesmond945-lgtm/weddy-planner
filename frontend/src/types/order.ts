@@ -1,28 +1,9 @@
 /*
- * CHỜ ĐỐI CHIẾU docs/database.md và docs/state-diagrams.md (trạng thái đơn, thanh toán).
- * Hợp đồng: docs/api/orders.md, docs/api/payments.md
+ * Đơn dịch vụ phía khách dùng CHUNG kiểu với phía NCC (types/vendorOrder.ts, docs/api/orders.md, docs/THE_DON_PHIA_KHACH.md):
+ * 7 trạng thái thô của CSDL, nhiều hạng mục, tỷ lệ cọc, hạn cọc, lịch sử chỉnh sửa, chứng từ.
+ * Hợp đồng thanh toán: docs/api/payments.md
  */
-
-export type OrderStatus = 'SENT' | 'REVISION_REQUESTED' | 'PAID' | 'CANCELLED'
-
-/** Đơn dịch vụ NCC gửi trong khung chat (7.3). */
-export interface Order {
-  id: string
-  /** Mã hiển thị, ví dụ "#001" */
-  code: string
-  planItemId: string
-  serviceId: string
-  conversationId: string
-  packageName: string
-  /** Ngày thực hiện "YYYY-MM-DD" */
-  serviceDate: string
-  totalAmount: number
-  depositAmount: number
-  status: OrderStatus
-  /** Nội dung cặp đôi yêu cầu chỉnh sửa (khi REVISION_REQUESTED) */
-  revisionNote: string | null
-  paidAt: string | null
-}
+export type { Invoice, InvoiceType, Order, OrderItem, OrderRevision, OrderStatus, RevisionChangeType } from './vendorOrder'
 
 export type PaymentMethod = 'VNPAY_QR' | 'VNPAY_ATM' | 'INTERNATIONAL_CARD'
 

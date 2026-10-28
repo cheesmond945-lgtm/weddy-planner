@@ -73,6 +73,13 @@ export class ChatService {
     return toMessage(m, conv.couple_id);
   }
 
+  /** Tổng số tin của bên kia mà người xem chưa đọc, ở mọi hội thoại (huy hiệu menu Tin nhắn). Bỏ qua tin hệ thống và tin của chính mình. */
+  async unreadCount(user: ChatUser) {
+    const mine = user.role === 'Couple' ? { couple_id: user.sub } : { vendor_id: user.sub };
+    const count = await this.prisma.messages.count({ where: { is_read: false, sender_id: { not: user.sub }, conversations: mine } });
+    return { count };
+  }
+
   /** Người xem mở hội thoại: các tin của bên kia thành đã đọc, thông báo NewMessage của hội thoại cũng đã đọc. */
   async markRead(user: ChatUser, id: string) {
     const conv = await this.owned(user, id);
@@ -102,12 +109,20 @@ export class ChatService {
     });
     const vendors = await this.prisma.vendor_profiles.findMany({ where: { user_id: { in: convs.map((c) => c.vendor_id) } }, select: { id: true, user_id: true } });
     const vendorByUser = new Map(vendors.map((v) => [v.user_id, v]));
-    const [summaries, statuses, unread] = await Promise.all([
+    const [summaries, statuses, unread, orders] = await Promise.all([
       this.services.summaries(vendors.map((v) => v.id)),
       this.weddings.planStatusMap(userId, vendors),
       this.unreadByConversation(convs, 'Couple'),
+      // Đơn đã gửi mới nhất với từng NCC (bỏ bản nháp), cho nhãn trạng thái đơn trong danh sách hội thoại
+      this.prisma.orders.findMany({
+        where: { vendor_id: { in: vendors.map((v) => v.id) }, status: { not: 'Draft' }, weddings: { user_id: userId } },
+        orderBy: { created_date: 'desc' },
+        select: { id: true, order_code: true, status: true, deposit_due_date: true, vendor_id: true },
+      }),
     ]);
     const sumById = new Map(summaries.map((s) => [s.id, s]));
+    const latestOrderByVendor = new Map<string, (typeof orders)[number]>();
+    for (const o of orders) if (!latestOrderByVendor.has(o.vendor_id)) latestOrderByVendor.set(o.vendor_id, o);
 
     return convs.flatMap((c) => {
       const v = vendorByUser.get(c.vendor_id);
@@ -121,6 +136,7 @@ export class ChatService {
           planStatus: statuses.get(v.id) ?? null,
           unreadCount: unread.get(c.id) ?? 0,
           lastMessage: last ? toLastMessage(last, c.couple_id) : null,
+          latestOrder: latestOrderByVendor.get(v.id) ? { id: latestOrderByVendor.get(v.id)!.id, orderCode: latestOrderByVendor.get(v.id)!.order_code, status: latestOrderByVendor.get(v.id)!.status, depositDueDate: latestOrderByVendor.get(v.id)!.deposit_due_date?.toISOString() ?? null } : null,
         },
       ];
     });

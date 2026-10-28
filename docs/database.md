@@ -363,7 +363,9 @@
 
   CompletedDate    Ngày đơn hoàn thành, là mốc tính hoa hồng
 
-  CancelledDate    Ngày khách hủy đơn
+  CancelledDate    Ngày NCC hủy đơn đã cọc
+
+  CancelReason     Lý do NCC hủy đơn: CUSTOMER_REQUEST (khách yêu cầu hủy, khách mất cọc) hoặc VENDOR_UNABLE (NCC không thể thực hiện, NCC hoàn cọc ngoài hệ thống)
 
   CreatedDate      Ngày tạo đơn
   -------------------------------------------------------------------------------------------------------------------------------------------
@@ -800,7 +802,7 @@ Lưu ý: mọi cột VendorId đều trỏ về VendorProfiles. Riêng Conversat
 
 18. Messages (**Id**, *ConversationId*, *SenderId*, *OrderId*, Content, Type, IsRead, ReadDate, SentDate)
 
-19. Orders (**Id**, *VendorId*, *WeddingId*, OrderCode, CustomerName, CustomerPhone, EventDate, TotalAmount, DepositPercent, DepositAmount, DepositDueDate, Status, Note, CompletedDate, CancelledDate, CreatedDate)
+19. Orders (**Id**, *VendorId*, *WeddingId*, OrderCode, CustomerName, CustomerPhone, EventDate, TotalAmount, DepositPercent, DepositAmount, DepositDueDate, Status, Note, CompletedDate, CancelledDate, CancelReason, CreatedDate)
 
 20. OrderItems (**Id**, *OrderId*, ItemName, Unit, Quantity, UnitPrice, Amount)
 
@@ -1421,9 +1423,11 @@ Bảng Orders lưu đơn dịch vụ do nhà cung cấp tạo cho khách, gồm 
 
   14    CompletedDate    TIMESTAMP WITH TIME ZONE                                                                                                              Ngày hoàn thành đơn, mốc tính hoa hồng
 
-  15    CancelledDate    TIMESTAMP WITH TIME ZONE                                                                                                              Ngày khách hủy đơn
+  15    CancelledDate    TIMESTAMP WITH TIME ZONE                                                                                                              Ngày NCC hủy đơn đã cọc
 
-  16    CreatedDate      TIMESTAMP WITH TIME ZONE   NOT NULL                                                                                                   Ngày tạo đơn
+  16    CancelReason     CHARACTER VARYING(20)      CHECK: CUSTOMER_REQUEST, VENDOR_UNABLE                                                                     Lý do NCC hủy: khách yêu cầu hủy (khách mất cọc) hoặc NCC không thể thực hiện (NCC hoàn cọc ngoài hệ thống); rỗng khi chưa hủy
+
+  17    CreatedDate      TIMESTAMP WITH TIME ZONE   NOT NULL                                                                                                   Ngày tạo đơn
   ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 **4.20. Bảng OrderItems**
@@ -2174,6 +2178,8 @@ Ràng buộc bảng: UNIQUE (CoupleId, VendorId); CHECK (CoupleId \<\> VendorId)
   CompletedDate?    TIMESTAMPTZ     Mốc tính hoa hồng
 
   CancelledDate?    TIMESTAMPTZ     
+
+  CancelReason?     VARCHAR(20)     CHECK: CUSTOMER_REQUEST, VENDOR_UNABLE
 
   CreatedDate       TIMESTAMPTZ     
   -------------------------------------------------------------------------------------------------------------------------------------------------------

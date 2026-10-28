@@ -72,12 +72,12 @@ const toWedding = ({ startDate: _s, ...w }: StoredWedding): Wedding => w
 
 function toPlanItem(data: UserData, p: UserData['planItems'][number]): PlanItem {
   const detail = mockCatalog.getService(p.serviceId)
-  const order = data.orders.filter((o) => o.planItemId === p.id).at(-1) ?? null
+  const order = data.orders.filter((o) => o.serviceId === p.serviceId && o.status !== 'Draft').at(-1) ?? null
   return {
     id: p.id,
     service: mockCatalog.getSummary(p.serviceId),
     status: p.status,
-    packageName: order?.packageName ?? detail.packages[0].name,
+    packageName: order?.items[0]?.itemName ?? detail.packages[0].name,
     price: order?.totalAmount ?? detail.packages[0].price,
     order,
   }
@@ -94,13 +94,15 @@ function slots(data: UserData) {
 }
 
 function removePlanItem(data: UserData, planItemId: string) {
-  const conv = data.conversations.filter((c) => data.planItems.find((p) => p.id === planItemId)?.serviceId === c.serviceId)
+  const removed = data.planItems.find((p) => p.id === planItemId)
+  const conv = data.conversations.filter((c) => removed?.serviceId === c.serviceId)
   data.planItems = data.planItems.filter((p) => p.id !== planItemId)
   // Bỏ dịch vụ khỏi kế hoạch thì bỏ luôn hội thoại (như replacePlan/removePlan trong prototype)
   const convIds = new Set(conv.map((c) => c.id))
   data.conversations = data.conversations.filter((c) => !convIds.has(c.id))
   data.messages = data.messages.filter((m) => !convIds.has(m.conversationId))
-  data.orders = data.orders.filter((o) => o.planItemId !== planItemId)
+  const removedService = removed?.serviceId
+  data.orders = data.orders.filter((o) => o.serviceId !== removedService)
 }
 
 /** Thêm dịch vụ vào kế hoạch; dùng chung cho POST /plan-items và khi bắt đầu nhắn tin. */
@@ -149,9 +151,9 @@ function buildTimeline(data: UserData): Timeline {
       serviceName: plan ? mockCatalog.getService(plan.serviceId).name : null, planStatus: plan?.status ?? null, serviceId: plan?.serviceId ?? null,
     })
     if (deposited) {
-      const order = data.orders.find((o) => o.planItemId === deposited.id && o.status === 'PAID')
-      if (order && order.serviceDate !== w.date) {
-        rows.push({ ...base, id: `service-date-${deposited.id}`, kind: 'SERVICE_DATE', title: `Ngày thực hiện ${cat.name.toLowerCase()}`, f: fractionOf(w, order.serviceDate), dueDate: order.serviceDate, isDone: false, category: cat })
+      const order = data.orders.find((o) => o.serviceId === deposited.serviceId && (o.status === 'Deposited' || o.status === 'Completed'))
+      if (order && order.eventDate !== w.date) {
+        rows.push({ ...base, id: `service-date-${deposited.id}`, kind: 'SERVICE_DATE', title: `Ngày thực hiện ${cat.name.toLowerCase()}`, f: fractionOf(w, order.eventDate), dueDate: order.eventDate, isDone: false, category: cat })
       }
       const serviceName = mockCatalog.getService(deposited.serviceId).name
       CATEGORY_RULES[slug].tasks.forEach(([title], i) => {

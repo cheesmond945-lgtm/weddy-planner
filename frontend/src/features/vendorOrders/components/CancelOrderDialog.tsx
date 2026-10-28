@@ -52,7 +52,7 @@ export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: Cancel
         </fieldset>
 
         <label className="grid gap-1 text-[13px] font-medium">
-          Ghi chú (không bắt buộc)
+          Ghi chú cho khách (không bắt buộc)
           <textarea
             rows={2}
             value={note}
@@ -60,6 +60,7 @@ export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: Cancel
             placeholder="VD: Khách báo dời lịch sang năm sau."
             className="rounded-md border border-line bg-surface px-3 py-2 text-sm leading-relaxed font-normal outline-none focus:border-gold"
           />
+          <span className="text-xs font-normal text-muted-foreground">Ghi chú chỉ hiện trong tin nhắn thông báo hủy đơn, không lưu vào đơn.</span>
         </label>
 
         <DialogFooter>

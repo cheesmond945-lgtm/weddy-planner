@@ -66,17 +66,20 @@ function RevisionRow({ r }: { r: OrderRevision }) {
 interface OrderDetailDialogProps {
   order: Order
   onClose: () => void
-  /** Mở form: màn chi tiết tự đóng trước */
-  onOpenForm: (mode: OrderFormMode) => void
+  /** Mở form: màn chi tiết tự đóng trước (chỉ phía NCC) */
+  onOpenForm?: (mode: OrderFormMode) => void
   onViewInvoice: (order: Order, type: InvoiceType) => void
+  /** Phía khách chỉ xem: không có dòng gợi ý và nút thao tác của NCC */
+  viewer?: 'vendor' | 'couple'
 }
 
 /**
  * Màn "Xem chi tiết" đơn (docs/api/THE_DON_HANG.md mục 2): thông tin, bảng hạng mục đầy đủ, lịch thanh toán 2 đợt,
  * lịch sử chỉnh sửa (OrderRevisions), chứng từ (Invoices). Khách và NCC thấy cùng nội dung.
  */
-export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice }: OrderDetailDialogProps) {
+export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice, viewer = 'vendor' }: OrderDetailDialogProps) {
   const hint = orderHint(o)
+  const vendorView = viewer === 'vendor'
   const th = 'border-y border-line bg-surface-2 px-3 py-2.5 text-left text-[11.5px] font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase'
   const td = 'px-3 py-2.5 align-top text-[13.5px]'
   return (
@@ -93,17 +96,19 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
       }
       footer={
         <>
-          <div className="mr-auto min-w-0 flex-1 max-sm:basis-full">
-            <p className={cn('text-[13px]', hint.tone === 'warn' ? 'text-warn' : hint.tone === 'ok' ? 'text-sage' : 'text-muted-foreground')}>{hint.text}</p>
-            <OrderActions
-              order={o}
-              onOpenForm={(mode) => {
-                onClose()
-                onOpenForm(mode)
-              }}
-              onViewInvoice={onViewInvoice}
-            />
-          </div>
+          {vendorView && (
+            <div className="mr-auto min-w-0 flex-1 max-sm:basis-full">
+              <p className={cn('text-[13px]', hint.tone === 'warn' ? 'text-warn' : hint.tone === 'ok' ? 'text-sage' : 'text-muted-foreground')}>{hint.text}</p>
+              <OrderActions
+                order={o}
+                onOpenForm={(mode) => {
+                  onClose()
+                  onOpenForm?.(mode)
+                }}
+                onViewInvoice={onViewInvoice}
+              />
+            </div>
+          )}
           <Button variant="outline" className="border-line-strong" onClick={onClose}>
             Đóng
           </Button>
@@ -119,10 +124,7 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
           {o.completedDate && <Item label="Ngày hoàn thành">{formatDay(o.completedDate)}</Item>}
           {o.cancelledDate && <Item label="Ngày hủy">{formatDay(o.cancelledDate)}</Item>}
           {o.cancelReason && (
-            <Item label="Lý do hủy">
-              {CANCEL_REASON[o.cancelReason].label}
-              {o.cancelNote ? ` · ${o.cancelNote}` : ''}
-            </Item>
+            <Item label="Lý do hủy">{CANCEL_REASON[o.cancelReason].label}</Item>
           )}
           <Item label="Ghi chú gửi khách" full>
             {o.note ?? <span className="text-muted-foreground">Không có</span>}
@@ -196,7 +198,9 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
             ))}
           </ul>
         ) : (
-          <p className="text-[13.5px] text-muted-foreground">Chưa có chứng từ. Giấy xác nhận cọc tự có khi khách cọc thành công; hóa đơn cuối do bạn xuất khi khách yêu cầu.</p>
+          <p className="text-[13.5px] text-muted-foreground">
+            {vendorView ? 'Chưa có chứng từ. Giấy xác nhận cọc tự có khi khách cọc thành công; hóa đơn cuối do bạn xuất khi khách yêu cầu.' : 'Chưa có chứng từ. Giấy xác nhận cọc có sau khi bạn thanh toán cọc; hóa đơn cuối do nhà cung cấp xuất.'}
+          </p>
         )}
       </Section>
     </PanelDialog>

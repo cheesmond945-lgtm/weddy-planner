@@ -1,19 +1,20 @@
-import { Filter, Search, Send } from 'lucide-react'
+import { Filter, Receipt, Search, Send } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { orderCardsStubbed } from '@/api'
-import { Badge } from '@/components/Badge'
-import { OrderStubCard } from '@/components/OrderStubCard'
+import { Badge, type BadgeTone } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
 import { useCategories } from '@/features/catalog/hooks'
 import { OrderCard } from '@/features/orders/components/OrderCard'
 import { ReviseOrderDialog } from '@/features/orders/components/ReviseOrderDialog'
+import { useOrder } from '@/features/orders/hooks'
+import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
 import { formatMessageTime } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { Conversation, Message } from '@/types/chat'
-import type { Order } from '@/types/order'
+import type { Order, OrderStatus } from '@/types/order'
 import { useMarkReadOnView, useMessages, useSendMessage } from '../hooks'
+import { coupleWording } from '../wording'
 
 interface ChatViewProps {
   conversations: Conversation[]
@@ -21,7 +22,25 @@ interface ChatViewProps {
   onSelect: (id: string) => void
 }
 
-const preview = (c: Conversation) => (c.lastMessage ? (c.lastMessage.type === 'Order' ? 'Đã gửi đơn dịch vụ' : c.lastMessage.content) : '')
+const preview = (c: Conversation) => (c.lastMessage ? (c.lastMessage.type === 'Order' ? 'Đã gửi đơn dịch vụ' : coupleWording(c.lastMessage.content, c.service.name)) : '')
+
+/** Nhãn ngắn theo đơn mới nhất với NCC (docs/THE_DON_PHIA_KHACH.md mục 5); Chờ cọc còn dưới 6 giờ thì có chấm đỏ. */
+const ORDER_BADGE: Partial<Record<OrderStatus, { label: string; tone: BadgeTone }>> = {
+  Pending: { label: 'Chờ cọc', tone: 'wait' },
+  NeedRevision: { label: 'Chờ chỉnh sửa', tone: 'warn' },
+  Deposited: { label: 'Đã cọc', tone: 'done' },
+  Completed: { label: 'Hoàn thành', tone: 'info' },
+  Expired: { label: 'Hết hạn', tone: 'neutral' },
+  Cancelled: { label: 'Đã hủy', tone: 'warn' },
+}
+
+function orderBadge(c: Conversation) {
+  const o = c.latestOrder
+  const b = o && ORDER_BADGE[o.status]
+  if (!o || !b) return null
+  const urgent = o.status === 'Pending' && !!o.depositDueDate && new Date(o.depositDueDate).getTime() - Date.now() < 6 * 3_600_000
+  return { ...b, urgent }
+}
 
 /** Hộp thư: danh sách hội thoại + khung trò chuyện (renderChat trong prototype). */
 export function ChatView({ conversations, activeId, onSelect }: ChatViewProps) {
@@ -125,11 +144,17 @@ function Inbox({ conversations, activeId, onSelect }: ChatViewProps) {
           <img src={c.service.coverImageUrl} alt="" className="row-span-2 size-[46px] rounded-full bg-accent-soft object-cover" />
           <span className="flex min-w-0 items-center gap-1.5">
             <b className="truncate text-[13px] font-semibold">{c.service.name}</b>
-            {c.planStatus === 'CONFIRMED' && (
-              <Badge tone="done" className="shrink-0 px-2 py-px text-[10px]">
-                Đã cọc
-              </Badge>
-            )}
+            {(() => {
+              const b = orderBadge(c)
+              return (
+                b && (
+                  <Badge tone={b.tone} className="shrink-0 px-2 py-px text-[10px]">
+                    {b.urgent && <span aria-label="Sắp hết hạn cọc" className="size-1.5 rounded-full bg-notify" />}
+                    {b.label}
+                  </Badge>
+                )
+              )
+            })()}
           </span>
           <span className="text-[11px] whitespace-nowrap text-muted-foreground">{c.lastMessage ? formatMessageTime(c.lastMessage.sentDate) : ''}</span>
           <span className={cn('truncate text-[11px] text-muted-foreground', c.unreadCount > 0 && c.id !== activeId ? 'font-semibold text-ink' : 'col-span-2')}>{preview(c)}</span>
@@ -151,6 +176,10 @@ function Thread({ conversation }: { conversation: Conversation }) {
   const [text, setText] = useState('')
   const [revising, setRevising] = useState<Order | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  // Thẻ mới nhất của từng đơn: gửi lại thì các thẻ cũ thu gọn
+  const latestCard = new Map<string, string>()
+  for (const m of messages) if (m.type === 'Order' && m.orderId) latestCard.set(m.orderId, m.id)
 
   // Có tin mới thì cuộn xuống cuối
   useEffect(() => {
@@ -185,12 +214,20 @@ function Thread({ conversation }: { conversation: Conversation }) {
 
       <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto bg-surface px-7 py-6 max-[900px]:p-4 max-[640px]:h-[360px] max-[640px]:flex-none">
         {messages.map((m) => (
-          <MessageItem key={m.id} message={m} categorySlug={conversation.service.category.slug} onRevise={setRevising} />
+          <MessageItem
+            key={m.id}
+            message={m}
+            conversation={conversation}
+            isLatestCard={!m.orderId || latestCard.get(m.orderId) === m.id}
+            onRevise={setRevising}
+            onMessageVendor={() => inputRef.current?.focus()}
+          />
         ))}
       </div>
 
       <form onSubmit={submit} className="flex items-center gap-2.5 border-t border-line-soft bg-surface px-6 pt-3.5 pb-[18px]">
         <input
+          ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Nhập tin nhắn..."
@@ -207,14 +244,49 @@ function Thread({ conversation }: { conversation: Conversation }) {
   )
 }
 
-function MessageItem({ message, categorySlug, onRevise }: { message: Message; categorySlug: string; onRevise: (o: Order) => void }) {
+function MessageItem({
+  message,
+  conversation,
+  isLatestCard,
+  onRevise,
+  onMessageVendor,
+}: {
+  message: Message
+  conversation: Conversation
+  isLatestCard: boolean
+  onRevise: (o: Order) => void
+  onMessageVendor: () => void
+}) {
+  const categorySlug = conversation.service.category.slug
   if (message.type === 'Order' && message.orderId) {
-    // Chat thật mà API đơn còn giả: không đọc được đơn đầy đủ, hiện ô gọn "Đơn {mã} · {trạng thái}"
-    if (orderCardsStubbed('chat') && message.order) return <OrderStubCard orderCode={message.order.orderCode} status={message.order.status} />
-    return <OrderCard orderId={message.orderId} categorySlug={categorySlug} onRevise={onRevise} />
+    return <OrderCard orderId={message.orderId} categorySlug={categorySlug} isLatest={isLatestCard} onRevise={onRevise} onMessageVendor={onMessageVendor} />
+  }
+  if ((message.type === 'DepositReceipt' || message.type === 'FinalInvoice') && message.orderId) {
+    return <ReceiptCard message={message} vendorName={conversation.service.name} />
   }
   const base = 'max-w-[78%] rounded-[20px] px-[15px] py-[11px] text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere] max-[640px]:max-w-[94%]'
-  if (message.sender === 'SYSTEM') return <div className={cn(base, 'self-center bg-sage-soft text-sage')}>{message.content}</div>
+  if (message.sender === 'SYSTEM') return <div className={cn(base, 'self-center bg-sage-soft text-sage')}>{coupleWording(message.content, conversation.service.name)}</div>
   if (message.sender === 'COUPLE') return <div className={cn(base, 'self-end rounded-br-[5px] bg-primary text-primary-foreground')}>{message.content}</div>
   return <div className={cn(base, 'self-start rounded-bl-[5px] bg-bg text-nav')}>{message.content}</div>
+}
+
+/** Thẻ Giấy xác nhận cọc / Hóa đơn cuối trong chat, có nút Xem (docs/THE_DON_PHIA_KHACH.md mục 4). */
+function ReceiptCard({ message, vendorName }: { message: Message; vendorName: string }) {
+  const { data: order } = useOrder(message.orderId ?? '')
+  const [open, setOpen] = useState(false)
+  const type = message.type === 'FinalInvoice' ? 'FinalInvoice' : 'DepositReceipt'
+  return (
+    <div className="w-[min(360px,100%)] self-start rounded-[22px] rounded-bl-[4px] border border-line bg-surface px-4 py-3 shadow-bubble">
+      <div className="flex items-start gap-2.5 text-[13px] leading-relaxed">
+        <Receipt className="mt-0.5 size-4 flex-none text-sage" aria-hidden />
+        <span>{message.content}</span>
+      </div>
+      {order && (
+        <Button size="sm" variant="outline" className="mt-2.5" onClick={() => setOpen(true)}>
+          Xem
+        </Button>
+      )}
+      {open && order && <InvoiceDialog order={order} type={type} vendorName={order.vendorName ?? vendorName} onClose={() => setOpen(false)} />}
+    </div>
+  )
 }

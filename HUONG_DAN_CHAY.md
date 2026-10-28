@@ -34,6 +34,14 @@ Mở `backend\.env`, điền ba giá trị:
 
 Các biến còn lại (`SUPABASE_URL`, `PORT`, `CORS_ORIGIN`) giữ nguyên.
 
+Biến cho đơn hàng và thanh toán cọc (đã có sẵn trong `.env.example`):
+
+| Biến | Ý nghĩa |
+|---|---|
+| `PAYMENT_MODE` | `simulate` (mặc định khi chạy dev): đặt cọc ghi nhận thành công ngay, dùng để chạy thử và demo. `vnpay`: VNPay thật, **chưa tích hợp** (trả 501). Khi `NODE_ENV=production` thì **không giả lập** trừ khi bạn đặt **rõ** `PAYMENT_MODE=simulate` (để bản demo triển khai vẫn bật được) |
+| `ORDER_JOBS_ENABLED` | Mặc định `false`. `true`: quét toàn hệ thống đơn hết hạn cọc và tự hoàn thành, lúc khởi động và mỗi giờ. Dù để `false`, đơn của người đang xem vẫn được cập nhật đúng trạng thái khi họ mở danh sách hoặc chi tiết đơn |
+| `DB_POOL_MAX` | Số kết nối tối đa của backend tới DB (mặc định 5). Supabase chỉ có 15 chỗ dùng chung cả nhóm; lỗi `EMAXCONNSESSION` nghĩa là hết chỗ |
+
 ```powershell
 npm install
 npx prisma generate
@@ -68,8 +76,8 @@ VITE_REAL_APIS=catalog,auth,chat,vendorChat
 
 - `VITE_REAL_APIS=catalog,auth,chat,vendorChat`: danh mục, dịch vụ, ảnh, đăng nhập và **tin nhắn** (cả khách lẫn NCC) lấy từ backend thật. Muốn chỉ xem giao diện bằng dữ liệu giả thì bỏ `chat,vendorChat`.
 - Các tính năng chưa có backend (đơn hàng, chat, yêu thích, kế hoạch đám cưới, NCC...) vẫn dùng dữ liệu giả vì `VITE_USE_MOCK=true`.
-- **Phía NCC: `orders` và `commissions` phải bật hoặc tắt CÙNG NHAU** (đơn và hoa hồng giả dùng chung một kho dữ liệu `weddy.mock.vendorOrders.*`). Nút "Giả lập khách" và "Giả lập thời gian" chỉ có khi các cờ này đang dùng dữ liệu giả.
-- **Tin nhắn thật mà đơn hàng còn giả** (`chat,vendorChat` có, `orders` không): đã hỗ trợ. Tin loại đơn hiện ô gọn "Đơn {mã} · {trạng thái}" ở cả hai bên; phía NCC ẩn nút "Tạo đơn" (thay bằng dòng "Tạo đơn sẽ bật khi nối backend đơn hàng") và ẩn "Giả lập khách". Khi `chat,vendorChat` dùng dữ liệu giả thì mọi thứ như cũ (thẻ đơn đầy đủ, Tạo đơn, giả lập khách). **Bật `orders,commissions` thật sau khi làm xong backend đơn hàng đợt 2** (backend đơn hàng hiện còn theo hợp đồng cũ, xem `docs/api/LECH_FE_BE.md`); lúc đó thêm cả hai cờ vào `VITE_REAL_APIS` cùng nhau.
+- **`chat`, `vendorChat`, `orders`, `commissions` bật hoặc tắt CÙNG NHAU.** Hội thoại, đơn và hoa hồng giả dùng chung một kho dữ liệu (`weddy.mock.vendorOrders.*`, `weddy.mock.planning`); bật thật riêng một cờ thì dữ liệu thật gặp dữ liệu giả và vỡ trang. Một cờ `orders` điều khiển cả đơn phía NCC lẫn phía khách. Bật cả bốn là có thẻ đơn thật, nút "Tạo đơn", đặt cọc thử (`PAYMENT_MODE=simulate`). Nút "Giả lập khách" và "Giả lập thời gian" chỉ có khi các cờ này đang dùng dữ liệu giả.
+- **`notifications`** (chuông thông báo cổng NCC) có backend thật riêng; nên bật cùng nhóm trên để chuông khớp với hội thoại và đơn thật. Để dữ liệu giả thì bỏ khỏi `VITE_REAL_APIS`.
 - Cờ `chat` thật thì "Nhắn tin với NCC" tạo hội thoại trên backend và **tự thêm NCC vào kế hoạch thật** của khách; trang Kế hoạch vẫn dùng dữ liệu giả nếu `weddings` chưa bật thật, nên hai nơi có thể lệch nhau.
 - Sửa `.env` xong phải khởi động lại `npm run dev`.
 

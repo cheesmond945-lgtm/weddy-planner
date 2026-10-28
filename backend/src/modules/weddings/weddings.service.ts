@@ -1,7 +1,7 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService, categoryRank, categorySlug } from '../catalog/services.service';
-import { ORDER_INCLUDE, toCoupleOrder, ymd } from '../orders/order-mapping';
+import { ORDER_INCLUDE, toOrderDto, ymd } from '../orders/order-mapping';
 import { onWeddingCategories } from './timeline-hooks';
 
 const fail = (code: string, message: string, status: number, details?: unknown): never => {
@@ -187,7 +187,7 @@ export class WeddingsService {
             status: st.status,
             packageName: order?.order_items[0]?.item_name ?? first?.name ?? '',
             price: order ? Number(order.total_amount) : (first?.price ?? 0),
-            order: order && st.conversationId ? toCoupleOrder(order, st.conversationId) : null,
+            order: order && st.conversationId ? toOrderDto(order, st.conversationId) : null,
           },
         };
       })

@@ -7,7 +7,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   constructor() {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) throw new Error('Thiếu DATABASE_URL trong backend/.env');
-    super({ adapter: new PrismaPg({ connectionString }) });
+    // Supabase (chế độ session) chỉ cho tối đa 15 kết nối dùng chung cả nhóm: mỗi backend chỉ giữ ít kết nối (đổi bằng DB_POOL_MAX)
+    const max = Number(process.env.DB_POOL_MAX) || 5;
+    super({ adapter: new PrismaPg({ connectionString, max }) });
   }
   async onModuleInit() {
     await this.$connect();

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
 import type { Message } from '@/types/chat'
+import { coupleWording } from '../wording'
 import { chatPanel, isWithinHours, useChatPanel, type ChatPanelState } from '../chatPanel'
 import { useMarkReadOnView, useMessages } from '../hooks'
 
@@ -167,7 +168,7 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
             <Loader2 className="size-6 animate-spin" />
           </div>
         ) : (
-          messages.map((m) => <Bubble key={m.id} message={m} conversationId={conversation.id} />)
+          messages.map((m) => <Bubble key={m.id} message={m} conversationId={conversation.id} vendorName={service.name} />)
         )}
         {pending.map((p) => (
           <div key={p.id} className="flex flex-col items-end">
@@ -234,10 +235,10 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
 
 const bubble = 'max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-[1.5] whitespace-pre-wrap [overflow-wrap:anywhere]'
 
-function Bubble({ message: m, conversationId }: { message: Message; conversationId: string }) {
+function Bubble({ message: m, conversationId, vendorName }: { message: Message; conversationId: string; vendorName: string }) {
   const time = <span className="mt-1 text-xs text-ink-3">{formatMessageTime(m.sentDate)}</span>
   if (m.sender === 'SYSTEM') {
-    return <div className="self-center rounded-pill bg-sage-soft px-3 py-1 text-center text-xs text-sage">{m.content}</div>
+    return <div className="self-center rounded-pill bg-sage-soft px-3 py-1 text-center text-xs text-sage">{coupleWording(m.content, vendorName)}</div>
   }
   // Đơn dịch vụ: khung hẹp không đủ chỗ cho thẻ đơn đầy đủ, mở trang Tin nhắn để xem và xử lý
   if (m.type === 'Order') {

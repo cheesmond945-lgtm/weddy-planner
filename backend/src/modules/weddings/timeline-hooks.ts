@@ -85,3 +85,22 @@ export async function onWeddingCategories(prisma: PrismaService, weddingId: stri
 }
 
 export const toYmd = ymdOf;
+
+/**
+ * Khi NCC hủy đơn đã cọc: xóa các việc chi tiết gắn với đơn khỏi timeline của khách và mở lại việc "Chốt ..." của hạng mục
+ * (đã được đánh dấu xong lúc cọc) nếu khách không còn đơn nào khác đã cọc cùng hạng mục, để khách tìm và chốt NCC khác.
+ */
+export async function onOrderCancelled(prisma: PrismaService, order: { id: string; wedding_id: string; vendor_id: string }) {
+  const vendor = await prisma.vendor_profiles.findUnique({ where: { id: order.vendor_id }, select: { category_id: true } });
+  await prisma.timeline_tasks.deleteMany({ where: { order_id: order.id, task_type: 'Detail' } });
+  if (!vendor) return;
+  // Còn đơn khác của hạng mục này đã cọc hoặc hoàn thành thì việc "Chốt ..." vẫn xong
+  const others = await prisma.orders.count({
+    where: { wedding_id: order.wedding_id, id: { not: order.id }, status: { in: ['Deposited', 'Completed'] }, vendor_profiles: { category_id: vendor.category_id } },
+  });
+  if (others) return;
+  await prisma.timeline_tasks.updateMany({
+    where: { wedding_id: order.wedding_id, category_id: vendor.category_id, task_type: 'Frame', task_code: { endsWith: '_BOOK' }, status: 'Done' },
+    data: { status: 'Todo', completed_date: null },
+  });
+}

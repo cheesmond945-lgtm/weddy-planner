@@ -223,7 +223,6 @@ function newDraft(d: Data, conversationId: string, c: OrderContent, at: Date): O
     completedDate: null,
     cancelledDate: null,
     cancelReason: null,
-    cancelNote: null,
     createdDate: iso(at),
   }
   applyContent(d, o, c)
@@ -352,8 +351,8 @@ function cancelOrder(d: Data, o: Order, reason: CancelReason, note: string | und
   o.status = 'Cancelled'
   o.cancelledDate = iso(at)
   o.cancelReason = reason
-  o.cancelNote = note?.trim() || null
-  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `NCC đã hủy đơn ${o.orderCode} · Lý do: ${CANCEL_REASON[reason].label}${o.cancelNote ? ` · ${o.cancelNote}` : ''}`, o.id, at)
+  const cancelNote = note?.trim() || null // chỉ đưa vào tin hệ thống, không lưu vào đơn
+  pushMsg(d, o.conversationId, 'SYSTEM', 'Text', `NCC đã hủy đơn ${o.orderCode} · Lý do: ${CANCEL_REASON[reason].label}${cancelNote ? ` · ${cancelNote}` : ''}`, o.id, at)
 }
 
 const firstOfMonth = (d: Date) => `${todayVN(d).slice(0, 7)}-01`

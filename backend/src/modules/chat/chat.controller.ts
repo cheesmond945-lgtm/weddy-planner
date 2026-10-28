@@ -24,6 +24,11 @@ export class ConversationsController {
     return this.chat.startForCouple(req.user.sub, String(body?.serviceId ?? ''), !!body?.replace);
   }
 
+  @Get('unread-count')
+  unreadCount(@Req() req: any) {
+    return this.chat.unreadCount(req.user);
+  }
+
   @Get(':id/messages')
   messages(@Req() req: any, @Param('id') id: string, @Query('after') after?: string) {
     return this.chat.messages(req.user, id, after);
@@ -50,6 +55,11 @@ export class VendorConversationsController {
   @Get()
   list(@Req() req: any) {
     return this.chat.list(req.user);
+  }
+
+  @Get('unread-count')
+  unreadCount(@Req() req: any) {
+    return this.chat.unreadCount(req.user);
   }
 
   @Get(':id/messages')

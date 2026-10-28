@@ -28,8 +28,10 @@ export interface Message {
 export interface Conversation {
   id: string
   service: ServiceSummary
-  /** Trạng thái dịch vụ trong kế hoạch; CONFIRMED thì hiện nhãn "Đã cọc" trong danh sách hội thoại */
+  /** Trạng thái dịch vụ trong kế hoạch */
   planStatus: PlanItemStatus | null
+  /** Đơn đã gửi mới nhất với NCC này (bỏ bản nháp), cho nhãn trạng thái đơn trong danh sách hội thoại */
+  latestOrder?: { id: string; orderCode: string; status: OrderStatus; depositDueDate: string | null } | null
   /** Số tin NCC gửi mà khách chưa đọc */
   unreadCount: number
   lastMessage: Pick<Message, 'sender' | 'type' | 'content' | 'sentDate'> | null

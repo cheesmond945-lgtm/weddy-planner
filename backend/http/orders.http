@@ -1,0 +1,137 @@
+### Thử API đơn hàng (docs/api/orders.md, payments.md). Dùng với extension "REST Client" của VS Code.
+### Chỉ dùng ncc01 với chi.bui12: DB Supabase dùng chung cả nhóm, đơn đã tạo là dữ liệu thật (không có nút xóa).
+### Mật khẩu tài khoản mẫu: xem HUONG_DAN_CHAY.md (không ghi vào file này).
+
+@host = http://localhost:3000/api
+@password = <điền mật khẩu mẫu>
+@conversationId = <id hội thoại ncc01 với chi.bui12, lấy từ GET /conversations>
+
+### 1. Đăng nhập NCC (ncc01)
+# @name loginVendor
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "identifier": "ncc01", "password": "{{password}}" }
+
+###
+@vendorToken = {{loginVendor.response.body.data.accessToken}}
+
+### 2. Đăng nhập khách (chi.bui12)
+# @name loginCouple
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "identifier": "chi.bui12", "password": "{{password}}" }
+
+###
+@coupleToken = {{loginCouple.response.body.data.accessToken}}
+
+### ===== NCC: tạo, sửa, gửi =====
+
+### 3. Tạo đơn nháp (send=false, không tạo tin, khách không thấy). Tiền do backend tính.
+POST {{host}}/vendors/me/orders
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{
+  "conversationId": "{{conversationId}}",
+  "send": false,
+  "content": {
+    "customerName": "Lương Minh Hùng & Bùi Thanh Chi",
+    "customerPhone": "0365158606",
+    "eventDate": "2027-04-18",
+    "note": "Tông màu trắng - champagne.",
+    "depositPercent": 30,
+    "items": [
+      { "itemName": "Trang trí cổng hoa tươi", "unit": "Gói", "quantity": 1, "unitPrice": 12000000 },
+      { "itemName": "Trang trí bàn tiệc", "unit": "Bàn", "quantity": 18, "unitPrice": 450000 }
+    ]
+  }
+}
+
+###
+@orderId = <id đơn lấy từ kết quả trên>
+
+### 4. Lưu lại bản nháp
+PUT {{host}}/vendors/me/orders/{{orderId}}/draft
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{ "content": { "customerName": "Lương Minh Hùng & Bùi Thanh Chi", "customerPhone": "0365158606", "eventDate": "2027-04-18", "depositPercent": 30, "items": [{ "itemName": "Trang trí cổng hoa tươi", "unit": "Gói", "quantity": 1, "unitPrice": 12000000 }] } }
+
+### 5. Gửi đơn (Draft → Pending, hạn cọc +24 giờ, tin Order vào chat). Cũng dùng để "Cập nhật đơn" khi Pending / NeedRevision.
+POST {{host}}/vendors/me/orders/{{orderId}}/send
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{ "content": { "customerName": "Lương Minh Hùng & Bùi Thanh Chi", "customerPhone": "0365158606", "eventDate": "2027-04-18", "depositPercent": 30, "items": [{ "itemName": "Trang trí cổng hoa tươi", "unit": "Gói", "quantity": 1, "unitPrice": 12000000 }] } }
+
+### ===== Khách =====
+
+### 6. Khách xem đơn (không thấy bản nháp)
+GET {{host}}/orders/{{orderId}}
+Authorization: Bearer {{coupleToken}}
+
+### 7. Khách yêu cầu chỉnh sửa (chỉ khi Pending). changes tùy chọn, note bắt buộc, chỉ 1 tin hệ thống.
+POST {{host}}/orders/{{orderId}}/revision-requests
+Authorization: Bearer {{coupleToken}}
+Content-Type: application/json
+
+{ "changes": ["Quantity", "EventDate"], "note": "Giảm còn 15 bàn và dời sang 25/04 được không ạ?" }
+
+### 8. Khách thanh toán cọc (PAYMENT_MODE=simulate: ghi nhận thành công ngay)
+POST {{host}}/payments
+Authorization: Bearer {{coupleToken}}
+Content-Type: application/json
+
+{ "orderId": "{{orderId}}", "method": "VNPAY_QR" }
+
+### ===== NCC: sau cọc =====
+
+### 9. Sửa đơn sau cọc (khóa tỷ lệ và tiền cọc, bắt buộc changeNote, tổng mới >= tiền đã cọc)
+PATCH {{host}}/vendors/me/orders/{{orderId}}
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{ "changeNote": "Thêm thảm đi lối hoa theo yêu cầu của khách.", "content": { "eventDate": "2027-04-18", "items": [{ "itemName": "Trang trí cổng hoa tươi", "unit": "Gói", "quantity": 1, "unitPrice": 12000000 }, { "itemName": "Thảm đi lối hoa", "unit": "Gói", "quantity": 1, "unitPrice": 4000000 }] } }
+
+### 10. Xuất hóa đơn cuối (mỗi đơn một lần)
+POST {{host}}/vendors/me/orders/{{orderId}}/final-invoice
+Authorization: Bearer {{vendorToken}}
+
+### 11. Hoàn tất (chỉ khi đã qua ngày thực hiện, giờ VN)
+POST {{host}}/vendors/me/orders/{{orderId}}/complete
+Authorization: Bearer {{vendorToken}}
+
+### 12. Hủy đơn đã cọc (chỉ khi Deposited và còn trước ngày thực hiện). reason bắt buộc: CUSTOMER_REQUEST | VENDOR_UNABLE.
+POST {{host}}/vendors/me/orders/{{orderId}}/cancel
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{ "reason": "CUSTOMER_REQUEST", "note": "Khách báo không tổ chức nữa." }
+
+### ===== Danh sách, đếm =====
+
+### 13. Danh sách đơn của NCC (lọc ở CSDL). Tham số: q, status, from, to, depositFrom, depositTo, conversationId, page, pageSize
+GET {{host}}/vendors/me/orders?status=Deposited&pageSize=20
+Authorization: Bearer {{vendorToken}}
+
+### 14. Số đơn theo 7 trạng thái
+GET {{host}}/vendors/me/orders/counts
+Authorization: Bearer {{vendorToken}}
+
+### ===== Phải bị từ chối =====
+
+### 15. Gửi đơn với ngày thực hiện trong quá khứ: 422 EVENT_DATE_IN_PAST
+POST {{host}}/vendors/me/orders
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{ "conversationId": "{{conversationId}}", "send": true, "content": { "customerName": "A", "customerPhone": "0365158606", "eventDate": "2026-01-01", "depositPercent": 30, "items": [{ "itemName": "Hoa", "unit": "Gói", "quantity": 1, "unitPrice": 12000000 }] } }
+
+### 16. Tổng đơn quá nhỏ để đặt cọc: 400 VALIDATION_ERROR, details.deposit
+POST {{host}}/vendors/me/orders
+Authorization: Bearer {{vendorToken}}
+Content-Type: application/json
+
+{ "conversationId": "{{conversationId}}", "send": true, "content": { "customerName": "A", "customerPhone": "0365158606", "eventDate": "2027-04-18", "depositPercent": 30, "items": [{ "itemName": "Hoa lẻ", "unit": "Gói", "quantity": 1, "unitPrice": 50000 }] } }

@@ -4,7 +4,10 @@ import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, matchPath, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
+import { MessageToaster } from '@/features/notifications/components/MessageToaster'
+import { VendorNotificationMenu } from '@/features/notifications/components/NotificationMenu'
 import { useUnreadCount } from '@/features/vendorChat/hooks'
+import { useIncomingMessageToasts } from '@/features/vendorChat/useIncomingMessageToasts'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
@@ -35,6 +38,17 @@ function useVendorPortalTheme() {
       delete root.dataset.portal
     }
   }, [])
+}
+
+/** Tiêu đề tab: "(2) Tin nhắn · WebPlan" khi có tin chưa đọc. Trả lại tiêu đề cũ khi rời cổng NCC. */
+function useUnreadTabTitle(pageLabel: string, unread: number) {
+  useEffect(() => {
+    const before = document.title
+    document.title = `${unread > 0 ? `(${unread}) ` : ''}${pageLabel} · WebPlan`
+    return () => {
+      document.title = before
+    }
+  }, [pageLabel, unread])
 }
 
 /** Chữ viết tắt từ tên: chữ đầu của từ đầu và từ cuối. */
@@ -174,6 +188,7 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
           </Link>
         </Button>
         <span aria-hidden className="h-6 w-px bg-line max-sm:hidden" />
+        <VendorNotificationMenu />
         {user && <StudioLogo name={user.name} />}
       </div>
     </header>
@@ -190,6 +205,10 @@ export function VendorLayout() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const unread = useUnreadCount()
+  const pageLabel = NAV.find(({ to, end }) => matchPath({ path: to, end: !!end }, pathname))?.label ?? 'Tổng quan'
+  useUnreadTabTitle(pageLabel, unread)
+  useIncomingMessageToasts()
 
   // Menu trượt đang mở: Esc để đóng
   useEffect(() => {
@@ -219,6 +238,7 @@ export function VendorLayout() {
           </div>
         </main>
       </div>
+      <MessageToaster />
       <ScrollRestoration />
     </div>
   )

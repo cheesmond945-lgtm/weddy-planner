@@ -17,6 +17,12 @@ export const vendorConversationsApi = {
   list: (): Promise<VendorConversation[]> =>
     isMock('vendorChat') ? mock((u) => mockVendorOrders.listConversations(u)) : http.get('/vendors/me/conversations'),
 
+  /** Tổng số tin của khách chưa đọc ở mọi hội thoại (huy hiệu menu Tin nhắn, tiêu đề tab). */
+  unreadCount: async (): Promise<number> =>
+    isMock('vendorChat')
+      ? mock((u) => mockVendorOrders.listConversations(u).reduce((sum, c) => sum + c.unreadCount, 0), 80)
+      : (await http.get<{ count: number }>('/vendors/me/conversations/unread-count')).count,
+
   listMessages: (conversationId: string): Promise<VendorMessage[]> =>
     isMock('vendorChat') ? mock((u) => mockVendorOrders.listMessages(u, conversationId)) : http.get(`/vendors/me/conversations/${conversationId}/messages`),
 

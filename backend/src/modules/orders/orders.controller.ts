@@ -1,9 +1,10 @@
-import { Body, Controller, Get, HttpException, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { ContentBody, ListQuery, OrdersService } from './orders.service';
+import { ListQuery, OrdersService } from './orders.service';
+import type { ContentInput } from './order-rules';
 
-/** Đơn dịch vụ phía cặp đôi (docs/api/orders.md). */
+/** Đơn dịch vụ phía cặp đôi (docs/api/orders.md, docs/THE_DON_PHIA_KHACH.md). */
 @UseGuards(JwtAuthGuard)
 @Roles('Couple')
 @Controller('orders')
@@ -15,19 +16,22 @@ export class CoupleOrdersController {
     return this.orders.getForCouple(req.user.sub, id);
   }
 
+  /** Yêu cầu chỉnh sửa (chỉ khi Pending): { changes?: ['Item'|'Quantity'|'EventDate'|'Other'], note } */
+  @HttpCode(200)
   @Post(':id/revision-requests')
-  requestRevision(@Req() req: any, @Param('id') id: string, @Body() body: { note?: string }) {
-    return this.orders.requestRevision(req.user.sub, id, body?.note ?? '');
+  requestRevision(@Req() req: any, @Param('id') id: string, @Body() body: { changes?: unknown; note?: string }) {
+    return this.orders.requestRevision(req.user.sub, id, body ?? {});
   }
 }
 
-/** Đặt cọc (docs/api/payments.md). Chưa có VNPay thật: xem OrdersService.createDeposit. */
+/** Đặt cọc (docs/api/payments.md). Chế độ thanh toán theo PAYMENT_MODE: xem paymentMode() trong order-rules.ts. */
 @UseGuards(JwtAuthGuard)
 @Roles('Couple')
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly orders: OrdersService) {}
 
+  @HttpCode(200)
   @Post()
   create(@Req() req: any, @Body() body: { orderId?: string; method?: string }) {
     return this.orders.createDeposit(req.user.sub, String(body?.orderId ?? ''));
@@ -57,33 +61,43 @@ export class VendorOrdersController {
   }
 
   @Post()
-  create(@Req() req: any, @Body() body: { conversationId?: string; content?: ContentBody; send?: boolean }) {
+  create(@Req() req: any, @Body() body: { conversationId?: string; content?: ContentInput; send?: boolean }) {
     return this.orders.create(req.user.sub, body ?? {});
   }
 
   @Put(':id/draft')
-  saveDraft(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentBody }) {
+  saveDraft(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput }) {
     return this.orders.saveDraft(req.user.sub, id, body?.content ?? {});
   }
 
+  /** Gửi đơn nháp, hoặc "Cập nhật đơn" (Pending, NeedRevision). */
+  @HttpCode(200)
   @Post(':id/send')
-  send(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentBody }) {
+  send(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput }) {
     return this.orders.send(req.user.sub, id, body ?? {});
   }
 
-  @Post(':id/payments')
-  recordPayment(@Req() req: any, @Param('id') id: string, @Body() body: { installmentId?: string; amount?: number; paidAt?: string; method?: string }) {
-    return this.orders.recordPayment(req.user.sub, id, body ?? {});
+  /** Sửa đơn sau cọc (Deposited). */
+  @Patch(':id')
+  edit(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput; changeNote?: string }) {
+    return this.orders.editDeposited(req.user.sub, id, body ?? {});
   }
 
-  // CSDL không có phương án điều chỉnh sau khi xác nhận/đặt cọc.
-  @Post(':id/adjustments')
-  adjustments() {
-    throw new HttpException({ code: 'ORDER_NOT_ADJUSTABLE', message: 'Hệ thống chưa hỗ trợ lập phương án điều chỉnh cho đơn đã đặt cọc.' }, 409);
-  }
-
+  @HttpCode(200)
   @Post(':id/cancel')
-  cancel(@Req() req: any, @Param('id') id: string, @Body() body: { reason?: string }) {
-    return this.orders.cancel(req.user.sub, id, body?.reason ?? '');
+  cancel(@Req() req: any, @Param('id') id: string, @Body() body: { reason?: string; note?: string }) {
+    return this.orders.cancel(req.user.sub, id, body ?? {});
+  }
+
+  @HttpCode(200)
+  @Post(':id/complete')
+  complete(@Req() req: any, @Param('id') id: string) {
+    return this.orders.complete(req.user.sub, id);
+  }
+
+  @HttpCode(200)
+  @Post(':id/final-invoice')
+  finalInvoice(@Req() req: any, @Param('id') id: string) {
+    return this.orders.finalInvoice(req.user.sub, id);
   }
 }

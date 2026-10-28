@@ -1,7 +1,6 @@
 import { ChevronLeft, FilePen, Phone, Plus, Send } from 'lucide-react'
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { orderCardsStubbed } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { formatDay, formatStamp, orderPageHref } from '@/features/vendorOrders/calc'
@@ -35,8 +34,6 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
   const markRead = useMarkRead()
   const [text, setText] = useState('')
   const historyRef = useRef<HTMLDivElement>(null)
-  // Chat thật mà API đơn còn giả: không tạo đơn, không giả lập khách (đơn giả không khớp hội thoại thật)
-  const orderStub = orderCardsStubbed('vendorChat')
 
   const sentOrders = orders.filter((o) => o.status !== 'Draft')
   const drafts = orders.filter((o) => o.status === 'Draft')
@@ -97,20 +94,16 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
             )}
           </div>
         </div>
-        {!orderStub && <CustomerSimulator conversationId={c.id} orders={orders} />}
+        <CustomerSimulator conversationId={c.id} orders={orders} />
         {latestOrder && (
           <Button asChild variant="outline" className="rounded-pill whitespace-nowrap max-[640px]:hidden">
             <Link to={orderPageHref(latestOrder.id)}>Xem đơn ›</Link>
           </Button>
         )}
-        {orderStub ? (
-          <span className="max-w-[170px] text-right text-[11.5px] leading-snug text-muted-foreground max-sm:max-w-[104px] max-sm:text-[10.5px]">Tạo đơn sẽ bật khi nối backend đơn hàng</span>
-        ) : (
-          <Button aria-label="Tạo đơn" className="rounded-pill whitespace-nowrap max-sm:size-[42px] max-sm:p-0" onClick={() => onOpenForm({ kind: 'new' })}>
-            <Plus />
-            <span className="max-sm:hidden">Tạo đơn</span>
-          </Button>
-        )}
+        <Button aria-label="Tạo đơn" className="rounded-pill whitespace-nowrap max-sm:size-[42px] max-sm:p-0" onClick={() => onOpenForm({ kind: 'new' })}>
+          <Plus />
+          <span className="max-sm:hidden">Tạo đơn</span>
+        </Button>
       </header>
 
       {drafts.map((o) => (
