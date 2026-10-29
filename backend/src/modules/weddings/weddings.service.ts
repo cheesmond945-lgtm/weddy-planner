@@ -2,7 +2,7 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService, categoryRank, categorySlug, estimateCost } from '../catalog/services.service';
 import { ORDER_INCLUDE, toOrderDto, ymd } from '../orders/order-mapping';
-import { onWeddingCategories } from './timeline-hooks';
+import { onWeddingCategories, planWeddingDateChange } from './timeline-hooks';
 
 const fail = (code: string, message: string, status: number, details?: unknown): never => {
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
@@ -90,19 +90,23 @@ export class WeddingsService {
 
     const existing = await this.prisma.weddings.findUnique({ where: { user_id: userId } });
     const data = { wedding_date: new Date(date), city: location, guest_count: guest!, budget, style: style || null, updated_date: new Date() };
-    let weddingId: string;
-    if (existing) {
-      weddingId = existing.id;
-      await this.prisma.weddings.update({ where: { id: weddingId }, data });
-    } else {
-      const user = await this.prisma.users.findUnique({ where: { id: userId }, select: { full_name: true } });
-      const created = await this.prisma.weddings.create({ data: { ...data, user_id: userId, groom_name: user?.full_name ?? '', bride_name: '(chưa cập nhật)' } });
-      weddingId = created.id;
-    }
-    await this.prisma.$transaction([
-      this.prisma.wedding_categories.deleteMany({ where: { wedding_id: weddingId } }),
-      this.prisma.wedding_categories.createMany({ data: slugs.map((s) => ({ wedding_id: weddingId, category_id: idBySlug.get(s)! })) }),
-    ]);
+    const user = existing ? null : await this.prisma.users.findUnique({ where: { id: userId }, select: { full_name: true } });
+    // Một transaction: lưu thông tin + hạng mục + (đổi ngày cưới) cập nhật hạn các việc khung chưa xong
+    const weddingId = await this.prisma.$transaction(async (tx) => {
+      let id: string;
+      if (existing) {
+        id = existing.id;
+        await tx.weddings.update({ where: { id }, data });
+        if (ymd(existing.wedding_date) !== date) {
+          for (const u of (await planWeddingDateChange(tx, id, date)).updates) await tx.timeline_tasks.update({ where: { id: u.id }, data: { scheduled_date: u.date } });
+        }
+      } else {
+        id = (await tx.weddings.create({ data: { ...data, user_id: userId, groom_name: user?.full_name ?? '', bride_name: '(chưa cập nhật)' } })).id;
+      }
+      await tx.wedding_categories.deleteMany({ where: { wedding_id: id } });
+      await tx.wedding_categories.createMany({ data: slugs.map((s) => ({ wedding_id: id, category_id: idBySlug.get(s)! })) });
+      return id;
+    });
     await onWeddingCategories(this.prisma, weddingId, new Date(date), slugs.map((s) => idBySlug.get(s)!));
     return this.getMine(userId);
   }

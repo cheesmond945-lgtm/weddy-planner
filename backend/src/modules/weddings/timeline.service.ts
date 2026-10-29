@@ -1,7 +1,9 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { categorySlug } from '../catalog/services.service';
-import { todayVNDate, toYmd } from './timeline-hooks';
+import { planWeddingDateChange, todayVNDate, toYmd, vnYmd } from './timeline-hooks';
+import { dayOf, levelOf, planDetails, planFrame } from './timeline-schedule';
+import { SERVICE_BY_CATEGORY_NAME, TIMELINE_TEMPLATES, suggestOf, templateOf, type ServiceKey } from './timeline-templates';
 import { WeddingsService } from './weddings.service';
 
 const fail = (code: string, message: string, status: number): never => {
@@ -12,11 +14,26 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 
 /**
- * Timeline theo CSDL (timeline_tasks):
- * - Frame có task_code kết thúc _BOOK  -> CATEGORY_DEADLINE ("Chốt <hạng mục>", xong khi đã cọc)
- * - Frame còn lại: có hạng mục -> TASK mẫu (sửa hạn/đánh dấu xong); không có task_code -> việc do cặp đôi thêm (isCustom)
- * - Detail gắn đơn -> SERVICE_TASK; Detail chưa có đơn -> LOCKED (chỗ giữ)
+ * Timeline theo CSDL (timeline_tasks) và mẫu (timeline-templates.ts); loại việc suy ra từ task_code qua mẫu (task_code rỗng = khách tự thêm):
+ * - SELF -> TASK; CHOOSE -> CHOOSE (nút "Gợi ý {dịch vụ}"); BOOK (mã *_BOOK) -> CATEGORY_DEADLINE ("Chốt <hạng mục>", xong khi đã cọc)
+ * - DETAIL / EVENT / PAYMENT gắn đơn -> SERVICE_TASK (needsMeeting = có nút "Hẹn với NCC")
+ * - Việc chi tiết (SERVICE_TASK) nằm trong nhóm của Mốc chốt cùng hạng mục; Mốc chốt chưa chốt mang detailCount (số việc sẽ mở)
+ * `urgent` (Cần làm gấp) tính lại khi đọc bằng đúng đầu vào lúc sinh; không lưu.
  */
+/** Số việc chi tiết (Chi tiết, Ngày thực hiện, Thanh toán) của một hạng mục trong mẫu. */
+const detailCountOf = (key: ServiceKey | undefined) => (key ? TIMELINE_TEMPLATES.filter((t) => t.service === key && t.kind !== 'SELF' && t.kind !== 'CHOOSE' && t.kind !== 'BOOK').length : 0);
+
+const frameUrgent = (w: { wedding_date: Date | null; created_date: Date | null }, keys: ServiceKey[]) => {
+  const out = new Set<string>();
+  if (!w.wedding_date) return out;
+  try {
+    for (const t of planFrame(TIMELINE_TEMPLATES, { wedding: toYmd(w.wedding_date), today: vnYmd(w.created_date ?? new Date()), services: keys }).tasks) if (t.urgent) out.add(t.code);
+  } catch {
+    // ngày cưới không sau ngày tạo: không có cờ gấp
+  }
+  return out;
+};
+
 @Injectable()
 export class TimelineService {
   constructor(private readonly prisma: PrismaService, private readonly weddings: WeddingsService) {}
@@ -27,30 +44,94 @@ export class TimelineService {
       this.prisma.timeline_tasks.findMany({ where: { wedding_id: w.id }, orderBy: [{ scheduled_date: 'asc' }, { display_order: 'asc' }, { created_date: 'asc' }] }),
       this.prisma.service_categories.findMany(),
       this.weddings.planSnapshot(userId, w.id),
-      this.prisma.orders.findMany({ where: { wedding_id: w.id }, select: { id: true, vendor_profiles: { select: { business_name: true } } } }),
+      this.prisma.orders.findMany({
+        where: { wedding_id: w.id },
+        select: { id: true, order_code: true, status: true, event_date: true, cancelled_date: true, payments: { select: { paid_date: true } }, vendor_profiles: { select: { id: true, business_name: true, category_id: true } } },
+      }),
     ]);
-    const catById = new Map(cats.map((c) => [c.id, { id: c.id, slug: categorySlug(c.name), name: c.name }]));
-    const vendorByOrder = new Map(orders.map((o) => [o.id, o.vendor_profiles?.business_name ?? '']));
+    const catById = new Map(cats.map((c) => [c.id, { id: c.id, slug: categorySlug(c.name), name: c.name ?? '' }]));
+    const keyOfCat = (id: string | null) => {
+      const name = cats.find((c) => c.id === id)?.name;
+      return name ? SERVICE_BY_CATEGORY_NAME[name] : undefined;
+    };
+    const orderById = new Map(orders.map((o) => [o.id, o]));
+    const cancelledOrderOf = (categoryId: string | null) => {
+      const o = orders
+        .filter((x) => x.status === 'Cancelled' && x.cancelled_date && x.payments?.paid_date && x.vendor_profiles?.category_id === categoryId)
+        .sort((a, b) => b.cancelled_date!.getTime() - a.cancelled_date!.getTime())[0];
+      return o ? { orderCode: o.order_code ?? '', vendorName: o.vendor_profiles?.business_name ?? '', date: vnYmd(o.cancelled_date!) } : null;
+    };
+    const today = vnYmd(new Date());
+
+    // Cờ gấp: khung tính lại với I = ngày tạo; chi tiết tính lại với D, E của đơn như lúc sinh
+    const keys = [...new Set(tasks.map((t) => keyOfCat(t.category_id)).filter((k): k is ServiceKey => !!k))];
+    const urgent = frameUrgent(w, keys);
+    const albumTask = tasks.find((t) => t.task_code === 'PHOTO_ALBUM_SHOOT');
+    for (const orderId of new Set(tasks.map((t) => t.order_id).filter((x): x is string => !!x))) {
+      const o = orderById.get(orderId);
+      const key = keyOfCat(tasks.find((t) => t.order_id === orderId)?.category_id ?? null);
+      if (!o || !key || !w.wedding_date) continue;
+      const deposit = o.payments?.paid_date ? vnYmd(o.payments.paid_date) : today;
+      const ctx = { today: deposit, wedding: toYmd(w.wedding_date), event: toYmd(o.event_date ?? w.wedding_date), deposit, albumDate: albumTask?.scheduled_date ? toYmd(albumTask.scheduled_date) : undefined };
+      for (const t of planDetails(TIMELINE_TEMPLATES, key, ctx).tasks) if (t.urgent) urgent.add(t.code);
+    }
 
     const items = tasks.map((t) => {
       const category = t.category_id ? (catById.get(t.category_id) ?? null) : null;
-      const deadline = t.task_type === 'Frame' && !!t.task_code?.endsWith('_BOOK');
-      const kind = t.task_type === 'Detail' ? (t.order_id ? 'SERVICE_TASK' : 'LOCKED') : deadline ? 'CATEGORY_DEADLINE' : 'TASK';
-      const planned = deadline && category ? plan.get(category.slug) : undefined;
+      const tpl = templateOf(t.task_code);
+      const legacyBook = t.task_type === 'Frame' && !!t.task_code?.endsWith('_BOOK');
+      const kind =
+        t.task_code === null || tpl?.kind === 'SELF'
+          ? 'TASK'
+          : tpl?.kind === 'CHOOSE'
+            ? 'CHOOSE'
+            : tpl?.kind === 'BOOK' || legacyBook
+              ? 'CATEGORY_DEADLINE'
+              : t.order_id
+                ? 'SERVICE_TASK'
+                : 'TASK';
+      const planned = category && (kind === 'CATEGORY_DEADLINE' || kind === 'CHOOSE') ? plan.get(category.slug) : undefined;
+      const order = t.order_id ? orderById.get(t.order_id) : undefined;
+      const done = t.status === 'Done';
       return {
         id: t.id,
         kind,
         title: t.title,
-        dueDate: kind === 'LOCKED' ? null : toYmd(t.scheduled_date),
-        isDone: t.status === 'Done',
+        dueDate: toYmd(t.scheduled_date),
+        isDone: done,
         isCustom: t.task_code === null,
         category,
-        serviceName: kind === 'SERVICE_TASK' ? (vendorByOrder.get(t.order_id!) ?? null) : (planned?.serviceName ?? null),
+        serviceName: kind === 'SERVICE_TASK' ? (order?.vendor_profiles?.business_name ?? null) : (planned?.serviceName ?? null),
         planStatus: planned?.status ?? null,
-        serviceId: planned?.serviceId ?? null,
+        // SERVICE_TASK: dịch vụ của đơn (để "Hẹn với NCC"); CHOOSE / CATEGORY_DEADLINE: dịch vụ đang trong kế hoạch của hạng mục
+        serviceId: kind === 'SERVICE_TASK' ? (order?.vendor_profiles?.id ?? null) : (planned?.serviceId ?? null),
+        urgent: !done && !!t.task_code && urgent.has(t.task_code),
+        // Việc neo theo ngày chụp album S mà khách chưa chốt ngày hẹn: ngày chỉ là tạm tính
+        tentative: !done && tpl?.anchor === 'S',
+        needsMeeting: !!tpl?.needsMeeting && !!t.order_id,
+        appointmentDate: null as string | null, // cột appointment_date chờ chạy SQL (prisma/sql/2026-10-29-timeline-appointment-date.sql)
+        /** SERVICE_TASK: mã đơn đang giữ việc */
+        orderCode: kind === 'SERVICE_TASK' ? (order?.order_code ?? null) : null,
+        /** CATEGORY_DEADLINE chưa chốt: số việc chi tiết sẽ mở sau khi đặt cọc ("N việc chi tiết mở sau khi bạn đặt cọc") */
+        detailCount: kind === 'CATEGORY_DEADLINE' && !done ? detailCountOf(keyOfCat(t.category_id)) : 0,
+        /** CATEGORY_DEADLINE đang Todo: đơn ĐÃ CỌC rồi bị hủy gần nhất cùng hạng mục ("Đơn … với … đã hủy ngày …"); cọc đơn mới thì Mốc chốt xong và dòng này mất */
+        cancelledOrder: kind === 'CATEGORY_DEADLINE' && !done ? cancelledOrderOf(t.category_id) : null,
       };
-    });
-    return { items };
+    }).map((i, idx) => ({ ...i, suggest: suggestOf(templateOf(tasks[idx].task_code), { done: i.isDone, hasCancelledOrder: !!i.cancelledOrder }) }));
+
+    const daysLeft = w.wedding_date ? dayOf(toYmd(w.wedding_date)) - dayOf(today) : null;
+    return { items, level: daysLeft !== null && daysLeft > 0 ? levelOf(daysLeft) : null, daysLeft };
+  }
+
+  /** Xem trước khi đổi ngày cưới: các việc sẽ đổi hạn (cũ → mới) và cảnh báo đơn lệch ngày. Không ghi gì. */
+  async regeneratePreview(userId: string, weddingDate: unknown) {
+    const w = await this.weddings.requireWedding(userId);
+    if (!isDate(weddingDate)) return fail('VALIDATION_ERROR', 'Chọn ngày tổ chức hợp lệ.', 400);
+    if (weddingDate <= vnYmd(new Date())) return fail('VALIDATION_ERROR', 'Ngày tổ chức phải sau hôm nay.', 400);
+    const plan = await planWeddingDateChange(this.prisma, w.id, weddingDate);
+    const daysLeft = dayOf(weddingDate) - dayOf(vnYmd(new Date()));
+    const changes = plan.changes.sort((a, b) => a.newDate.localeCompare(b.newDate));
+    return { count: changes.length, changes, warnings: plan.warnings, level: levelOf(daysLeft), daysLeft };
   }
 
   private async task(userId: string, id: string) {

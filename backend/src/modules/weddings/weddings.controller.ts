@@ -27,6 +27,11 @@ export class WeddingsController {
     return this.timeline.get(req.user.sub);
   }
 
+  @Post('timeline/regenerate-preview')
+  regeneratePreview(@Req() req: any, @Body() body: { weddingDate?: string }) {
+    return this.timeline.regeneratePreview(req.user.sub, body?.weddingDate);
+  }
+
   @Post('timeline/tasks')
   addTask(@Req() req: any, @Body() body: { title?: string; dueDate?: string }) {
     return this.timeline.addTask(req.user.sub, body ?? {});

@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "../node_modules/.cache/timeline-scripts",
+    "incremental": false,
+    "sourceMap": false
+  },
+  "include": ["./*.ts"]
+}

@@ -10,6 +10,29 @@ export const fail = (code: string, message: string, status: number, details?: un
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
 };
 
+/** Đơn của một đám cưới, rút gọn để kiểm tra luật "mỗi hạng mục tối đa MỘT đơn Deposited cùng lúc". */
+export interface CategoryOrder {
+  id: string;
+  status: string | null;
+  categoryId: string | null;
+  code: string;
+  vendorName: string;
+  categoryName: string;
+}
+
+/** Đơn Deposited khác cùng hạng mục (nếu có). Đơn Completed không tính: đã xong, không giữ chỗ. */
+export const depositedConflict = (orders: readonly CategoryOrder[], categoryId: string | null, exceptOrderId?: string) =>
+  categoryId ? orders.find((o) => o.status === 'Deposited' && o.categoryId === categoryId && o.id !== exceptOrderId) : undefined;
+
+/** Thông báo 409 CATEGORY_ALREADY_DEPOSITED cho khách (đặt cọc) hoặc NCC (gửi / tạo lại đơn). */
+export const categoryTakenMessage = (who: 'COUPLE' | 'VENDOR', o: CategoryOrder) =>
+  who === 'COUPLE'
+    ? `Hạng mục ${o.categoryName} đã có đơn ${o.code} của ${o.vendorName} đang đặt cọc. Mỗi hạng mục chỉ có một đơn đã cọc cùng lúc: nhờ nhà cung cấp hủy đơn đó trước khi đặt cọc đơn mới.`
+    : `Khách đã đặt cọc đơn ${o.code} của ${o.vendorName} cho hạng mục ${o.categoryName}. Mỗi hạng mục chỉ có một đơn đã cọc cùng lúc: chỉ gửi đơn mới sau khi đơn đó được hủy.`;
+
+/** Tạo đơn: `send = true` gửi luôn (Draft → Pending), thiếu / false / giá trị khác = chỉ lưu nháp (docs/api/orders.md). */
+export const wantsSend = (body: { send?: unknown } | null | undefined) => body?.send === true;
+
 export const HOUR = 3_600_000;
 export const DAY = 86_400_000;
 
