@@ -27,6 +27,7 @@ export function WeddingInfoCard({ wedding }: { wedding: Wedding | null }) {
   const left = Math.max(0, daysBetween(today(), parseDate(wedding.date)))
   const serviceNames = categories.filter((c) => wedding.categorySlugs.includes(c.slug)).map((c) => c.name)
   const fields: [string, ReactNode, boolean?][] = [
+    ['Chú rể & cô dâu', wedding.groomName && wedding.brideName ? `${wedding.groomName} & ${wedding.brideName}` : 'Chưa nhập'],
     ['Ngày tổ chức', <>{formatDate(wedding.date)} <small className="font-normal text-muted-foreground">(còn {left} ngày)</small></>],
     ['Địa điểm', wedding.location],
     ['Sức chứa dự kiến', wedding.guestCount ? `${wedding.guestCount} khách` : 'Chưa nhập'],

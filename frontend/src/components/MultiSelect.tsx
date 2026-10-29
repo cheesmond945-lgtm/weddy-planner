@@ -1,20 +1,31 @@
-import { ChevronDown } from 'lucide-react'
-import { useEffect, useId, useRef, useState } from 'react'
+import { Check, ChevronDown } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 interface MultiSelectProps {
   options: { value: string; label: string }[]
   value: string[]
   onChange: (value: string[]) => void
-  /** Chữ trên nút, tính theo danh sách đang chọn */
-  summary: (selected: string[]) => string
+  /** Chữ mờ trên nút khi chưa chọn gì */
+  placeholder: string
+  /** Chữ trên nút khi chọn hết (vd "Tất cả dịch vụ"); không có thì vẫn hiện thẻ như thường */
+  allLabel?: string
+  /** Số thẻ tên tối đa hiện trên nút, phần còn lại gộp thành "+N" */
+  maxChips?: number
   /** Có nút "Chọn tất cả / Bỏ chọn tất cả" */
   selectAll?: boolean
+  /** Icon nhỏ bên trái chữ trên nút */
+  icon?: ReactNode
+  /** Viền đỏ khi có lỗi */
+  invalid?: boolean
   'aria-labelledby'?: string
 }
 
-/** Ô chọn nhiều dạng thả xuống (.msel trong prototype). */
-export function MultiSelect({ options, value, onChange, summary, selectAll, ...aria }: MultiSelectProps) {
+/** Chiều cao tối đa của bảng chọn (px); nhiều lựa chọn hơn thì cuộn trong bảng */
+const PANEL_MAX_H = 260
+
+/** Ô chọn nhiều dạng thả xuống (.msel trong prototype). Bảng chọn mở ngay dưới nút, đẩy nội dung bên dưới xuống; các lựa chọn là thẻ bo tròn xếp tràn hàng. */
+export function MultiSelect({ options, value, onChange, placeholder, allLabel, maxChips = 2, selectAll, icon, invalid, ...aria }: MultiSelectProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const panelId = useId()
@@ -41,27 +52,45 @@ export function MultiSelect({ options, value, onChange, summary, selectAll, ...a
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
+        aria-invalid={invalid || undefined}
         onClick={() => setOpen((o) => !o)}
-        className="flex min-h-[46px] w-full cursor-pointer items-center justify-between gap-2.5 rounded-[14px] border border-line bg-surface px-4 py-2.5 text-left text-sm font-medium text-ink hover:border-gold aria-expanded:border-gold"
+        className="flex min-h-10 w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border border-line bg-white/85 px-3.5 py-2 text-left text-sm font-medium text-ink hover:border-gold aria-expanded:border-gold aria-invalid:border-destructive"
         {...aria}
       >
-        <span className={cn('min-w-0 flex-1 truncate', !value.length && 'font-normal text-muted-foreground')}>{summary(value)}</span>
+        {icon && (
+          <span aria-hidden className="shrink-0 text-gold-700 [&_svg]:size-[18px]">
+            {icon}
+          </span>
+        )}
+        <SelectedChips options={options} value={value} placeholder={placeholder} allLabel={all ? allLabel : undefined} maxChips={maxChips} />
         <ChevronDown className={cn('size-[18px] shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden />
       </button>
-      <div id={panelId} hidden={!open} className="mt-1.5 rounded-[14px] border border-line bg-bg p-2">
+      <div
+        id={panelId}
+        hidden={!open}
+        style={{ maxHeight: PANEL_MAX_H }}
+        className="mt-1.5 overflow-auto rounded-xl border border-line bg-surface p-3 shadow-[0_8px_24px_rgb(var(--shadow-rgb)/0.1)]"
+      >
         {selectAll && (
-          <div className="flex justify-end px-2 pt-0.5 pb-1.5">
-            <button type="button" onClick={() => onChange(all ? [] : options.map((o) => o.value))} className="text-[13px] font-medium text-ink underline underline-offset-[3px]">
+          <div className="mb-2 flex justify-end">
+            <button type="button" onClick={() => onChange(all ? [] : options.map((o) => o.value))} className="text-[13px] font-medium text-gold-700 underline underline-offset-[3px] hover:text-gold-800">
               {all ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
             </button>
           </div>
         )}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-0.5">
+        <div className="flex flex-wrap gap-2">
           {options.map((o) => {
             const checked = value.includes(o.value)
             return (
-              <label key={o.value} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[9px] text-sm font-medium hover:bg-accent-soft">
-                <input type="checkbox" checked={checked} onChange={() => toggle(o.value)} className="size-[18px] shrink-0 cursor-pointer accent-gold" />
+              <label
+                key={o.value}
+                className={cn(
+                  'inline-flex cursor-pointer items-center gap-1.5 rounded-pill border px-3 py-1.5 text-[13px] font-medium transition-colors select-none has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ring',
+                  checked ? 'border-gold bg-gold-100 text-gold-800' : 'border-line bg-white/70 text-ink-2 hover:border-gold hover:text-ink',
+                )}
+              >
+                <input type="checkbox" checked={checked} onChange={() => toggle(o.value)} className="sr-only" />
+                {checked && <Check aria-hidden className="size-3.5" strokeWidth={2.6} />}
                 {o.label}
               </label>
             )
@@ -69,5 +98,24 @@ export function MultiSelect({ options, value, onChange, summary, selectAll, ...a
         </div>
       </div>
     </div>
+  )
+}
+
+/** Phần chữ trên nút: chưa chọn thì chữ mờ, chọn hết thì allLabel, còn lại là thẻ tên các mục đã chọn kèm "+N" */
+function SelectedChips({ options, value, placeholder, allLabel, maxChips }: { options: { value: string; label: string }[]; value: string[]; placeholder: string; allLabel?: string; maxChips: number }) {
+  if (!value.length) return <span className="min-w-0 flex-1 truncate font-normal text-muted-foreground">{placeholder}</span>
+  if (allLabel) return <span className="min-w-0 flex-1 truncate">{allLabel}</span>
+  const labels = options.filter((o) => value.includes(o.value)).map((o) => o.label)
+  const shown = labels.slice(0, maxChips)
+  const rest = labels.length - shown.length
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+      {shown.map((l) => (
+        <span key={l} className="shrink-0 whitespace-nowrap rounded-pill bg-gold-100 px-2.5 py-0.5 text-[13px] font-medium text-gold-800">
+          {l}
+        </span>
+      ))}
+      {rest > 0 && <span className="shrink-0 text-[13px] font-semibold text-gold-700">+{rest}</span>}
+    </span>
   )
 }

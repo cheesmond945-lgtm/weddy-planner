@@ -1,23 +1,31 @@
+import { ArrowRight, CalendarDays } from 'lucide-react'
 import { useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { compareStore } from '@/features/compare/store'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
 import { useSaveWedding, useWedding } from '../hooks'
+import { WeddingDialogContent } from './LetterDialog'
 import { WeddingForm } from './WeddingForm'
 
 // ---- Hộp thiết lập lần đầu (mở sau khi đăng nhập mà chưa có thông tin đám cưới) ----
 
-let setupState: { open: boolean; then: (() => void) | null } = { open: false, then: null }
+let setupState: { open: boolean; then: (() => void) | null; preview?: boolean } = { open: false, then: null }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((l) => l())
 
 /** Mở hộp thiết lập; `then` chạy sau khi lưu xong (việc người dùng đang định làm trước khi đăng nhập). */
 export function openWeddingSetup(then: (() => void) | null) {
   setupState = { open: true, then }
+  emit()
+}
+
+/** Chỉ dùng khi dev (mở bằng /?setup-wedding): xem hộp thiết lập kể cả khi đã có đám cưới, bấm Esc để đóng. */
+export function previewWeddingSetup() {
+  setupState = { open: true, then: null, preview: true }
   emit()
 }
 
@@ -41,20 +49,22 @@ export function WeddingSetupDialog() {
 
   return (
     <Dialog open={state.open && user?.role === 'COUPLE'}>
-      <DialogContent
-        showCloseButton={false}
-        className="max-w-[780px]"
-        onEscapeKeyDown={(e) => e.preventDefault()}
+      <WeddingDialogContent
+        title="Thiết lập thông tin đám cưới"
+        description="Nhập thông tin để tạo timeline khung"
+        onEscapeKeyDown={(e) => (state.preview ? closeSetup() : e.preventDefault())}
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>Thiết lập thông tin đám cưới</DialogTitle>
-          <DialogDescription className="sr-only">Nhập thông tin để tạo timeline khung</DialogDescription>
-        </DialogHeader>
         {state.open && (
           <WeddingForm
             initial={null}
-            submitLabel="Tạo timeline khung"
+            submitLabel={
+              <>
+                <CalendarDays aria-hidden className="size-[18px]" />
+                Tạo timeline khung
+                <ArrowRight aria-hidden className="size-[18px]" />
+              </>
+            }
             pending={save.isPending}
             error={save.error?.message}
             onSubmit={(input) =>
@@ -85,7 +95,7 @@ export function WeddingSetupDialog() {
             }
           />
         )}
-      </DialogContent>
+      </WeddingDialogContent>
     </Dialog>
   )
 }
@@ -97,11 +107,7 @@ export function WeddingEditDialog({ open, onOpenChange }: { open: boolean; onOpe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[780px]">
-        <DialogHeader>
-          <DialogTitle>Chỉnh sửa thông tin đám cưới</DialogTitle>
-          <DialogDescription>Khi đổi ngày tổ chức, các mốc trong timeline tự tính lại theo tỷ lệ thời gian.</DialogDescription>
-        </DialogHeader>
+      <WeddingDialogContent title="Chỉnh sửa thông tin đám cưới" description="Khi đổi ngày tổ chức, các mốc trong timeline tự tính lại theo tỷ lệ thời gian.">
         {open && wedding && (
           <WeddingForm
             initial={wedding}
@@ -123,7 +129,7 @@ export function WeddingEditDialog({ open, onOpenChange }: { open: boolean; onOpe
             }
           />
         )}
-      </DialogContent>
+      </WeddingDialogContent>
     </Dialog>
   )
 }

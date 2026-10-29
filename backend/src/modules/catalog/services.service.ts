@@ -37,6 +37,10 @@ const foldText = (s: string) =>
     .replace(/Đ/g, 'D')
     .toLowerCase();
 
+/** Đổi từ "mâm" thành "bàn" (giữ kiểu viết hoa), chỉ khi đứng riêng một từ: "4.500.000đ/mâm" -> "4.500.000đ/bàn". */
+const tablesNotTrays = (s: string) =>
+  s.normalize('NFC').replace(/(?<!\p{L})m(â)m(?!\p{L})/giu, (w) => (w === w.toUpperCase() ? 'BÀN' : w[0] === 'M' ? 'Bàn' : 'bàn'));
+
 /**
  * Cách hiện mục "Gói dịch vụ" ở trang chi tiết: "tiles" = mỗi gói một ô ảnh (biến thể của cùng dịch vụ:
  * chụp ảnh, váy cưới, trang điểm), "album" = card ảnh ghép theo album gói (mặc định).
@@ -92,7 +96,9 @@ export class ServicesService {
 
   private summarize(v: Awaited<ReturnType<ServicesService['loadVisible']>>[number]) {
     const prices = v.service_packages.map((p) => Number(p.price));
-    const cover = v.service_packages.flatMap((p) => p.package_albums)[0];
+    // Ảnh đại diện: ảnh bìa (is_cover) đầu tiên theo thứ tự gói; gói nào chưa đặt ảnh bìa thì bỏ qua. Không gói nào có thì lấy ảnh đầu tiên.
+    const albums = v.service_packages.flatMap((p) => p.package_albums);
+    const cover = albums.find((a) => a.is_cover) ?? albums[0];
     return {
       id: v.id,
       name: v.business_name,
@@ -184,6 +190,13 @@ export class ServicesService {
     const capacities = v.service_packages.map((p) => p.capacity).filter((c): c is number => c !== null);
     const covers = v.service_packages.flatMap((p) => p.package_albums.filter((a) => a.is_cover));
     const others = v.service_packages.flatMap((p) => p.package_albums.filter((a) => !a.is_cover));
+    // Ảnh đại diện nằm ở gói khác gói đầu (vd ForeverMark lấy ảnh sảnh Xanh Đêm): đưa cả album gói đó lên đầu thư viện ảnh,
+    // thứ tự gói giữ nguyên. Ảnh đại diện ở gói đầu thì giữ cách xếp cũ (ảnh bìa các gói trước, rồi các ảnh còn lại).
+    const coverPkg = v.service_packages.find((p) => p.package_albums.some((a) => a.is_cover));
+    const gallery =
+      coverPkg && coverPkg !== v.service_packages[0]
+        ? [...coverPkg.package_albums, ...v.service_packages.filter((p) => p !== coverPkg).flatMap((p) => p.package_albums)]
+        : [...covers, ...others];
     const tags = [...new Set(v.service_packages.flatMap((p) => p.package_tags.map((t) => t.tag)))];
 
     return {
@@ -199,15 +212,18 @@ export class ServicesService {
       contactPhone: (await this.prisma.users.findUnique({ where: { id: v.user_id }, select: { phone_number: true } }))?.phone_number ?? null,
       isVerified: true,
       isGuaranteed: false,
-      images: [...covers, ...others].slice(0, 60).map((a) => this.img(a.url)),
+      images: gallery.slice(0, 60).map((a) => this.img(a.url)),
       packages: v.service_packages.map((p) => ({
         id: p.id,
         name: p.name,
-        description: p.description,
+        // Nhà hàng tính theo bàn: mô tả NCC còn ghi "mâm" thì đổi sang "bàn" cho thống nhất
+        description: tablesNotTrays(p.description),
         price: Number(p.price),
         capacity: p.capacity,
-        // CSDL chưa có cột đơn vị tính: đọc từ mô tả của NCC ("…4.500.000đ/mâm"), không có thì là gói
-        unit: p.description.match(/đ\s*\/\s*(mâm|bàn|khách|người|set|bộ)/i)?.[1].toLowerCase() ?? 'gói',
+        // Số bàn tối thiểu phải đặt (nhà hàng), null khi gói không ghi
+        minTables: p.min_tables,
+        // CSDL chưa có cột đơn vị tính: đọc từ mô tả của NCC ("…4.500.000đ/bàn"), không có thì là gói
+        unit: tablesNotTrays(p.description.match(/đ\s*\/\s*(mâm|bàn|khách|người|set|bộ)/i)?.[1].toLowerCase() ?? 'gói'),
         // Ảnh bìa và thẻ phong cách của gói
         imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null,
         tags: p.package_tags.map((t) => t.tag),
