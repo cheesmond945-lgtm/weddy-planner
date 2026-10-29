@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { vendorConversationsApi } from '@/api/vendorConversations'
 import { toast } from '@/components/ui/toast'
 import { vendorKeys } from '@/features/vendorOrders/keys'
+import { useLivePoll } from '@/lib/realtime'
 import { useAuth } from '@/store/auth'
 import type { VendorMessage } from '@/types/vendorConversation'
 
-// Chưa có websocket (docs/api/chat.md): hỏi lại định kỳ khi đang mở trang Tin nhắn, như phía cặp đôi (5 giây)
+// Có realtime (lib/realtime.ts) thì dữ liệu được đẩy tới; mất kết nối thì hỏi lại định kỳ khi đang mở trang Tin nhắn, như phía cặp đôi (5 giây)
 const POLL_MS = 5000
 
 function useVendorId() {
@@ -13,16 +14,18 @@ function useVendorId() {
   return user?.role === 'VENDOR' ? user.id : undefined
 }
 
-/** pollMs: trang Tin nhắn hỏi lại mỗi 2,5 giây; sidebar (số chưa đọc) thưa hơn. */
+/** pollMs: chu kỳ hỏi lại khi chưa có realtime (trang Tin nhắn 5 giây). */
 export function useVendorConversations(pollMs = POLL_MS) {
   const uid = useVendorId()
-  return useQuery({ queryKey: vendorKeys.conversations(uid), queryFn: vendorConversationsApi.list, enabled: !!uid, refetchInterval: pollMs })
+  const poll = useLivePoll(pollMs)
+  return useQuery({ queryKey: vendorKeys.conversations(uid), queryFn: vendorConversationsApi.list, enabled: !!uid, refetchInterval: poll })
 }
 
 /** Tổng số tin chưa đọc bằng endpoint riêng (nhẹ hơn tải cả danh sách), hỏi lại 15 giây; React Query dừng khi tab bị ẩn. */
 export function useUnreadQuery() {
   const uid = useVendorId()
-  return useQuery({ queryKey: vendorKeys.unread(uid), queryFn: vendorConversationsApi.unreadCount, enabled: !!uid, refetchInterval: 15_000 })
+  const poll = useLivePoll(15_000)
+  return useQuery({ queryKey: vendorKeys.unread(uid), queryFn: vendorConversationsApi.unreadCount, enabled: !!uid, refetchInterval: poll })
 }
 
 /** Tổng số tin chưa đọc (mục "Tin nhắn" trên sidebar, tiêu đề tab). */
@@ -32,11 +35,12 @@ export function useUnreadCount() {
 
 export function useVendorMessages(conversationId: string | null) {
   const uid = useVendorId()
+  const poll = useLivePoll(POLL_MS)
   return useQuery({
     queryKey: vendorKeys.messages(uid, conversationId ?? ''),
     queryFn: () => vendorConversationsApi.listMessages(conversationId!),
     enabled: !!uid && !!conversationId,
-    refetchInterval: POLL_MS,
+    refetchInterval: poll,
   })
 }
 

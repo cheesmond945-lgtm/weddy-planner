@@ -32,6 +32,23 @@
 8. Cách chạy dự án, tài khoản mẫu và mật khẩu: xem [HUONG_DAN_CHAY.md](../HUONG_DAN_CHAY.md). **Không chép mật khẩu vào tài liệu.**
 9. Đọc trước khi sửa phần NCC: [CHOT_NGHIEP_VU_NCC.md](CHOT_NGHIEP_VU_NCC.md). Khi mâu thuẫn, ưu tiên: `database.md` > `CHOT_NGHIEP_VU_NCC.md` và `api/THE_DON_HANG.md` > các `api/*.md` cũ.
 
+## CẬP NHẬT 28/10/2026 (nhánh `feat/order-flow-realtime`)
+
+Các phần dưới viết trước đợt này; chỗ nào mâu thuẫn thì **mục này đúng**.
+
+| Thay đổi | Chi tiết | File chính |
+|---|---|---|
+| **Realtime (Socket.IO)** | Tin nhắn, thẻ đơn, đơn đổi trạng thái, đã đọc, thông báo đẩy tới hai bên ngay (thay polling 5 đến 15 giây; polling còn làm dự phòng 60 giây). Xử lý G17 | [backend/src/modules/realtime](../backend/src/modules/realtime), [chat-messages.ts](../backend/src/modules/chat/chat-messages.ts), [app/RealtimeBridge.tsx](../frontend/src/app/RealtimeBridge.tsx), [lib/realtime.ts](../frontend/src/lib/realtime.ts), [api/chat.md](api/chat.md) |
+| **Cọc tối thiểu 10%** | Gửi / Cập nhật đơn với tỷ lệ < 10% bị chặn (BE + FE). Hai đợt: đợt 1 cọc qua VNPay, đợt 2 tiền mặt cho NCC | [order-rules.ts](../backend/src/modules/orders/order-rules.ts), [lib/deposit.ts](../frontend/src/lib/deposit.ts), [validation.ts](../frontend/src/features/vendorOrders/validation.ts) |
+| **Khách yêu cầu chỉnh sửa sau cọc** | `Deposited` còn trước ngày thực hiện: `AfterDeposit`/`Requested`, đơn giữ `Deposited`, tiền cọc không đổi. NCC "Chỉnh sửa theo yêu cầu" (→ `Applied`) hoặc "Từ chối yêu cầu" (→ `Rejected`, endpoint mới). Hội thoại vào "Cần xử lý". Thay quy tắc "sau cọc khách không có nút sửa" ở B, C bước 4, D4, E | [orders.service.ts](../backend/src/modules/orders/orders.service.ts) `requestRevision`, `editDeposited`, `rejectRevision`; [RejectRevisionDialog.tsx](../frontend/src/features/vendorOrders/components/RejectRevisionDialog.tsx) |
+| **Đơn của khách trong trang Kế hoạch** | `/plan`: dưới mỗi hạng mục hiện mọi đơn đã gửi của hạng mục đó (đơn hết hạn, đã hủy thu gọn), nút Thanh toán cọc / Yêu cầu chỉnh sửa / Xem chi tiết / Nhắn NCC; dải "đang chờ thanh toán cọc" tính từ đơn thật. Bỏ dòng đơn rút gọn và nút Thanh toán cọc trùng ở dòng dịch vụ. API mới `GET /orders`; DTO thêm `category` | [PlanPage.tsx](../frontend/src/pages/couple/PlanPage.tsx), [PlanSlots.tsx](../frontend/src/features/weddings/components/PlanSlots.tsx), [CategoryOrders.tsx](../frontend/src/features/orders/components/CategoryOrders.tsx), [MyOrderCard.tsx](../frontend/src/features/orders/components/MyOrderCard.tsx) |
+| **Nhắn tin tự do khi hạng mục đã khóa** | Hạng mục đã có NCC khác chờ cọc / đã chốt: "Nhắn tin với NCC" (và nút chat nổi trên trang NCC) vẫn mở hội thoại, không thay NCC trong kế hoạch, FE báo cho khách. Thay `PLAN_CATEGORY_LOCKED` ở B1. Khách cọc đơn của NCC thứ hai thì hạng mục có hai NCC; trang Kế hoạch hiện đủ. Nút chat nổi trên trang một NCC mở đúng hội thoại với NCC đó | [chat.service.ts](../backend/src/modules/chat/chat.service.ts) `startForCouple`, [planActions.tsx](../frontend/src/features/weddings/planActions.tsx), [PlanSlots.tsx](../frontend/src/features/weddings/components/PlanSlots.tsx), [CoupleLayout.tsx](../frontend/src/layouts/CoupleLayout.tsx) |
+| **Tạo lại đơn giữ nguyên thông tin** | Chép cả ngày thực hiện (nếu chưa qua), mã mới, hạn cọc 24 giờ mới | [calc.ts](../frontend/src/features/vendorOrders/calc.ts) `valuesFromOrder` |
+| **Tự hủy khi quá 24 giờ chưa cọc** | `ORDER_JOBS_ENABLED=true` thì quét hết hạn **mỗi phút**; khách bấm thanh toán khi đã quá hạn bị chặn ngay (G1) | [order-jobs.service.ts](../backend/src/modules/orders/order-jobs.service.ts), `createDeposit` |
+| Sửa G3, G6, G7, G9 | Cập nhật / sửa đơn có điều kiện trạng thái; thẻ khách hiện "Nội dung thay đổi"; đóng mọi yêu cầu `Requested` trong transaction; nhãn `Rejected` | như trên, [OrderDetailDialog.tsx](../frontend/src/features/vendorOrders/components/OrderDetailDialog.tsx) |
+
+Chưa làm: trang thanh toán VNPay thật (G18); quy tắc khách hủy đơn gần ngày (không hoàn cọc), chờ chốt quy tắc hệ thống.
+
 ## Mục lục
 
 - [Phần A. Bức tranh chung](#phần-a-bức-tranh-chung)

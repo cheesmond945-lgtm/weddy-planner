@@ -10,7 +10,7 @@ import { controlClass, Field } from '@/features/vendors/components/FormParts'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { UnsavedChangesGuard } from '@/features/vendors/components/UnsavedChangesGuard'
 import { formatDate } from '@/lib/date'
-import { DEPOSIT_MIN, DEPOSIT_ROUNDING, depositOf } from '@/lib/deposit'
+import { DEPOSIT_MIN, DEPOSIT_PERCENT_MIN, DEPOSIT_ROUNDING, depositOf } from '@/lib/deposit'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { VendorConversation } from '@/types/vendorConversation'
@@ -103,7 +103,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
                 <Input
                   className={cn(controlClass, 'h-[38px] w-[104px] pr-8 text-right tabular-nums')}
                   type="number"
-                  min={1}
+                  min={DEPOSIT_PERCENT_MIN}
                   max={99}
                   step={1}
                   aria-label="Tỷ lệ đặt cọc (%)"
@@ -146,7 +146,9 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
           {depositError}
         </p>
       )}
-      <p className="border-t border-line bg-surface-2 px-3 py-2 text-[12.5px] text-muted-foreground">Hệ thống chỉ ghi nhận khoản cọc qua VNPay.</p>
+      <p className="border-t border-line bg-surface-2 px-3 py-2 text-[12.5px] text-muted-foreground">
+        Cọc tối thiểu {DEPOSIT_PERCENT_MIN}% tổng đơn. Hệ thống chỉ ghi nhận khoản cọc qua VNPay; khách quá 24 giờ chưa cọc thì đơn tự hủy (hết hạn).
+      </p>
     </div>
   )
 }
@@ -277,7 +279,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
       : mode.kind === 'edit'
         ? 'Đơn đã đặt cọc: sửa được hạng mục, ngày, ghi chú. Tỷ lệ và tiền cọc đã khóa, tổng mới không nhỏ hơn tiền đã cọc.'
         : mode.kind === 'again'
-          ? 'Hạng mục và ghi chú chép từ đơn cũ, mã đơn mới. Nhập lại ngày diễn ra sự kiện.'
+          ? 'Thông tin giữ nguyên như đơn cũ, chỉ đổi mã đơn. Gửi đơn thì khách có 24 giờ mới để đặt cọc.'
           : mode.kind === 'draft'
             ? `Bản nháp ${mode.order.orderCode} · Gửi tới ${customer.name}`
             : `Gửi tới ${customer.name} trong cuộc trò chuyện này`

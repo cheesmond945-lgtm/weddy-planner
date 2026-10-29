@@ -5,6 +5,7 @@
  * Thay mô hình cũ (phiên bản v1/v2, đợt thanh toán tùy chỉnh, phương án điều chỉnh) đã bỏ.
  * Kiểu Order phía cặp đôi ở types/order.ts giữ nguyên.
  */
+import type { CategoryRef } from './catalog'
 
 /** Trạng thái đơn (Orders.Status). Nhãn và màu ở features/vendorOrders/constants.ts. */
 export const ORDER_STATUSES = ['Draft', 'Pending', 'NeedRevision', 'Deposited', 'Completed', 'Expired', 'Cancelled'] as const
@@ -43,14 +44,20 @@ export type RevisionChangeType = (typeof REVISION_CHANGE_TYPES)[number]
 export interface OrderRevision {
   id: string
   revisionType: 'BeforeDeposit' | 'AfterDeposit'
-  /** BeforeDeposit: lời nhắn của khách (null khi NCC tự sửa). AfterDeposit: "Nội dung thay đổi" do NCC ghi, khách thấy */
+  /**
+   * BeforeDeposit: lời nhắn của khách (null khi NCC tự sửa). AfterDeposit: yêu cầu của khách (Requested/Rejected),
+   * hoặc "Nội dung thay đổi" do NCC ghi khi chỉnh sửa (Applied), khách thấy
+   */
   requestNote: string | null
   changes: RevisionChangeType[]
   oldTotalAmount: number
   /** null khi chưa áp dụng */
   newTotalAmount: number | null
-  /** Requested: khách yêu cầu trước cọc, chờ NCC sửa. Applied: NCC đã sửa. Sau cọc chỉ có Applied (do NCC tạo khi chỉnh sửa) */
-  status: 'Requested' | 'Applied'
+  /**
+   * Requested: khách yêu cầu, chờ NCC (trước cọc: đơn NeedRevision; sau cọc: đơn vẫn Deposited). Applied: NCC đã sửa.
+   * Rejected: NCC từ chối yêu cầu sau cọc, đơn giữ nguyên.
+   */
+  status: 'Requested' | 'Applied' | 'Rejected'
   createdDate: string
   appliedDate: string | null
 }
@@ -74,6 +81,8 @@ export interface Order {
   /** Chỉ BE trả (phía khách): id hồ sơ NCC để mở trang dịch vụ, và tên NCC hiện trên thẻ đơn */
   serviceId?: string
   vendorName?: string
+  /** Lĩnh vực của NCC (trang Kế hoạch của khách hiện đơn dưới hạng mục này) */
+  category?: CategoryRef
   status: OrderStatus
   customerName: string
   customerPhone: string

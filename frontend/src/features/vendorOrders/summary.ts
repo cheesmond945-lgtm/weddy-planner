@@ -1,6 +1,6 @@
 import { addDaysYmd, now as clockNow, todayVN } from '@/lib/clock'
 import type { Order } from '@/types/vendorOrder'
-import { eventPassed } from './calc'
+import { eventPassed, openRevision } from './calc'
 
 /*
  * Số liệu tổng hợp từ danh sách đơn (4 thẻ đầu trang Quản lý đơn hàng, trang Tổng quan). Hàm thuần.
@@ -26,7 +26,7 @@ export const URGENT_HOURS = 6
 /** Đơn cần chú ý (vạch màu bên trái dòng): chờ chỉnh sửa, chờ hoàn thành, sắp hết hạn cọc. */
 export function attentionOf(o: Order): 'warn' | 'danger' | null {
   if (o.status === 'NeedRevision') return 'warn'
-  if (o.status === 'Deposited' && eventPassed(o)) return 'warn'
+  if (o.status === 'Deposited' && (eventPassed(o) || openRevision(o))) return 'warn'
   const ms = msToDeadline(o)
   if (ms !== null && ms < URGENT_HOURS * HOUR) return 'danger'
   return null

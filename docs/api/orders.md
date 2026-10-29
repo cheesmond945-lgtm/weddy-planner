@@ -4,7 +4,12 @@
 > Quy ước chung: [README.md](README.md). Role: **Couple**, chỉ thấy đơn của mình và **không thấy bản nháp** (`Draft` trả 404).
 > Khách và NCC dùng **cùng một DTO `Order`** (mô tả ở phần Nhà cung cấp bên dưới, kiểu `frontend/src/types/vendorOrder.ts`), thêm hai trường để khách mở trang dịch vụ và hiện tên NCC: `serviceId` (`VendorProfiles.Id`) và `vendorName`. Trạng thái trả thô như CSDL: `Draft`, `Pending`, `NeedRevision`, `Deposited`, `Completed`, `Expired`, `Cancelled`.
 
-**Hai giai đoạn (đã chốt):** trước cọc (`Pending`, `NeedRevision`) khách có Thanh toán cọc (chỉ `Pending`) và Yêu cầu chỉnh sửa (chỉ `Pending`); sau cọc (`Deposited`) khách không sửa, không hủy, muốn đổi thì nhắn NCC. **Khách không có API hủy đơn.** Phần còn lại sau cọc khách trả tiền mặt trực tiếp cho NCC, ngoài hệ thống.
+**Hai giai đoạn (cập nhật 28/10/2026):** trước cọc (`Pending`, `NeedRevision`) khách có Thanh toán cọc (chỉ `Pending`) và Yêu cầu chỉnh sửa (chỉ `Pending`). Sau cọc (`Deposited`, còn trước `eventDate`) khách **vẫn gửi được Yêu cầu chỉnh sửa**, đơn giữ `Deposited` và **tiền cọc không đổi**; NCC áp dụng bằng `PATCH` hoặc từ chối. **Khách không có API hủy đơn** (muốn hủy thì nhắn NCC; quy tắc hoàn cọc khi hủy gần ngày chưa chốt). Hai đợt thanh toán: đợt 1 cọc (tối thiểu 10%) qua VNPay trong 24 giờ, đợt 2 phần còn lại trả tiền mặt trực tiếp cho NCC, ngoài hệ thống.
+
+### GET /orders
+**Đơn của khách** (trang Kế hoạch của tôi `/plan`, hiện dưới từng hạng mục): mọi đơn đã gửi của khách, **không có bản nháp**, mới nhất trước (tối đa 200). Lọc tùy chọn `?status=` (một trong 6 trạng thái trừ `Draft`; sai thì 400). Mỗi `Order` có thêm `category: { id, slug, name }` (lĩnh vực của NCC) để FE nhóm theo hạng mục. Trước khi đọc, backend quét hết hạn / tự hoàn thành riêng đơn của khách.
+
+Response 200: `{ "data": Order[] }`. NCC gọi thì 403.
 
 ### GET /orders/:id
 Response 200: `{ "data": Order }`. Lỗi: 404 `ORDER_NOT_FOUND` (không có, không phải của khách, hoặc đang là `Draft`).
@@ -12,7 +17,7 @@ Response 200: `{ "data": Order }`. Lỗi: 404 `ORDER_NOT_FOUND` (không có, kh�
 Trước khi đọc, backend tự đưa đơn `Pending` quá hạn cọc sang `Expired` và đơn `Deposited` quá `eventDate` + 7 ngày sang `Completed` (chỉ riêng đơn của khách này, xem mục "Việc theo thời gian" ở phần NCC).
 
 ### POST /orders/:id/revision-requests
-**Yêu cầu chỉnh sửa, chỉ khi `Pending`.** Body:
+**Yêu cầu chỉnh sửa: khi `Pending`, hoặc khi `Deposited` còn trước `eventDate` và chưa có yêu cầu đang chờ.** Body:
 
 ```json
 { "changes": ["Quantity", "EventDate"], "note": "Giảm từ 20 xuống 15 bàn và dời sang 25/04 được không ạ?" }
@@ -22,7 +27,9 @@ Trước khi đọc, backend tự đưa đơn `Pending` quá hạn cọc sang `E
 - `note` **bắt buộc**: nội dung chi tiết, lưu `OrderRevisions.RequestNote`.
 - Thành công: tạo `OrderRevisions` (`BeforeDeposit`, `Requested`, `OldTotalAmount` = tổng hiện tại); đơn `Pending` → `NeedRevision` (hạn cọc tạm dừng, đơn không hết hạn khi chờ NCC); thêm **một tin hệ thống** vào chat (không thêm tin riêng của khách): `Khách yêu cầu chỉnh sửa đơn {OrderCode}: {nội dung chọn, nối bằng ", "} · "{note}"` (thiếu phần nào thì bỏ phần đó); báo NCC (`OrderRevisionRequested`). Phía khách hiển thị "Bạn đã yêu cầu chỉnh sửa đơn …".
 
-Response 200: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR` (`details.note` thiếu nội dung, `details.changes` sai giá trị), 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_REVISABLE` (đơn không phải `Pending`: đã yêu cầu rồi, đã cọc, hết hạn, hủy).
+- **Sau cọc** (`Deposited`): tạo `OrderRevisions` `AfterDeposit` / `Requested`, đơn **giữ `Deposited`**, tin hệ thống có thêm "(đã đặt cọc, tiền cọc giữ nguyên)". NCC áp dụng bằng `PATCH /vendors/me/orders/:id` (yêu cầu thành `Applied`) hoặc từ chối bằng `POST /vendors/me/orders/:id/revision-requests/reject` (thành `Rejected`). Mỗi lúc chỉ một yêu cầu đang chờ.
+
+Response 200: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR` (`details.note` thiếu nội dung, `details.changes` sai giá trị), 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_REVISABLE` (đơn đang `NeedRevision`; đơn đã cọc nhưng đã đến ngày thực hiện hoặc đang có yêu cầu chờ NCC; đơn hết hạn, hủy, hoàn thành).
 
 ### Đặt cọc
 Xem [payments.md](payments.md): `POST /payments`.
@@ -42,7 +49,7 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 
 - **7 trạng thái:** `Draft` → `Pending` → (`NeedRevision` ↔ `Pending`) → `Deposited` → `Completed`; `Pending` quá hạn thành `Expired`; `Deposited` bị **NCC hủy** (trước `eventDate`) thành `Cancelled`.
 - **Chỉ một khoản trong hệ thống: tiền cọc qua VNPay** (`Payments`). Phần còn lại khách trả **tiền mặt trực tiếp cho NCC, ngoài hệ thống, không ghi nhận**. Không có nhiều đợt, không có "ghi nhận thanh toán", không có "đã thu / còn phải thu".
-- **Hai giai đoạn.** Trước cọc: khách Thanh toán cọc, Yêu cầu chỉnh sửa; NCC Cập nhật đơn. Sau cọc (`Deposited`): khách không yêu cầu chỉnh sửa, không hủy; **NCC tự Chỉnh sửa hoặc Hủy đơn**. Không có `OrderRevisions` `AfterDeposit` trạng thái `Requested`.
+- **Hai giai đoạn.** Trước cọc: khách Thanh toán cọc, Yêu cầu chỉnh sửa; NCC Cập nhật đơn. Sau cọc (`Deposited`): khách **Yêu cầu chỉnh sửa** được (trước `eventDate`, `AfterDeposit` / `Requested`, đơn vẫn `Deposited`, tiền cọc giữ nguyên), không hủy; **NCC Chỉnh sửa** (áp dụng yêu cầu nếu có), **Từ chối yêu cầu**, hoặc **Hủy đơn**.
 - **NCC hủy đơn:** chỉ khi `Deposited` và hôm nay (giờ VN) **nhỏ hơn** `eventDate` (xem `POST …/cancel`). Đơn `Pending` không cọc thì tự `Expired`, không hủy được.
 - Đơn `Expired` và `Cancelled` bị khóa. Muốn tiếp tục: NCC tạo **đơn mới** (mã mới) bằng cách chép hạng mục và ghi chú (FE gọi `POST /vendors/me/orders`, không có endpoint riêng).
 - **Backend tính tiền**, không tin số tiền từ giao diện:
@@ -51,7 +58,8 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
   - **Tổng đơn quá nhỏ để đặt cọc:** nếu `depositAmount` (đã làm tròn, tối thiểu) **lớn hơn hoặc bằng** `totalAmount` thì không cho Gửi đơn (`400 VALIDATION_ERROR`, `details.deposit` = "Tổng đơn quá nhỏ để đặt cọc."). Lưu nháp vẫn được. Không kiểm khi Chỉnh sửa sau cọc (tiền cọc đã khóa).
   - `depositDueDate` = thời điểm gửi đơn + 1 ngày (24 giờ).
   - NCC chỉ nhập: hạng mục, `depositPercent`, `eventDate`, `note` (cùng tên và số điện thoại khách, điền sẵn từ tài khoản khách).
-- `depositPercent`: lớn hơn 0 và nhỏ hơn 100 (FE chỉ cho nhập số nguyên 1 đến 99).
+- `depositPercent`: **tối thiểu 10** và nhỏ hơn 100 khi Gửi đơn / Cập nhật đơn (`400 VALIDATION_ERROR`, `details.depositPercent` = "Tỷ lệ đặt cọc tối thiểu 10%."). Lưu nháp không chặn; Chỉnh sửa sau cọc giữ tỷ lệ đã chốt. FE chỉ cho nhập số nguyên 10 đến 99.
+- "Tạo lại đơn" (đơn `Expired`/`Cancelled`): FE chép **toàn bộ** thông tin đơn cũ (cả ngày thực hiện nếu chưa qua) sang đơn mới, mã mới, hạn cọc 24 giờ mới.
 - Đơn vị tính (`unit`): `Gói` (số lượng mặc định 1) hoặc `Bàn` (số lượng tùy chỉnh).
 - Mã đơn `orderCode` dạng `DH<yyMM><số 4 chữ số>` (ví dụ `DH26100001`), không đổi dù sửa nhiều lần.
 
@@ -202,10 +210,16 @@ Response 200: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR`, 400 `ORDER_NO_
 
 - Sửa được: hạng mục, `eventDate`, `note`. **Khóa** `depositPercent` và `depositAmount` (giá trị gửi lên bị bỏ qua); `customerName`, `customerPhone` giữ nguyên.
 - `totalAmount` mới phải lớn hơn hoặc bằng `depositAmount` đã cọc.
-- Ghi `OrderRevisions` loại `AfterDeposit` trạng thái **`Applied` luôn** (`requestNote` = `changeNote`, `oldTotalAmount` → `newTotalAmount`, `appliedDate`). Thêm một tin `Order` (thẻ cập nhật). Đơn **vẫn** `Deposited`.
+- Ghi `OrderRevisions` loại `AfterDeposit` trạng thái **`Applied` luôn** (`requestNote` = `changeNote`, `oldTotalAmount` → `newTotalAmount`, `appliedDate`). Khách đang có yêu cầu `AfterDeposit` / `Requested` thì yêu cầu đó cũng thành `Applied`. Thêm một tin `Order` (thẻ cập nhật). Đơn **vẫn** `Deposited`.
 - Tiền còn phải trả = `totalAmount` mới trừ `depositAmount` (ví dụ đơn 10 triệu, cọc 1 triệu, sửa lên 12 triệu thì còn 11 triệu).
 
 Response 200: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR`, 400 `ORDER_NO_CHANGES`, 400 `ORDER_TOTAL_BELOW_DEPOSIT`, 404, 409 `ORDER_NOT_EDITABLE` (không phải `Deposited`).
+
+### POST /vendors/me/orders/:id/revision-requests/reject
+
+**Từ chối yêu cầu chỉnh sửa của khách với đơn đã cọc.** Body `{ "note"?: string }` (lý do, chỉ vào tin hệ thống, không lưu cột). Yêu cầu `AfterDeposit` / `Requested` thành `Rejected`; đơn giữ nguyên; tin hệ thống "NCC đã từ chối yêu cầu chỉnh sửa đơn …"; báo khách (`OrderRevisionRejected`). Khách gửi được yêu cầu mới sau đó.
+
+Response 200: `{ "data": Order }`. Lỗi: 404, 409 `REVISION_NOT_FOUND` (không phải `Deposited` hoặc không có yêu cầu đang chờ).
 
 ### POST /vendors/me/orders/:id/cancel
 

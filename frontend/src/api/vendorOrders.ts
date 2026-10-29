@@ -43,6 +43,10 @@ export const vendorOrdersApi = {
   cancel: (orderId: string, body: { reason: CancelReason; note?: string }): Promise<Order> =>
     http.post(`/vendors/me/orders/${orderId}/cancel`, body),
 
+  /** Từ chối yêu cầu chỉnh sửa của khách với đơn đã cọc (đơn giữ nguyên). Dữ liệu giả không có yêu cầu sau cọc nên không hỗ trợ. */
+  rejectRevision: (orderId: string, note?: string): Promise<Order> =>
+    http.post(`/vendors/me/orders/${orderId}/revision-requests/reject`, { note }),
+
   /** Hoàn tất đơn (chỉ khi đã qua ngày sự kiện). */
   complete: (orderId: string): Promise<Order> =>
     http.post(`/vendors/me/orders/${orderId}/complete`),

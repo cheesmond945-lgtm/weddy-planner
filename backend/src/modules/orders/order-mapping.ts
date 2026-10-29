@@ -7,6 +7,7 @@
  * Không có phiên bản đơn, đợt thanh toán tùy chỉnh hay phương án điều chỉnh.
  */
 import type { Prisma } from '../../generated/prisma/client';
+import { categorySlug } from '../catalog/services.service';
 
 export const ORDER_INCLUDE = {
   order_items: { orderBy: { id: 'asc' as const } },
@@ -14,7 +15,7 @@ export const ORDER_INCLUDE = {
   order_revisions: { orderBy: { created_date: 'desc' as const }, include: { order_revision_changes: true } },
   invoices: { orderBy: { created_date: 'asc' as const } },
   weddings: { select: { user_id: true } },
-  vendor_profiles: { select: { id: true, user_id: true, business_name: true } },
+  vendor_profiles: { select: { id: true, user_id: true, business_name: true, service_categories: { select: { id: true, name: true } } } },
 } satisfies Prisma.ordersInclude;
 
 export type OrderRow = Prisma.ordersGetPayload<{ include: typeof ORDER_INCLUDE }>;
@@ -32,16 +33,21 @@ export const lateDaysOf = (due: Date | null, paidAt: Date | null) => {
 
 const REVISION_CHANGE_ORDER = ['Item', 'Quantity', 'EventDate', 'Other'];
 
-/** Đơn dịch vụ cho cả hai phía. `serviceId` và `vendorName` để phía khách mở trang dịch vụ và hiện tên NCC. */
+/**
+ * Đơn dịch vụ cho cả hai phía. `serviceId` và `vendorName` để phía khách mở trang dịch vụ và hiện tên NCC;
+ * `category` (lĩnh vực của NCC) để trang Kế hoạch của khách hiện đơn dưới đúng hạng mục.
+ */
 export function toOrderDto(o: OrderRow, conversationId: string) {
   const cancel = o as unknown as { cancel_reason?: string | null };
   const sent = o.status !== 'Draft';
+  const cat = o.vendor_profiles!.service_categories!;
   return {
     id: o.id,
     orderCode: o.order_code,
     conversationId,
     serviceId: o.vendor_profiles!.id,
     vendorName: o.vendor_profiles!.business_name!,
+    category: { id: cat.id, slug: categorySlug(cat.name), name: cat.name },
     status: o.status,
     customerName: o.customer_name,
     customerPhone: o.customer_phone,

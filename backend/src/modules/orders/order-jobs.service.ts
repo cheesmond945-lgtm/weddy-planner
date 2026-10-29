@@ -6,31 +6,44 @@ import { autoComplete, expirePending } from './order-lifecycle';
 /** Hai lần quét cùng một phạm vi cách nhau tối thiểu từng này giây (FE hỏi lại mỗi 2,5 đến 5 giây). */
 const MIN_GAP_MS = 15_000;
 const GLOBAL_EVERY_MS = 3_600_000;
+/** Đơn quá hạn cọc 24 giờ phải tự hủy (Expired) gần như ngay: quét riêng việc hết hạn mỗi phút (một câu SELECT nhẹ). */
+const EXPIRE_EVERY_MS = 60_000;
 
 /**
  * Việc theo thời gian của đơn hàng (docs/database.md mục 9.12): hết hạn cọc và tự hoàn thành.
  *
  * - sweep({ vendorId | coupleId }): quét RIÊNG đơn của người đang xem, gọi trước khi đọc danh sách/chi tiết/đếm đơn để đơn
  *   của chính họ hiện đúng trạng thái. Luôn bật. Không đụng đơn của người khác.
- * - Quét toàn hệ thống (mọi đơn) chỉ chạy khi đặt ORDER_JOBS_ENABLED=true: một lần lúc khởi động rồi mỗi giờ. Mặc định TẮT.
+ * - Quét toàn hệ thống (mọi đơn) chỉ chạy khi đặt ORDER_JOBS_ENABLED=true: hết hạn cọc mỗi phút; hết hạn + tự hoàn thành lúc
+ *   khởi động rồi mỗi giờ. Mặc định TẮT. Đơn hết hạn có tin hệ thống nên hai bên thấy ngay qua realtime.
  */
 @Injectable()
 export class OrderJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('OrderJobs');
-  private timer?: NodeJS.Timeout;
+  private readonly timers: NodeJS.Timeout[] = [];
   private readonly last = new Map<string, number>();
 
   constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
     if (process.env.ORDER_JOBS_ENABLED?.trim().toLowerCase() !== 'true') return;
-    this.log.log('ORDER_JOBS_ENABLED=true: quét toàn hệ thống lúc khởi động và mỗi giờ');
+    this.log.log('ORDER_JOBS_ENABLED=true: quét hết hạn cọc mỗi phút, quét toàn bộ lúc khởi động và mỗi giờ');
     void this.runAll();
-    this.timer = setInterval(() => void this.runAll(), GLOBAL_EVERY_MS);
+    this.timers.push(setInterval(() => void this.runAll(), GLOBAL_EVERY_MS));
+    this.timers.push(setInterval(() => void this.expireAll(), EXPIRE_EVERY_MS));
   }
 
   onModuleDestroy() {
-    if (this.timer) clearInterval(this.timer);
+    this.timers.forEach(clearInterval);
+  }
+
+  private async expireAll() {
+    try {
+      const n = await expirePending(this.prisma);
+      if (n) this.log.log(`${n} đơn hết hạn đặt cọc`);
+    } catch (e) {
+      this.log.error(`Quét hết hạn lỗi: ${(e as Error).message}`);
+    }
   }
 
   private async run(where: Prisma.ordersWhereInput) {

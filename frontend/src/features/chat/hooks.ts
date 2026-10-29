@@ -3,10 +3,11 @@ import { useEffect } from 'react'
 import { chatApi } from '@/api/chat'
 import { toast } from '@/components/ui/toast'
 import { planningKeys } from '@/features/weddings/hooks'
+import { useLivePoll } from '@/lib/realtime'
 import { useAuth } from '@/store/auth'
 import type { Message } from '@/types/chat'
 
-// Chưa có thư viện websocket trong danh sách được dùng: hỏi lại định kỳ khi đang mở khung chat (5 giây, như phía NCC)
+// Có realtime (lib/realtime.ts) thì dữ liệu được đẩy tới; mất kết nối thì hỏi lại định kỳ khi đang mở khung chat (5 giây, như phía NCC)
 const POLL_MS = 5000
 
 function useCoupleId() {
@@ -16,21 +17,23 @@ function useCoupleId() {
 
 export function useConversations(options?: { poll?: boolean }) {
   const uid = useCoupleId()
+  const poll = useLivePoll(POLL_MS)
   return useQuery({
     queryKey: planningKeys.conversations(uid),
     queryFn: chatApi.listConversations,
     enabled: !!uid,
-    refetchInterval: options?.poll ? POLL_MS : false,
+    refetchInterval: options?.poll ? poll : false,
   })
 }
 
 export function useMessages(conversationId: string) {
   const uid = useCoupleId()
+  const poll = useLivePoll(POLL_MS)
   return useQuery({
     queryKey: planningKeys.messages(uid, conversationId),
     queryFn: () => chatApi.listMessages(conversationId),
     enabled: !!uid && !!conversationId,
-    refetchInterval: POLL_MS,
+    refetchInterval: poll,
   })
 }
 
@@ -56,11 +59,12 @@ const UNREAD_POLL_MS = 30_000
 /** Tổng số tin NCC gửi mà khách chưa đọc (badge trên nút chat / mục Tin nhắn). */
 export function useUnreadMessages() {
   const uid = useCoupleId()
+  const poll = useLivePoll(UNREAD_POLL_MS)
   const { data } = useQuery({
     queryKey: planningKeys.conversations(uid),
     queryFn: chatApi.listConversations,
     enabled: !!uid,
-    refetchInterval: UNREAD_POLL_MS,
+    refetchInterval: poll,
   })
   return data?.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0) ?? 0
 }

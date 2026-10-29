@@ -2,6 +2,7 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
 import { WeddingsService } from '../weddings/weddings.service';
+import { publish } from '../realtime/realtime.bus';
 import { markNewMessageRead, notifyNewMessage, postMessage } from './chat-messages';
 import { ChatRole, isUuid, todayVn, toLastMessage, toMessage } from './chat.mappers';
 
@@ -84,8 +85,10 @@ export class ChatService {
   async markRead(user: ChatUser, id: string) {
     const conv = await this.owned(user, id);
     const counterpart = user.role === 'Couple' ? conv.vendor_id : conv.couple_id;
-    await this.prisma.messages.updateMany({ where: { conversation_id: id, sender_id: counterpart, is_read: false }, data: { is_read: true, read_date: new Date() } });
+    const r = await this.prisma.messages.updateMany({ where: { conversation_id: id, sender_id: counterpart, is_read: false }, data: { is_read: true, read_date: new Date() } });
     await markNewMessageRead(this.prisma, user.sub, id);
+    // Báo cả hai bên: các tab khác của người đọc giảm số chưa đọc, bên kia biết tin đã được xem
+    if (r.count) publish({ users: [conv.couple_id!, conv.vendor_id!], event: 'read', data: { conversationId: id } });
     return null;
   }
 
@@ -142,9 +145,17 @@ export class ChatService {
     });
   }
 
-  /** POST /conversations: mở (hoặc tạo) hội thoại với NCC của một dịch vụ, tự thêm dịch vụ vào kế hoạch. */
+  /**
+   * POST /conversations: mở (hoặc tạo) hội thoại với NCC của một dịch vụ, tự thêm dịch vụ vào kế hoạch.
+   * Hạng mục đã có NCC khác chờ cọc / đã chốt (PLAN_CATEGORY_LOCKED): vẫn mở hội thoại để khách tư vấn tự do,
+   * chỉ KHÔNG thêm NCC này vào kế hoạch (hội thoại trả planStatus = null). Nếu khách cọc đơn của NCC này thì
+   * NCC được thêm vào kế hoạch lúc cọc, hạng mục có hai NCC.
+   */
   async startForCouple(userId: string, serviceId: string, replace: boolean) {
-    await this.weddings.addPlanItem(userId, serviceId, replace, true);
+    await this.weddings.addPlanItem(userId, serviceId, replace, true).catch((e: unknown) => {
+      if (e instanceof HttpException && (e.getResponse() as { code?: string }).code === 'PLAN_CATEGORY_LOCKED') return null;
+      throw e;
+    });
     const vendor = await this.prisma.vendor_profiles.findUniqueOrThrow({ where: { id: serviceId }, include: { service_categories: { select: { name: true } } } });
     let conv = await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: userId, vendor_id: vendor.user_id! } } });
     if (!conv) {
@@ -175,7 +186,7 @@ export class ChatService {
       this.prisma.weddings.findMany({ where: { user_id: { in: coupleIds } }, select: { user_id: true, groom_name: true, bride_name: true } }),
       this.prisma.orders.findMany({
         where: { vendor_id: vendor.id, weddings: { user_id: { in: coupleIds } } },
-        select: { id: true, order_code: true, status: true, event_date: true, weddings: { select: { user_id: true } } },
+        select: { id: true, order_code: true, status: true, event_date: true, weddings: { select: { user_id: true } }, order_revisions: { where: { status: 'Requested' }, select: { id: true } } },
         orderBy: { created_date: 'desc' },
       }),
       this.unreadByConversation(convs, 'Vendor'),
@@ -197,8 +208,13 @@ export class ChatService {
         lastMessage: last ? toLastMessage(last, c.couple_id) : null,
         latestOrder: latestSent ? { id: latestSent.id, orderCode: latestSent.order_code, status: latestSent.status } : null,
         hasDraftOrder: mine.some((o) => o.status === 'Draft'),
-        // Cần NCC xử lý: có đơn nháp, đơn cần chỉnh sửa, hoặc đơn đã cọc đã qua ngày thực hiện (chờ đánh dấu hoàn thành)
-        needsAction: mine.some((o) => o.status === 'Draft' || o.status === 'NeedRevision' || (o.status === 'Deposited' && o.event_date && o.event_date.toISOString().slice(0, 10) < today)),
+        // Cần NCC xử lý: có đơn nháp, đơn cần chỉnh sửa, đơn đã cọc có yêu cầu chỉnh sửa của khách, hoặc đơn đã cọc đã qua ngày thực hiện (chờ đánh dấu hoàn thành)
+        needsAction: mine.some(
+          (o) =>
+            o.status === 'Draft' ||
+            o.status === 'NeedRevision' ||
+            (o.status === 'Deposited' && (o.order_revisions.length > 0 || (!!o.event_date && o.event_date.toISOString().slice(0, 10) < today))),
+        ),
         orderCodes: mine.map((o) => o.order_code),
       };
     });
