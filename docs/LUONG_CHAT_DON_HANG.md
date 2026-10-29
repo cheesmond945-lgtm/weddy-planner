@@ -31,6 +31,7 @@
 7. Trước khi commit chạy: `cd backend && npx tsc --noEmit -p tsconfig.json` và `cd frontend && npm run build`. Cả hai phải sạch lỗi.
 8. Cách chạy dự án, tài khoản mẫu và mật khẩu: xem [HUONG_DAN_CHAY.md](../HUONG_DAN_CHAY.md). **Không chép mật khẩu vào tài liệu.**
 9. Đọc trước khi sửa phần NCC: [CHOT_NGHIEP_VU_NCC.md](CHOT_NGHIEP_VU_NCC.md). Khi mâu thuẫn, ưu tiên: `database.md` > `CHOT_NGHIEP_VU_NCC.md` và `api/THE_DON_HANG.md` > các `api/*.md` cũ.
+10. **KHÔNG dùng `replace: true` (`POST /conversations`, `POST /weddings/me/plan-items`) hay bất kỳ thao tác nào gọi `purge`** (`weddings.service.ts`: `addPlanItem` khi thay NCC cùng hạng mục, `removePlanItem`) **để dọn dữ liệu sau khi test.** `purge` xóa cứng toàn bộ hội thoại và mọi tin nhắn của NCC bị thay, cùng các đơn chưa cọc (Nháp, Chờ cọc, Cần sửa) và thanh toán của chúng; dữ liệu mất không khôi phục được. Muốn thử luồng đơn: dùng NCC chưa có trong kế hoạch của khách thử, hoặc tạo khách mới bằng luồng đăng ký, và chấp nhận để lại đơn đã hủy / hết hạn thay vì xóa.
 
 ## CẬP NHẬT 28/10/2026 (nhánh `feat/order-flow-realtime`)
 

@@ -30,7 +30,7 @@ Chỉ khi đơn `Pending` và chưa quá hạn cọc. Thành công (một giao d
 
 Response 200: `{ "data": { "paymentId": "…", "paymentUrl": "/plan/deal/{orderId}?vnp_ResponseCode=00" } }`. FE chuyển tới `paymentUrl` rồi đọc lại `GET /orders/:id`: trạng thái `Deposited` mới là bằng chứng đã cọc (FE **không** coi `vnp_ResponseCode` trên URL là bằng chứng).
 
-Lỗi: 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_PAYABLE` (đơn không phải `Pending`: đang chờ NCC sửa, đã cọc, hết hạn, hủy), 501 `PAYMENT_NOT_CONFIGURED`.
+Lỗi: 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_PAYABLE` (đơn không phải `Pending`: đang chờ NCC sửa, đã cọc, hết hạn, hủy), 409 `CATEGORY_ALREADY_DEPOSITED` (hạng mục đã có đơn `Deposited` khác của đám cưới này: chặn trước khi chuyển tiền; NCC của đơn kia phải hủy trước), 501 `PAYMENT_NOT_CONFIGURED`.
 
 ## Khi làm VNPay thật (chưa làm)
 
