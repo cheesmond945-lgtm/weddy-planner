@@ -62,8 +62,21 @@ export function useTimelineMutations() {
     add: useMutation({ mutationFn: weddingsApi.addTask, onSuccess }),
     update: useMutation({
       mutationFn: ({ id, patch }: { id: string; patch: TimelineItemPatch }) => weddingsApi.updateTimelineItem(id, patch),
+      // Tick / bỏ tick hiện ngay trên giao diện, lỗi thì trả về như cũ
+      onMutate: async ({ id, patch }) => {
+        const key = planningKeys.timeline(uid)
+        await qc.cancelQueries({ queryKey: key })
+        const previous = qc.getQueryData<Timeline>(key)
+        if (previous && patch.isDone !== undefined) {
+          qc.setQueryData<Timeline>(key, { ...previous, items: previous.items.map((i) => (i.id === id ? { ...i, isDone: patch.isDone! } : i)) })
+        }
+        return { previous }
+      },
+      onError: (e, _vars, context) => {
+        if (context?.previous) qc.setQueryData(planningKeys.timeline(uid), context.previous)
+        toast(e.message)
+      },
       onSuccess,
-      onError: (e) => toast(e.message),
     }),
     remove: useMutation({ mutationFn: weddingsApi.deleteTask, onSuccess }),
   }

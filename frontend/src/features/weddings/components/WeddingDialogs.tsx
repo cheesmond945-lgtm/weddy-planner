@@ -1,12 +1,18 @@
-import { useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router'
+import { catalogApi } from '@/api/catalog'
+import { weddingsApi } from '@/api/weddings'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { compareStore } from '@/features/compare/store'
+import { formatDate } from '@/lib/date'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
+import type { DateChangePreview, WeddingInput } from '@/types/wedding'
 import { useSaveWedding, useWedding } from '../hooks'
+import { usePlanActions } from '../planActions'
+import { DateChangePreviewDialog } from './DateChangePreviewDialog'
 import { WeddingForm } from './WeddingForm'
 
 // ---- Hộp thiết lập lần đầu (mở sau khi đăng nhập mà chưa có thông tin đám cưới) ----
@@ -94,28 +100,51 @@ export function WeddingSetupDialog() {
 export function WeddingEditDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { data: wedding } = useWedding()
   const save = useSaveWedding()
+  const { openChat } = usePlanActions()
+  // Đổi ngày cưới: xem trước (hạn cũ → mới) rồi xác nhận mới lưu; đổi thông tin khác thì lưu thẳng
+  const [pending, setPending] = useState<{ input: WeddingInput; preview: DateChangePreview } | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState<string | null>(null)
+
+  const finish = () => {
+    setPending(null)
+    onOpenChange(false)
+    toast('Đã lưu thay đổi')
+  }
+  const submit = (input: WeddingInput) => {
+    if (!wedding || input.date === wedding.date) return save.mutate(input, { onSuccess: finish })
+    setChecking(true)
+    setCheckError(null)
+    weddingsApi
+      .previewDateChange(input.date)
+      .then((preview) => setPending({ input, preview }))
+      .catch((e: Error) => setCheckError(e.message))
+      .finally(() => setChecking(false))
+  }
+  const messageVendor = (serviceId: string, orderCode: string, eventDate: string) => {
+    const newDate = pending?.input.date
+    setPending(null)
+    onOpenChange(false)
+    catalogApi.getService(serviceId).then(
+      (service) => openChat(service, { draft: `Chào shop, mình vừa đổi ngày cưới${newDate ? ` sang ${formatDate(newDate)}` : ''}. Mình muốn cập nhật ngày thực hiện đơn ${orderCode} (hiện là ${formatDate(eventDate)}), bên mình trao đổi được không ạ?` }),
+      () => toast('Không mở được khung chat với nhà cung cấp'),
+    )
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[780px]">
         <DialogHeader>
           <DialogTitle>Chỉnh sửa thông tin đám cưới</DialogTitle>
-          <DialogDescription>Khi đổi ngày tổ chức, các mốc trong timeline tự tính lại theo tỷ lệ thời gian.</DialogDescription>
+          <DialogDescription>Khi đổi ngày tổ chức, bạn sẽ được xem trước hạn mới của các việc chưa xong rồi mới xác nhận.</DialogDescription>
         </DialogHeader>
         {open && wedding && (
           <WeddingForm
             initial={wedding}
             submitLabel="Lưu thay đổi"
-            pending={save.isPending}
-            error={save.error?.message}
-            onSubmit={(input) =>
-              save.mutate(input, {
-                onSuccess: () => {
-                  onOpenChange(false)
-                  toast('Đã lưu thay đổi')
-                },
-              })
-            }
+            pending={save.isPending || checking}
+            error={checkError ?? save.error?.message}
+            onSubmit={submit}
             secondaryAction={
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Hủy
@@ -123,6 +152,15 @@ export function WeddingEditDialog({ open, onOpenChange }: { open: boolean; onOpe
             }
           />
         )}
+        <DateChangePreviewDialog
+          newDate={pending?.input.date ?? null}
+          preview={pending?.preview ?? null}
+          pending={save.isPending}
+          error={save.error?.message}
+          onCancel={() => setPending(null)}
+          onConfirm={() => pending && save.mutate(pending.input, { onSuccess: finish })}
+          onMessageVendor={messageVendor}
+        />
       </DialogContent>
     </Dialog>
   )

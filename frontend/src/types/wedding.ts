@@ -26,13 +26,15 @@ export type WeddingInput = Omit<Wedding, 'id'>
 export type TimelineItemKind =
   /** Việc chung: mặc định hoặc do cặp đôi thêm */
   | 'TASK'
+  /** Việc khung "Chọn NCC" (lọc, hỏi giá, đi xem, thử để đánh giá): có nút "Gợi ý {dịch vụ}" */
+  | 'CHOOSE'
   /** Mốc "Chốt <hạng mục>", xong khi đã đặt cọc dịch vụ của hạng mục */
   | 'CATEGORY_DEADLINE'
   /** Ngày thực hiện dịch vụ khác ngày cưới (chỉ để xem) */
   | 'SERVICE_DATE'
   /** Việc chi tiết của dịch vụ đã đặt cọc */
   | 'SERVICE_TASK'
-  /** Chỗ giữ: việc chi tiết của hạng mục chưa đặt cọc */
+  /** Khối khóa "Việc chi tiết của <hạng mục>" khi chưa đặt cọc; không có hạn */
   | 'LOCKED'
 
 export interface TimelineItem {
@@ -49,12 +51,43 @@ export interface TimelineItem {
   serviceName: string | null
   /** Với CATEGORY_DEADLINE: trạng thái dịch vụ trong kế hoạch của hạng mục */
   planStatus: PlanItemStatus | null
-  /** Với CATEGORY_DEADLINE: id dịch vụ trong kế hoạch (để mở tin nhắn) */
+  /** SERVICE_TASK: dịch vụ của đơn (để Hẹn với NCC). CHOOSE / CATEGORY_DEADLINE: dịch vụ trong kế hoạch của hạng mục (để nhắn tin) */
   serviceId: string | null
+  /** Cờ "Cần làm gấp" (lịch bị ép vì thời gian chuẩn bị ngắn) */
+  urgent: boolean
+  /** Ngày chỉ là tạm tính (việc theo lịch chụp album chưa chốt) */
+  tentative: boolean
+  /** Việc chi tiết cần gặp NCC: có nút "Hẹn với NCC" */
+  needsMeeting: boolean
+  /** Ngày hẹn với NCC "YYYY-MM-DD" (khác Hạn); null khi chưa hẹn */
+  appointmentDate: string | null
+  /** SERVICE_TASK: mã đơn đang giữ việc */
+  orderCode: string | null
+  /** CATEGORY_DEADLINE chưa chốt: số việc chi tiết sẽ mở sau khi đặt cọc */
+  detailCount: number
+  /** CATEGORY_DEADLINE đang Todo: đơn đã cọc rồi bị hủy gần nhất cùng hạng mục; mất khi cọc đơn mới */
+  cancelledOrder: { orderCode: string; vendorName: string; date: string } | null
+  /** Có nút "Gợi ý {dịch vụ} →": việc Chọn NCC đầu tiên của dịch vụ, hoặc Mốc chốt đang Todo có đơn đã hủy */
+  suggest: boolean
 }
+
+/** Mức độ gấp theo số ngày còn lại tới ngày cưới */
+export type PrepLevel = 'FAR' | 'NORMAL' | 'SOON' | 'VERY_SOON'
 
 export interface Timeline {
   items: TimelineItem[]
+  level: PrepLevel | null
+  daysLeft: number | null
+}
+
+export interface DateChangePreview {
+  /** Số việc chưa xong sẽ đổi hạn */
+  count: number
+  changes: { id: string; title: string; oldDate: string; newDate: string }[]
+  /** Đơn đã cọc có ngày thực hiện khác ngày cưới mới */
+  warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string }[]
+  level: PrepLevel
+  daysLeft: number
 }
 
 export interface TimelineItemPatch {

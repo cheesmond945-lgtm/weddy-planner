@@ -119,9 +119,9 @@ export function usePlanActions() {
      * Chưa đăng nhập: đăng nhập xong quay lại trang với ?chat=<id> để tự mở lại khung chat (ChatPanelResume).
      * VITE_CHAT_MODE=zalo: mở Zalo của NCC thay vì chat trong WebPlan (xem features/chat/chatPanel.ts).
      */
-    openChat: (service: ServiceSummary & Partial<Pick<ServiceDetail, 'workingHours' | 'contactPhone'>>) => {
+    openChat: (service: ServiceSummary & Partial<Pick<ServiceDetail, 'workingHours' | 'contactPhone'>>, opts?: { draft?: string }) => {
       if (CHAT_MODE === 'zalo' && service.contactPhone) {
-        openZalo(service.contactPhone, `Chào ${service.name}, mình xem dịch vụ trên WebPlan và muốn được tư vấn thêm.`)
+        openZalo(service.contactPhone, opts?.draft ?? `Chào ${service.name}, mình xem dịch vụ trên WebPlan và muốn được tư vấn thêm.`)
         return
       }
       return requireCouple(
@@ -139,7 +139,7 @@ export function usePlanActions() {
             void refresh()
             chatPanel.open({
               conversation: conv,
-              draft: packageName ? `Mình muốn hỏi giá chốt cho gói ${packageName} ạ.` : '',
+              draft: opts?.draft ?? (packageName ? `Mình muốn hỏi giá chốt cho gói ${packageName} ạ.` : ''),
               packageName,
               workingHours: service.workingHours,
             })

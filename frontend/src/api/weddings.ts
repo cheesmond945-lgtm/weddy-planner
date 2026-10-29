@@ -1,4 +1,4 @@
-import type { AiSuggestionResult, PlanItem, Timeline, TimelineItemPatch, Wedding, WeddingInput } from '@/types/wedding'
+import type { AiSuggestionResult, DateChangePreview, PlanItem, Timeline, TimelineItemPatch, Wedding, WeddingInput } from '@/types/wedding'
 import { http } from './client'
 
 /** Hợp đồng: docs/api/weddings.md */
@@ -9,6 +9,9 @@ export const weddingsApi = {
 
   // Timeline (4.2, 4.4)
   getTimeline: (): Promise<Timeline> => (http.get('/weddings/me/timeline')),
+  /** Xem trước khi đổi ngày cưới: việc đổi hạn (cũ → mới) và cảnh báo đơn lệch ngày. Không ghi gì. */
+  previewDateChange: (weddingDate: string): Promise<DateChangePreview> =>
+    http.post('/weddings/me/timeline/regenerate-preview', { weddingDate }),
   addTask: (body: { title: string; dueDate: string }): Promise<Timeline> =>
     http.post('/weddings/me/timeline/tasks', body),
   updateTimelineItem: (id: string, body: TimelineItemPatch): Promise<Timeline> =>
