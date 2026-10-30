@@ -61,8 +61,14 @@ export interface TimelineItem {
   needsMeeting: boolean
   /** Ngày hẹn với NCC "YYYY-MM-DD" (khác Hạn); null khi chưa hẹn */
   appointmentDate: string | null
+  /** SERVICE_TASK: ai làm việc này. Khách chỉ tick được CUSTOMER và BOTH; VENDOR do NCC cập nhật */
+  owner?: 'CUSTOMER' | 'VENDOR' | 'BOTH' | null
   /** SERVICE_TASK: mã đơn đang giữ việc */
   orderCode: string | null
+  /** SERVICE_TASK: ngày thực hiện của đơn đang giữ việc */
+  orderEventDate?: string | null
+  /** SERVICE_TASK: ngày thực hiện của đơn sau ngày cưới (đơn cũ hoặc khách đã đổi ngày cưới) */
+  dateConflict?: boolean
   /** CATEGORY_DEADLINE chưa chốt: số việc chi tiết sẽ mở sau khi đặt cọc */
   detailCount: number
   /** CATEGORY_DEADLINE đang Todo: đơn đã cọc rồi bị hủy gần nhất cùng hạng mục; mất khi cọc đơn mới */
@@ -84,8 +90,8 @@ export interface DateChangePreview {
   /** Số việc chưa xong sẽ đổi hạn */
   count: number
   changes: { id: string; title: string; oldDate: string; newDate: string }[]
-  /** Đơn đã cọc có ngày thực hiện khác ngày cưới mới */
-  warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string }[]
+  /** Đơn có ngày thực hiện lệch ngày cưới mới: đã cọc khác ngày, hoặc sau ngày cưới mới. blocksDeposit: đơn chưa cọc, khách chưa cọc được cho tới khi NCC đổi ngày */
+  warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string; kind?: 'DIFFERENT' | 'AFTER_WEDDING'; blocksDeposit?: boolean }[]
   level: PrepLevel
   daysLeft: number
 }

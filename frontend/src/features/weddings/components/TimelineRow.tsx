@@ -2,10 +2,11 @@ import { Ban, CalendarDays, Check, Lock, Pencil, RotateCcw, Sparkles, Trash2 } f
 import type { KeyboardEvent } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { parseDate, today } from '@/lib/date'
+import { daysBetween, parseDate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { TimelineItem } from '@/types/wedding'
+import { DUE_SOON_DAYS } from '../timelineFilter'
 
 /** Tên hạng mục dùng trong chữ ("Gợi ý nhà hàng", "Việc chi tiết của nhà hàng"); danh mục lạ thì dùng tên từ API. */
 export const SERVICE_LABEL: Record<string, string> = {
@@ -67,9 +68,13 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
   const due = parseDate(item.dueDate!)
   const done = item.isDone
   const overdue = !done && due < today()
+  // Sắp đến hạn: còn 0 đến 2 ngày (cùng ngưỡng với thông báo của backend)
+  const dueSoon = !done && !overdue && daysBetween(today(), due) <= DUE_SOON_DAYS
   // Mốc "Chốt" tự xong khi đặt cọc: không tick tay
   const autoDone = item.kind === 'CATEGORY_DEADLINE'
-  const canComplete = !done && !autoDone
+  // Việc do NCC thực hiện (VENDOR): khách chỉ xem, NCC cập nhật ở "Tiến độ đơn"
+  const vendorOwned = item.kind === 'SERVICE_TASK' && item.owner === 'VENDOR'
+  const canComplete = !done && !autoDone && !vendorOwned
   // Nút "Gợi ý {dịch vụ}" theo cờ `suggest` của backend (việc Chọn NCC đầu tiên của dịch vụ; Mốc chốt Todo có đơn đã hủy). Việc đã tick xong vẫn giữ nút.
   const suggests = item.suggest && !!item.category
   const label = serviceLabel(item)
@@ -109,8 +114,13 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
           <span className={cn(overdue && 'text-warn')}>Hạn: {compactDate ? dm(item.dueDate!) : dmy(item.dueDate!)}</span>
           {showService && item.kind === 'SERVICE_TASK' && <span>· {capitalize(serviceLabel(item))}</span>}
           {!done && item.appointmentDate && <span>· Đã hẹn {dm(item.appointmentDate)}</span>}
+          {dueSoon && <span className="font-semibold text-gold-ink">· Sắp đến hạn</span>}
+          {overdue && !vendorOwned && <span className="font-semibold text-warn">· Quá hạn</span>}
           {!done && item.urgent && <span className="font-semibold text-warn">· Gấp</span>}
           {!done && item.tentative && <span>· Tạm tính</span>}
+          {vendorOwned && !done && <span className={cn(overdue && 'font-semibold text-warn')}>· {overdue ? 'NCC chưa cập nhật' : 'NCC thực hiện'}</span>}
+          {vendorOwned && done && <span>· NCC đã cập nhật</span>}
+          {item.kind === 'SERVICE_TASK' && item.owner === 'BOTH' && !done && <span>· Hai bên</span>}
         </div>
         {autoDone && done && (
           <div className="mt-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-sage">
@@ -158,7 +168,7 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
             </Button>
           </span>
         )}
-        {done && !autoDone && (
+        {done && !autoDone && !vendorOwned && (
           <Button variant="outline" size="icon" className="size-8" aria-label={`Đưa về Chưa xong: ${item.title}`} title="Đưa về Chưa xong" onClick={() => onReopen(item)}>
             <RotateCcw className="size-3.5" />
           </Button>

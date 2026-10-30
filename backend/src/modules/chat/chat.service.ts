@@ -183,7 +183,7 @@ export class ChatService {
     const coupleIds = convs.flatMap((c) => (c.couple_id ? [c.couple_id] : []));
     const [couples, weddings, orders, unread] = await Promise.all([
       this.prisma.users.findMany({ where: { id: { in: coupleIds } }, select: { id: true, full_name: true, phone_number: true } }),
-      this.prisma.weddings.findMany({ where: { user_id: { in: coupleIds } }, select: { user_id: true, groom_name: true, bride_name: true } }),
+      this.prisma.weddings.findMany({ where: { user_id: { in: coupleIds } }, select: { user_id: true, groom_name: true, bride_name: true, wedding_date: true } }),
       this.prisma.orders.findMany({
         where: { vendor_id: vendor.id, weddings: { user_id: { in: coupleIds } } },
         select: { id: true, order_code: true, status: true, event_date: true, weddings: { select: { user_id: true } }, order_revisions: { where: { status: 'Requested' }, select: { id: true } } },
@@ -203,7 +203,7 @@ export class ChatService {
       const last = c.messages[0];
       return {
         id: c.id,
-        customer: { name: w && w.bride_name && !w.bride_name.startsWith('(') ? `${w.groom_name} & ${w.bride_name}` : (w?.groom_name ?? u?.full_name ?? ''), phone: u?.phone_number ?? '' },
+        customer: { name: w && w.bride_name && !w.bride_name.startsWith('(') ? `${w.groom_name} & ${w.bride_name}` : (w?.groom_name ?? u?.full_name ?? ''), phone: u?.phone_number ?? '', weddingDate: w?.wedding_date ? w.wedding_date.toISOString().slice(0, 10) : null },
         unreadCount: unread.get(c.id) ?? 0,
         lastMessage: last ? toLastMessage(last, c.couple_id) : null,
         latestOrder: latestSent ? { id: latestSent.id, orderCode: latestSent.order_code, status: latestSent.status } : null,

@@ -9,6 +9,7 @@ import { usePackages } from '@/features/vendorPackages/hooks'
 import { controlClass, Field } from '@/features/vendors/components/FormParts'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { UnsavedChangesGuard } from '@/features/vendors/components/UnsavedChangesGuard'
+import { todayVN } from '@/lib/clock'
 import { formatDate } from '@/lib/date'
 import { DEPOSIT_MIN, DEPOSIT_PERCENT_MIN, DEPOSIT_ROUNDING, depositOf } from '@/lib/deposit'
 import { formatMoney } from '@/lib/format'
@@ -17,6 +18,7 @@ import type { VendorConversation } from '@/types/vendorConversation'
 import type { Order } from '@/types/vendorOrder'
 import { emptyValues, formatDay, filledItems, sameValues, toContent, totalOf, valuesFromOrder, valuesOfOrder, type OrderFormValues } from '../calc'
 import { CHANGE_LABEL } from '../constants'
+import { eventDateAdvice } from '../eventDate'
 import { useSaveOrder, type SaveOrderInput } from '../hooks'
 import { validateDraft, validateOrder, type OrderErrors } from '../validation'
 import { OrderItemsEditor, type QuickFillPackage } from './OrderItemsEditor'
@@ -180,6 +182,9 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   // Sửa sau cọc: nội dung thay đổi, khách sẽ thấy (lưu vào OrderRevisions AfterDeposit)
   const [changeNote, setChangeNote] = useState('')
 
+  // Ngày cưới của khách: ngày thực hiện không được sau ngày này (backend kiểm lại, 422 EVENT_DATE_AFTER_WEDDING)
+  const weddingDate = customer.weddingDate ?? (order ?? (mode.kind === 'again' ? mode.from : null))?.weddingDate ?? null
+  const categorySlug = (order ?? (mode.kind === 'again' ? mode.from : null))?.category?.slug ?? packages?.[0]?.category?.slug ?? null
   const busy = save.isPending
   const dirty = !sameValues(values, initial)
   const items = filledItems(values.items)
@@ -191,7 +196,10 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
     changeNote: locked ? changeNote : undefined,
     originalEventDate: mode.kind === 'resend' || mode.kind === 'edit' ? mode.order.eventDate : undefined,
     deposit: !locked,
+    weddingDate,
+    afterDeposit: locked,
   }
+  const advice = eventDateAdvice({ eventDate: values.eventDate, weddingDate, today: todayVN(), categorySlug })
   const errors: OrderErrors = checked
     ? validateOrder(values, rules)
     : needDate
@@ -218,7 +226,8 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
           setFormError('Khách chưa điền thông tin đám cưới nên chưa tạo đơn được.')
         } else {
           const first = e instanceof ApiError && e.details && typeof e.details === 'object' ? Object.values(e.details as Record<string, unknown>).find((v) => typeof v === 'string') : undefined
-          setFormError(e.message ? `${e.message}${first ? ` ${first}` : ''}` : 'Không lưu được đơn. Dữ liệu vẫn được giữ, vui lòng thử lại.')
+          // Chi tiết trùng nội dung thông báo (vd. ngày thực hiện sau ngày cưới) thì không in hai lần
+          setFormError(e.message ? `${e.message}${first && first !== e.message ? ` ${first}` : ''}` : 'Không lưu được đơn. Dữ liệu vẫn được giữ, vui lòng thử lại.')
         }
       },
     })
@@ -397,10 +406,26 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                   onChange={(e) => set({ customerPhone: e.target.value })}
                 />
               </Field>
-              <Field label="Ngày diễn ra sự kiện *" error={errors.eventDate}>
+              <Field
+                label="Ngày diễn ra sự kiện *"
+                error={errors.eventDate}
+                hint={
+                  weddingDate || advice.length ? (
+                    <>
+                      {weddingDate && <span className="block">Ngày cưới của khách: {formatDate(weddingDate)}</span>}
+                      {advice.map((a) => (
+                        <span key={a} className="mt-1 block text-gold-ink">
+                          {a}
+                        </span>
+                      ))}
+                    </>
+                  ) : undefined
+                }
+              >
                 <Input
                   className={controlClass}
                   type="date"
+                  max={weddingDate && !locked ? weddingDate : undefined}
                   aria-invalid={errors.eventDate ? true : undefined}
                   value={values.eventDate}
                   onChange={(e) => set({ eventDate: e.target.value })}

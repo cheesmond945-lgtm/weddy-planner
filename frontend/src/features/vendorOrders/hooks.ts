@@ -170,3 +170,45 @@ export function useIssueFinalInvoice() {
     onError: (e) => toast(e.message),
   })
 }
+
+/** "Tiến độ đơn" của một đơn đã cọc (việc chi tiết gắn với đơn). */
+export function useOrderTasks(orderId: string | null, enabled = true) {
+  const uid = useVendorId()
+  return useQuery({
+    queryKey: vendorKeys.orderTasks(uid, orderId ?? ''),
+    queryFn: () => vendorOrdersApi.tasks(orderId!),
+    enabled: !!uid && !!orderId && enabled,
+  })
+}
+
+/** NCC tick / bỏ tick việc của mình; khách thấy ngay vì dùng chung bảng việc. */
+export function useSetOrderTask(orderId: string) {
+  const uid = useVendorId()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { taskId: string; isDone: boolean }) => vendorOrdersApi.setTaskDone(orderId, v.taskId, v.isDone),
+    onSuccess: (data) => {
+      qc.setQueryData(vendorKeys.orderTasks(uid, orderId), data)
+      void qc.invalidateQueries({ queryKey: vendorKeys.orderProgress(uid) })
+      void qc.invalidateQueries({ queryKey: vendorKeys.calendar(uid) })
+    },
+    onError: (e: unknown) => toast(e instanceof Error ? e.message : 'Không cập nhật được việc.'),
+  })
+}
+
+/** Tiến độ tóm tắt của mọi đơn đang thực hiện ({ [orderId]: OrderProgress }), để hiện nhãn "Trễ tiến độ". */
+export function useOrderProgress() {
+  const uid = useVendorId()
+  return useQuery({ queryKey: vendorKeys.orderProgress(uid), queryFn: vendorOrdersApi.progress, enabled: !!uid, staleTime: 60_000 })
+}
+
+/** Lịch làm việc trong khoảng ngày của lưới tháng đang xem. */
+export function useVendorCalendar(from: string, to: string) {
+  const uid = useVendorId()
+  return useQuery({
+    queryKey: vendorKeys.calendar(uid, from, to),
+    queryFn: () => vendorOrdersApi.calendar(from, to),
+    enabled: !!uid,
+    placeholderData: keepPreviousData,
+  })
+}

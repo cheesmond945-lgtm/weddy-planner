@@ -48,6 +48,35 @@ export const addDaysYmd = (s: string, n: number) => new Date(Date.parse(`${s}T00
 export const startOfDayVn = (s: string) => new Date(`${s}T00:00:00+07:00`);
 export const endOfDayVn = (s: string) => new Date(`${s}T23:59:00+07:00`);
 const validYmd = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+/** "YYYY-MM-DD" -> "dd/mm/yyyy" để đưa vào thông báo. */
+export const dmy = (s: string) => s.split('-').reverse().join('/');
+
+// ---------- Ngày thực hiện so với ngày cưới (docs/TIMELINE.md mục 7) ----------
+
+/** Ngày thực hiện sau ngày cưới của khách (không có ngày cưới thì không xét). So sánh chuỗi "YYYY-MM-DD" đúng thứ tự thời gian. */
+export const eventAfterWedding = (eventDate: string, weddingDate: string | null | undefined) => !!weddingDate && eventDate > weddingDate;
+
+/**
+ * Lỗi ngày thực hiện / ngày cưới khi NCC gửi hoặc sửa đơn; null nếu hợp lệ. Hàm thuần, parseContent ném lỗi theo kết quả.
+ * - send: ngày cưới của khách phải còn ở phía sau (WEDDING_DATE_PASSED, 409); ngày thực hiện không sau ngày cưới
+ *   (EVENT_DATE_AFTER_WEDDING, 422), kể cả khi cập nhật đơn Pending / NeedRevision: khách chưa cọc nên NCC phải sửa.
+ * - edit (sau cọc): chỉ kiểm ngày thực hiện, và giữ nguyên ngày đang có thì qua, để đơn cũ lệch ngày vẫn sửa được ghi chú, hạng mục.
+ * - draft: không kiểm (nháp chưa tới tay khách).
+ */
+export function weddingDateIssue(
+  eventDate: string,
+  weddingDate: string | null | undefined,
+  opts: { mode: ParseMode; currentEventDate?: string; today?: string },
+): { code: string; message: string; status: number } | null {
+  if (!weddingDate || opts.mode === 'draft') return null;
+  if (opts.mode === 'send' && weddingDate <= (opts.today ?? todayVn())) {
+    return { code: 'WEDDING_DATE_PASSED', message: `Ngày cưới của khách (${dmy(weddingDate)}) đã qua hoặc là hôm nay. Nhắn khách cập nhật ngày cưới trước khi gửi đơn.`, status: 409 };
+  }
+  if (eventAfterWedding(eventDate, weddingDate) && !(opts.mode === 'edit' && eventDate === opts.currentEventDate)) {
+    return { code: 'EVENT_DATE_AFTER_WEDDING', message: `Ngày thực hiện (${dmy(eventDate)}) không được sau ngày cưới của khách (${dmy(weddingDate)}).`, status: 422 };
+  }
+  return null;
+}
 
 // ---------- Tiền cọc ----------
 
@@ -127,9 +156,9 @@ export type ParseMode = 'draft' | 'send' | 'edit';
  * Kiểm tra và chuẩn hóa nội dung đơn. Lỗi trường: 400 VALIDATION_ERROR kèm `details` theo trường
  * (customerName, customerPhone, eventDate, depositPercent, items, items.<i>.itemName|quantity|unitPrice|unit, deposit).
  * Ngày thực hiện trước hôm nay (giờ VN): 422 EVENT_DATE_IN_PAST, trừ khi giữ nguyên ngày hiện có của đơn (currentEventDate)
- * hoặc đang lưu nháp.
+ * hoặc đang lưu nháp. Có `weddingDate`: thêm 409 WEDDING_DATE_PASSED và 422 EVENT_DATE_AFTER_WEDDING (xem weddingDateIssue).
  */
-export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEventDate?: string } = {}): ParsedContent {
+export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEventDate?: string; weddingDate?: string | null } = {}): ParsedContent {
   const strict = mode !== 'draft';
   const errors: Record<string, string> = {};
 
@@ -181,6 +210,8 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
   if (strict && eventDate < todayVn() && eventDate !== opts.currentEventDate) {
     fail('EVENT_DATE_IN_PAST', 'Ngày thực hiện phải từ hôm nay trở đi.', 422, { eventDate: 'Ngày thực hiện phải từ hôm nay trở đi.' });
   }
+  const wd = weddingDateIssue(eventDate, opts.weddingDate, { mode, currentEventDate: opts.currentEventDate });
+  if (wd) fail(wd.code, wd.message, wd.status, { eventDate: wd.message, weddingDate: opts.weddingDate });
 
   return { customerName, customerPhone, eventDate, note: c.note?.trim() || null, depositPercent: percent, items, total };
 }

@@ -71,6 +71,8 @@ export async function completeOrder(prisma: PrismaService, orderId: string, comp
     const r = await tx.orders.updateMany({ where: { id: orderId, status: 'Deposited' }, data: { status: 'Completed', completed_date: completedAt } });
     if (!r.count) return false;
     await addCommission(tx, o, o.vendor_profiles!, completedAt);
+    // Dịch vụ đã xong: đóng các việc chi tiết còn Todo của đơn trên timeline khách (không để tồn đọng thành việc quá hạn)
+    await tx.timeline_tasks.updateMany({ where: { order_id: orderId, task_type: 'Detail', status: 'Todo' }, data: { status: 'Done', completed_date: completedAt } });
     return true;
   });
   if (!done) return false;

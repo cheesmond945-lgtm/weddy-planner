@@ -1,14 +1,17 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrderJobsService } from '../orders/order-jobs.service';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Thông báo của chính tài khoản đang đăng nhập (bảng notifications), dùng chung cho NCC và cặp đôi. */
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly jobs: OrderJobsService) {}
 
   async list(userId: string, limitInput?: string | number) {
+    // Nhắc hạn việc (sắp đến hạn, quá hạn) được tạo khi tài khoản tải thông báo, nên chuông luôn thấy thông báo mới nhất
+    await this.jobs.sweepUser(userId);
     const limit = Math.min(50, Math.max(1, Math.trunc(Number(limitInput)) || 20));
     const [rows, unread] = await Promise.all([
       this.prisma.notifications.findMany({ where: { user_id: userId }, orderBy: [{ created_date: 'desc' }, { id: 'asc' }], take: limit }),

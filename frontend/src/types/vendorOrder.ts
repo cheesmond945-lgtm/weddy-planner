@@ -88,6 +88,8 @@ export interface Order {
   customerPhone: string
   /** Ngày diễn ra sự kiện "YYYY-MM-DD" */
   eventDate: string
+  /** Ngày cưới của khách "YYYY-MM-DD" (chỉ BE thật trả): ngày thực hiện không được sau ngày này */
+  weddingDate?: string | null
   items: OrderItem[]
   totalAmount: number
   /** Tỷ lệ cọc (%), lớn hơn 0 và nhỏ hơn 100 */
@@ -141,3 +143,43 @@ export interface OrderListQuery {
   page?: number
   pageSize?: number
 }
+
+/** Ai làm việc chi tiết của đơn (docs/TIMELINE.md mục 8): khách, NCC hoặc cả hai. */
+export type TaskOwner = 'CUSTOMER' | 'VENDOR' | 'BOTH'
+
+/** Một việc trong "Tiến độ đơn" (GET /vendors/me/orders/:id/tasks). */
+export interface OrderTask {
+  id: string
+  title: string
+  /** "YYYY-MM-DD" */
+  dueDate: string
+  isDone: boolean
+  completedDate: string | null
+  owner: TaskOwner
+  /** NCC được tick việc này (VENDOR, BOTH) */
+  canTick: boolean
+  overdue: boolean
+}
+
+/** Tóm tắt tiến độ một đơn. overdueVendor: việc của NCC (hoặc hai bên) chưa xong và quá hạn = "Trễ tiến độ". */
+export interface OrderProgress {
+  /** Tổng số việc của đơn và số đã xong (thanh tiến độ) */
+  total: number
+  done: number
+  /** Việc chưa xong gần hạn nhất của NCC (NCC làm hoặc hai bên); null khi NCC không còn việc nào */
+  next: { due: string; title: string } | null
+  open: number
+  overdueVendor: number
+  overdueCustomer: number
+  dueSoonVendor: number
+}
+
+export interface OrderTasks {
+  items: OrderTask[]
+  progress: OrderProgress
+}
+
+/** Một mục trên lịch làm việc của NCC (GET /vendors/me/orders/calendar). */
+export type CalendarItem =
+  | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: OrderStatus; isDone: boolean }
+  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; isDone: boolean; owner: TaskOwner; canTick: boolean; overdue: boolean }

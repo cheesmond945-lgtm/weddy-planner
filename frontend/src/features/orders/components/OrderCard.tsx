@@ -14,6 +14,7 @@ import { paths } from '@/routes/paths'
 import type { InvoiceType, Order } from '@/types/order'
 import { hintOf, hintTone } from '../hint'
 import { useOrder } from '../hooks'
+import { EventDateNote } from './EventDateNote'
 
 interface OrderCardProps {
   orderId: string
@@ -83,6 +84,7 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
       </div>
 
       {row('Ngày thực hiện', formatDate(o.eventDate))}
+      <EventDateNote order={o} />
       {row('Tổng giá trị', formatMoney(o.totalAmount))}
       {updated && (
         <div className="border-b border-dashed border-line py-1.5 text-[12.5px] text-gold-700">

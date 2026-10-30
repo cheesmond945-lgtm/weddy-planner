@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { OrderTasksService } from './order-tasks.service';
 import { ListQuery, OrdersService } from './orders.service';
 import type { ContentInput } from './order-rules';
 
@@ -56,7 +57,7 @@ export class PaymentsController {
 @Roles('Vendor')
 @Controller('vendors/me/orders')
 export class VendorOrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(private readonly orders: OrdersService, private readonly tasks: OrderTasksService) {}
 
   @Get()
   list(@Req() req: any, @Query() q: ListQuery) {
@@ -68,9 +69,33 @@ export class VendorOrdersController {
     return this.orders.countsForVendor(req.user.sub);
   }
 
+  /** Tiến độ việc của các đơn đang thực hiện: { [orderId]: { open, overdueVendor, overdueCustomer, dueSoonVendor } }. */
+  @Get('progress')
+  progress(@Req() req: any) {
+    return this.tasks.progress(req.user.sub);
+  }
+
+  /** Lịch làm việc: ?from=YYYY-MM-DD&to=YYYY-MM-DD (tối đa 100 ngày). */
+  @Get('calendar')
+  calendar(@Req() req: any, @Query('from') from: string, @Query('to') to: string) {
+    return this.tasks.calendar(req.user.sub, from, to);
+  }
+
   @Get(':id')
   get(@Req() req: any, @Param('id') id: string) {
     return this.orders.getForVendor(req.user.sub, id);
+  }
+
+  /** "Tiến độ đơn": việc chi tiết gắn với đơn và tóm tắt. */
+  @Get(':id/tasks')
+  taskList(@Req() req: any, @Param('id') id: string) {
+    return this.tasks.list(req.user.sub, id);
+  }
+
+  /** NCC đánh dấu xong / mở lại việc của NCC (hoặc hai bên): { isDone }. */
+  @Patch(':id/tasks/:taskId')
+  taskDone(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: { isDone?: unknown }) {
+    return this.tasks.setDone(req.user.sub, id, taskId, body?.isDone);
   }
 
   @Post()

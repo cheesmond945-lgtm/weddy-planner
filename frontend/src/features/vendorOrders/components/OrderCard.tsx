@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { changesLabel, depositDeadline, formatStamp, openRevision, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
-import { OrderStatusBadge } from './OrderBadges'
+import { LateProgressBadge, OrderStatusBadge } from './OrderBadges'
 import type { OrderFormMode } from './OrderFormDialog'
 
 interface OrderCardProps {
@@ -59,6 +59,7 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
         <span>Đơn dịch vụ {o.orderCode}</span>
         <span className="flex flex-wrap items-center gap-1.5">
           <OrderStatusBadge status={o.status} />
+          <LateProgressBadge orderId={o.id} status={o.status} />
         </span>
       </div>
       <p className="mt-0.5 mb-1.5 text-[12.5px] text-muted-foreground">{o.customerName}</p>

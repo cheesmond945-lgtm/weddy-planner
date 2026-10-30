@@ -1,6 +1,6 @@
 import type { TimelineItem } from '@/types/wedding'
 
-export type ViewMode = 'time' | 'service'
+export type ViewMode = 'time' | 'service' | 'calendar'
 
 export interface TimeGroup {
   /** "overdue" hoặc "YYYY-MM" */

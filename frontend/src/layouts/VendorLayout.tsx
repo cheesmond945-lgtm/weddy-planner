@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Building2, ChevronRight, CircleUserRound, ClipboardList, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Wallet } from 'lucide-react'
+import { Building2, CalendarDays, ChevronRight, CircleUserRound, ClipboardList, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Wallet } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, matchPath, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
 import { applySavedTheme, ThemeToggle } from '@/components/ThemeToggle'
@@ -23,6 +23,7 @@ interface VendorNavItem {
 const NAV: VendorNavItem[] = [
   { to: paths.vendor.dashboard, label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: paths.vendor.orders, label: 'Quản lý đơn hàng', icon: ClipboardList },
+  { to: paths.vendor.calendar, label: 'Lịch làm việc', icon: CalendarDays },
   { to: paths.vendor.chat, label: 'Tin nhắn', icon: MessageSquare },
   { to: paths.vendor.catalog, label: 'Quản lý gói dịch vụ', icon: Package },
   { to: paths.vendor.commissions, label: 'Tài chính & đối soát', icon: Wallet },

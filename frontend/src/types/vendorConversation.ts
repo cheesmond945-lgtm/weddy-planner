@@ -32,9 +32,10 @@ export interface VendorConversation {
   /**
    * name: "Chú rể & Cô dâu" (Weddings), chưa có thông tin đám cưới thì Users.FullName (điền sẵn vào đơn).
    * phone: Users.PhoneNumber, rỗng nếu khách chưa nhập (điền sẵn vào đơn).
+   * weddingDate: ngày cưới của khách "YYYY-MM-DD" (chỉ BE thật trả; null = chưa thiết lập): ngày thực hiện của đơn không được sau ngày này.
    * online: chỉ có khi BE trả trạng thái trực tuyến thật; không có thì giao diện không hiện chấm xanh.
    */
-  customer: { name: string; phone: string; online?: boolean }
+  customer: { name: string; phone: string; online?: boolean; weddingDate?: string | null }
   unreadCount: number
   lastMessage: { sender: MessageSender; type: MessageType; content: string; orderCode: string | null; sentDate: string } | null
   /** Đơn đã gửi mới nhất (mọi trạng thái trừ Draft) */

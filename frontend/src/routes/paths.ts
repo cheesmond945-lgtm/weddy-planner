@@ -26,6 +26,7 @@ export const paths = {
     packageNew: '/vendor/catalog/new',
     package: (id: string) => `/vendor/catalog/${id}`,
     orders: '/vendor/orders',
+    calendar: '/vendor/calendar',
     chat: '/vendor/chat',
     commissions: '/vendor/commissions',
     account: '/vendor/account',

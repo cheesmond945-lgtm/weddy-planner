@@ -35,6 +35,7 @@ import VendorCommissionsPage from '@/pages/vendor/VendorCommissionsPage'
 import VendorVnpayReturnPage from '@/pages/vendor/VendorVnpayReturnPage'
 import VendorVnpaySandboxPage from '@/pages/vendor/VendorVnpaySandboxPage'
 import VendorDashboardPage from '@/pages/vendor/VendorDashboardPage'
+import VendorCalendarPage from '@/pages/vendor/VendorCalendarPage'
 import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
 import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
 import VendorProfilePage from '@/pages/vendor/VendorProfilePage'
@@ -90,6 +91,7 @@ export const router = createBrowserRouter([
           { path: paths.vendor.packageNew, element: <VendorPackagePage /> },
           { path: '/vendor/catalog/:packageId', element: <VendorPackagePage /> },
           { path: paths.vendor.orders, element: <VendorOrdersPage /> },
+          { path: paths.vendor.calendar, element: <VendorCalendarPage /> },
           { path: paths.vendor.chat, element: <VendorChatPage /> },
           { path: paths.vendor.commissions, element: <VendorCommissionsPage /> },
           { path: '/vendor/commissions/vnpay-sandbox', element: <VendorVnpaySandboxPage /> },

@@ -42,6 +42,7 @@ export function RealtimeBridge() {
             invalidate(vendorKeys.orders(uid, conversationId))
             invalidate(vendorKeys.order(uid, orderId))
             invalidate(vendorKeys.orderLists(uid))
+            invalidate(vendorKeys.calendar(uid))
             invalidate(vendorKeys.orderCounts(uid))
           }
         }
@@ -53,9 +54,21 @@ export function RealtimeBridge() {
           invalidate(vendorKeys.unread(uid))
         }
       },
-      notification: () => {
-        if (role === 'COUPLE') invalidate(['couple', 'notifications'])
-        if (role === 'VENDOR') invalidate(['vendor', 'notifications'])
+      notification: ({ type }) => {
+        const task = type.startsWith('Task')
+        if (role === 'COUPLE') {
+          invalidate(['couple', 'notifications'])
+          // NCC cập nhật tiến độ: việc trên timeline của khách đổi theo
+          if (task) invalidate(planningKeys.timeline(uid))
+        }
+        if (role === 'VENDOR') {
+          invalidate(['vendor', 'notifications'])
+          if (task || type === 'WeddingDateChanged') {
+            invalidate(vendorKeys.orderProgress(uid))
+            invalidate(['vendor', uid, 'order-tasks'])
+            invalidate(vendorKeys.calendar(uid))
+          }
+        }
         if (role === 'ADMIN') invalidate(['admin', 'notifications'])
       },
     })

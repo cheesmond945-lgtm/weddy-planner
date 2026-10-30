@@ -1,5 +1,5 @@
 import type { Paginated } from '@/types/api'
-import type { CancelReason, Order, OrderContent, OrderListQuery, OrderStatus } from '@/types/vendorOrder'
+import type { CalendarItem, CancelReason, Order, OrderContent, OrderListQuery, OrderProgress, OrderStatus, OrderTasks } from '@/types/vendorOrder'
 import { http, requestRaw } from './client'
 
 /** Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp). */
@@ -22,6 +22,24 @@ export const vendorOrdersApi = {
 
   get: (orderId: string): Promise<Order> =>
     http.get(`/vendors/me/orders/${orderId}`),
+
+  /** "Tiến độ đơn": việc chi tiết gắn với đơn và tóm tắt. */
+  tasks: (orderId: string): Promise<OrderTasks> =>
+    http.get(`/vendors/me/orders/${orderId}/tasks`),
+
+  /** NCC đánh dấu xong / mở lại việc của NCC (hoặc hai bên); khách nhận thông báo khi việc xong. */
+  setTaskDone: (orderId: string, taskId: string, isDone: boolean): Promise<OrderTasks> =>
+    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}`, { isDone }),
+
+  /** Lịch làm việc trong khoảng [from, to] (YYYY-MM-DD, tối đa 100 ngày): ngày thực hiện của đơn và việc chi tiết của đơn đã cọc. */
+  calendar: async (from: string, to: string): Promise<CalendarItem[]> => {
+    const res = await http.get<{ items: CalendarItem[] }>('/vendors/me/orders/calendar', { query: { from, to } })
+    return res.items
+  },
+
+  /** Tiến độ của các đơn đang thực hiện: { [orderId]: OrderProgress } (nhãn "Trễ tiến độ" ở danh sách đơn). */
+  progress: (): Promise<Record<string, OrderProgress>> =>
+    http.get('/vendors/me/orders/progress'),
 
   /** Tạo đơn trong hội thoại: send = false lưu nháp, true gửi luôn. BE tự suy WeddingId từ hội thoại. */
   create: (body: { conversationId: string; content: OrderContent; send: boolean }): Promise<Order> =>

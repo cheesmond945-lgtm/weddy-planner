@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { InvoiceType, Order } from '@/types/order'
 import { hintOf, hintTone } from '../hint'
+import { EventDateNote } from './EventDateNote'
 
 const HOUR = 3_600_000
 
@@ -57,6 +58,7 @@ export function MyOrderCard({ order: o, onRevise }: { order: Order; onRevise: (o
         {items}
       </p>
       {row('Ngày thực hiện', formatDate(o.eventDate))}
+      <EventDateNote order={o} />
       {row('Tổng giá trị', formatMoney(o.totalAmount))}
       {row(`Đợt 1 · Cọc ${Math.round(o.depositPercent * 100) / 100}% (VNPay)`, <span className="text-gold-700">{formatMoney(o.depositAmount)}</span>)}
       {row('Đợt 2 · Còn lại (tiền mặt cho NCC)', formatMoney(o.totalAmount - o.depositAmount))}

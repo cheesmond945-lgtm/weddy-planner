@@ -1,5 +1,6 @@
 import { todayVN } from '@/lib/clock'
 import { DEPOSIT_PERCENT_MIN, isDepositTooLarge } from '@/lib/deposit'
+import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { filledItems, totalOf, type OrderFormValues } from './calc'
 
@@ -28,8 +29,13 @@ export function validateDraft(v: OrderFormValues): OrderErrors {
  * `changeNote`: nội dung thay đổi khi sửa sau cọc (bắt buộc, khách sẽ thấy); không truyền thì không kiểm.
  * Ngày sự kiện phải từ hôm nay trở đi (giờ VN, theo đồng hồ giả lập); `originalEventDate`: ngày đang có của đơn, giữ nguyên thì không kiểm.
  * `deposit` = false (sửa sau cọc, tiền cọc đã khóa): bỏ kiểm "tổng đơn quá nhỏ để đặt cọc".
+ * `weddingDate`: ngày cưới của khách; ngày thực hiện không được sau ngày đó, và (trừ `afterDeposit`) ngày cưới không được đã qua.
+ * `afterDeposit` (sửa sau cọc): giữ nguyên ngày đang có của đơn thì qua kiểm ngày cưới, như backend.
  */
-export function validateOrder(v: OrderFormValues, opts: { minTotal?: number; changeNote?: string; originalEventDate?: string; deposit?: boolean } = {}): OrderErrors {
+export function validateOrder(
+  v: OrderFormValues,
+  opts: { minTotal?: number; changeNote?: string; originalEventDate?: string; deposit?: boolean; weddingDate?: string | null; afterDeposit?: boolean } = {},
+): OrderErrors {
   const e: OrderErrors = {}
   if (opts.changeNote !== undefined && !opts.changeNote.trim()) e.changeNote = 'Ghi nội dung thay đổi để khách biết đơn đã đổi gì.'
   if (!v.customerName.trim()) e.customerName = 'Nhập tên khách hàng.'
@@ -37,6 +43,11 @@ export function validateOrder(v: OrderFormValues, opts: { minTotal?: number; cha
   const date = eventDateError(v.eventDate)
   if (date) e.eventDate = date
   else if (v.eventDate !== opts.originalEventDate && v.eventDate < todayVN()) e.eventDate = 'Ngày diễn ra sự kiện phải từ hôm nay trở đi.'
+  else if (opts.weddingDate && !opts.afterDeposit && opts.weddingDate <= todayVN()) {
+    e.eventDate = `Ngày cưới của khách (${formatDate(opts.weddingDate)}) đã qua hoặc là hôm nay. Nhắn khách cập nhật ngày cưới trước khi gửi đơn.`
+  } else if (opts.weddingDate && v.eventDate > opts.weddingDate && !(opts.afterDeposit && v.eventDate === opts.originalEventDate)) {
+    e.eventDate = `Ngày thực hiện không được sau ngày cưới của khách (${formatDate(opts.weddingDate)}).`
+  }
   // Sửa sau cọc (deposit = false): tỷ lệ đã khóa, đơn cũ có thể dưới mức tối thiểu nên không kiểm
   if (opts.deposit !== false && (!(v.depositPercent >= DEPOSIT_PERCENT_MIN && v.depositPercent < 100) || !Number.isInteger(v.depositPercent))) {
     e.depositPercent = `Tỷ lệ cọc là số nguyên từ ${DEPOSIT_PERCENT_MIN} đến 99 (%).`

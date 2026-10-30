@@ -14,7 +14,7 @@ export const ORDER_INCLUDE = {
   payments: true,
   order_revisions: { orderBy: { created_date: 'desc' as const }, include: { order_revision_changes: true } },
   invoices: { orderBy: { created_date: 'asc' as const } },
-  weddings: { select: { user_id: true } },
+  weddings: { select: { user_id: true, wedding_date: true } },
   vendor_profiles: { select: { id: true, user_id: true, business_name: true, service_categories: { select: { id: true, name: true } } } },
 } satisfies Prisma.ordersInclude;
 
@@ -52,6 +52,8 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
     customerName: o.customer_name,
     customerPhone: o.customer_phone,
     eventDate: ymd(o.event_date),
+    /** Ngày cưới của khách (null nếu chưa có), để form đơn điền sẵn và thẻ đơn báo khi ngày thực hiện lệch */
+    weddingDate: ymd(o.weddings?.wedding_date ?? null) || null,
     items: o.order_items.map((i) => ({ id: i.id, itemName: i.item_name, unit: i.unit, quantity: i.quantity, unitPrice: Number(i.unit_price), amount: Number(i.amount) })),
     totalAmount: Number(o.total_amount),
     depositPercent: Number(o.deposit_percent),

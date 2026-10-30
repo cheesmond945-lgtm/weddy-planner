@@ -49,7 +49,7 @@ Kiểm chứng: 62 dòng sheet ví dụ (có kỳ vọng cập nhật theo luậ
 
 ## 4. API
 
-`GET /weddings/me/timeline` trả `{ items, level, daysLeft }`. Mỗi việc: `kind` (TASK, CHOOSE, CATEGORY_DEADLINE, SERVICE_TASK), `dueDate`, `isDone`, `isCustom`, `category`, `serviceId`, `urgent`, `tentative`, `needsMeeting`, `appointmentDate` (luôn null cho tới khi có cột), `orderCode` (SERVICE_TASK), `detailCount` và `cancelledOrder` (CATEGORY_DEADLINE đang Todo). `PATCH /weddings/me/timeline/items/:id` đổi `isDone` / `dueDate` / `title` (tên chỉ đổi được với việc tự thêm). Việc từ mẫu không xóa được.
+`GET /weddings/me/timeline` trả `{ items, level, daysLeft }`. Mỗi việc: `kind` (TASK, CHOOSE, CATEGORY_DEADLINE, SERVICE_TASK), `dueDate`, `isDone`, `isCustom`, `category`, `serviceId`, `urgent`, `tentative`, `needsMeeting`, `appointmentDate` (luôn null cho tới khi có cột), `orderCode` (SERVICE_TASK), `detailCount` và `cancelledOrder` (CATEGORY_DEADLINE đang Todo). `PATCH /weddings/me/timeline/items/:id` đổi `isDone` / `dueDate` / `title` (tên chỉ đổi được với việc tự thêm). Việc từ mẫu không xóa được. Việc chi tiết do NCC làm (`owner` = `VENDOR`) khách không tick được: xem mục 8.
 
 ## 5. Giao diện
 
@@ -69,4 +69,139 @@ Nút trên thẻ (backend trả cờ `suggest`, `needsMeeting`):
 - `npm run timelines:rebuild [-- --apply]` (backend): dựng lại timeline mọi đám cưới theo mẫu mới; mặc định DRY-RUN, `--apply` sao lưu dòng sẽ xóa vào `backend/scripts/backup/` (không commit).
 - `npm run timelines:repair [-- --apply]`: sinh bù việc chi tiết cho đơn đã cọc đang thiếu (xem mục 3.5).
 - `npm run timelines:restore -- <file sao lưu> [--apply]`: khôi phục từ bản sao lưu.
-- Chưa có: cột `appointment_date` (`backend/prisma/sql/2026-10-29-timeline-appointment-date.sql`, chưa chạy) cho Ngày hẹn; kiểm tra ngày thực hiện của đơn không sau ngày cưới (đơn nhập ngày 2222 sẽ kéo cả bộ việc chi tiết tới 2222).
+- Chưa có: cột `appointment_date` (`backend/prisma/sql/2026-10-29-timeline-appointment-date.sql`, chưa chạy) cho Ngày hẹn.
+
+## 7. Quy tắc kiểm tra ngày
+
+Nguyên tắc: **ngày cưới W là mốc duy nhất của một đám cưới; ngày thực hiện E của mọi đơn phải bám theo W.** Trước đây E chỉ bị chặn khi ở quá khứ nên đơn nhập 2027 hay 2222 vẫn nhận, kéo cả bộ việc chi tiết ra ngoài đám cưới. Mã nguồn: `backend/src/modules/orders/order-rules.ts` (`weddingDateIssue`), `backend/src/modules/weddings/timeline-rules.ts`, `timeline-hooks.ts`, `timeline.service.ts`.
+
+### 7.1 Ngày thực hiện của đơn (NCC) — chặn
+
+| # | Quy tắc | Lỗi |
+|---|---|---|
+| A1 | `E ≤ W` khi NCC Gửi, Cập nhật, Tạo lại hoặc Chỉnh sửa sau cọc. Chỉnh sửa sau cọc mà giữ nguyên ngày đang có (đơn cũ lệch ngày) thì qua, để vẫn sửa được hạng mục / ghi chú. Cập nhật đơn chưa cọc không được miễn. Lưu nháp không kiểm | `422 EVENT_DATE_AFTER_WEDDING` |
+| A2 | Ngày cưới của khách phải còn ở phía sau (`W > hôm nay`) khi Gửi / Cập nhật đơn. Chỉnh sửa sau cọc không xét | `409 WEDDING_DATE_PASSED` |
+| A3 | Kiểm lại lúc khách **đặt cọc**: khách có thể đổi W sau khi đơn đã gửi, hoặc đơn cũ đã lệch. Chặn trước khi chuyển tiền; hướng dẫn "Yêu cầu chỉnh sửa → Đổi ngày thực hiện". Cổng thanh toán đã báo thành công (IPN) thì vẫn ghi nhận cọc (tiền đã thu), timeline xử lý ở 7.2 | `409 EVENT_DATE_AFTER_WEDDING` |
+
+Giao diện: form đơn của NCC điền sẵn E = W, hiện "Ngày cưới của khách", ô ngày có `max` = W. Thẻ đơn của khách báo "Khác ngày cưới của bạn" / "Sau ngày cưới của bạn" kèm cách xử lý.
+
+### 7.2 Sinh và đóng việc chi tiết
+
+- **B1** `syncOrderDetails` không sinh việc chi tiết khi `E > W` (ghi log cảnh báo), không tự kẹp E về W vì sẽ che sự thật. Mốc chốt vẫn xong khi cọc.
+- **B2** Đơn → Hoàn thành (NCC bấm hoặc tự hoàn thành sau E+7): việc chi tiết còn Todo của đơn tự thành Done. Không còn việc "quá hạn" của dịch vụ đã làm xong.
+- **B3** NCC Sửa đơn đã cọc đổi E: việc chi tiết neo theo E còn Todo bị xóa rồi sinh lại theo E mới (`onOrderEventDateChanged`); việc đã xong và việc neo D / S / W giữ nguyên.
+- Mỗi hạng mục tối đa một đơn Deposited (mục 3.5) giữ nguyên.
+
+### 7.3 Đổi ngày cưới
+
+`regenerate-preview` trả thêm đơn lệch (xem `warnings[]`: `kind` = `DIFFERENT` | `AFTER_WEDDING`, `blocksDeposit`):
+- Đơn đã cọc: khác W mới thì nhắc (`DIFFERENT`), sau W mới thì `AFTER_WEDDING`.
+- Đơn `Pending` / `NeedRevision` có E sau W mới: `AFTER_WEDDING` + `blocksDeposit` (khách chưa cọc được cho tới khi NCC đổi ngày, mục A3).
+- Việc đổi ngày cưới **không bị chặn** (quyền của khách). Sau khi lưu, NCC có đơn `AFTER_WEDDING` nhận thông báo `WeddingDateChanged` để cập nhật đơn.
+
+### 7.4 Khách tự đổi hạn việc (`PATCH` / `POST` timeline)
+
+Khoảng hạn theo loại việc (`dueBounds`):
+
+| Loại việc | Hạn hợp lệ |
+|---|---|
+| Khách tự thêm, mã lạ; Tự làm, Chọn NCC, Mốc chốt; việc chi tiết neo D hoặc S | `hôm nay ≤ hạn ≤ W` (gồm đúng ngày cưới) |
+| Việc chi tiết neo E trước sự kiện (E − n) | `hôm nay ≤ hạn ≤ E` của đơn |
+| "Ngày thực hiện" (EVENT, mốc E hoặc W) | Cố định theo đơn / ngày cưới, không đổi tay (`TIMELINE_ITEM_READONLY`) |
+| Việc sau sự kiện (mốc W + n hoặc E + n: cảm ơn, nhận ảnh, thanh toán, trả đồ) | `max(hôm nay, mốc) ≤ hạn ≤ mốc + 365 ngày` |
+
+Thứ tự trong một hạng mục (`sequenceIssue`): việc Chọn NCC phải trước hoặc **cùng ngày** Mốc chốt; Mốc chốt không trước việc Chọn NCC cuối. Mốc chốt đã xong thì không ràng buộc (`400 DUE_DATE_ORDER`).
+
+### 7.5 Dữ liệu cũ
+
+Luật mới chỉ áp cho lần Gửi / Sửa / Cọc tiếp theo; đơn cũ không tự sửa. Ba loại dữ liệu cũ có thể còn: đơn còn hiệu lực có E sau W (cần người xử lý: hủy hoặc để hết hạn đơn, nhắn NCC đổi ngày), việc chi tiết còn gắn đơn Cancelled / Expired / Draft, và đơn Completed còn việc chi tiết Todo (việc đã quá hạn nhưng dịch vụ đã làm xong). Đơn Hoàn thành từ nay tự đóng việc chi tiết (mục 7.2 B2).
+
+### 7.6 API: trường mới
+
+`GET /weddings/me/timeline`: việc SERVICE_TASK có `orderEventDate` và `dateConflict` (E sau W; thẻ nhóm hiện chú thích). Đơn (`Order`): `weddingDate`. Hội thoại NCC: `customer.weddingDate`.
+
+## 8. Tiến độ đơn: chủ việc, nhắc hạn, việc quá hạn
+
+Việc chi tiết (SERVICE_TASK) gắn với đơn đã cọc là **bảng việc dùng chung** của khách và NCC: một dòng `timeline_tasks`, hai bên cùng đọc. Trước đây chỉ khách ghi được nên NCC không có chỗ xem hay cập nhật. Mã nguồn: `backend/src/modules/weddings/task-owner.ts` (luật thuần), `orders/order-tasks.service.ts` (API NCC), `orders/order-reminders.ts` (nhắc hạn). Không đổi schema: chủ việc suy ra từ `task_code` qua mẫu.
+
+### 8.1 Chủ việc và quyền
+
+| Chủ | Việc | Khách | NCC |
+|---|---|---|---|
+| `CUSTOMER` | Gửi concept decor, chọn ảnh, duyệt ảnh, chọn kiểu hoa, trả đồ thuê, **mọi "Thanh toán phần còn lại"** | tick, đổi hạn | chỉ xem |
+| `VENDOR` | Ngày thực hiện (setup decor, makeup, tiệc, chụp album, chụp ngày cưới) | chỉ xem | tick |
+| `BOTH` | Thử món, chốt thực đơn, duyệt phối cảnh, thử đồ, nhận đồ, chốt chi tiết tiệc, "Nhận hoa, kiểm tra độ tươi", nhận ảnh phóng sự… | tick | tick |
+
+Mã lạ hoặc việc không thuộc mẫu (timeline cũ): `BOTH` để không khóa nhầm. Vi phạm: `403 TIMELINE_ITEM_READONLY` (khách tick việc `VENDOR`, NCC tick việc `CUSTOMER`). NCC chỉ thấy việc gắn với **đơn của mình**, không thấy việc cá nhân của khách (đăng ký kết hôn, mua nhẫn…). NCC chỉ cập nhật khi đơn đang `Deposited`; đơn `Completed` thì Tiến độ đơn chỉ đọc (việc đã được đóng, mục 7.2 B2).
+
+NCC tick xong một việc: khách nhận thông báo `TaskUpdated` ("{NCC} đã hoàn thành việc …"), timeline của khách đổi ngay (realtime). Bỏ tick thì không thông báo.
+
+### 8.2 Nhắc hạn
+
+Hai nhóm việc, hai cách nhắc:
+
+**1. Việc chi tiết của đơn đã cọc** (`Todo`, đơn `Deposited`): mỗi việc một thông báo cho đúng chủ việc.
+
+| Giai đoạn | Điều kiện | Loại |
+|---|---|---|
+| Sắp đến hạn | hạn từ hôm nay đến hôm nay + 2 ngày | `TaskDueSoon` |
+| Quá hạn | trễ 1 đến 14 ngày (trễ hơn là dữ liệu cũ, không nhắc dồn) | `TaskOverdue` |
+
+Người nhận: chủ việc (`BOTH` thì cả hai). Mỗi (người nhận, việc, loại, hạn) chỉ một thông báo (đổi hạn thì nhắc lại theo hạn mới).
+
+**2. Việc không gắn đơn của khách** (việc khung: thiệp, nhẫn, chọn NCC, Mốc chốt; việc tự thêm): một thông báo tổng hợp `TaskDigest` ("Bạn có 2 việc sắp đến hạn và 1 việc quá hạn trên timeline: …", tối đa 3 tên việc, còn lại "và N việc khác") **mỗi khách mỗi ngày** (giờ VN). Gom thay vì mỗi việc một thông báo vì timeline gấp thường dồn nhiều việc vào cùng một vài ngày. NCC không nhận loại này.
+
+**Khi nào được tạo.** Không cần bật job nền: (a) tài khoản **tải thông báo** của mình (chuông ở mọi trang) thì quét đơn của NCC đó / khách đó (tối đa mỗi 5 phút mỗi tài khoản, `OrderJobsService.sweepUser`); (b) NCC hoặc khách đọc đơn (cách 10 phút/phạm vi); (c) toàn hệ thống khi `ORDER_JOBS_ENABLED=true` (cùng job với hết hạn cọc). Vì vậy một bên mở trang là cả hai bên có thông báo; thông báo mới được đẩy realtime tới trang đang mở.
+
+### 8.3 Chính sách việc quá hạn (bản mềm, chờ nhóm xác nhận)
+
+- Việc quá hạn **không chặn đơn, không phạt tự động** (nhóm chưa có luật phạt hay hoa hồng gắn việc).
+- Việc của NCC (`VENDOR`) trễ: NCC nhận `TaskOverdue`; **khách cũng nhận** "Nhà cung cấp chưa cập nhật việc …" và được hướng dẫn nhắn trong chat. Trên timeline khách hiện "NCC chưa cập nhật" (chữ đỏ).
+- Việc của khách trễ: khách nhận nhắc; NCC không nhận thông báo, chỉ thấy "Chờ khách thực hiện" và "Quá hạn" ở Tiến độ đơn.
+- Đơn bên NCC có việc của NCC (hoặc hai bên) trễ thì hiện nhãn **"Trễ tiến độ · N"** ở danh sách đơn, thẻ đơn trong chat.
+- **Hạn cứng duy nhất là ngày thực hiện E.** NCC không thực hiện được thì dùng luồng hủy đơn "NCC không thể thực hiện" (hoàn cọc cho khách).
+
+### 8.4 API
+
+| Endpoint | Ý nghĩa |
+|---|---|
+| `GET /vendors/me/orders/:id/tasks` | `{ items: [{ id, title, dueDate, isDone, completedDate, owner, canTick, overdue }], progress }` |
+| `PATCH /vendors/me/orders/:id/tasks/:taskId` | `{ isDone }`; việc của NCC / hai bên; `409 ORDER_NOT_ACTIVE` nếu đơn không phải `Deposited` |
+| `GET /vendors/me/orders/progress` | `{ [orderId]: { open, overdueVendor, overdueCustomer, dueSoonVendor } }` cho đơn `Deposited` |
+| `GET /weddings/me/timeline` | SERVICE_TASK có thêm `owner` (`CUSTOMER` / `VENDOR` / `BOTH`); việc khác `owner: null` |
+
+Thông báo mới: `TaskUpdated` (gửi khách), `TaskDueSoon`, `TaskOverdue` (`referenceType: "TimelineTask"`, `referenceId` = id việc), `TaskDigest` (gửi khách, `referenceType: "Wedding"`).
+
+### 8.5 Việc hiện gì trên giao diện
+
+| Tình huống | Khách | NCC |
+|---|---|---|
+| Việc sắp đến hạn (còn 0 đến 2 ngày) | Nhãn "· Sắp đến hạn" trên thẻ việc; dải đầu trang "N việc sắp đến hạn" (bấm để lọc); thông báo ở chuông | Nhãn "· Sắp đến hạn" ở Tiến độ đơn; dải ở Lịch làm việc; nhãn "Sắp đến hạn · N" ở thẻ Theo đơn; thông báo ở chuông |
+| Việc quá hạn | Chữ đỏ "Quá hạn"; dải "N việc quá hạn"; nhóm "Quá hạn" ở cách xem theo thời gian; thông báo ở chuông. Việc của NCC trễ: "NCC chưa cập nhật" (đỏ) và thông báo "Nhà cung cấp chưa cập nhật việc …" | Việc đỏ "Quá hạn"; nhãn "Trễ tiến độ · N" ở danh sách đơn, thẻ đơn trong chat, thẻ Theo đơn; dải đỏ ở Lịch làm việc; thông báo ở chuông (chỉ việc của NCC / hai bên) |
+
+## 9. Chế độ xem Lịch
+
+Danh sách việc có thêm cách xem **Lịch tháng** (kiểu Google Calendar, chỉ xem và chọn ngày, **không kéo thả**: hạn việc có luật khoảng ngày và thứ tự ở mục 7.4 nên đổi hạn vẫn đi qua các hộp thoại hiện có). Không thêm thư viện: lưới tháng tự tính ở `frontend/src/features/calendar/monthGrid.ts` (tuần bắt đầu thứ Hai, tính theo UTC), component dùng chung `CalendarMonth.tsx`.
+
+- **Khách:** tab thứ ba **LỊCH** cạnh "Theo thời gian" / "Theo dịch vụ" ở `/timeline`, nhớ lựa chọn trong `localStorage` (`weddy.timeline.view` = `calendar`). Cùng bộ lọc Chưa xong / Đã xong / Tất cả và theo hạng mục. Mỗi việc nằm ở ngày Hạn; ngày cưới được đánh dấu. Bấm ngày để xem các việc của ngày đó bằng đúng thẻ việc của cách xem danh sách (hoàn thành, hẹn NCC, sửa đều như cũ). Có dải "N việc quá hạn" nhảy tới việc quá hạn sớm nhất.
+- **NCC:** trang **Lịch làm việc** (`/vendor/calendar`, menu trái) gồm ngày thực hiện của các đơn Chờ cọc / Chờ chỉnh sửa / Đã cọc / Hoàn thành và việc chi tiết của đơn đã cọc. NCC có nhiều khách cùng lúc nên lịch có công cụ để biết việc nào của khách nào và không bị chồng chéo:
+  - **Màu theo đơn.** Mỗi đơn một màu ổn định (`features/calendar/orderColors.ts`: sắp theo mã đơn nên các đơn hiện có không trùng màu, đơn cũ giữ màu khi có đơn mới; tối đa 8 màu, quay vòng sau đó; không dùng đỏ và vàng vì dành cho trạng thái). Thẻ ghi tên khách ngắn ("Hùng & Chi: Chốt thực đơn"). Trạng thái hiện bằng dấu hiệu riêng, không chiếm màu: quá hạn có "!" và viền đỏ, đã xong gạch ngang và mờ.
+  - **Ô đông việc** (hơn 3) gom theo khách thành thẻ "Hùng & Chi · 2", ô nào có việc quá hạn thì thẻ có "!"; thừa thì "+N khách khác".
+  - **Lọc.** Chú giải là các nút bấm được, mỗi khách / đơn một nút (kèm 4 số cuối mã đơn và số việc trễ); bấm để chỉ xem khách đó, chọn nhiều được, "Bỏ lọc" để về tất cả. Thêm bộ lọc **Việc của tôi** ẩn các việc do khách làm.
+  - **Danh sách của ngày gom theo khách**: mỗi khách một nhóm có tên đầy đủ, mã đơn. Ngày có từ hai đơn cùng thực hiện hiện nhắc "Có N đơn cùng thực hiện trong ngày này".
+  - **Chế độ "Theo đơn"** (tab thứ hai, nhớ trong `localStorage` `weddy.vendor.calendar.view`): mỗi đơn đang theo dõi một thẻ có màu riêng: tên khách, trạng thái, nhãn "Trễ tiến độ" / "Sắp đến hạn", ngày thực hiện còn bao lâu, thanh tiến độ `đã xong / tổng`, việc tiếp theo của NCC (hoặc "Đang chờ khách thực hiện" / "Đã xong mọi việc"), và nút mở danh sách việc để tick ngay. Đơn có việc của NCC bị trễ lên trước, rồi theo ngày thực hiện gần nhất.
+- **API:** `GET /vendors/me/orders/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` (tối đa 100 ngày, `400 VALIDATION_ERROR` nếu sai) trả `{ items }`: mốc `ORDER` (`orderId`, `orderCode`, `customerName`, `date`, `status`) và `TASK` (thêm `owner`, `canTick`, `overdue`). Việc "Ngày thực hiện" trùng đúng ngày thực hiện của đơn bị bỏ vì đã có mốc ORDER. Logic thuần: `backend/src/modules/weddings/calendar-items.ts`.
+
+### 9.1 Tìm kiếm và lọc (cách xem THEO THỜI GIAN và LỊCH)
+
+Thanh tìm kiếm và lọc nằm dưới thanh chuyển cách xem, lọc ngay trên máy (không gọi API), lưu trên URL (`?q=` `&month=` `&owner=` `&category=`) nên tải lại hoặc gửi link vẫn còn. Logic thuần: `frontend/src/features/weddings/timelineFilter.ts`. Cách xem THEO DỊCH VỤ không có thanh này (đã gom theo dịch vụ).
+
+| Bộ lọc | Cách dùng |
+|---|---|
+| Từ khóa | Không cần gõ dấu ("dat coc" khớp "đặt cọc"). Tìm trong tên việc, dịch vụ, tên NCC, hạng mục, mã đơn và ngày hạn. Mỗi từ phải là **đầu của một từ** (nên "hang" không khớp "tháng"), đủ mọi từ, thứ tự tùy ý. Gõ ngày: "12/11". Gõ "tháng 12" để lấy việc có hạn trong tháng 12 |
+| Tháng | Danh sách các tháng có việc kèm số việc; "Quá hạn" (chưa xong, hạn trước hôm nay) và "Sắp đến hạn" (chưa xong, còn 0 đến 2 ngày) lên đầu. Số đếm tính theo các bộ lọc khác nên khớp những gì sẽ thấy. Ẩn ở cách xem Lịch (đã có nút chuyển tháng) |
+| Dịch vụ | Một hạng mục (nhà hàng, decor…); thay chip "Đang xem" trước đây |
+| Người thực hiện | Mọi việc / Việc của tôi (bỏ việc chỉ NCC làm) / Việc do NCC làm (xem mục 8.1) |
+
+Cùng bộ lọc trạng thái Chưa xong / Đã xong / Tất cả có sẵn; các bộ lọc kết hợp theo AND. Khi bộ lọc nào bật hiện "N việc phù hợp" và "Xóa bộ lọc". Cách xem Lịch: nếu tháng đang xem không có việc nào khớp thì có dải "Tháng này không có việc nào" kèm nút tới việc gần nhất.
+

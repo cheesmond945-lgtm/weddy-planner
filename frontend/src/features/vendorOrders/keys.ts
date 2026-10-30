@@ -11,4 +11,10 @@ export const vendorKeys = {
   /** Danh sách đơn trang Quản lý đơn hàng (mọi bộ lọc) */
   orderLists: (userId: string | undefined) => ['vendor', userId, 'order-list'] as const,
   orderCounts: (userId: string | undefined) => ['vendor', userId, 'order-counts'] as const,
+  /** "Tiến độ đơn" của một đơn (việc chi tiết) */
+  orderTasks: (userId: string | undefined, orderId: string) => ['vendor', userId, 'order-tasks', orderId] as const,
+  /** Lịch làm việc trong một khoảng ngày (mọi khoảng: khóa tiền tố để làm mới cùng lúc) */
+  calendar: (userId: string | undefined, from?: string, to?: string) => (from && to ? (['vendor', userId, 'calendar', from, to] as const) : (['vendor', userId, 'calendar'] as const)),
+  /** Tiến độ tóm tắt của mọi đơn đang thực hiện */
+  orderProgress: (userId: string | undefined) => ['vendor', userId, 'order-progress'] as const,
 }

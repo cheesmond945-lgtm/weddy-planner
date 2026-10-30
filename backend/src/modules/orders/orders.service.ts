@@ -5,7 +5,7 @@ import type { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Paginated } from '../../common/utils/pagination';
 import { notify, postMessage } from '../chat/chat-messages';
-import { onOrderCancelled, onOrderDeposited } from '../weddings/timeline-hooks';
+import { onOrderCancelled, onOrderDeposited, onOrderEventDateChanged } from '../weddings/timeline-hooks';
 import { OrderJobsService } from './order-jobs.service';
 import { completeOrder } from './order-lifecycle';
 import { ORDER_INCLUDE, OrderRow, toOrderDto, ymd } from './order-mapping';
@@ -26,7 +26,9 @@ import {
   changeTypesBetween,
   depositedConflict,
   depositOf,
+  dmy,
   endOfDayVn,
+  eventAfterWedding,
   fail,
   money,
   orderedUuid,
@@ -270,6 +272,16 @@ export class OrdersService {
       await this.jobs.sweep({ coupleId: userId });
       return fail('ORDER_NOT_PAYABLE', 'Đơn đã hết hạn đặt cọc.', 409);
     }
+    // Ngày thực hiện sau ngày cưới (khách đổi ngày cưới sau khi đơn đã gửi, hoặc đơn cũ): chặn trước khi chuyển tiền, vì timeline không dựng được
+    const weddingDate = ymd(o.weddings?.wedding_date ?? null);
+    if (eventAfterWedding(ymd(o.event_date), weddingDate)) {
+      return fail(
+        'EVENT_DATE_AFTER_WEDDING',
+        `Ngày thực hiện của đơn (${dmy(ymd(o.event_date))}) sau ngày cưới của bạn (${dmy(weddingDate)}). Bạn bấm "Yêu cầu chỉnh sửa" để nhà cung cấp đổi ngày thực hiện, hoặc cập nhật lại ngày cưới nếu bạn đã dời đám cưới.`,
+        409,
+        { eventDate: ymd(o.event_date), weddingDate },
+      );
+    }
     // Hạng mục đã có đơn khác đang Deposited: chưa cho cọc (chặn trước khi chuyển tiền)
     const taken = await this.depositedElsewhere(o.wedding_id, o.vendor_profiles?.service_categories?.id ?? null, o.id);
     if (taken) return fail('CATEGORY_ALREADY_DEPOSITED', categoryTakenMessage('COUPLE', taken), 409);
@@ -474,7 +486,7 @@ export class OrdersService {
     if (!wedding) return fail('WEDDING_NOT_SET', 'Khách chưa thiết lập thông tin đám cưới nên chưa tạo được đơn.', 409);
 
     const send = wantsSend(body);
-    const p = parseContent(body.content ?? {}, send ? 'send' : 'draft');
+    const p = parseContent(body.content ?? {}, send ? 'send' : 'draft', { weddingDate: wedding.wedding_date ? ymd(wedding.wedding_date) : null });
     if (send) {
       // Gửi / tạo lại đơn khi hạng mục đã có đơn Deposited khác: chặn, chưa tạo gì (lưu nháp thì vẫn được)
       const taken = await this.depositedElsewhere(wedding.id, v.category_id);
@@ -510,7 +522,7 @@ export class OrdersService {
     }
     const taken = await this.depositedElsewhere(order.wedding_id, order.vendor_profiles?.service_categories?.id ?? null, order.id);
     if (taken) return fail('CATEGORY_ALREADY_DEPOSITED', categoryTakenMessage('VENDOR', taken), 409);
-    const p = parseContent(body.content ?? {}, 'send', { currentEventDate: order.status === 'Draft' ? undefined : ymd(order.event_date) });
+    const p = parseContent(body.content ?? {}, 'send', { currentEventDate: order.status === 'Draft' ? undefined : ymd(order.event_date), weddingDate: ymd(order.weddings?.wedding_date ?? null) || null });
     if (order.status !== 'Draft' && sameContent(p, this.currentOf(order))) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn đang gửi.', 400);
     await this.applySend(userId, order, p);
     return this.dtoOf(id);
@@ -576,7 +588,7 @@ export class OrdersService {
     if (!changeNote) return fail('VALIDATION_ERROR', 'Nhập nội dung thay đổi để khách biết.', 400, { changeNote: 'Nhập nội dung thay đổi để khách biết.' });
 
     const current = this.currentOf(order);
-    const p = parseContent({ ...(body.content ?? {}), customerName: current.customerName, customerPhone: current.customerPhone, depositPercent: current.depositPercent }, 'edit', { currentEventDate: current.eventDate });
+    const p = parseContent({ ...(body.content ?? {}), customerName: current.customerName, customerPhone: current.customerPhone, depositPercent: current.depositPercent }, 'edit', { currentEventDate: current.eventDate, weddingDate: ymd(order.weddings?.wedding_date ?? null) || null });
     const deposit = Number(order.deposit_amount);
     if (p.total < deposit) return fail('ORDER_TOTAL_BELOW_DEPOSIT', `Tổng mới không được nhỏ hơn tiền đã cọc (${money(deposit)}).`, 400);
     if (sameContent(p, current)) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn hiện tại.', 400);
@@ -604,6 +616,9 @@ export class OrdersService {
         },
       });
     });
+
+    // Đổi ngày thực hiện: việc chi tiết neo theo ngày đó trên timeline của khách phải tính lại
+    if (changes.includes('EventDate')) await onOrderEventDateChanged(this.prisma, id);
 
     const conversationId = await this.conversationOf(order);
     if (conversationId) {

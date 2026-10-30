@@ -30,9 +30,9 @@ export const totalOf = (items: OrderItemInput[]) => items.reduce((s, i) => s + i
 
 const withKeys = (items: OrderItemInput[]): FormItem[] => (items.length ? items.map((i) => ({ ...i, key: newItemKey() })) : [newItem()])
 
-/** Đơn mới: điền sẵn tên và số điện thoại khách; ngày sự kiện NCC tự nhập. */
-export function emptyValues(customer: { name: string; phone: string }): OrderFormValues {
-  return { customerName: customer.name, customerPhone: customer.phone, eventDate: '', note: null, depositPercent: 30, items: [newItem()] }
+/** Đơn mới: điền sẵn tên, số điện thoại và ngày thực hiện = ngày cưới của khách (NCC đổi được, nhưng không được sau ngày cưới). */
+export function emptyValues(customer: { name: string; phone: string; weddingDate?: string | null }): OrderFormValues {
+  return { customerName: customer.name, customerPhone: customer.phone, eventDate: customer.weddingDate ?? '', note: null, depositPercent: 30, items: [newItem()] }
 }
 
 /** Nội dung hiện tại của đơn (để sửa). */
@@ -47,10 +47,16 @@ export function valuesOfOrder(o: Order): OrderFormValues {
   }
 }
 
-/** "Tạo lại đơn" (đơn hết hạn, đã hủy): giữ nguyên thông tin đơn cũ, mã đơn mới. Ngày sự kiện đã qua thì để trống cho NCC nhập lại. */
+/**
+ * "Tạo lại đơn" (đơn hết hạn, đã hủy): giữ nguyên thông tin đơn cũ, mã đơn mới. Ngày sự kiện đã qua hoặc sau ngày cưới của khách
+ * thì thay bằng ngày cưới (còn ở phía sau), không có thì để trống cho NCC nhập lại.
+ */
 export function valuesFromOrder(o: Order): OrderFormValues {
   const v = valuesOfOrder(o)
-  return { ...v, eventDate: v.eventDate >= todayVN() ? v.eventDate : '' }
+  const today = todayVN()
+  const wedding = o.weddingDate && o.weddingDate > today ? o.weddingDate : ''
+  const ok = v.eventDate >= today && (!o.weddingDate || v.eventDate <= o.weddingDate)
+  return { ...v, eventDate: ok ? v.eventDate : wedding }
 }
 
 /** Bỏ `key`, gọn dòng trống: nội dung gửi lên API. */

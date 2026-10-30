@@ -1,9 +1,13 @@
+import { Logger } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { notify } from '../chat/chat-messages';
 import { cancelPlan, depositDetailPlan, frameRows, type ServiceRef } from './timeline-rows';
 import { replanOnWeddingDateChange } from './timeline-schedule';
+import { customerDateWarning, dateChangeIssue, vendorDateNotice } from './timeline-rules';
 import { SERVICE_BY_CATEGORY_NAME, TIMELINE_TEMPLATES, templateOf, type ServiceKey } from './timeline-templates';
 
+const logger = new Logger('Timeline');
 const ymdOf = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
 /** Ngày theo giờ Việt Nam của một thời điểm, dạng "YYYY-MM-DD". */
 export const vnYmd = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
@@ -45,6 +49,11 @@ export async function syncOrderDetails(prisma: PrismaService, orderId: string): 
   const service = await serviceOfCategory(prisma, order.vendor_profiles.category_id);
   const wedding = await prisma.weddings.findUnique({ where: { id: order.wedding_id }, select: { wedding_date: true } });
   if (!service || !wedding?.wedding_date) return { deleted: 0, created: 0 };
+  // Ngày thực hiện sau ngày cưới (đơn cũ trước khi có luật, hoặc khách đổi ngày cưới sau khi cọc): không sinh việc, kẻo cả bộ việc chi tiết bị kéo tới ngày đó
+  if (ymdOf(order.event_date) > ymdOf(wedding.wedding_date)) {
+    logger.warn(`Đơn ${orderId}: ngày thực hiện ${ymdOf(order.event_date)} sau ngày cưới ${ymdOf(wedding.wedding_date)}, không sinh việc chi tiết`);
+    return { deleted: 0, created: 0 };
+  }
 
   const tasks = await prisma.timeline_tasks.findMany({ where: { wedding_id: order.wedding_id, task_code: { not: null } }, select: { id: true, task_code: true, status: true, order_id: true, scheduled_date: true } });
   // Ngày chụp album S: đã có (dịch vụ chụp ảnh cọc trước) thì dùng đúng ngày đó; chưa có thì tính tạm
@@ -64,6 +73,17 @@ export async function syncOrderDetails(prisma: PrismaService, orderId: string): 
     if (plan.rows.length) await tx.timeline_tasks.createMany({ data: plan.rows });
   });
   return { deleted: plan.deleteIds.length, created: plan.rows.length };
+}
+
+/**
+ * Khi NCC sửa ngày thực hiện của đơn đã cọc: các việc chi tiết neo theo E (E − n, ngày thực hiện, thanh toán, trả đồ) còn Todo bị xóa rồi sinh lại theo E mới.
+ * Việc đã xong, việc neo D / S / W (ngày chụp album, nhận ảnh...) và việc khách tự đổi hạn mà không neo theo E giữ nguyên.
+ */
+export async function onOrderEventDateChanged(prisma: PrismaService, orderId: string) {
+  const mine = await prisma.timeline_tasks.findMany({ where: { order_id: orderId, task_type: 'Detail', status: 'Todo' }, select: { id: true, task_code: true } });
+  const stale = mine.filter((t) => templateOf(t.task_code)?.anchor === 'E').map((t) => t.id);
+  if (stale.length) await prisma.timeline_tasks.deleteMany({ where: { id: { in: stale } } });
+  await syncOrderDetails(prisma, orderId);
 }
 
 /**
@@ -112,8 +132,8 @@ export interface DateChangePlan {
   changes: { id: string; title: string; oldDate: string; newDate: string }[];
   /** Dòng cần UPDATE khi xác nhận */
   updates: { id: string; date: Date }[];
-  /** Đơn đã cọc có ngày thực hiện khác ngày cưới mới */
-  warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string }[];
+  /** Đơn có ngày thực hiện lệch ngày cưới mới: đã cọc khác ngày, hoặc sau ngày cưới mới (chưa cọc thì kèm blocksDeposit) */
+  warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string; kind: 'DIFFERENT' | 'AFTER_WEDDING'; blocksDeposit: boolean }[];
 }
 
 /**
@@ -145,17 +165,39 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
 
   const changes = replanOnWeddingDateChange(TIMELINE_TEMPLATES, { wedding: newWedding, today, tasks: existing, services, orders: deposited });
   const byCode = new Map(tasks.map((t) => [t.task_code, t]));
-  const warnings = orders
-    .filter((o) => o.status === 'Deposited' && o.event_date && ymdOf(o.event_date) !== newWedding)
-    .map((o) => {
-      const e = ymdOf(o.event_date);
-      const vendorName = o.vendor_profiles?.business_name ?? '';
-      const [y, m, d] = e.split('-');
-      return { orderCode: o.order_code ?? '', vendorName, serviceId: o.vendor_profiles?.id ?? '', eventDate: e, message: `Đơn ${o.order_code} của ${vendorName} thực hiện ngày ${d}/${m}/${y}, khác ngày cưới mới. Nhắn NCC để cập nhật đơn.` };
-    });
+  const warnings = orders.flatMap((o) => {
+    const eventDate = ymdOf(o.event_date);
+    const view = { orderCode: o.order_code ?? '', status: o.status, eventDate, vendorName: o.vendor_profiles?.business_name ?? '' };
+    const issue = dateChangeIssue(view, newWedding);
+    if (!issue) return [];
+    return [{ orderCode: view.orderCode, vendorName: view.vendorName, serviceId: o.vendor_profiles?.id ?? '', eventDate, kind: issue.kind, blocksDeposit: issue.blocksDeposit, message: customerDateWarning(view, issue, newWedding) }];
+  });
   return {
     changes: changes.map((c) => ({ id: byCode.get(c.code)!.id, title: byCode.get(c.code)!.title ?? '', oldDate: c.from, newDate: c.to })),
     updates: changes.map((c) => ({ id: byCode.get(c.code)!.id, date: new Date(`${c.to}T00:00:00Z`) })),
     warnings,
   };
+}
+
+/**
+ * Sau khi khách lưu ngày cưới mới: báo các NCC có đơn đang giữ ngày thực hiện sau ngày cưới mới (đã cọc, hoặc chưa cọc nhưng đang chờ / chỉnh sửa)
+ * để họ cập nhật đơn. Chỉ báo trường hợp AFTER_WEDDING (cần hành động); lỗi ghi thông báo không làm hỏng việc đổi ngày cưới.
+ */
+export async function notifyVendorsOfWeddingDate(prisma: PrismaService, weddingId: string, newWedding: string) {
+  const orders = await prisma.orders.findMany({
+    where: { wedding_id: weddingId, status: { in: ['Deposited', 'Pending', 'NeedRevision'] } },
+    select: { id: true, order_code: true, status: true, event_date: true, vendor_profiles: { select: { user_id: true, business_name: true } } },
+  });
+  for (const o of orders) {
+    const view = { orderCode: o.order_code ?? '', status: o.status, eventDate: ymdOf(o.event_date), vendorName: o.vendor_profiles?.business_name ?? '' };
+    if (dateChangeIssue(view, newWedding)?.kind !== 'AFTER_WEDDING' || !o.vendor_profiles?.user_id) continue;
+    await notify(prisma, {
+      userId: o.vendor_profiles.user_id,
+      type: 'WeddingDateChanged',
+      title: 'Khách đã đổi ngày cưới',
+      content: vendorDateNotice(view, newWedding),
+      referenceType: 'Order',
+      referenceId: o.id,
+    }).catch(() => undefined);
+  }
 }

@@ -9,6 +9,7 @@ import { CANCEL_REASON } from '../constants'
 import { changesLabel, depositDeadline, formatDay, formatDayTime, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
 import { OrderStatusBadge } from './OrderBadges'
+import { OrderProgressPanel } from './OrderProgressPanel'
 import type { OrderFormMode } from './OrderFormDialog'
 import { PanelDialog } from './PanelDialog'
 import { PaymentScheduleTable } from './PaymentScheduleTable'
@@ -142,6 +143,12 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
           </Item>
         </dl>
       </Section>
+
+      {vendorView && (o.status === 'Deposited' || o.status === 'Completed') && (
+        <Section title="Tiến độ đơn">
+          <OrderProgressPanel orderId={o.id} readOnly={o.status !== 'Deposited'} />
+        </Section>
+      )}
 
       <Section title="Hạng mục báo giá">
         <div className="overflow-x-auto rounded-md border border-line">

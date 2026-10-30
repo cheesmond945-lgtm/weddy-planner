@@ -1,4 +1,3 @@
-import { X } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { catalogApi } from '@/api/catalog'
@@ -12,9 +11,12 @@ import type { PrepLevel, TimelineItem, Wedding } from '@/types/wedding'
 import { useTimeline, useTimelineMutations } from '../hooks'
 import { usePlanActions } from '../planActions'
 import { countServices, groupByTime, type ViewMode } from '../timelineGroups'
+import { filterTimeline, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
 import { CompleteTaskDialog, ReopenTaskDialog } from './TimelineConfirmDialogs'
 import { AddTaskDialog, EditMilestoneDialog } from './TimelineDialogs'
 import { TimelineGroupCard, defaultOpen } from './TimelineGroupCard'
+import { TimelineCalendar } from './TimelineCalendar'
+import { TimelineFilters } from './TimelineFilters'
 import { TimelineHero } from './TimelineHero'
 import { SERVICE_LABEL, TimelineCard, meetingDraft } from './TimelineRow'
 import { WeddingEditDialog } from './WeddingDialogs'
@@ -27,10 +29,11 @@ const SHOWS: { value: Show; label: string }[] = [
 ]
 
 const VIEW_KEY = 'weddy.timeline.view'
-/** Cách xem đã chọn, nhớ trong trình duyệt (localStorage có thể bị chặn nên bọc try/catch); mặc định THEO THỜI GIAN. */
+/** Cách xem đã chọn (THEO THỜI GIAN / THEO DỊCH VỤ / LỊCH), nhớ trong trình duyệt (localStorage có thể bị chặn nên bọc try/catch); mặc định THEO THỜI GIAN. */
 const loadView = (): ViewMode => {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'service' ? 'service' : 'time'
+    const v = localStorage.getItem(VIEW_KEY)
+    return v === 'service' || v === 'calendar' ? v : 'time'
   } catch {
     return 'time'
   }
@@ -62,6 +65,30 @@ const saveOpen = (v: Record<string, boolean>) => {
 
 type Entry = { type: 'task'; key: string; due: string; item: TimelineItem } | { type: 'group'; key: string; due: string; book: TimelineItem; kids: TimelineItem[] }
 
+/**
+ * Dải tổng hợp việc cần chú ý: quá hạn và sắp đến hạn (còn 0 đến 2 ngày). Bấm để xem đúng nhóm đó ở cách xem THEO THỜI GIAN.
+ * Cùng ngưỡng với thông báo (chuông) để hai nơi nói cùng một chuyện.
+ */
+function DeadlineBanner({ overdue, soon, onPick }: { overdue: number; soon: number; onPick: (month: 'overdue' | 'soon') => void }) {
+  if (!overdue && !soon) return null
+  const btn = 'font-semibold underline underline-offset-2 hover:opacity-80'
+  return (
+    <div role="status" className={cn('mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border px-4 py-3 text-sm', overdue ? 'border-warn bg-warn-soft text-warn' : 'border-gold-500 bg-gold-100 text-gold-800')}>
+      {overdue > 0 && (
+        <button type="button" className={btn} onClick={() => onPick('overdue')}>
+          {overdue} việc quá hạn
+        </button>
+      )}
+      {soon > 0 && (
+        <button type="button" className={btn} onClick={() => onPick('soon')}>
+          {soon} việc sắp đến hạn
+        </button>
+      )}
+      <span className="text-[13px] opacity-80">Bấm để xem danh sách.</span>
+    </div>
+  )
+}
+
 /** Banner khi thời gian chuẩn bị ngắn (mức Gấp / Rất gấp). */
 function UrgencyBanner({ level, daysLeft }: { level: PrepLevel | null; daysLeft: number | null }) {
   if (level !== 'SOON' && level !== 'VERY_SOON') return null
@@ -90,6 +117,12 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   const [params, setParams] = useSearchParams()
   const show = (SHOWS.find((s) => s.value === params.get('show'))?.value ?? 'todo') as Show
   const category = params.get('category') ?? ''
+  // Tìm kiếm / lọc việc (cách xem THEO THỜI GIAN và LỊCH), giữ trên URL để tải lại hoặc gửi link vẫn còn: ?q= &month= &owner=
+  const filters: Filters = {
+    q: params.get('q') ?? '',
+    month: params.get('month') ?? '',
+    owner: (['mine', 'vendor'] as const).find((o) => o === params.get('owner')) ?? 'all',
+  }
   const [editing, setEditing] = useState<TimelineItem | null>(null)
   const [completing, setCompleting] = useState<TimelineItem | null>(null)
   const [reopening, setReopening] = useState<TimelineItem | null>(null)
@@ -141,8 +174,13 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   })
 
   // Cách xem THEO THỜI GIAN: mọi việc (khung + việc con + việc tự thêm), cùng bộ lọc với cách xem theo dịch vụ
-  const timeItems = items.filter((i) => i.kind !== 'LOCKED' && (!category || slugOf(i) === category) && tab(i))
-  const timeGroups = groupByTime(timeItems, toISODate(today()))
+  const nowISO = toISODate(today())
+  const baseItems = items.filter((i) => i.kind !== 'LOCKED' && (!category || slugOf(i) === category) && tab(i))
+  // Số đếm của ô chọn tháng tính theo các bộ lọc khác (trừ tháng) để khớp với những gì sẽ thấy
+  const months = monthOptions(filterTimeline(baseItems, { ...filters, month: '' }, nowISO), nowISO)
+  const timeItems = view === 'service' ? baseItems : filterTimeline(baseItems, view === 'calendar' ? { ...filters, month: '' } : filters, nowISO)
+  const timeGroups = groupByTime(timeItems, nowISO)
+  const categories = [...new Map(items.filter((i) => i.category).map((i) => [i.category!.slug, SERVICE_LABEL[i.category!.slug] ?? i.category!.name])).entries()].map(([slug, label]) => ({ slug, label }))
   const setView = (v: ViewMode) => {
     setViewState(v)
     saveView(v)
@@ -158,15 +196,22 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       },
       { replace: true, preventScrollReset: true },
     )
-  const clearCategory = () =>
+  const setParam = (patch: Record<string, string>) =>
     setParams(
       (p) => {
         const next = new URLSearchParams(p)
-        next.delete('category')
+        for (const [k, v] of Object.entries(patch)) {
+          if (v) next.set(k, v)
+          else next.delete(k)
+        }
         return next
       },
-      { replace: true },
+      { replace: true, preventScrollReset: true },
     )
+  const overdueCount = items.filter((i) => i.kind !== 'LOCKED' && isOverdue(i, nowISO)).length
+  const soonCount = items.filter((i) => i.kind !== 'LOCKED' && isDueSoon(i, nowISO)).length
+  const setFilters = (patch: Partial<Filters>) => setParam({ ...(patch.q !== undefined && { q: patch.q.trim() }), ...(patch.month !== undefined && { month: patch.month }), ...(patch.owner !== undefined && { owner: patch.owner === 'all' ? '' : (patch.owner as OwnerFilter) }) })
+  const resetFilters = () => setParam({ q: '', month: '', owner: '', category: '' })
   const toggleGroup = (slug: string, current: boolean) =>
     setOpenMap((cur) => {
       const next = { ...cur, [slug]: !current }
@@ -215,12 +260,12 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
 
   const chip = (active: boolean) =>
     cn('rounded-pill border px-3.5 py-1.5 text-[13px] font-medium transition-colors', active ? 'border-ink bg-ink text-bg' : 'border-line bg-surface text-ink hover:border-primary')
-  const categoryName = category ? (SERVICE_LABEL[category] ?? items.find((i) => slugOf(i) === category)?.category?.name ?? category) : ''
 
   return (
     <>
       <TimelineHero wedding={wedding} items={items} onEdit={() => setEditingWedding(true)} onAddTask={() => setAdding(true)} />
       <UrgencyBanner level={level} daysLeft={daysLeft} />
+      <DeadlineBanner overdue={overdueCount} soon={soonCount} onPick={(m) => { setView('time'); setParam({ month: m, q: '', owner: '', category: '', show: '' }) }} />
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="text-[26px] leading-[1.15]">Timeline</h1>
@@ -232,14 +277,6 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
           ))}
         </div>
       </div>
-      {category && (
-        <div className="mt-3">
-          <button type="button" onClick={clearCategory} className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-surface px-3 py-1 text-[13px] font-medium hover:border-ink">
-            Đang xem: {categoryName}
-            <X className="size-3.5" aria-label="Xem tất cả hạng mục" />
-          </button>
-        </div>
-      )}
 
       <SegmentedTabs
         ariaLabel="Cách xem timeline"
@@ -249,12 +286,28 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
         tabs={[
           { value: 'time', label: 'Theo thời gian', sub: `${timeItems.length} việc` },
           { value: 'service', label: 'Theo dịch vụ', sub: `${countServices(timeItems)} dịch vụ` },
+          { value: 'calendar', label: 'Lịch', sub: 'Theo tháng' },
         ]}
       />
 
-      {view === 'time' ? (
+      {view !== 'service' && (
+        <TimelineFilters
+          filters={filters}
+          onChange={setFilters}
+          onReset={resetFilters}
+          months={view === 'time' ? months : undefined}
+          categories={categories}
+          category={category}
+          onCategory={(slug) => setParam({ category: slug })}
+          shown={timeItems.length}
+        />
+      )}
+
+      {view === 'calendar' ? (
+        <TimelineCalendar items={timeItems} weddingDate={wedding.date} renderCard={(i) => <TimelineCard key={i.id} item={i} leaving={leaving.has(i.id)} showService compactDate {...handlers} />} />
+      ) : view === 'time' ? (
         <div className="mt-5">
-          {timeItems.length === 0 && <EmptyState title={show === 'done' ? 'Chưa có việc nào xong' : 'Không còn việc nào cần làm'} />}
+          {timeItems.length === 0 && <EmptyState title={hasFilters(filters) || category ? 'Không có việc nào khớp bộ lọc' : show === 'done' ? 'Chưa có việc nào xong' : 'Không còn việc nào cần làm'} action={hasFilters(filters) || category ? <Button variant="outline" onClick={resetFilters}>Xóa bộ lọc</Button> : undefined} />}
           {timeGroups.map((g) => (
             <section key={g.key} aria-label={g.title} className="mb-7 last:mb-0">
               <h2 className={cn('mb-3 flex items-baseline gap-2 font-serif text-xl leading-tight', g.key === 'overdue' && 'text-warn')}>

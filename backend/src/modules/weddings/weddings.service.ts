@@ -2,7 +2,7 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService, categoryRank, categorySlug, estimateCost } from '../catalog/services.service';
 import { ORDER_INCLUDE, toOrderDto, ymd } from '../orders/order-mapping';
-import { onWeddingCategories, planWeddingDateChange } from './timeline-hooks';
+import { notifyVendorsOfWeddingDate, onWeddingCategories, planWeddingDateChange } from './timeline-hooks';
 
 const fail = (code: string, message: string, status: number, details?: unknown): never => {
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
@@ -92,12 +92,14 @@ export class WeddingsService {
     const data = { wedding_date: new Date(date), city: location, guest_count: guest!, budget, style: style || null, updated_date: new Date() };
     const user = existing ? null : await this.prisma.users.findUnique({ where: { id: userId }, select: { full_name: true } });
     // Một transaction: lưu thông tin + hạng mục + (đổi ngày cưới) cập nhật hạn các việc khung chưa xong
+    let dateChanged = false;
     const weddingId = await this.prisma.$transaction(async (tx) => {
       let id: string;
       if (existing) {
         id = existing.id;
         await tx.weddings.update({ where: { id }, data });
         if (ymd(existing.wedding_date) !== date) {
+          dateChanged = true;
           for (const u of (await planWeddingDateChange(tx, id, date)).updates) await tx.timeline_tasks.update({ where: { id: u.id }, data: { scheduled_date: u.date } });
         }
       } else {
@@ -108,6 +110,7 @@ export class WeddingsService {
       return id;
     });
     await onWeddingCategories(this.prisma, weddingId, new Date(date), slugs.map((s) => idBySlug.get(s)!));
+    if (dateChanged) await notifyVendorsOfWeddingDate(this.prisma, weddingId, date).catch(() => undefined);
     return this.getMine(userId);
   }
 

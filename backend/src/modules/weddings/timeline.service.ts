@@ -3,6 +3,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { categorySlug } from '../catalog/services.service';
 import { planWeddingDateChange, todayVNDate, toYmd, vnYmd } from './timeline-hooks';
 import { dayOf, levelOf, planDetails, planFrame } from './timeline-schedule';
+import { dueBounds, dueRangeIssue, sequenceIssue } from './timeline-rules';
+import { canTick, ownerOf } from './task-owner';
 import { SERVICE_BY_CATEGORY_NAME, TIMELINE_TEMPLATES, suggestOf, templateOf, type ServiceKey } from './timeline-templates';
 import { WeddingsService } from './weddings.service';
 
@@ -110,8 +112,13 @@ export class TimelineService {
         tentative: !done && tpl?.anchor === 'S',
         needsMeeting: !!tpl?.needsMeeting && !!t.order_id,
         appointmentDate: null as string | null, // cột appointment_date chờ chạy SQL (prisma/sql/2026-10-29-timeline-appointment-date.sql)
+        /** SERVICE_TASK: ai làm việc này (CUSTOMER / VENDOR / BOTH); khách chỉ tick được CUSTOMER và BOTH */
+        owner: kind === 'SERVICE_TASK' ? ownerOf(t.task_code) : null,
         /** SERVICE_TASK: mã đơn đang giữ việc */
         orderCode: kind === 'SERVICE_TASK' ? (order?.order_code ?? null) : null,
+        /** SERVICE_TASK: ngày thực hiện của đơn đang giữ việc, và cờ lệch (sau ngày cưới: đơn cũ trước khi có luật, hoặc khách đổi ngày cưới) */
+        orderEventDate: kind === 'SERVICE_TASK' && order?.event_date ? toYmd(order.event_date) : null,
+        dateConflict: kind === 'SERVICE_TASK' && !!order?.event_date && !!w.wedding_date && toYmd(order.event_date) > toYmd(w.wedding_date),
         /** CATEGORY_DEADLINE chưa chốt: số việc chi tiết sẽ mở sau khi đặt cọc ("N việc chi tiết mở sau khi bạn đặt cọc") */
         detailCount: kind === 'CATEGORY_DEADLINE' && !done ? detailCountOf(keyOfCat(t.category_id)) : 0,
         /** CATEGORY_DEADLINE đang Todo: đơn ĐÃ CỌC rồi bị hủy gần nhất cùng hạng mục ("Đơn … với … đã hủy ngày …"); cọc đơn mới thì Mốc chốt xong và dòng này mất */
@@ -140,10 +147,25 @@ export class TimelineService {
     return { wedding: w, task: t ?? fail('TIMELINE_ITEM_NOT_FOUND', 'Không tìm thấy việc trong timeline.', 404) };
   }
 
-  private checkDue(dueDate: unknown, weddingDate: Date | null) {
+  /**
+   * Hạn khách đặt phải nằm trong khoảng của loại việc (timeline-rules.ts dueBounds): việc tự thêm, khung, chi tiết trước sự kiện từ hôm nay đến ngày cưới
+   * (đúng ngày cưới được), việc neo ngày thực hiện đến E, việc sau sự kiện từ mốc của nó, "Ngày thực hiện" cố định theo đơn.
+   * `task` có: kiểm thêm thứ tự Chọn NCC / Mốc chốt cùng hạng mục.
+   */
+  private async checkDue(dueDate: unknown, weddingDate: Date | null, task?: { id: string; task_code: string | null; order_id: string | null; category_id: string | null; wedding_id: string | null }) {
     if (!isDate(dueDate)) return fail('VALIDATION_ERROR', 'Chọn hạn hợp lệ.', 400);
-    if (!weddingDate || dueDate < toYmd(todayVNDate()) || dueDate >= toYmd(weddingDate)) {
-      return fail('DUE_DATE_OUT_OF_RANGE', 'Hạn phải từ hôm nay đến trước ngày cưới.', 400);
+    if (!weddingDate) return fail('DUE_DATE_OUT_OF_RANGE', 'Hãy thiết lập ngày cưới trước.', 400);
+    const order = task?.order_id ? await this.prisma.orders.findUnique({ where: { id: task.order_id }, select: { event_date: true } }) : null;
+    const bounds = dueBounds(task?.task_code ?? null, { today: toYmd(todayVNDate()), wedding: toYmd(weddingDate), event: order?.event_date ? toYmd(order.event_date) : null });
+    const issue = dueRangeIssue(dueDate, bounds);
+    if (issue) return fail(bounds.fixed ? 'TIMELINE_ITEM_READONLY' : 'DUE_DATE_OUT_OF_RANGE', issue, 400);
+    if (task?.category_id) {
+      const siblings = await this.prisma.timeline_tasks.findMany({
+        where: { wedding_id: task.wedding_id!, category_id: task.category_id, id: { not: task.id }, task_code: { not: null } },
+        select: { task_code: true, scheduled_date: true, status: true },
+      });
+      const seq = sequenceIssue(task.task_code, dueDate, siblings.map((x) => ({ code: x.task_code, due: toYmd(x.scheduled_date), done: x.status === 'Done' })));
+      if (seq) return fail('DUE_DATE_ORDER', seq, 400);
     }
     return new Date(dueDate);
   }
@@ -152,7 +174,7 @@ export class TimelineService {
     const w = await this.weddings.requireWedding(userId);
     const title = body.title?.trim() ?? '';
     if (!title || title.length > 255) return fail('VALIDATION_ERROR', 'Nhập tên việc (tối đa 255 ký tự).', 400);
-    const due = this.checkDue(body.dueDate, w.wedding_date);
+    const due = await this.checkDue(body.dueDate, w.wedding_date);
     await this.prisma.timeline_tasks.create({ data: { wedding_id: w.id, title, scheduled_date: due, status: 'Todo', task_type: 'Frame', display_order: 0 } });
     return this.get(userId);
   }
@@ -163,13 +185,14 @@ export class TimelineService {
     const data: { title?: string; scheduled_date?: Date; status?: string; completed_date?: Date | null } = {};
 
     if (task.task_type === 'Detail' && !task.order_id) return fail('TIMELINE_ITEM_READONLY', 'Việc này mở ra sau khi đặt cọc dịch vụ.', 400);
+    if (task.order_id && !canTick('COUPLE', ownerOf(task.task_code))) return fail('TIMELINE_ITEM_READONLY', 'Việc này do nhà cung cấp thực hiện và cập nhật. Bạn chỉ xem được tiến độ.', 403);
     if (body.title !== undefined) {
       if (task.task_code !== null) return fail('TIMELINE_ITEM_READONLY', 'Không đổi được tên việc mặc định.', 400);
       const title = body.title.trim();
       if (!title || title.length > 255) return fail('VALIDATION_ERROR', 'Nhập tên việc (tối đa 255 ký tự).', 400);
       data.title = title;
     }
-    if (body.dueDate !== undefined) data.scheduled_date = this.checkDue(body.dueDate, wedding.wedding_date);
+    if (body.dueDate !== undefined) data.scheduled_date = await this.checkDue(body.dueDate, wedding.wedding_date, task);
     if (body.isDone !== undefined) {
       if (deadline) return fail('TIMELINE_ITEM_READONLY', 'Mốc "Chốt" tự hoàn thành khi đặt cọc dịch vụ.', 400);
       data.status = body.isDone ? 'Done' : 'Todo';
