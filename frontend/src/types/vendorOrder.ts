@@ -83,6 +83,8 @@ export interface Order {
   vendorName?: string
   /** Lĩnh vực của NCC (trang Kế hoạch của khách hiện đơn dưới hạng mục này) */
   category?: CategoryRef
+  /** Sảnh (gói) của đơn, Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md); null với dịch vụ khác và đơn cũ */
+  package?: { id: string; name: string } | null
   status: OrderStatus
   customerName: string
   customerPhone: string
@@ -128,6 +130,8 @@ export interface OrderContent {
   note: string | null
   depositPercent: number
   items: OrderItemInput[]
+  /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tổ chức sự kiện gửi / sửa đơn; dịch vụ khác để null */
+  packageId: string | null
 }
 
 export interface OrderListQuery {
@@ -177,6 +181,15 @@ export interface OrderProgress {
 export interface OrderTasks {
   items: OrderTask[]
   progress: OrderProgress
+}
+
+/** Một việc trên Bảng việc (GET /vendors/me/orders/tasks): việc của đơn đang thực hiện kèm thông tin đơn để gom theo khách / đơn. */
+export interface BoardTask extends OrderTask {
+  orderId: string
+  orderCode: string
+  customerName: string
+  /** "YYYY-MM-DD" ngày thực hiện của đơn */
+  eventDate: string
 }
 
 /** Một mục trên lịch làm việc của NCC (GET /vendors/me/orders/calendar). */

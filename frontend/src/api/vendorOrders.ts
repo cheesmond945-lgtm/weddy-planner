@@ -1,5 +1,5 @@
 import type { Paginated } from '@/types/api'
-import type { CalendarItem, CancelReason, Order, OrderContent, OrderListQuery, OrderProgress, OrderStatus, OrderTasks } from '@/types/vendorOrder'
+import type { BoardTask, CalendarItem, CancelReason, Order, OrderContent, OrderListQuery, OrderProgress, OrderStatus, OrderTasks } from '@/types/vendorOrder'
 import { http, requestRaw } from './client'
 
 /** Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp). */
@@ -34,6 +34,12 @@ export const vendorOrdersApi = {
   /** Lịch làm việc trong khoảng [from, to] (YYYY-MM-DD, tối đa 100 ngày): ngày thực hiện của đơn và việc chi tiết của đơn đã cọc. */
   calendar: async (from: string, to: string): Promise<CalendarItem[]> => {
     const res = await http.get<{ items: CalendarItem[] }>('/vendors/me/orders/calendar', { query: { from, to } })
+    return res.items
+  },
+
+  /** Bảng việc (kanban): mọi việc chi tiết của các đơn đang thực hiện, kèm mã đơn, tên khách, ngày thực hiện. */
+  board: async (): Promise<BoardTask[]> => {
+    const res = await http.get<{ items: BoardTask[] }>('/vendors/me/orders/tasks')
     return res.items
   },
 

@@ -57,6 +57,7 @@ export function MyOrderCard({ order: o, onRevise }: { order: Order; onRevise: (o
       <p className="mt-2 mb-1 line-clamp-2 text-[13px] [overflow-wrap:anywhere]" title={items}>
         {items}
       </p>
+      {o.package && row('Sảnh', o.package.name)}
       {row('Ngày thực hiện', formatDate(o.eventDate))}
       <EventDateNote order={o} />
       {row('Tổng giá trị', formatMoney(o.totalAmount))}

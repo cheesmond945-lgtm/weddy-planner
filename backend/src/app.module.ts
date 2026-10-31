@@ -18,8 +18,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ConsultationRequestsModule } from './modules/consultation-requests/consultation-requests.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { PaymentsGatewayModule } from './modules/payments-gateway/payments-gateway.module';
+import { HallsModule } from './modules/halls/halls.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, PaymentsGatewayModule, RealtimeModule],
+  imports: [PrismaModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, PaymentsGatewayModule, RealtimeModule, HallsModule],
 })
 export class AppModule {}

@@ -11,10 +11,12 @@ interface ServiceSidebarProps {
   actions?: ReactNode
   /** Ghi chú dưới các nút */
   tip?: ReactNode
+  /** Dòng thông tin đầu tiên dưới các nút (lịch bận theo sảnh vào ngày cưới) */
+  lead?: ReactNode
 }
 
 /** Khung giá bên phải trang chi tiết (dside trong prototype). */
-export function ServiceSidebar({ service, actions, tip }: ServiceSidebarProps) {
+export function ServiceSidebar({ service, actions, tip, lead }: ServiceSidebarProps) {
   const perTable = isTablePriced(service)
   return (
     <aside className="sticky top-[98px] rounded-[24px] border border-line bg-surface p-6 max-[900px]:static max-[900px]:order-first">
@@ -30,6 +32,8 @@ export function ServiceSidebar({ service, actions, tip }: ServiceSidebarProps) {
 
       {/* Nút ngay dưới khoảng giá: nhắn tin NCC, thêm vào kế hoạch */}
       {actions && <div className="mb-4 grid gap-2.5">{actions}</div>}
+
+      {lead}
 
       <InfoRow
         icon={<MapPin className="size-[18px]" />}

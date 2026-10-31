@@ -17,4 +17,6 @@ export const vendorKeys = {
   calendar: (userId: string | undefined, from?: string, to?: string) => (from && to ? (['vendor', userId, 'calendar', from, to] as const) : (['vendor', userId, 'calendar'] as const)),
   /** Tiến độ tóm tắt của mọi đơn đang thực hiện */
   orderProgress: (userId: string | undefined) => ['vendor', userId, 'order-progress'] as const,
+  /** Bảng việc (kanban) của Lịch làm việc */
+  taskBoard: (userId: string | undefined) => ['vendor', userId, 'task-board'] as const,
 }

@@ -1,5 +1,5 @@
 import { Check, Flower2, ImageIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { FitImage } from '@/components/FitImage'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -11,6 +11,8 @@ import { attrsOf, imagesOf } from './packageInfo'
 
 interface ServiceInfoPanelProps {
   service: ServiceDetail
+  /** Phần thêm trong khung chi tiết gói (lịch bận của sảnh) */
+  packageExtra?: (pkg: ServicePackage) => ReactNode
 }
 
 /** Ảnh đang xem trong khung xem lớn: album nào, ảnh thứ mấy */
@@ -20,7 +22,7 @@ type Viewing = { title: string; images: string[]; index: number }
  * Tab "Thông tin chung": giới thiệu, gói dịch vụ, ảnh thực tế ngoài gói (2.2).
  * Gói hiện theo service.packageLayout: "album" = card ảnh ghép (14B), "tiles" = mỗi gói một ô ảnh (14D).
  */
-export function ServiceInfoPanel({ service }: ServiceInfoPanelProps) {
+export function ServiceInfoPanel({ service, packageExtra }: ServiceInfoPanelProps) {
   const [viewing, setViewing] = useState<Viewing | null>(null)
   // Gói đang mở trong khung bên phải (layout album)
   const [opened, setOpened] = useState<ServicePackage | null>(null)
@@ -85,7 +87,7 @@ export function ServiceInfoPanel({ service }: ServiceInfoPanelProps) {
         </DetailCard>
       )}
 
-      <PackageDrawer service={service} pkg={opened} variant="gallery" onClose={() => setOpened(null)} />
+      <PackageDrawer service={service} pkg={opened} variant="gallery" extra={opened ? packageExtra?.(opened) : null} onClose={() => setOpened(null)} />
 
       <Lightbox
         title={viewing?.title ?? ''}

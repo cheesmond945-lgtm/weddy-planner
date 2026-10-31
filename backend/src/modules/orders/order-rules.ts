@@ -130,6 +130,8 @@ export interface ContentInput {
   note?: string | null;
   depositPercent?: number | string | null;
   items?: { itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string }[];
+  /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tổ chức sự kiện gửi / sửa đơn (docs/LICH_BAN_SANH.md); dịch vụ khác bỏ qua */
+  packageId?: string | null;
 }
 
 export interface ParsedItem {
@@ -147,6 +149,8 @@ export interface ParsedContent {
   depositPercent: number;
   items: ParsedItem[];
   total: number;
+  /** Sảnh đã chọn (chỉ kiểm định dạng ở đây; thuộc NCC nào, có bận không: OrdersService.checkHall) */
+  packageId: string | null;
 }
 
 /** draft: lưu nháp (chỉ bắt buộc ngày). send: gửi hoặc cập nhật đơn (kiểm tra đủ, kiểm tra cọc). edit: sửa sau cọc (như send, không kiểm tra cọc). */
@@ -190,6 +194,9 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
   });
   const total = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
+  const packageId = c.packageId === undefined || c.packageId === null || String(c.packageId).trim() === '' ? null : String(c.packageId).trim();
+  if (packageId && !UUID.test(packageId)) errors.packageId = 'Sảnh không hợp lệ.';
+
   const hasPercent = c.depositPercent !== undefined && c.depositPercent !== null && String(c.depositPercent).trim() !== '';
   const percent = hasPercent ? Number(c.depositPercent) : 30;
   const percentOk = percent > 0 && percent < 100;
@@ -213,18 +220,19 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
   const wd = weddingDateIssue(eventDate, opts.weddingDate, { mode, currentEventDate: opts.currentEventDate });
   if (wd) fail(wd.code, wd.message, wd.status, { eventDate: wd.message, weddingDate: opts.weddingDate });
 
-  return { customerName, customerPhone, eventDate, note: c.note?.trim() || null, depositPercent: percent, items, total };
+  return { customerName, customerPhone, eventDate, note: c.note?.trim() || null, depositPercent: percent, items, total, packageId };
 }
 
 /** Các thay đổi nội dung giữa đơn hiện tại và nội dung mới, theo ChangeType (để ghi OrderRevisionChanges sau cọc). */
 export function changeTypesBetween(
-  prev: { eventDate: string; note: string | null; items: ParsedItem[] },
-  next: { eventDate: string; note: string | null; items: ParsedItem[] },
+  prev: { eventDate: string; note: string | null; items: ParsedItem[]; packageId?: string | null },
+  next: { eventDate: string; note: string | null; items: ParsedItem[]; packageId?: string | null },
 ): ChangeType[] {
   const out = new Set<ChangeType>();
   const key = (i: ParsedItem) => i.itemName.trim().toLowerCase();
   const names = (x: ParsedItem[]) => x.map(key).sort().join('|');
-  if (names(prev.items) !== names(next.items)) out.add('Item');
+  // Đổi sảnh tính là đổi hạng mục
+  if (names(prev.items) !== names(next.items) || (prev.packageId ?? null) !== (next.packageId ?? null)) out.add('Item');
   for (const n of next.items) {
     const p = prev.items.find((i) => key(i) === key(n));
     if (p && (p.quantity !== n.quantity || p.unit !== n.unit)) out.add('Quantity');
@@ -238,9 +246,10 @@ export function changeTypesBetween(
   return [...out];
 }
 
-/** Hai nội dung giống nhau (cùng hạng mục theo thứ tự, ngày, ghi chú, tên, số điện thoại, tỷ lệ cọc). */
+/** Hai nội dung giống nhau (cùng hạng mục theo thứ tự, ngày, ghi chú, tên, số điện thoại, tỷ lệ cọc, sảnh). */
 export function sameContent(a: ParsedContent, b: ParsedContent): boolean {
   return (
+    (a.packageId ?? null) === (b.packageId ?? null) &&
     a.customerName === b.customerName &&
     a.customerPhone === b.customerPhone &&
     a.eventDate === b.eventDate &&

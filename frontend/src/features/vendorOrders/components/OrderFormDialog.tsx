@@ -3,9 +3,11 @@ import { useState, type ReactNode } from 'react'
 import { ApiError } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useHallDates } from '@/features/halls/hooks'
 import { useWeddingReminder } from '@/features/vendorChat/hooks'
 import { isVenue } from '@/features/vendorPackages/constants'
 import { usePackages } from '@/features/vendorPackages/hooks'
+import { RESTAURANT_SLUG } from '@/features/vendors/constants'
 import { controlClass, Field } from '@/features/vendors/components/FormParts'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { UnsavedChangesGuard } from '@/features/vendors/components/UnsavedChangesGuard'
@@ -185,6 +187,14 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   // Ngày cưới của khách: ngày thực hiện không được sau ngày này (backend kiểm lại, 422 EVENT_DATE_AFTER_WEDDING)
   const weddingDate = customer.weddingDate ?? (order ?? (mode.kind === 'again' ? mode.from : null))?.weddingDate ?? null
   const categorySlug = (order ?? (mode.kind === 'again' ? mode.from : null))?.category?.slug ?? packages?.[0]?.category?.slug ?? null
+  // Trung tâm tổ chức sự kiện: đơn phải chọn sảnh (gói đang đăng, hoặc đúng sảnh đơn đang có dù đã ẩn); sảnh bận ngày đó thì gửi bị từ chối
+  const venue = categorySlug === RESTAURANT_SLUG
+  const currentHall = order?.package?.id ?? (mode.kind === 'again' ? mode.from.package?.id : undefined)
+  const halls = (packages ?? []).filter((p) => isVenue(p.category) && (p.status === 'PUBLISHED' || p.id === currentHall))
+  const hallDates = useHallDates(venue ? values.packageId : null, values.eventDate, values.eventDate)
+  // Sửa đơn đã cọc giữ nguyên sảnh và ngày: sảnh "bận" chính vì đơn này, không cảnh báo
+  const keepsHall = mode.kind === 'edit' && values.packageId === mode.order.package?.id && values.eventDate === mode.order.eventDate
+  const hallBusy = !keepsHall && !!values.eventDate && !!hallDates.data?.dates.includes(values.eventDate)
   const busy = save.isPending
   const dirty = !sameValues(values, initial)
   const items = filledItems(values.items)
@@ -198,6 +208,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
     deposit: !locked,
     weddingDate,
     afterDeposit: locked,
+    requireHall: venue,
   }
   const advice = eventDateAdvice({ eventDate: values.eventDate, weddingDate, today: todayVN(), categorySlug })
   const errors: OrderErrors = checked
@@ -431,6 +442,36 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                   onChange={(e) => set({ eventDate: e.target.value })}
                 />
               </Field>
+              {venue && (
+                <Field
+                  label="Sảnh *"
+                  error={errors.packageId}
+                  hint={
+                    hallBusy ? (
+                      <span className="block font-medium text-warn">
+                        Sảnh này đã bận ngày {formatDate(values.eventDate)} (đơn đã cọc hoặc bạn đã đánh dấu bận). Đổi sảnh hoặc ngày, xem ở Lịch làm việc &gt; Lịch bận.
+                      </span>
+                    ) : (
+                      'Sảnh bận vào ngày thực hiện khi khách đặt cọc.'
+                    )
+                  }
+                >
+                  <select
+                    className={controlClass}
+                    aria-invalid={errors.packageId || hallBusy ? true : undefined}
+                    value={values.packageId ?? ''}
+                    onChange={(e) => set({ packageId: e.target.value || null })}
+                  >
+                    <option value="">Chọn sảnh</option>
+                    {halls.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.name}
+                        {h.status !== 'PUBLISHED' ? ' (đang ẩn)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <Field label="Ghi chú gửi khách" hint="Khách nhìn thấy ghi chú này trên đơn." full>
                 <textarea
                   rows={2}

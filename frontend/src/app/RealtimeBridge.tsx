@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
+import { hallKeys } from '@/features/halls/hooks'
 import { coupleOrderKeys } from '@/features/orders/hooks'
 import { vendorKeys } from '@/features/vendorOrders/keys'
 import { planningKeys } from '@/features/weddings/hooks'
@@ -33,6 +34,8 @@ export function RealtimeBridge() {
             // Đặt cọc, hủy đơn đổi kế hoạch và việc cần làm của khách
             invalidate(planningKeys.plan(uid))
             invalidate(planningKeys.timeline(uid))
+            // Cọc / hủy làm sảnh bận / trống (lịch của sảnh, số sảnh trống)
+            invalidate(['halls'])
           }
         } else if (role === 'VENDOR') {
           invalidate(vendorKeys.conversations(uid))
@@ -44,7 +47,22 @@ export function RealtimeBridge() {
             invalidate(vendorKeys.orderLists(uid))
             invalidate(vendorKeys.calendar(uid))
             invalidate(vendorKeys.orderCounts(uid))
+            // Cọc / hủy / đổi ngày thực hiện sinh hoặc gỡ việc chi tiết của đơn
+            invalidate(vendorKeys.orderProgress(uid))
+            invalidate(vendorKeys.taskBoard(uid))
+            // Khách cọc / NCC hủy hoặc đổi ngày, đổi sảnh: lịch bận theo sảnh đổi
+            invalidate(hallKeys.vendorBusy(uid))
           }
+        }
+      },
+      // Việc của đơn đổi (khách tick / đổi hạn, NCC tick / bỏ tick): timeline của khách, lịch và tiến độ của NCC tải lại
+      task: () => {
+        if (role === 'COUPLE') invalidate(planningKeys.timeline(uid))
+        if (role === 'VENDOR') {
+          invalidate(vendorKeys.orderProgress(uid))
+          invalidate(['vendor', uid, 'order-tasks'])
+          invalidate(vendorKeys.calendar(uid))
+          invalidate(vendorKeys.taskBoard(uid))
         }
       },
       read: () => {
@@ -67,6 +85,7 @@ export function RealtimeBridge() {
             invalidate(vendorKeys.orderProgress(uid))
             invalidate(['vendor', uid, 'order-tasks'])
             invalidate(vendorKeys.calendar(uid))
+            invalidate(vendorKeys.taskBoard(uid))
           }
         }
         if (role === 'ADMIN') invalidate(['admin', 'notifications'])

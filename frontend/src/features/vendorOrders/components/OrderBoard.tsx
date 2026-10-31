@@ -14,9 +14,9 @@ import { OrderProgressPanel } from './OrderProgressPanel'
 /** Đơn đang theo dõi trên lịch: chờ cọc, chờ chỉnh sửa, đã cọc. */
 export const ACTIVE_STATUSES: readonly Order['status'][] = ['Pending', 'NeedRevision', 'Deposited']
 
-/** Màu của đơn (hue) từ danh sách đơn: đơn hiện có không trùng màu, đơn cũ giữ màu khi có đơn mới. */
+/** Màu của đơn (hue) từ danh sách đơn: đơn đang theo dõi không trùng màu, đơn cũ giữ màu khi có đơn mới. */
 export const useHues = (orders: readonly Order[]) => {
-  const map = useMemo(() => assignHues(orders.map((o) => o.id)), [orders])
+  const map = useMemo(() => assignHues(orders.map((o) => ({ id: o.id, orderCode: o.orderCode, active: ACTIVE_STATUSES.includes(o.status) }))), [orders])
   return useMemo(() => (id: string) => hueOf(map, id), [map])
 }
 

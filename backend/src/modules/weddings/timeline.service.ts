@@ -1,6 +1,7 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { categorySlug } from '../catalog/services.service';
+import { publish } from '../realtime/realtime.bus';
 import { planWeddingDateChange, todayVNDate, toYmd, vnYmd } from './timeline-hooks';
 import { dayOf, levelOf, planDetails, planFrame } from './timeline-schedule';
 import { dueBounds, dueRangeIssue, sequenceIssue } from './timeline-rules';
@@ -199,7 +200,18 @@ export class TimelineService {
       data.completed_date = body.isDone ? new Date() : null;
     }
     if (Object.keys(data).length) await this.prisma.timeline_tasks.update({ where: { id }, data });
+    if (task.order_id && (data.status !== undefined || data.scheduled_date !== undefined)) await this.publishTaskChange(userId, task.order_id, id);
     return this.get(userId);
+  }
+
+  /**
+   * Việc gắn đơn vừa đổi trạng thái / hạn: báo NCC của đơn (và các phiên khác của khách) qua realtime để Lịch làm việc, Tiến độ đơn tải lại ngay.
+   * Không tạo thông báo; lỗi tra cứu không làm hỏng việc đã lưu.
+   */
+  private async publishTaskChange(userId: string, orderId: string, taskId: string) {
+    const o = await this.prisma.orders.findUnique({ where: { id: orderId }, select: { vendor_profiles: { select: { user_id: true } } } }).catch(() => null);
+    const vendorUser = o?.vendor_profiles?.user_id;
+    publish({ users: vendorUser ? [vendorUser, userId] : [userId], event: 'task', data: { orderId, taskId } });
   }
 
   async remove(userId: string, id: string) {

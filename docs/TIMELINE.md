@@ -134,7 +134,7 @@ Việc chi tiết (SERVICE_TASK) gắn với đơn đã cọc là **bảng việ
 
 Mã lạ hoặc việc không thuộc mẫu (timeline cũ): `BOTH` để không khóa nhầm. Vi phạm: `403 TIMELINE_ITEM_READONLY` (khách tick việc `VENDOR`, NCC tick việc `CUSTOMER`). NCC chỉ thấy việc gắn với **đơn của mình**, không thấy việc cá nhân của khách (đăng ký kết hôn, mua nhẫn…). NCC chỉ cập nhật khi đơn đang `Deposited`; đơn `Completed` thì Tiến độ đơn chỉ đọc (việc đã được đóng, mục 7.2 B2).
 
-NCC tick xong một việc: khách nhận thông báo `TaskUpdated` ("{NCC} đã hoàn thành việc …"), timeline của khách đổi ngay (realtime). Bỏ tick thì không thông báo.
+NCC tick xong một việc: khách nhận thông báo `TaskUpdated` ("{NCC} đã hoàn thành việc …"). Bỏ tick thì không thông báo. Mọi lần đổi việc gắn đơn (NCC tick / bỏ tick, khách tick / đổi hạn) đều đẩy sự kiện realtime `task` cho bên kia, không tạo thông báo: timeline của khách, Lịch làm việc và Tiến độ đơn của NCC đổi ngay.
 
 ### 8.2 Nhắc hạn
 
@@ -185,11 +185,13 @@ Danh sách việc có thêm cách xem **Lịch tháng** (kiểu Google Calendar,
 
 - **Khách:** tab thứ ba **LỊCH** cạnh "Theo thời gian" / "Theo dịch vụ" ở `/timeline`, nhớ lựa chọn trong `localStorage` (`weddy.timeline.view` = `calendar`). Cùng bộ lọc Chưa xong / Đã xong / Tất cả và theo hạng mục. Mỗi việc nằm ở ngày Hạn; ngày cưới được đánh dấu. Bấm ngày để xem các việc của ngày đó bằng đúng thẻ việc của cách xem danh sách (hoàn thành, hẹn NCC, sửa đều như cũ). Có dải "N việc quá hạn" nhảy tới việc quá hạn sớm nhất.
 - **NCC:** trang **Lịch làm việc** (`/vendor/calendar`, menu trái) gồm ngày thực hiện của các đơn Chờ cọc / Chờ chỉnh sửa / Đã cọc / Hoàn thành và việc chi tiết của đơn đã cọc. NCC có nhiều khách cùng lúc nên lịch có công cụ để biết việc nào của khách nào và không bị chồng chéo:
-  - **Màu theo đơn.** Mỗi đơn một màu ổn định (`features/calendar/orderColors.ts`: sắp theo mã đơn nên các đơn hiện có không trùng màu, đơn cũ giữ màu khi có đơn mới; tối đa 8 màu, quay vòng sau đó; không dùng đỏ và vàng vì dành cho trạng thái). Thẻ ghi tên khách ngắn ("Hùng & Chi: Chốt thực đơn"). Trạng thái hiện bằng dấu hiệu riêng, không chiếm màu: quá hạn có "!" và viền đỏ, đã xong gạch ngang và mờ.
+  - **Màu theo đơn.** Mỗi đơn một màu ổn định (`features/calendar/orderColors.ts`: đơn đang theo dõi (chờ cọc, chờ chỉnh sửa, đã cọc) được chia trước, rồi theo mã đơn `DH<yyMM><số>` (id là UUID ngẫu nhiên nên không dùng để sắp), nên tối đa 8 đơn đang theo dõi không trùng màu dù có nhiều đơn cũ và đơn mới không làm đổi màu đơn đang có; quá 8 thì quay vòng; không dùng đỏ và vàng vì dành cho trạng thái). Thẻ ghi tên khách ngắn ("Hùng & Chi: Chốt thực đơn"). Trạng thái hiện bằng dấu hiệu riêng, không chiếm màu: quá hạn có "!" và viền đỏ, đã xong gạch ngang và mờ.
   - **Ô đông việc** (hơn 3) gom theo khách thành thẻ "Hùng & Chi · 2", ô nào có việc quá hạn thì thẻ có "!"; thừa thì "+N khách khác".
   - **Lọc.** Chú giải là các nút bấm được, mỗi khách / đơn một nút (kèm 4 số cuối mã đơn và số việc trễ); bấm để chỉ xem khách đó, chọn nhiều được, "Bỏ lọc" để về tất cả. Thêm bộ lọc **Việc của tôi** ẩn các việc do khách làm.
   - **Danh sách của ngày gom theo khách**: mỗi khách một nhóm có tên đầy đủ, mã đơn. Ngày có từ hai đơn cùng thực hiện hiện nhắc "Có N đơn cùng thực hiện trong ngày này".
-  - **Chế độ "Theo đơn"** (tab thứ hai, nhớ trong `localStorage` `weddy.vendor.calendar.view`): mỗi đơn đang theo dõi một thẻ có màu riêng: tên khách, trạng thái, nhãn "Trễ tiến độ" / "Sắp đến hạn", ngày thực hiện còn bao lâu, thanh tiến độ `đã xong / tổng`, việc tiếp theo của NCC (hoặc "Đang chờ khách thực hiện" / "Đã xong mọi việc"), và nút mở danh sách việc để tick ngay. Đơn có việc của NCC bị trễ lên trước, rồi theo ngày thực hiện gần nhất.
+  - **Chế độ "Bảng việc"** (tab thứ hai): kanban kéo thả, xem mục 9.2.
+  - **Chế độ "Lịch bận"** (chỉ Trung tâm tổ chức sự kiện): lịch bận theo từng sảnh, nguồn Đơn / Thủ công, xem [LICH_BAN_SANH.md](LICH_BAN_SANH.md).
+  - **Chế độ "Theo đơn"** (tab thứ ba; tab đang chọn nhớ trong `localStorage` `weddy.vendor.calendar.view`): mỗi đơn đang theo dõi một thẻ có màu riêng: tên khách, trạng thái, nhãn "Trễ tiến độ" / "Sắp đến hạn", ngày thực hiện còn bao lâu, thanh tiến độ `đã xong / tổng`, việc tiếp theo của NCC (hoặc "Đang chờ khách thực hiện" / "Đã xong mọi việc"), và nút mở danh sách việc để tick ngay. Đơn có việc của NCC bị trễ lên trước, rồi theo ngày thực hiện gần nhất.
 - **API:** `GET /vendors/me/orders/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` (tối đa 100 ngày, `400 VALIDATION_ERROR` nếu sai) trả `{ items }`: mốc `ORDER` (`orderId`, `orderCode`, `customerName`, `date`, `status`) và `TASK` (thêm `owner`, `canTick`, `overdue`). Việc "Ngày thực hiện" trùng đúng ngày thực hiện của đơn bị bỏ vì đã có mốc ORDER. Logic thuần: `backend/src/modules/weddings/calendar-items.ts`.
 
 ### 9.1 Tìm kiếm và lọc (cách xem THEO THỜI GIAN và LỊCH)
@@ -204,4 +206,20 @@ Thanh tìm kiếm và lọc nằm dưới thanh chuyển cách xem, lọc ngay t
 | Người thực hiện | Mọi việc / Việc của tôi (bỏ việc chỉ NCC làm) / Việc do NCC làm (xem mục 8.1) |
 
 Cùng bộ lọc trạng thái Chưa xong / Đã xong / Tất cả có sẵn; các bộ lọc kết hợp theo AND. Khi bộ lọc nào bật hiện "N việc phù hợp" và "Xóa bộ lọc". Cách xem Lịch: nếu tháng đang xem không có việc nào khớp thì có dải "Tháng này không có việc nào" kèm nút tới việc gần nhất.
+
+### 9.2 Bảng việc của NCC (kanban kéo thả)
+
+Tab **Bảng việc** ở Lịch làm việc (`/vendor/calendar`), giữa "Lịch tháng" và "Theo đơn". Dữ liệu: `GET /vendors/me/orders/tasks` (mọi việc chi tiết của đơn Đã cọc). Logic thuần: `frontend/src/features/vendorOrders/taskBoard.ts`; giao diện: `components/TaskBoard.tsx` (thư viện `@dnd-kit/core`).
+
+| Cột | Việc | Kéo |
+|---|---|---|
+| Chờ khách làm | Việc của khách (`CUSTOMER`) chưa xong | Không (chỉ xem) |
+| Cần làm | Việc của NCC / hai bên chưa xong, theo hạn tăng dần | Sang Đã xong = đánh dấu xong |
+| Đã xong | Mọi việc đã xong, xong gần nhất trước | Việc của NCC / hai bên kéo về Cần làm = mở lại |
+
+- **Hàng (swimlane):** mặc định mỗi đơn một hàng (tên khách, mã đơn, ngày thực hiện, "đã xong / tổng", nhãn "Trễ tiến độ · N"), đơn có việc của NCC trễ lên trước rồi theo ngày thực hiện gần nhất; thu / mở từng hàng. "Không gom" cho một hàng chung, thẻ ghi tên khách và mã đơn. Mỗi hạng mục của đám cưới chỉ có một đơn Đã cọc (mục 3.5) nên gom theo khách cũng là gom theo đơn. Lựa chọn nhớ trong `localStorage` (`weddy.vendor.board.group`).
+- **Luật kéo thả:** chỉ việc NCC được tick, chỉ giữa Cần làm và Đã xong, không sang hàng khác; ô không thả được thì không sáng khi đang kéo. Thả xong thẻ đổi cột ngay rồi gọi `PATCH /vendors/me/orders/:id/tasks/:taskId`; lỗi (403 / 409) thì thẻ về chỗ cũ kèm thông báo. Khách thấy ngay (sự kiện realtime `task`) và nhận `TaskUpdated` khi việc xong.
+- **Cách kéo:** chuột kéo ngay; cảm ứng nhấn giữ rồi kéo (để vẫn cuộn ngang được các cột); bàn phím Space / Enter nhấc, mũi tên di chuyển, Space / Enter thả, Esc hủy, có lời đọc tiếng Việt. Mỗi thẻ vẫn có ô tròn để tick không cần kéo.
+- **Bộ lọc** dùng chung với Lịch tháng: chọn khách / đơn (chỉ hiện đơn Đã cọc), "Việc của tôi" ẩn cột Chờ khách làm và việc của khách.
+- **Không có** cột "Đang làm" (trạng thái việc trong CSDL chỉ có Todo / Done, thêm cần đổi CHECK của `TimelineTasks.Status`) và không tự sắp thứ tự thẻ trong cột (`display_order` dùng chung với timeline của khách).
 

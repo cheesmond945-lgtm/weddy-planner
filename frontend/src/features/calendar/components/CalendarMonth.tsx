@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useMemo, type CSSProperties } from 'react'
+import { useMemo, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { WEEKDAYS, groupByDate, monthGrid, monthTitle, shiftMonth } from '../monthGrid'
@@ -74,13 +74,19 @@ interface CalendarMonthProps {
   marks?: readonly { date: string; label: string }[]
   /** Việc làm khi bấm "Hôm nay" (mặc định: nhảy tới tháng của hôm nay và chọn hôm nay) */
   onToday?: () => void
+  /** Chú giải thay cho chú giải mặc định (Chưa xong / Quá hạn / Đã xong / Ngày thực hiện), ví dụ lịch bận theo sảnh */
+  legend?: ReactNode
+  /** Lớp thêm cho ô của một ngày trong tháng đang xem (ví dụ tô đỏ ngày sảnh bận) */
+  dayClassName?: (date: string) => string | undefined
+  /** Tên đơn vị: item cho mỗi thẻ ("việc"), group cho mỗi nhóm khi ô đông ("khách"); lịch bận theo sảnh dùng "mục bận" / "sảnh" */
+  nouns?: { item: string; group: string }
 }
 
 /**
  * Lịch tháng kiểu Google Calendar, chỉ xem và chọn ngày (không kéo thả): đổi hạn, tick việc làm ở danh sách của ngày được chọn.
  * Màn rộng: mỗi ô hiện tối đa 3 việc dạng thẻ nhỏ và "+N việc"; màn hẹp: chấm màu theo trạng thái.
  */
-export function CalendarMonth({ month, onMonthChange, events, today, selected, onSelect, marks = [], onToday }: CalendarMonthProps) {
+export function CalendarMonth({ month, onMonthChange, events, today, selected, onSelect, marks = [], onToday, legend, dayClassName, nouns = { item: 'việc', group: 'khách' } }: CalendarMonthProps) {
   const days = useMemo(() => monthGrid(month), [month])
   const byDate = useMemo(() => groupByDate(events), [events])
   const markOf = useMemo(() => new Map(marks.map((m) => [m.date, m.label])), [marks])
@@ -121,11 +127,12 @@ export function CalendarMonth({ month, onMonthChange, events, today, selected, o
               key={date}
               type="button"
               aria-pressed={isSelected}
-              aria-label={`${day}/${date.slice(5, 7)}${mark ? `, ${mark}` : ''}: ${list.length ? `${list.length} việc` : 'không có việc'}`}
+              aria-label={`${day}/${date.slice(5, 7)}${mark ? `, ${mark}` : ''}: ${list.length ? `${list.length} ${nouns.item}` : `không có ${nouns.item}`}`}
               onClick={() => onSelect(date)}
               className={cn(
                 'flex min-h-[58px] flex-col items-stretch gap-1 bg-surface p-1 text-left transition-colors hover:bg-surface-2 focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sage sm:min-h-[104px] sm:p-1.5',
                 !inMonth && 'bg-surface-2/60 text-muted-foreground',
+                inMonth && dayClassName?.(date),
                 isSelected && 'z-10 outline-2 -outline-offset-2 outline-sage',
               )}
             >
@@ -149,7 +156,11 @@ export function CalendarMonth({ month, onMonthChange, events, today, selected, o
                         {e.title}
                       </span>
                     ))}
-                    {list.length > MAX_CHIPS && <span className="px-1.5 text-[11.5px] font-medium text-muted-foreground">+{list.length - MAX_CHIPS} việc</span>}
+                    {list.length > MAX_CHIPS && (
+                      <span className="px-1.5 text-[11.5px] font-medium text-muted-foreground">
+                        +{list.length - MAX_CHIPS} {nouns.item}
+                      </span>
+                    )}
                   </>
                 ) : (
                   // Ô đông việc: một thẻ cho mỗi khách / đơn kèm số việc, thay cho một dãy thẻ chồng lên nhau
@@ -160,7 +171,7 @@ export function CalendarMonth({ month, onMonthChange, events, today, selected, o
                         {gs.slice(0, MAX_CHIPS).map((g) => (
                           <span
                             key={g.key}
-                            title={`${g.label}: ${g.count} việc${g.overdue ? `, ${g.overdue} quá hạn` : ''}`}
+                            title={`${g.label}: ${g.count} ${nouns.item}${g.overdue ? `, ${g.overdue} quá hạn` : ''}`}
                             style={g.hue !== undefined ? hueStyle(g.hue) : undefined}
                             className={cn('truncate rounded px-1.5 py-0.5 text-[11.5px] leading-tight font-medium', g.overdue > 0 && 'ring-1 ring-warn')}
                           >
@@ -168,7 +179,11 @@ export function CalendarMonth({ month, onMonthChange, events, today, selected, o
                             {g.label} · {g.count}
                           </span>
                         ))}
-                        {gs.length > MAX_CHIPS && <span className="px-1.5 text-[11.5px] font-medium text-muted-foreground">+{gs.length - MAX_CHIPS} khách khác</span>}
+                        {gs.length > MAX_CHIPS && (
+                          <span className="px-1.5 text-[11.5px] font-medium text-muted-foreground">
+                            +{gs.length - MAX_CHIPS} {nouns.group} khác
+                          </span>
+                        )}
                       </>
                     )
                   })()
@@ -186,21 +201,23 @@ export function CalendarMonth({ month, onMonthChange, events, today, selected, o
         })}
       </div>
 
-      <ul aria-label="Chú giải" className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted-foreground">
-        {(
-          [
-            ['todo', 'Chưa xong'],
-            ['overdue', 'Quá hạn'],
-            ['done', 'Đã xong'],
-            ['event', 'Ngày thực hiện'],
-          ] as const
-        ).map(([tone, label]) => (
-          <li key={tone} className="flex items-center gap-1.5">
-            <i className={cn('size-2 rounded-full', DOT[tone])} />
-            {label}
-          </li>
-        ))}
-      </ul>
+      {legend ?? (
+        <ul aria-label="Chú giải" className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted-foreground">
+          {(
+            [
+              ['todo', 'Chưa xong'],
+              ['overdue', 'Quá hạn'],
+              ['done', 'Đã xong'],
+              ['event', 'Ngày thực hiện'],
+            ] as const
+          ).map(([tone, label]) => (
+            <li key={tone} className="flex items-center gap-1.5">
+              <i className={cn('size-2 rounded-full', DOT[tone])} />
+              {label}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }

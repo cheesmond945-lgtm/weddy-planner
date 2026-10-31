@@ -77,6 +77,7 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
       ))}
       {o.items.length > shown.length && <p className="border-b border-dashed border-line py-1.5 text-[12.5px] text-muted-foreground">và {o.items.length - shown.length} hạng mục khác</p>}
 
+      {o.package && row('Sảnh', o.package.name)}
       {row('Ngày thực hiện', formatDate(o.eventDate))}
       {row('Tổng giá trị', formatMoney(o.totalAmount))}
       {updated && updated.newTotalAmount !== null && (

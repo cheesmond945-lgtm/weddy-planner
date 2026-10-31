@@ -31,13 +31,15 @@ export function validateDraft(v: OrderFormValues): OrderErrors {
  * `deposit` = false (sửa sau cọc, tiền cọc đã khóa): bỏ kiểm "tổng đơn quá nhỏ để đặt cọc".
  * `weddingDate`: ngày cưới của khách; ngày thực hiện không được sau ngày đó, và (trừ `afterDeposit`) ngày cưới không được đã qua.
  * `afterDeposit` (sửa sau cọc): giữ nguyên ngày đang có của đơn thì qua kiểm ngày cưới, như backend.
+ * `requireHall` (Trung tâm tổ chức sự kiện): phải chọn sảnh (docs/LICH_BAN_SANH.md).
  */
 export function validateOrder(
   v: OrderFormValues,
-  opts: { minTotal?: number; changeNote?: string; originalEventDate?: string; deposit?: boolean; weddingDate?: string | null; afterDeposit?: boolean } = {},
+  opts: { minTotal?: number; changeNote?: string; originalEventDate?: string; deposit?: boolean; weddingDate?: string | null; afterDeposit?: boolean; requireHall?: boolean } = {},
 ): OrderErrors {
   const e: OrderErrors = {}
   if (opts.changeNote !== undefined && !opts.changeNote.trim()) e.changeNote = 'Ghi nội dung thay đổi để khách biết đơn đã đổi gì.'
+  if (opts.requireHall && !v.packageId) e.packageId = 'Chọn sảnh cho đơn.'
   if (!v.customerName.trim()) e.customerName = 'Nhập tên khách hàng.'
   if (!PHONE_RE.test(v.customerPhone.trim())) e.customerPhone = 'Nhập số điện thoại hợp lệ (9–15 chữ số).'
   const date = eventDateError(v.eventDate)

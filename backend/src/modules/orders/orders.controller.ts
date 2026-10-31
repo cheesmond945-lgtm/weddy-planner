@@ -81,6 +81,12 @@ export class VendorOrdersController {
     return this.tasks.calendar(req.user.sub, from, to);
   }
 
+  /** Bảng việc (kanban): mọi việc chi tiết của các đơn đang thực hiện, kèm mã đơn, tên khách, ngày thực hiện. */
+  @Get('tasks')
+  board(@Req() req: any) {
+    return this.tasks.board(req.user.sub);
+  }
+
   @Get(':id')
   get(@Req() req: any, @Param('id') id: string) {
     return this.orders.getForVendor(req.user.sub, id);

@@ -1,6 +1,6 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Check, ImageIcon, X } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { FitImage } from '@/components/FitImage'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -164,11 +164,13 @@ interface PackageDrawerProps {
    * gallery: thông tin ở đầu, bên dưới là lưới toàn bộ ảnh của gói để lướt nhanh (sảnh, trang trí: layout album).
    */
   variant?: 'photos' | 'gallery'
+  /** Phần thêm dưới thông tin gói (lịch bận của sảnh, Trung tâm tổ chức sự kiện) */
+  extra?: ReactNode
   onClose: () => void
 }
 
 /** Khung chi tiết gói trượt từ phải: tên, thuộc tính, giá, mô tả đầy đủ, "Bao gồm" và ảnh của gói. */
-export function PackageDrawer({ service, pkg, variant = 'photos', onClose }: PackageDrawerProps) {
+export function PackageDrawer({ service, pkg, variant = 'photos', extra, onClose }: PackageDrawerProps) {
   return (
     <DialogPrimitive.Root open={!!pkg} onOpenChange={(o) => !o && onClose()}>
       <DialogPrimitive.Portal>
@@ -187,9 +189,9 @@ export function PackageDrawer({ service, pkg, variant = 'photos', onClose }: Pac
         >
           {pkg &&
             (variant === 'gallery' ? (
-              <GalleryBody key={pkg.id} images={imagesOf(service, pkg)} pkg={pkg} />
+              <GalleryBody key={pkg.id} images={imagesOf(service, pkg)} pkg={pkg} extra={extra} />
             ) : (
-              <DrawerBody key={pkg.id} images={imagesOf(service, pkg)} pkg={pkg} />
+              <DrawerBody key={pkg.id} images={imagesOf(service, pkg)} pkg={pkg} extra={extra} />
             ))}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
@@ -229,13 +231,14 @@ function PackageInfo({ pkg }: { pkg: ServicePackage }) {
 }
 
 /** Kiểu "gallery": thông tin gói ở đầu, bên dưới lưới giữ tỉ lệ toàn bộ ảnh; bấm ảnh mới phóng to. */
-function GalleryBody({ pkg, images }: { pkg: ServicePackage; images: string[] }) {
+function GalleryBody({ pkg, images, extra }: { pkg: ServicePackage; images: string[]; extra?: ReactNode }) {
   const [viewing, setViewing] = useState<number | null>(null)
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="relative border-b border-line px-6 pt-6 pb-5 pr-16 max-[700px]:px-4">
           <PackageInfo pkg={pkg} />
+          {extra}
           <DialogPrimitive.Close
             aria-label="Đóng chi tiết gói"
             className="absolute top-4 right-4 grid size-10 place-items-center rounded-full text-ink-2 transition-colors hover:bg-gold-100 hover:text-ink"
@@ -269,7 +272,7 @@ function GalleryBody({ pkg, images }: { pkg: ServicePackage; images: string[] })
  * Kiểu "photos": một cột, ảnh trên chữ dưới. Ảnh hiện nguyên khung (không cắt) trên nền kem, cao tối đa 58% màn hình
  * để tên và giá lộ ngay bên dưới; dải ảnh nhỏ để chuyển ảnh, bấm ảnh lớn để phóng to.
  */
-function DrawerBody({ pkg, images }: { pkg: ServicePackage; images: string[] }) {
+function DrawerBody({ pkg, images, extra }: { pkg: ServicePackage; images: string[]; extra?: ReactNode }) {
   const [index, setIndex] = useState(0)
   const [viewing, setViewing] = useState<number | null>(null)
 
@@ -314,6 +317,7 @@ function DrawerBody({ pkg, images }: { pkg: ServicePackage; images: string[] }) 
 
         <div className="px-6 pt-5 pb-6 max-[700px]:px-5">
           <PackageInfo pkg={pkg} />
+          {extra}
         </div>
       </div>
 

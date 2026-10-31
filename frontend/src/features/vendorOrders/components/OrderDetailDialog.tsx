@@ -132,6 +132,7 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
           <Item label="Khách hàng">{o.customerName}</Item>
           <Item label="Số điện thoại">{o.customerPhone || '—'}</Item>
           <Item label="Ngày thực hiện">{formatDate(o.eventDate)}</Item>
+          {o.package && <Item label="Sảnh">{o.package.name}</Item>}
           {o.status === 'Pending' && o.depositDueDate && <Item label="Hạn đặt cọc">{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</Item>}
           {o.completedDate && <Item label="Ngày hoàn thành">{formatDay(o.completedDate)}</Item>}
           {o.cancelledDate && <Item label="Ngày hủy">{formatDay(o.cancelledDate)}</Item>}

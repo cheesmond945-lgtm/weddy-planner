@@ -83,6 +83,7 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
         {more > 0 && <div className="border-b border-dashed border-line py-1.5 text-xs text-muted-foreground">và {more} hạng mục khác</div>}
       </div>
 
+      {o.package && row('Sảnh', o.package.name)}
       {row('Ngày thực hiện', formatDate(o.eventDate))}
       <EventDateNote order={o} />
       {row('Tổng giá trị', formatMoney(o.totalAmount))}

@@ -12,6 +12,8 @@ export interface RealtimeHandlers {
   message?: (e: { conversationId: string; orderId: string | null; type: string }) => void
   read?: (e: { conversationId: string }) => void
   notification?: (e: { type: string; referenceType: string | null; referenceId: string | null }) => void
+  /** Việc chi tiết của một đơn vừa đổi trạng thái / hạn (khách hoặc NCC cập nhật) */
+  task?: (e: { orderId: string; taskId: string }) => void
 }
 
 let socket: Socket | null = null

@@ -6,6 +6,10 @@ import { ServiceDetailView } from '@/features/catalog/components/ServiceDetailVi
 import { PackageCardSkeleton } from '@/features/catalog/components/ServiceInfoPanel'
 import { useService } from '@/features/catalog/hooks'
 import { FavoriteButton } from '@/features/favorites/components/FavoriteButton'
+import { HallCalendar, HallsVerdict } from '@/features/halls/components/HallCalendar'
+import { useMyOrders } from '@/features/orders/hooks'
+import { RESTAURANT_SLUG } from '@/features/vendors/constants'
+import { useWedding } from '@/features/weddings/hooks'
 import { AddToPlanButton, OpenChatButton, usePlanItemOf } from '@/features/weddings/planActions'
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { formatMoney } from '@/lib/format'
@@ -18,6 +22,14 @@ export default function ServiceDetailPage() {
   const location = useLocation()
   const { data: service, isPending, isError, error, refetch } = useService(serviceId)
   const planItem = usePlanItemOf(serviceId)
+  // Trung tâm tổ chức sự kiện: mỗi gói là một sảnh có lịch bận (docs/LICH_BAN_SANH.md); so với ngày cưới nếu khách đã thiết lập
+  const { data: wedding } = useWedding()
+  const halls = service?.category.slug === RESTAURANT_SLUG
+  // Sảnh chính khách này đã đặt cọc: lịch hiện "Bạn đã đặt" thay vì "Bận"
+  const { data: myOrders } = useMyOrders()
+  const booked = (myOrders ?? []).filter((o) => o.serviceId === serviceId && o.package && (o.status === 'Deposited' || o.status === 'Completed'))
+  const mineOf = (packageId: string) => booked.filter((o) => o.package!.id === packageId).map((o) => o.eventDate)
+  const bookedHall = booked.find((o) => o.eventDate === wedding?.date)?.package?.name ?? null
 
   // Về đúng danh sách (giữ bộ lọc) nếu đi từ trang Dịch vụ cưới
   const backTo = (location.state as { from?: string } | null)?.from ?? paths.services
@@ -60,6 +72,8 @@ export default function ServiceDetailPage() {
       {service && (
         <ServiceDetailView
           service={service}
+          sidebarLead={halls ? <HallsVerdict serviceId={service.id} weddingDate={wedding?.date} bookedHall={bookedHall} /> : undefined}
+          packageExtra={halls ? (pkg) => <HallCalendar packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
           headActions={<FavoriteButton service={service} variant="icon" />}
           sidebarActions={
             <>

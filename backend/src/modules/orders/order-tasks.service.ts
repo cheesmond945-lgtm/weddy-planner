@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
+import { publish } from '../realtime/realtime.bus';
 import { CALENDAR_MAX_DAYS, calendarItems } from '../weddings/calendar-items';
 import { canTick, orderProgress, ownerOf } from '../weddings/task-owner';
 import { OrderJobsService } from './order-jobs.service';
@@ -78,6 +79,28 @@ export class OrderTasksService {
   }
 
   /**
+   * Bảng việc (kanban) của NCC: mọi việc chi tiết của các đơn đang thực hiện (Deposited) trong một lần gọi, kèm thông tin đơn để gom theo
+   * khách / đơn. Kéo thả giữa cột Cần làm / Đã xong dùng setDone.
+   */
+  async board(userId: string) {
+    const vendor = await this.vendorOf(userId);
+    await this.jobs.sweep({ vendorId: vendor.id });
+    const today = todayVn();
+    const rows = await this.prisma.timeline_tasks.findMany({
+      where: { task_type: 'Detail', orders: { is: { vendor_id: vendor.id, status: 'Deposited' } } },
+      orderBy: [{ scheduled_date: 'asc' }, { display_order: 'asc' }],
+      select: { id: true, title: true, task_code: true, scheduled_date: true, status: true, completed_date: true, orders: { select: { id: true, order_code: true, customer_name: true, event_date: true } } },
+    });
+    return {
+      items: rows.flatMap((t) =>
+        t.orders
+          ? [{ ...this.rowOf(t, today), orderId: t.orders.id, orderCode: t.orders.order_code ?? '', customerName: t.orders.customer_name ?? '', eventDate: t.orders.event_date ? ymdOf(t.orders.event_date) : '' }]
+          : [],
+      ),
+    };
+  }
+
+  /**
    * Lịch làm việc của NCC trong khoảng [from, to] (tối đa CALENDAR_MAX_DAYS ngày): ngày thực hiện của các đơn đang chờ cọc / đã cọc / hoàn thành
    * và việc chi tiết của đơn đã cọc. Gom thành danh sách theo ngày ở weddings/calendar-items.ts.
    */
@@ -122,6 +145,8 @@ export class OrderTasksService {
     if (was !== isDone) {
       await this.prisma.timeline_tasks.update({ where: { id: task.id }, data: { status: isDone ? 'Done' : 'Todo', completed_date: isDone ? new Date() : null } });
       const coupleId = order.weddings?.user_id;
+      // Timeline của khách và các phiên khác của NCC tải lại ngay, kể cả khi bỏ tick (bỏ tick không có thông báo)
+      publish({ users: coupleId ? [coupleId, userId] : [userId], event: 'task', data: { orderId: order.id, taskId: task.id } });
       if (isDone && coupleId) {
         await notify(this.prisma, {
           userId: coupleId,

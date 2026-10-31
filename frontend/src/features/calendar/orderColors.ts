@@ -6,13 +6,23 @@
 
 export const HUES = [205, 330, 150, 270, 175, 235, 305, 95] as const
 
+export interface HueOrder {
+  id: string
+  /** Mã đơn DH<yyMM><4 số>: tăng theo thời điểm tạo (id là UUID ngẫu nhiên nên không dùng để sắp được) */
+  orderCode: string
+  /** Đơn đang theo dõi (chờ cọc, chờ chỉnh sửa, đã cọc): được chia màu trước đơn đã xong / đã hủy */
+  active?: boolean
+}
+
 /**
- * Gán hue cho từng đơn: sắp theo mã đơn (UUID tăng dần theo thời điểm tạo) rồi chia lần lượt, nên các đơn hiện có không trùng màu
- * khi ít hơn HUES.length và đơn cũ giữ màu khi có đơn mới. Cùng danh sách luôn ra cùng kết quả, không phụ thuộc thứ tự đầu vào.
+ * Gán hue cho từng đơn: đơn đang theo dõi trước, rồi theo mã đơn, chia lần lượt. Nhờ vậy tối đa HUES.length đơn đang theo dõi không trùng màu
+ * dù NCC có nhiều đơn cũ, và đơn mới (mã lớn hơn) không làm đổi màu đơn đang có. Cùng danh sách luôn ra cùng kết quả, không phụ thuộc thứ tự đầu vào.
  */
-export function assignHues(orderIds: readonly string[]): Map<string, number> {
-  const sorted = [...new Set(orderIds)].sort()
-  return new Map(sorted.map((id, i) => [id, HUES[i % HUES.length]]))
+export function assignHues(orders: readonly HueOrder[]): Map<string, number> {
+  const sorted = [...new Map(orders.map((o) => [o.id, o])).values()].sort(
+    (a, b) => Number(!a.active) - Number(!b.active) || a.orderCode.localeCompare(b.orderCode) || a.id.localeCompare(b.id),
+  )
+  return new Map(sorted.map((o, i) => [o.id, HUES[i % HUES.length]]))
 }
 
 /** Hue của một đơn; đơn chưa có trong danh sách (ví dụ ngoài 100 đơn gần nhất) lấy theo băm mã đơn. */

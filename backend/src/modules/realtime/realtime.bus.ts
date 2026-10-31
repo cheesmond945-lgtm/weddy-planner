@@ -7,7 +7,8 @@ import { EventEmitter } from 'node:events';
  * Chạy một tiến trình backend; nhiều tiến trình thì cần adapter Redis cho Socket.IO.
  */
 
-export type RealtimeEventName = 'message' | 'read' | 'notification';
+/** task: việc chi tiết của một đơn vừa đổi trạng thái / hạn (khách hoặc NCC cập nhật), không kèm thông báo */
+export type RealtimeEventName = 'message' | 'read' | 'notification' | 'task';
 
 export interface RealtimeEvent {
   /** Users.Id của người nhận */

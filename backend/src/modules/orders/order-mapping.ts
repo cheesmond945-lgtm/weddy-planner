@@ -16,6 +16,7 @@ export const ORDER_INCLUDE = {
   invoices: { orderBy: { created_date: 'asc' as const } },
   weddings: { select: { user_id: true, wedding_date: true } },
   vendor_profiles: { select: { id: true, user_id: true, business_name: true, service_categories: { select: { id: true, name: true } } } },
+  service_packages: { select: { id: true, name: true } },
 } satisfies Prisma.ordersInclude;
 
 export type OrderRow = Prisma.ordersGetPayload<{ include: typeof ORDER_INCLUDE }>;
@@ -48,6 +49,8 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
     serviceId: o.vendor_profiles!.id,
     vendorName: o.vendor_profiles!.business_name!,
     category: { id: cat.id, slug: categorySlug(cat.name), name: cat.name },
+    /** Sảnh (gói) của đơn, Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md); null với dịch vụ khác và đơn cũ */
+    package: o.service_packages ? { id: o.service_packages.id, name: o.service_packages.name ?? '' } : null,
     status: o.status,
     customerName: o.customer_name,
     customerPhone: o.customer_phone,

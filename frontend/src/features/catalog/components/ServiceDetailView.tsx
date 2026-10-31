@@ -2,7 +2,7 @@ import { Check, ExternalLink, Info, Lock, MapPin, Star } from 'lucide-react'
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { formatNumber } from '@/lib/format'
-import type { ServiceDetail } from '@/types/catalog'
+import type { ServiceDetail, ServicePackage } from '@/types/catalog'
 import { GalleryDialog } from './GalleryDialog'
 import { ServiceGallery } from './ServiceGallery'
 import { ServiceInfoPanel } from './ServiceInfoPanel'
@@ -26,10 +26,14 @@ interface ServiceDetailViewProps {
   /** Nút trong khung giá (nhắn tin, thêm vào kế hoạch) */
   sidebarActions?: ReactNode
   sidebarTip?: ReactNode
+  /** Dòng đầu dưới các nút trong khung giá (lịch bận theo sảnh vào ngày cưới, module halls) */
+  sidebarLead?: ReactNode
+  /** Phần thêm trong khung chi tiết gói (lịch bận của sảnh, module halls) */
+  packageExtra?: (pkg: ServicePackage) => ReactNode
 }
 
 /** Nội dung trang chi tiết dịch vụ (2.2), như renderDetail trong prototype. */
-export function ServiceDetailView({ service, headActions, sidebarActions, sidebarTip }: ServiceDetailViewProps) {
+export function ServiceDetailView({ service, headActions, sidebarActions, sidebarTip, sidebarLead, packageExtra }: ServiceDetailViewProps) {
   const [tab, setTab] = useState<Tab>('info')
   const [galleryOpen, setGalleryOpen] = useState(false)
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -128,13 +132,13 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
           {/* @container/content: lưới gói đo theo bề rộng cột nội dung này (2 cột khi từ 700px) */}
           <div id="service-tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="@container/content">
             {tab === 'info' ? (
-              <ServiceInfoPanel service={service} />
+              <ServiceInfoPanel service={service} packageExtra={packageExtra} />
             ) : (
               <GoogleReviewsPanel vendorId={service.id} mapsUrl={service.googleMapsUrl} />
             )}
           </div>
         </div>
-        <ServiceSidebar service={service} actions={sidebarActions} tip={sidebarTip} />
+        <ServiceSidebar service={service} actions={sidebarActions} tip={sidebarTip} lead={sidebarLead} />
       </div>
 
       <GalleryDialog

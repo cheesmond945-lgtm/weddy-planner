@@ -43,6 +43,7 @@ export function InvoiceDialog({ order: o, type, onClose, vendorName: vendorNameP
       {info('Số điện thoại', o.customerPhone || '—')}
       {info('Đơn dịch vụ', o.orderCode)}
       {info('Ngày thực hiện', formatDate(o.eventDate))}
+      {o.package && info('Sảnh', o.package.name)}
 
       {type === 'FinalInvoice' && (
         <div className="mt-4 overflow-x-auto rounded-md border border-line">

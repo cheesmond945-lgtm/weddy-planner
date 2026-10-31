@@ -138,6 +138,7 @@ Khi có tin văn bản mới, **người nhận** có một thông báo (bảng 
 | `message` | `{ conversationId, orderId, type }` | Mọi tin mới trong hội thoại của mình: tin chữ, thẻ đơn, tin hệ thống (đơn hết hạn, cọc, sửa, hủy, hoàn thành…). Gửi cho **cả hai bên** |
 | `read` | `{ conversationId }` | Một bên vừa đọc hội thoại (số chưa đọc đổi) |
 | `notification` | `{ type, referenceType, referenceId }` | Có thông báo mới |
+| `task` | `{ orderId, taskId }` | Việc chi tiết của một đơn vừa đổi: NCC tick / bỏ tick, khách tick / đổi hạn. Gửi cho bên kia và các phiên khác của người vừa sửa; không tạo thông báo (docs/TIMELINE.md mục 8.1) |
 
 Sự kiện chỉ báo "có thay đổi"; FE tải lại đúng truy vấn liên quan qua REST (`frontend/src/app/RealtimeBridge.tsx`), nên contract các endpoint giữ nguyên. Khi đang kết nối, FE chỉ hỏi lại dự phòng mỗi 60 giây; mất kết nối thì hỏi lại như cũ (5 giây khung chat, 15 đến 30 giây số chưa đọc). Chạy nhiều tiến trình backend thì cần adapter Redis cho Socket.IO.
 

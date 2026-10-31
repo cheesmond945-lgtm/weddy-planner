@@ -216,6 +216,9 @@ model orders {
   cancelled_date   DateTime?         @db.Timestamptz(6)
   cancel_reason    String?           @db.VarChar(20)
   created_date     DateTime?         @default(now()) @db.Timestamptz(6)
+  /// Gói / sảnh của đơn (Trung tâm tổ chức sự kiện): sảnh bận vào event_date khi đơn Deposited hoặc Completed (prisma/sql/2026-10-31-package-busy-dates.sql)
+  package_id       String?           @db.Uuid
+  service_packages service_packages? @relation(fields: [package_id], references: [id], onUpdate: NoAction)
   commissions      commissions?
   invoices         invoices[]
   messages         messages[]
@@ -264,7 +267,6 @@ model package_verifications {
   status           String?           @default("Pending") @db.VarChar(20)
   admin_note       String?
   reviewed_date    DateTime?         @db.Timestamptz(6)
-  cancel_reason    String?           @db.VarChar(20)
   created_date     DateTime?         @default(now()) @db.Timestamptz(6)
   snapshot         Json?
   service_packages service_packages? @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -342,9 +344,27 @@ model service_packages {
   package_albums        package_albums[]
   package_tags          package_tags[]
   package_verifications package_verifications[]
+  orders                orders[]
+  package_busy_dates    package_busy_dates[]
   vendor_profiles       vendor_profiles?        @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([vendor_id, status], map: "ix_packages_vendor_status")
+}
+
+/// Ngày bận NCC tự đánh dấu cho một sảnh (Trung tâm tổ chức sự kiện), từ ngày đến ngày (prisma/sql/2026-10-31-package-busy-dates.sql).
+/// Ngày bận từ đơn lấy từ orders (package_id, event_date, Deposited / Completed).
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model package_busy_dates {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  package_id       String           @db.Uuid
+  start_date       DateTime         @db.Date
+  end_date         DateTime         @db.Date
+  reason           String           @db.VarChar(255)
+  created_date     DateTime         @default(now()) @db.Timestamptz(6)
+  service_packages service_packages @relation(fields: [package_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([package_id, start_date, end_date], map: "ix_package_busy_dates_package")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.

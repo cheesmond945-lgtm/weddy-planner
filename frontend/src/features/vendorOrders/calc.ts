@@ -32,7 +32,7 @@ const withKeys = (items: OrderItemInput[]): FormItem[] => (items.length ? items.
 
 /** Đơn mới: điền sẵn tên, số điện thoại và ngày thực hiện = ngày cưới của khách (NCC đổi được, nhưng không được sau ngày cưới). */
 export function emptyValues(customer: { name: string; phone: string; weddingDate?: string | null }): OrderFormValues {
-  return { customerName: customer.name, customerPhone: customer.phone, eventDate: customer.weddingDate ?? '', note: null, depositPercent: 30, items: [newItem()] }
+  return { customerName: customer.name, customerPhone: customer.phone, eventDate: customer.weddingDate ?? '', note: null, depositPercent: 30, items: [newItem()], packageId: null }
 }
 
 /** Nội dung hiện tại của đơn (để sửa). */
@@ -44,6 +44,7 @@ export function valuesOfOrder(o: Order): OrderFormValues {
     note: o.note,
     depositPercent: o.depositPercent,
     items: withKeys(o.items.map(({ itemName, unit, quantity, unitPrice }) => ({ itemName, unit, quantity, unitPrice }))),
+    packageId: o.package?.id ?? null,
   }
 }
 
@@ -68,6 +69,7 @@ export function toContent(v: OrderFormValues): OrderContent {
     note: v.note?.trim() || null,
     depositPercent: v.depositPercent,
     items: filledItems(v.items).map(({ itemName, unit, quantity, unitPrice }) => ({ itemName: itemName.trim(), unit, quantity, unitPrice })),
+    packageId: v.packageId ?? null,
   }
 }
 
