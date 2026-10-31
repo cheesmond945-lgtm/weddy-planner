@@ -44,7 +44,7 @@ export function useSubmitCommissionPayment(id: string) {
     mutationFn: (body: SubmitCommissionPaymentBody) => commissionsApi.submitPayment(id, body),
     onSuccess: (s, body) => {
       sync(s)
-      toast(`Đã gửi minh chứng ${formatMoney(body.amount)} cho kỳ ${s.code}. Chờ WebPlan xác nhận.`)
+      toast(`Đã gửi minh chứng ${formatMoney(body.amount)} cho kỳ ${s.code}. Chờ Forever xác nhận.`)
     },
   })
 }

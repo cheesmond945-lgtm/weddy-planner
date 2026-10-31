@@ -54,7 +54,7 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
   const [updating, setUpdating] = useState(profile.revisionRequested)
   const [aiOpen, setAiOpen] = useState(false)
   const [confirmSubmit, setConfirmSubmit] = useState(false)
-  // Đồng ý Điều khoản hợp tác: phải tích mới nộp được hồ sơ duyệt hoặc gửi cập nhật
+  // Đồng ý Điều khoản hợp tác: chỉ tích khi nộp hồ sơ chưa được duyệt; đã duyệt thì gửi cập nhật không cần tích lại
   const [agreed, setAgreed] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
 
@@ -105,7 +105,7 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
 
   function doSave(submit: boolean) {
     save.mutate(
-      { body: { ...toRequest(values), ...(submit && { agreedToTerms: agreed }) }, submit, verified },
+      { body: { ...toRequest(values), ...(submit && { agreedToTerms: verified || agreed }) }, submit, verified },
       {
         onError: (err) => {
           const details = err instanceof ApiError && err.details && typeof err.details === 'object' ? (err.details as Record<string, string>) : null
@@ -337,7 +337,7 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
         actions
       ) : (
       <>
-      {!readOnly && (!verified || updating) && (
+      {!readOnly && !verified && (
         <label className="mb-3 flex cursor-pointer items-start justify-end gap-2 text-sm max-sm:justify-start">
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-[3px] accent-primary" />
           <span>
@@ -384,7 +384,7 @@ export function VendorProfileForm({ profile, reviewMode, actions }: { profile: V
             <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={cancelUpdate}>
               Hủy
             </Button>
-            <Button type="submit" className="h-10" disabled={busy || !agreed}>
+            <Button type="submit" className="h-10" disabled={busy}>
               {busy ? (
                 'Đang gửi…'
               ) : (

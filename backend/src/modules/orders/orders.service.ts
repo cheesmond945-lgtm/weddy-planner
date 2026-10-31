@@ -278,7 +278,7 @@ export class OrdersService {
     if (!txn) return { status: 'PENDING' as const, message: 'Chưa nhận được tiền. Nếu bạn vừa chuyển khoản, vui lòng đợi ít giây.' };
     const res = await this.markDepositPaid(o, txn.id, txn.paidAt);
     if (res === 'NOT_PENDING') {
-      return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái trong lúc thanh toán. Vui lòng liên hệ WebPlan để được hỗ trợ hoàn tiền.' };
+      return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái trong lúc thanh toán. Vui lòng liên hệ Forever để được hỗ trợ hoàn tiền.' };
     }
     return { status: 'PAID' as const, message: 'Đặt cọc thành công.' };
   }
@@ -413,7 +413,7 @@ export class OrdersService {
 
   async send(userId: string, id: string, body: { content?: ContentBody }) {
     const { vendor, order } = await this.ownedByVendor(userId, id);
-    if (vendor.status === 'Hidden') return fail('VENDOR_HIDDEN', 'Hồ sơ đang bị ẩn nên chưa gửi đơn mới được. Vui lòng liên hệ Everly.', 409);
+    if (vendor.status === 'Hidden') return fail('VENDOR_HIDDEN', 'Hồ sơ đang bị ẩn nên chưa gửi đơn mới được. Vui lòng liên hệ Forever.', 409);
     if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status ?? '')) {
       return fail('ORDER_NOT_REVISABLE', order.status === 'Deposited' || order.status === 'Completed' ? 'Đơn đã đặt cọc, không sửa và gửi lại được.' : 'Đơn đã hủy hoặc hết hạn.', 409);
     }

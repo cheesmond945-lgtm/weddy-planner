@@ -1,5 +1,5 @@
 /*
- * Hoa hồng NCC trả WebPlan theo kỳ tháng. Hợp đồng: docs/api/commissions.md (bản nháp).
+ * Hoa hồng NCC trả Forever theo kỳ tháng. Hợp đồng: docs/api/commissions.md (bản nháp).
  * CHỜ ĐỐI CHIẾU docs/database.md và docs/state-diagrams.md: tên trường, trạng thái đang suy từ prototype NCC
  * (màn Tài chính & đối soát) và các quyết định của nhóm (tỷ lệ theo lĩnh vực, tính theo đơn hoàn thành).
  *
@@ -68,7 +68,7 @@ export interface CommissionPayment {
   reviewNote: string | null
 }
 
-/** Thông tin chuyển khoản cho WebPlan (BE cấu hình). */
+/** Thông tin chuyển khoản cho Forever (BE cấu hình). */
 export interface CommissionTransferInfo {
   accountName: string
   bankName: string

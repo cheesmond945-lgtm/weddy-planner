@@ -89,7 +89,7 @@ export class CommissionPaymentsService {
         userId: row.vendor_profiles.user_id,
         type: 'CommissionPaid',
         title: 'Đã ghi nhận thanh toán hoa hồng',
-        content: `WebPlan đã nhận hoa hồng ${money} của kỳ ${period.slice(5, 7)}/${period.slice(0, 4)} (mã giao dịch ${txCode}).`,
+        content: `Forever đã nhận hoa hồng ${money} của kỳ ${period.slice(5, 7)}/${period.slice(0, 4)} (mã giao dịch ${txCode}).`,
         referenceType: 'CommissionStatement',
         referenceId: row.id,
       });

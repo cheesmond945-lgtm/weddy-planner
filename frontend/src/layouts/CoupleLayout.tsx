@@ -176,7 +176,7 @@ function QuickActions({ hideOnMobile }: { hideOnMobile?: boolean }) {
 function Footer() {
   return (
     <footer className="mx-auto flex w-full max-w-content flex-wrap items-center justify-between gap-4 px-6 pb-8 text-[13px] text-muted-foreground max-sm:px-3.5">
-      <span>© {new Date().getFullYear()} WebPlan. Nền tảng lập kế hoạch đám cưới.</span>
+      <span>© {new Date().getFullYear()} Forever. Nền tảng lập kế hoạch đám cưới.</span>
     </footer>
   )
 }

@@ -1,4 +1,4 @@
-/** Điều khoản hợp tác dành cho đối tác Everly. Chỗ {{...}} do fillTerms điền theo hồ sơ NCC. */
+/** Điều khoản hợp tác dành cho đối tác Forever. Chỗ {{...}} do fillTerms điền theo hồ sơ NCC. */
 export const TERMS_EFFECTIVE_DATE = '04/05/2026'
 
 export interface TermsArticle {
@@ -18,8 +18,8 @@ export const TERMS_ARTICLES: TermsArticle[] = [
   {
     title: 'Điều 1. Phí hoa hồng',
     paragraphs: [
-      'Đối tác chiết khấu cho Everly {{TY_LE}}% trên giá trị đơn thực tế, theo tỷ lệ áp dụng cho loại dịch vụ {{TEN_LOAI_DICH_VU}}.',
-      'Giá trị đơn thực tế là tổng giá trị cuối cùng của đơn trên Everly, sau mọi lần chỉnh sửa.',
+      'Đối tác chiết khấu cho Forever {{TY_LE}}% trên giá trị đơn thực tế, theo tỷ lệ áp dụng cho loại dịch vụ {{TEN_LOAI_DICH_VU}}.',
+      'Giá trị đơn thực tế là tổng giá trị cuối cùng của đơn trên Forever, sau mọi lần chỉnh sửa.',
       'Phí chỉ áp dụng khi khách hàng đã thanh toán hoàn tất cho Đối tác, tức là khi đơn chuyển sang trạng thái “Hoàn thành”. Đơn chuyển sang “Hoàn thành” khi Đối tác xác nhận sau ngày diễn ra sự kiện, hoặc khi hệ thống tự xác nhận sau 7 ngày kể từ ngày sự kiện.',
       'Đơn hết hạn cọc hoặc bị khách hủy không phát sinh hoa hồng.',
     ],
@@ -27,32 +27,32 @@ export const TERMS_ARTICLES: TermsArticle[] = [
   {
     title: 'Điều 2. Cam kết giá',
     paragraphs: [
-      'Đối tác cam kết báo giá cho khách hàng từ Everly bằng hoặc tốt hơn mức giá niêm yết công khai trên Fanpage, Website hoặc tại cửa hàng của Đối tác.',
+      'Đối tác cam kết báo giá cho khách hàng từ Forever bằng hoặc tốt hơn mức giá niêm yết công khai trên Fanpage, Website hoặc tại cửa hàng của Đối tác.',
       'Tuyệt đối không kê giá hay tăng giá để bù trừ vào phí hoa hồng của nền tảng.',
-      'Giá trên các gói dịch vụ đăng tại Everly phải là giá thật và được cập nhật khi có thay đổi.',
+      'Giá trên các gói dịch vụ đăng tại Forever phải là giá thật và được cập nhật khi có thay đổi.',
     ],
   },
   {
     title: 'Điều 3. Đảm bảo quyền lợi và khuyến mãi',
     paragraphs: [
-      'Khách hàng từ Everly phải được áp dụng đầy đủ các khuyến mãi và quà tặng hiện hành mà Đối tác đang công bố công khai.',
-      'Thay vào đó, Đối tác có thể cung cấp một ưu đãi độc quyền dành riêng cho người dùng Everly, với giá trị tương đương hoặc cao hơn.',
-      'Tuyệt đối không cắt giảm ưu đãi của khách hàng với lý do khách đến từ Everly, hoặc để bù trừ vào phí hoa hồng.',
+      'Khách hàng từ Forever phải được áp dụng đầy đủ các khuyến mãi và quà tặng hiện hành mà Đối tác đang công bố công khai.',
+      'Thay vào đó, Đối tác có thể cung cấp một ưu đãi độc quyền dành riêng cho người dùng Forever, với giá trị tương đương hoặc cao hơn.',
+      'Tuyệt đối không cắt giảm ưu đãi của khách hàng với lý do khách đến từ Forever, hoặc để bù trừ vào phí hoa hồng.',
     ],
   },
   {
     title: 'Điều 4. Thanh toán hoa hồng',
     paragraphs: [
-      'Everly lập bảng kê hoa hồng hằng tháng, gồm các đơn hoàn thành trong tháng.',
+      'Forever lập bảng kê hoa hồng hằng tháng, gồm các đơn hoàn thành trong tháng.',
       'Đối tác chủ động đối soát và thanh toán toàn bộ hoa hồng của bảng kê chậm nhất ngày 25 của tháng kế tiếp, qua mã QR thanh toán trên hệ thống.',
-      'Everly gửi thông báo nhắc trước hạn và khi bảng kê quá hạn.',
-      'Nếu Đối tác cố tình không thanh toán hoa hồng, hoặc quá hạn thanh toán từ 15 ngày, Everly sẽ khóa tài khoản. Khi tài khoản bị khóa, các gói dịch vụ ngừng hiển thị và Đối tác không thể nhận đơn mới.',
+      'Forever gửi thông báo nhắc trước hạn và khi bảng kê quá hạn.',
+      'Nếu Đối tác cố tình không thanh toán hoa hồng, hoặc quá hạn thanh toán từ 15 ngày, Forever sẽ khóa tài khoản. Khi tài khoản bị khóa, các gói dịch vụ ngừng hiển thị và Đối tác không thể nhận đơn mới.',
     ],
   },
   {
     title: 'Điều 5. Giao dịch qua nền tảng',
     paragraphs: [
-      'Với khách hàng tìm đến Đối tác qua Everly, mọi báo giá và chốt đơn phải được thực hiện qua hệ thống đơn của Everly.',
+      'Với khách hàng tìm đến Đối tác qua Forever, mọi báo giá và chốt đơn phải được thực hiện qua hệ thống đơn của Forever.',
       'Đối tác không được lôi kéo khách hàng giao dịch ngoài nền tảng nhằm tránh phí hoa hồng.',
       'Nếu phát hiện vi phạm, Đối tác vẫn phải thanh toán hoa hồng cho giao dịch đó và có thể bị xử lý theo Điều 11.',
     ],
@@ -62,7 +62,7 @@ export const TERMS_ARTICLES: TermsArticle[] = [
     paragraphs: [
       'Đối tác cam kết thông tin doanh nghiệp, mã số thuế, địa chỉ và giấy tờ cung cấp là thật, hợp lệ và còn hiệu lực.',
       'Khi có thay đổi, Đối tác phải cập nhật lại thông tin.',
-      'Everly có quyền yêu cầu bổ sung giấy tờ.',
+      'Forever có quyền yêu cầu bổ sung giấy tờ.',
     ],
   },
   {
@@ -70,8 +70,8 @@ export const TERMS_ARTICLES: TermsArticle[] = [
     paragraphs: [
       'Hình ảnh và mô tả gói dịch vụ phải đúng với dịch vụ thực tế Đối tác cung cấp.',
       'Đối tác phải sở hữu hoặc có quyền sử dụng hình ảnh đăng tải. Không được sử dụng hình ảnh của bên khác khi chưa được phép.',
-      'Gói dịch vụ chỉ hiển thị với khách hàng sau khi được Everly duyệt.',
-      'Everly có quyền yêu cầu chỉnh sửa nội dung sai lệch, phản cảm hoặc vi phạm pháp luật.',
+      'Gói dịch vụ chỉ hiển thị với khách hàng sau khi được Forever duyệt.',
+      'Forever có quyền yêu cầu chỉnh sửa nội dung sai lệch, phản cảm hoặc vi phạm pháp luật.',
     ],
   },
   {
@@ -99,14 +99,14 @@ export const TERMS_ARTICLES: TermsArticle[] = [
   },
   {
     title: 'Điều 11. Xử lý vi phạm',
-    paragraphs: ['Tùy mức độ vi phạm, Everly có thể áp dụng một hoặc nhiều biện pháp sau:'],
+    paragraphs: ['Tùy mức độ vi phạm, Forever có thể áp dụng một hoặc nhiều biện pháp sau:'],
     bullets: ['Nhắc nhở hoặc cảnh báo.', 'Khóa tài khoản.'],
     after: ['Khi bị khóa tài khoản, Đối tác vẫn phải hoàn thành các đơn khách đã đặt cọc và thanh toán đủ hoa hồng còn nợ.'],
   },
   {
     title: 'Điều 12. Thay đổi điều khoản và tỷ lệ hoa hồng',
     paragraphs: [
-      'Everly có thể cập nhật điều khoản hoặc tỷ lệ hoa hồng và sẽ thông báo cho Đối tác ít nhất 30 ngày trước khi áp dụng.',
+      'Forever có thể cập nhật điều khoản hoặc tỷ lệ hoa hồng và sẽ thông báo cho Đối tác ít nhất 30 ngày trước khi áp dụng.',
       'Tỷ lệ mới chỉ áp dụng cho các đơn hoàn thành sau ngày hiệu lực.',
       'Việc Đối tác tiếp tục sử dụng nền tảng sau ngày hiệu lực được xem là đồng ý với nội dung cập nhật.',
     ],
@@ -114,15 +114,15 @@ export const TERMS_ARTICLES: TermsArticle[] = [
   {
     title: 'Điều 13. Chấm dứt hợp tác',
     paragraphs: [
-      'Khi muốn dừng hợp tác, Đối tác liên hệ với Everly để được ẩn hồ sơ khỏi nền tảng.',
+      'Khi muốn dừng hợp tác, Đối tác liên hệ với Forever để được ẩn hồ sơ khỏi nền tảng.',
       'Trước khi dừng hợp tác, Đối tác phải hoàn thành các đơn đã nhận cọc và thanh toán đủ hoa hồng còn nợ.',
     ],
   },
   {
-    title: 'Điều 14. Vai trò của Everly',
+    title: 'Điều 14. Vai trò của Forever',
     paragraphs: [
-      'Everly là nền tảng kết nối khách hàng với Đối tác, không phải bên cung cấp dịch vụ cưới.',
-      'Tranh chấp về chất lượng dịch vụ do Đối tác và khách hàng tự giải quyết. Everly hỗ trợ cung cấp lịch sử đơn và tin nhắn làm căn cứ.',
+      'Forever là nền tảng kết nối khách hàng với Đối tác, không phải bên cung cấp dịch vụ cưới.',
+      'Tranh chấp về chất lượng dịch vụ do Đối tác và khách hàng tự giải quyết. Forever hỗ trợ cung cấp lịch sử đơn và tin nhắn làm căn cứ.',
     ],
   },
 ]

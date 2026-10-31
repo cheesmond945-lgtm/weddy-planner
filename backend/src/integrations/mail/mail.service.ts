@@ -23,8 +23,8 @@ export class MailService {
       return false;
     }
     try {
-      // || chứ không ??: MAIL_FROM_NAME để trống thì vẫn hiện tên WebPlan (tên người gửi rỗng dễ bị lọc spam)
-      const info = await this.transport.sendMail({ from: `"${process.env.MAIL_FROM_NAME || 'WebPlan'}" <${this.user}>`, to, subject, html, text });
+      // || chứ không ??: MAIL_FROM_NAME để trống thì vẫn hiện tên Forever (tên người gửi rỗng dễ bị lọc spam)
+      const info = await this.transport.sendMail({ from: `"${process.env.MAIL_FROM_NAME || 'Forever'}" <${this.user}>`, to, subject, html, text });
       this.log.log(`Đã gửi email "${subject}" tới ${to} (${info.response})`);
       return true;
     } catch (e) {
@@ -41,16 +41,16 @@ export class MailService {
     const created = reason === 'created';
     const copy = created
       ? {
-          preheader: 'Thông tin đăng nhập tài khoản WebPlan của bạn.',
-          title: 'Chào mừng bạn đến với WebPlan',
+          preheader: 'Thông tin đăng nhập tài khoản Forever của bạn.',
+          title: 'Chào mừng bạn đến với Forever',
           intro: 'Tài khoản của bạn đã được tạo. Hãy dùng thông tin dưới đây để đăng nhập.',
-          subject: 'Thông tin tài khoản WebPlan của bạn',
+          subject: 'Thông tin tài khoản Forever của bạn',
         }
       : {
-          preheader: 'Email đăng nhập WebPlan của bạn đã được đổi, kèm mật khẩu mới.',
+          preheader: 'Email đăng nhập Forever của bạn đã được đổi, kèm mật khẩu mới.',
           title: 'Email đăng nhập đã được đổi',
-          intro: 'Theo yêu cầu hỗ trợ, quản trị viên WebPlan đã đổi email đăng nhập tài khoản của bạn sang địa chỉ này và cấp mật khẩu mới. Mật khẩu cũ không còn dùng được.',
-          subject: 'Email đăng nhập WebPlan đã được đổi – mật khẩu mới',
+          intro: 'Theo yêu cầu hỗ trợ, quản trị viên Forever đã đổi email đăng nhập tài khoản của bạn sang địa chỉ này và cấp mật khẩu mới. Mật khẩu cũ không còn dùng được.',
+          subject: 'Email đăng nhập Forever đã được đổi – mật khẩu mới',
         };
     // || chứ không ??: biến môi trường để trống ("") cũng phải lấy giá trị dự phòng
     const loginUrl = `${(process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173').trim()}/login`;
@@ -69,7 +69,7 @@ export class MailService {
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(22,29,29,.08)">
         <tr><td style="background:${ink};padding:28px 32px">
-          <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#ffffff;line-height:1">Web<i style="color:#d4b068">Plan.</i></div>
+          <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#ffffff;line-height:1">For<i style="color:#d4b068">ever.</i></div>
           <div style="margin-top:8px;font-size:11px;letter-spacing:3px;color:#9aa5a5">WEDDING PLANNER</div>
         </td></tr>
         <tr><td style="padding:32px 32px 8px">
@@ -91,7 +91,7 @@ export class MailService {
           </div>
         </td></tr>
         <tr><td style="background:#faf7f0;padding:18px 32px;text-align:center;font-size:12px;color:#8a8170">
-          Email được gửi tự động từ hệ thống WebPlan, vui lòng không trả lời.
+          Email được gửi tự động từ hệ thống Forever, vui lòng không trả lời.
         </td></tr>
       </table>
     </td></tr>
@@ -113,47 +113,47 @@ Bạn có thể đổi mật khẩu sau khi đăng nhập. Không chia sẻ emai
     const html = `<!doctype html>
 <html lang="vi"><body style="margin:0;padding:24px 12px;background:#f4efe6;font-family:'Segoe UI',Helvetica,Arial,sans-serif">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden">
-    <tr><td style="background:#161d1d;padding:24px 32px;font-family:Georgia,serif;font-size:26px;color:#ffffff">Web<i style="color:#d4b068">Plan.</i></td></tr>
+    <tr><td style="background:#161d1d;padding:24px 32px;font-family:Georgia,serif;font-size:26px;color:#ffffff">For<i style="color:#d4b068">ever.</i></td></tr>
     <tr><td style="padding:28px 32px;font-size:15px;line-height:1.6;color:#4a4a45">
       <h1 style="margin:0 0 12px;font-size:20px;color:#161d1d">Mật khẩu đã được thay đổi</h1>
-      <p style="margin:0 0 12px">Chào ${esc(name || to)}, mật khẩu tài khoản WebPlan <b>${esc(to)}</b> vừa được đổi lúc ${esc(at)}.</p>
-      <p style="margin:0">Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên WebPlan ngay để được hỗ trợ khóa và lấy lại tài khoản.</p>
+      <p style="margin:0 0 12px">Chào ${esc(name || to)}, mật khẩu tài khoản Forever <b>${esc(to)}</b> vừa được đổi lúc ${esc(at)}.</p>
+      <p style="margin:0">Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên Forever ngay để được hỗ trợ khóa và lấy lại tài khoản.</p>
     </td></tr>
-    <tr><td style="background:#faf7f0;padding:16px 32px;text-align:center;font-size:12px;color:#8a8170">Email được gửi tự động từ hệ thống WebPlan, vui lòng không trả lời.</td></tr>
+    <tr><td style="background:#faf7f0;padding:16px 32px;text-align:center;font-size:12px;color:#8a8170">Email được gửi tự động từ hệ thống Forever, vui lòng không trả lời.</td></tr>
   </table>
 </body></html>`;
-    const text = `Mật khẩu tài khoản WebPlan ${to} vừa được đổi lúc ${at}.
-Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên WebPlan ngay.`;
-    return this.send(to, 'Mật khẩu tài khoản WebPlan đã được thay đổi', html, text);
+    const text = `Mật khẩu tài khoản Forever ${to} vừa được đổi lúc ${at}.
+Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên Forever ngay.`;
+    return this.send(to, 'Mật khẩu tài khoản Forever đã được thay đổi', html, text);
   }
 
   /** Mã OTP xác minh email: đăng ký tài khoản cặp đôi hoặc đổi email đăng nhập. */
   sendOtp(to: string, otp: string, minutes: number, purpose: 'register' | 'changeEmail') {
-    const action = purpose === 'register' ? 'hoàn tất đăng ký tài khoản WebPlan' : `đổi email đăng nhập WebPlan sang <b>${esc(to)}</b>`;
+    const action = purpose === 'register' ? 'hoàn tất đăng ký tài khoản Forever' : `đổi email đăng nhập Forever sang <b>${esc(to)}</b>`;
     const html = this.notice(
       purpose === 'register' ? 'Xác minh email đăng ký' : 'Xác minh email mới',
       `<p style="margin:0 0 12px">Mã xác minh để ${action}:</p>
       <p style="margin:0 0 12px;font-family:Consolas,'Courier New',monospace;font-size:28px;font-weight:700;letter-spacing:6px;color:#161d1d">${esc(otp)}</p>
       <p style="margin:0">Mã có hiệu lực trong ${minutes} phút. Nếu không phải bạn yêu cầu, hãy bỏ qua email này.</p>`,
     );
-    const text = `Mã xác minh WebPlan của bạn: ${otp}
+    const text = `Mã xác minh Forever của bạn: ${otp}
 Mã có hiệu lực trong ${minutes} phút. Nếu không phải bạn yêu cầu, hãy bỏ qua email này.`;
-    return this.send(to, purpose === 'register' ? 'Mã xác minh đăng ký WebPlan' : 'Mã xác minh đổi email WebPlan', html, text);
+    return this.send(to, purpose === 'register' ? 'Mã xác minh đăng ký Forever' : 'Mã xác minh đổi email Forever', html, text);
   }
 
   /** Báo về email CŨ rằng email đăng nhập vừa được đổi, để chủ tài khoản phát hiện nếu không phải mình đổi. */
   sendEmailChanged(to: string, newEmail: string, byAdmin: boolean) {
     const at = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
     const masked = newEmail.replace(/^(.{1,2})[^@]*(@.*)$/, '$1***$2');
-    const who = byAdmin ? 'theo yêu cầu hỗ trợ, quản trị viên WebPlan đã đổi' : 'đã được đổi';
+    const who = byAdmin ? 'theo yêu cầu hỗ trợ, quản trị viên Forever đã đổi' : 'đã được đổi';
     const html = this.notice(
       'Email đăng nhập đã được thay đổi',
-      `<p style="margin:0 0 12px">Email đăng nhập tài khoản WebPlan <b>${esc(to)}</b> ${who} sang <b>${esc(masked)}</b> lúc ${esc(at)}. Từ giờ email này không còn dùng để đăng nhập.</p>
-      <p style="margin:0">Nếu không phải bạn yêu cầu, hãy liên hệ quản trị viên WebPlan ngay để được hỗ trợ khóa và lấy lại tài khoản.</p>`,
+      `<p style="margin:0 0 12px">Email đăng nhập tài khoản Forever <b>${esc(to)}</b> ${who} sang <b>${esc(masked)}</b> lúc ${esc(at)}. Từ giờ email này không còn dùng để đăng nhập.</p>
+      <p style="margin:0">Nếu không phải bạn yêu cầu, hãy liên hệ quản trị viên Forever ngay để được hỗ trợ khóa và lấy lại tài khoản.</p>`,
     );
-    const text = `Email đăng nhập tài khoản WebPlan ${to} ${who} sang ${masked} lúc ${at}.
-Nếu không phải bạn yêu cầu, hãy liên hệ quản trị viên WebPlan ngay.`;
-    return this.send(to, 'Email đăng nhập WebPlan đã được thay đổi', html, text);
+    const text = `Email đăng nhập tài khoản Forever ${to} ${who} sang ${masked} lúc ${at}.
+Nếu không phải bạn yêu cầu, hãy liên hệ quản trị viên Forever ngay.`;
+    return this.send(to, 'Email đăng nhập Forever đã được thay đổi', html, text);
   }
 
   /** Khung email thông báo ngắn (logo, tiêu đề, nội dung HTML đã escape sẵn). */
@@ -161,12 +161,12 @@ Nếu không phải bạn yêu cầu, hãy liên hệ quản trị viên WebPlan
     return `<!doctype html>
 <html lang="vi"><body style="margin:0;padding:24px 12px;background:#f4efe6;font-family:'Segoe UI',Helvetica,Arial,sans-serif">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden">
-    <tr><td style="background:#161d1d;padding:24px 32px;font-family:Georgia,serif;font-size:26px;color:#ffffff">Web<i style="color:#d4b068">Plan.</i></td></tr>
+    <tr><td style="background:#161d1d;padding:24px 32px;font-family:Georgia,serif;font-size:26px;color:#ffffff">For<i style="color:#d4b068">ever.</i></td></tr>
     <tr><td style="padding:28px 32px;font-size:15px;line-height:1.6;color:#4a4a45">
       <h1 style="margin:0 0 12px;font-size:20px;color:#161d1d">${esc(title)}</h1>
       ${body}
     </td></tr>
-    <tr><td style="background:#faf7f0;padding:16px 32px;text-align:center;font-size:12px;color:#8a8170">Email được gửi tự động từ hệ thống WebPlan, vui lòng không trả lời.</td></tr>
+    <tr><td style="background:#faf7f0;padding:16px 32px;text-align:center;font-size:12px;color:#8a8170">Email được gửi tự động từ hệ thống Forever, vui lòng không trả lời.</td></tr>
   </table>
 </body></html>`;
   }

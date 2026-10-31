@@ -23,7 +23,7 @@ export function PayCommissionDialog({ statementId, info, onClose }: { statementI
       <DialogContent className="max-w-[640px]">
         <DialogHeader>
           <DialogTitle>{paid ? 'Thanh toán thành công' : 'Thanh toán hoa hồng qua VietQR'}</DialogTitle>
-          <DialogDescription>{paid ? 'WebPlan đã nhận hoa hồng của kỳ này.' : 'Quét mã QR hoặc chuyển khoản theo thông tin bên dưới.'}</DialogDescription>
+          <DialogDescription>{paid ? 'Forever đã nhận hoa hồng của kỳ này.' : 'Quét mã QR hoặc chuyển khoản theo thông tin bên dưới.'}</DialogDescription>
         </DialogHeader>
         {info &&
           (paid ? (

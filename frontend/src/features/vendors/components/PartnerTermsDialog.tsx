@@ -26,7 +26,7 @@ export function PartnerTermsDialog({ open, onOpenChange, vars }: { open: boolean
               <DialogTitle className="bg-[linear-gradient(90deg,var(--sage),var(--gold))] bg-clip-text pr-1 pb-1 font-serif text-[clamp(34px,6vw,46px)] leading-[1.1] font-medium tracking-normal text-transparent italic">
                 Điều khoản hợp tác
               </DialogTitle>
-              <DialogDescription className="mt-1.5 text-[13px] text-muted-foreground">Dành cho đối tác Everly</DialogDescription>
+              <DialogDescription className="mt-1.5 text-[13px] text-muted-foreground">Dành cho đối tác Forever</DialogDescription>
               <div className="mt-2.5 flex flex-wrap gap-2 text-[11.5px] font-medium">
                 <span className="rounded-pill border border-line bg-surface px-2.5 py-0.5 text-muted-foreground">Hiệu lực từ {TERMS_EFFECTIVE_DATE}</span>
               </div>

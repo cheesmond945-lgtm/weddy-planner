@@ -7,7 +7,7 @@ import type { VendorProfile } from '@/types/vendor'
 export function PackageStatusSummary({ profile }: { profile: VendorProfile }) {
   if (profile.status === 'VERIFIED') return null
   if (profile.status === 'HIDDEN') {
-    return <Notice tone="warn" title="Hồ sơ của bạn đang được ẩn nên các gói dịch vụ không hiển thị và chưa thêm hay khôi phục được. Liên hệ Everly nếu cần hiển thị lại." />
+    return <Notice tone="warn" title="Hồ sơ của bạn đang được ẩn nên các gói dịch vụ không hiển thị và chưa thêm hay khôi phục được. Liên hệ Forever nếu cần hiển thị lại." />
   }
   return (
     <Notice tone="warn" title="Hồ sơ nhà cung cấp chưa được duyệt nên chưa thêm được gói dịch vụ. Các gói đã có vẫn xem và sửa được.">

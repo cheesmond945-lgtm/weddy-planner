@@ -134,7 +134,7 @@ export class VendorProfileService {
    */
   async save(userId: string, body: UpdateProfileBody, submit: boolean) {
     const v = await this.findVendor(userId);
-    if (v.status === 'Hidden') return fail('VENDOR_PROFILE_HIDDEN', 'Hồ sơ đang bị ẩn, vui lòng liên hệ Everly.', 409);
+    if (v.status === 'Hidden') return fail('VENDOR_PROFILE_HIDDEN', 'Hồ sơ đang bị ẩn, vui lòng liên hệ Forever.', 409);
     const approved = v.status === 'Approved';
     const awaitingReview = v.status === 'Pending' || (approved && v.vendor_verifications[0]?.status === 'Pending');
     if (awaitingReview) return fail('VENDOR_PROFILE_LOCKED', 'Hồ sơ đang chờ duyệt, không thể chỉnh sửa.', 409);
@@ -291,7 +291,7 @@ export class VendorProfileService {
     const hours = v.working_hours?.trim();
 
     const system =
-      'Bạn là biên tập viên nội dung cho nền tảng đặt dịch vụ cưới Everly. Viết đoạn giới thiệu nhà cung cấp bằng tiếng Việt, một đoạn văn liền mạch dài khoảng 70 đến 110 từ. ' +
+      'Bạn là biên tập viên nội dung cho nền tảng đặt dịch vụ cưới Forever. Viết đoạn giới thiệu nhà cung cấp bằng tiếng Việt, một đoạn văn liền mạch dài khoảng 70 đến 110 từ. ' +
       `${style.instruction} ` +
       'BẮT BUỘC nêu cụ thể tên đơn vị, lĩnh vực và mọi thông tin có trong dữ liệu (khu vực, giờ làm việc, điểm nhấn). Chỉ nhắc khu vực ở mức phường/xã và tỉnh/thành phố, KHÔNG nêu số nhà, tên đường hay địa chỉ chi tiết. Mỗi câu phải mang ít nhất một thông tin cụ thể từ dữ liệu; không viết câu chung chung có thể áp cho đơn vị nào cũng được. ' +
       'Không mở đầu bằng lời chào. TUYỆT ĐỐI không bịa số năm kinh nghiệm, số khách hàng, giải thưởng, ưu đãi, giá, cam kết hay chi tiết nào không có trong dữ liệu. ' +

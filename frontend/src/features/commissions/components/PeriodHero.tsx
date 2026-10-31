@@ -73,7 +73,7 @@ export function PeriodHero({ summary, detail }: { summary: CommissionStatementSu
               </span>
               <p className="text-[15px] font-semibold text-ink">Đã thanh toán kỳ này</p>
               <p className="text-[13px] text-muted-foreground">
-                {receipt ? <>Ngày {formatDate(receipt.submittedAt.slice(0, 10))}</> : 'WebPlan đã nhận hoa hồng.'}
+                {receipt ? <>Ngày {formatDate(receipt.submittedAt.slice(0, 10))}</> : 'Forever đã nhận hoa hồng.'}
                 {receipt?.note && <span className="block">{receipt.note}</span>}
                 {s.lateDays && <span className="block text-warn">Trả trễ {s.lateDays} ngày so với hạn.</span>}
               </p>

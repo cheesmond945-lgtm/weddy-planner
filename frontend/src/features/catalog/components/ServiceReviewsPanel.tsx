@@ -3,7 +3,7 @@ import { formatNumber } from '@/lib/format'
 import type { ServiceDetail } from '@/types/catalog'
 import { DetailCard } from './DetailCard'
 
-/** Tab "Đánh giá và phản hồi": điểm Google Maps, chưa có phản hồi trên WebPlan (như prototype). */
+/** Tab "Đánh giá và phản hồi": điểm Google Maps, chưa có phản hồi trên Forever (như prototype). */
 export function ServiceReviewsPanel({ service }: { service: ServiceDetail }) {
   return (
     <DetailCard title="Đánh giá và phản hồi">
@@ -14,9 +14,9 @@ export function ServiceReviewsPanel({ service }: { service: ServiceDetail }) {
           <div className="text-[13px] text-muted-foreground">{formatNumber(service.reviewCount)} đánh giá trên Google Maps</div>
         </div>
       </div>
-      <p className="mt-1.5 text-[13px] text-muted-foreground">Điểm đánh giá lấy từ Google Maps, không phải đánh giá trên WebPlan.</p>
+      <p className="mt-1.5 text-[13px] text-muted-foreground">Điểm đánh giá lấy từ Google Maps, không phải đánh giá trên Forever.</p>
       <div className="mt-4 rounded-xl border border-dashed border-line p-[26px] text-center text-muted-foreground">
-        Chưa có phản hồi nào từ khách hàng Weddy.
+        Chưa có phản hồi nào từ khách hàng Forever.
         <br />
         Sau khi hoàn thành dịch vụ, bạn sẽ được mời đánh giá.
       </div>

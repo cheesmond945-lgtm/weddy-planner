@@ -6,7 +6,7 @@ export function ServicesHero({ categories, onSelectCategory }: { categories: Cat
   return (
     <section className="mx-auto mt-0.5 mb-7 max-w-[1120px] text-center">
       <span className="mb-5 inline-flex rounded-pill border border-line bg-surface px-[13px] py-1 text-[9px] leading-snug font-semibold tracking-[0.18em] text-gold">
-        WEDDY PLANNER VIỆT NAM
+        FOREVER VIỆT NAM
       </span>
       <h1 className="mx-auto max-w-[700px] text-[clamp(34px,4.2vw,48px)] leading-[1.05] tracking-[-0.035em] max-md:text-[34px] max-[500px]:text-[32px]">
         Hiện thực hóa

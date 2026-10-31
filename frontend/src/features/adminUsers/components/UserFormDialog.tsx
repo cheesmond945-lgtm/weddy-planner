@@ -11,7 +11,7 @@ import { ROLE_LABEL } from '../constants'
 import { useSaveUser } from '../hooks'
 import { PanelDialog } from '@/features/serviceOrders/components/PanelDialog'
 
-/** Giá trị điền sẵn khi tạo tài khoản NCC từ một yêu cầu tư vấn. */
+/** Giá trị điền sẵn khi tạo tài khoản NCC từ một yêu cầu hợp tác. */
 export interface UserPreset {
   role?: Role
   username?: string
@@ -19,7 +19,7 @@ export interface UserPreset {
   phone?: string
   categoryId?: string
   consultationId?: string
-  /** Tạo từ yêu cầu tư vấn: tên đăng nhập, vai trò, lĩnh vực lấy từ yêu cầu và bị khóa (email, SĐT vẫn sửa được) */
+  /** Tạo từ yêu cầu hợp tác: tên đăng nhập, vai trò, lĩnh vực lấy từ yêu cầu và bị khóa (email, SĐT vẫn sửa được) */
   locked?: boolean
 }
 

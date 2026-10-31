@@ -7,7 +7,7 @@ import type { VendorDocumentType, VendorPhotoType, VendorProfile, VendorProfileS
 export const PROFILE_STATUS: Record<VendorProfileStatus, { label: string; tone: BadgeTone }> = {
   NOT_SUBMITTED: { label: 'Bản nháp', tone: 'wait' },
   PENDING: { label: 'Chờ duyệt', tone: 'info' },
-  NEEDS_REVISION: { label: 'Cần chỉnh sửa / bổ sung', tone: 'warn' },
+  NEEDS_REVISION: { label: 'Cần chỉnh sửa', tone: 'warn' },
   VERIFIED: { label: 'Đã duyệt', tone: 'done' },
   HIDDEN: { label: 'Đã ẩn', tone: 'wait' },
 }

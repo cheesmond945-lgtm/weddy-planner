@@ -97,7 +97,7 @@ export default function AdminPackageDetailPage() {
   const changes = changesOf(p)
 
   function openRevisionConfirm() {
-    if (!note.trim()) return setFormError('Nhập lý do chỉnh sửa / bổ sung để nhà cung cấp biết cần sửa gì.')
+    if (!note.trim()) return setFormError('Nhập lý do chỉnh sửa để nhà cung cấp biết cần sửa gì.')
     setFormError('')
     setConfirm('revision')
   }
@@ -112,7 +112,7 @@ export default function AdminPackageDetailPage() {
     <div className="grid gap-3">
       {asking && (
         <label className="grid gap-1.5 rounded-md border border-warn/35 bg-warn-soft px-4 py-3.5">
-          <span className="text-[13px] font-medium text-warn">Lý do chỉnh sửa / bổ sung *</span>
+          <span className="text-[13px] font-medium text-warn">Lý do chỉnh sửa *</span>
           <textarea
             rows={4}
             autoFocus
@@ -137,14 +137,14 @@ export default function AdminPackageDetailPage() {
             </Button>
             <Button type="button" variant="outline" className="h-10 border-warn/50 text-warn hover:bg-warn-soft" onClick={openRevisionConfirm} disabled={review.isPending}>
               {review.isPending ? <LoaderCircle className="animate-spin" /> : <MessageSquareWarning />}
-              Gửi yêu cầu chỉnh sửa / bổ sung
+              Gửi yêu cầu chỉnh sửa
             </Button>
           </>
         ) : (
           <>
             <Button type="button" variant="outline" className="h-10 border-warn/50 text-warn hover:bg-warn-soft" onClick={() => setAsking(true)} disabled={review.isPending}>
               <MessageSquareWarning />
-              Yêu cầu chỉnh sửa / bổ sung
+              Yêu cầu chỉnh sửa
             </Button>
             <Button type="button" variant="success" className="h-10" onClick={() => setConfirm('approve')} disabled={review.isPending}>
               {review.isPending ? <LoaderCircle className="animate-spin" /> : <Check />}
@@ -189,7 +189,7 @@ export default function AdminPackageDetailPage() {
         </Notice>
       )}
       {p.status === 'NEEDS_REVISION' && p.reviewNote && (
-        <Notice tone="warn" title={p.published ? 'Đã yêu cầu nhà cung cấp chỉnh sửa / bổ sung bản cập nhật' : 'Đã yêu cầu nhà cung cấp chỉnh sửa / bổ sung'}>
+        <Notice tone="warn" title={p.published ? 'Đã yêu cầu nhà cung cấp chỉnh sửa bản cập nhật' : 'Đã yêu cầu nhà cung cấp chỉnh sửa'}>
           <p>
             <b>Lý do:</b> {p.reviewNote}
           </p>
@@ -226,7 +226,7 @@ export default function AdminPackageDetailPage() {
         onOpenChange={(o) => !o && !review.isPending && setConfirm(null)}
         icon={MessageSquareWarning}
         confirmIcon={MessageSquareWarning}
-        title="Gửi yêu cầu chỉnh sửa / bổ sung?"
+        title="Gửi yêu cầu chỉnh sửa?"
         confirmLabel="Gửi yêu cầu"
         pending={review.isPending}
         notice={

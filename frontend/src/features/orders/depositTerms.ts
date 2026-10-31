@@ -24,7 +24,7 @@ export const DEPOSIT_TERMS_ARTICLES: DepositTermsArticle[] = [
   },
   {
     title: 'Điều 4. Cách thanh toán',
-    body: 'Thanh toán bằng chuyển khoản qua mã QR hiển thị trên đơn, đúng số tiền và giữ nguyên nội dung chuyển khoản. Chuyển sai số tiền hoặc sửa nội dung có thể khiến hệ thống không tự xác nhận được. Everly chỉ ghi nhận các khoản cọc thanh toán qua hệ thống. Khoản chuyển trực tiếp cho nhà cung cấp ngoài nền tảng không được Everly ghi nhận hay hỗ trợ.',
+    body: 'Thanh toán bằng chuyển khoản qua mã QR hiển thị trên đơn, đúng số tiền và giữ nguyên nội dung chuyển khoản. Chuyển sai số tiền hoặc sửa nội dung có thể khiến hệ thống không tự xác nhận được. Forever chỉ ghi nhận các khoản cọc thanh toán qua hệ thống. Khoản chuyển trực tiếp cho nhà cung cấp ngoài nền tảng không được Forever ghi nhận hay hỗ trợ.',
   },
   {
     title: 'Điều 5. Số tiền cọc cố định',

@@ -113,7 +113,7 @@ export function validateProfile(v: ProfileFormValues, categorySlug: string | und
     if (!String(v[key]).trim()) errors[key] = `Nhập ${label}.`
   }
   if (v.taxCode.trim() && !TAX_CODE_RE.test(v.taxCode.trim())) errors.taxCode = 'Mã số thuế gồm 10 chữ số (hoặc 10 + 3 số chi nhánh).'
-  if (!categorySlug) errors.categoryId = 'Tài khoản chưa được gán lĩnh vực. Liên hệ WebPlan.'
+  if (!categorySlug) errors.categoryId = 'Tài khoản chưa được gán lĩnh vực. Liên hệ Forever.'
 
   for (const slot of documentSlotsOf(categorySlug)) {
     if (slot.required && !v.documents.some((d) => d.type === slot.type)) errors[`document:${slot.type}`] = `Cần tải lên: ${slot.label}.`

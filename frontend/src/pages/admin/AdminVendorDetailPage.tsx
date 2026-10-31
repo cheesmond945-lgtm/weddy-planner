@@ -47,7 +47,7 @@ function toProfile(v: AdminVendor): VendorProfile {
 
 /**
  * Chi tiết hồ sơ nhà cung cấp (Admin): dùng đúng form của trang Hồ sơ NCC ở chế độ chỉ đọc.
- * Hồ sơ đang chờ duyệt: Phê duyệt (sang Đã duyệt) hoặc Yêu cầu chỉnh sửa / bổ sung kèm lý do.
+ * Hồ sơ đang chờ duyệt: Phê duyệt (sang Đã duyệt) hoặc Yêu cầu chỉnh sửa kèm lý do.
  */
 export default function AdminVendorDetailPage() {
   const { id = '' } = useParams()
@@ -87,7 +87,7 @@ export default function AdminVendorDetailPage() {
   const isUpdate = v.reviewKind === 'UPDATE'
 
   function openRevisionConfirm() {
-    if (!note.trim()) return setFormError('Nhập lý do chỉnh sửa / bổ sung để nhà cung cấp biết cần sửa gì.')
+    if (!note.trim()) return setFormError('Nhập lý do chỉnh sửa để nhà cung cấp biết cần sửa gì.')
     setFormError('')
     setConfirm('revision')
   }
@@ -132,7 +132,7 @@ export default function AdminVendorDetailPage() {
     <div className="grid gap-3">
       {asking && (
         <label className="grid gap-1.5 rounded-md border border-warn/35 bg-warn-soft px-4 py-3.5">
-          <span className="text-[13px] font-medium text-warn">Lý do chỉnh sửa / bổ sung *</span>
+          <span className="text-[13px] font-medium text-warn">Lý do chỉnh sửa *</span>
           <textarea
             rows={4}
             autoFocus
@@ -157,14 +157,14 @@ export default function AdminVendorDetailPage() {
             </Button>
             <Button type="button" variant="outline" className="h-10 border-warn/50 text-warn hover:bg-warn-soft" onClick={openRevisionConfirm} disabled={review.isPending}>
               {review.isPending ? <LoaderCircle className="animate-spin" /> : <MessageSquareWarning />}
-              Gửi yêu cầu chỉnh sửa / bổ sung
+              Gửi yêu cầu chỉnh sửa
             </Button>
           </>
         ) : (
           <>
             <Button type="button" variant="outline" className="h-10 border-warn/50 text-warn hover:bg-warn-soft" onClick={() => setAsking(true)} disabled={review.isPending}>
               <MessageSquareWarning />
-              Yêu cầu chỉnh sửa / bổ sung
+              Yêu cầu chỉnh sửa
             </Button>
             <Button type="button" variant="success" className="h-10" onClick={() => setConfirm('approve')} disabled={review.isPending}>
               {review.isPending ? <LoaderCircle className="animate-spin" /> : <Check />}
@@ -204,7 +204,7 @@ export default function AdminVendorDetailPage() {
         </Notice>
       )}
       {v.status === 'NEEDS_REVISION' && v.reviewNote && (
-        <Notice tone="warn" title="Đã yêu cầu nhà cung cấp chỉnh sửa / bổ sung">
+        <Notice tone="warn" title="Đã yêu cầu nhà cung cấp chỉnh sửa">
           <p>
             <b>Lý do:</b> {v.reviewNote}
           </p>
@@ -217,7 +217,7 @@ export default function AdminVendorDetailPage() {
       )}
       {pending && missing.length > 0 && (
         <Notice tone="warn" title={`Hồ sơ còn thiếu: ${missing.join(', ')}.`}>
-          Cân nhắc yêu cầu chỉnh sửa / bổ sung trước khi phê duyệt.
+          Cân nhắc yêu cầu chỉnh sửa trước khi phê duyệt.
         </Notice>
       )}
 
@@ -271,10 +271,10 @@ export default function AdminVendorDetailPage() {
         onOpenChange={(o) => !o && !review.isPending && setConfirm(null)}
         icon={MessageSquareWarning}
         confirmIcon={MessageSquareWarning}
-        title="Gửi yêu cầu chỉnh sửa / bổ sung?"
+        title="Gửi yêu cầu chỉnh sửa?"
         confirmLabel="Gửi yêu cầu"
         pending={review.isPending}
-        notice={isUpdate ? 'Hồ sơ vẫn hiển thị với khách trong lúc nhà cung cấp chỉnh sửa. Nhà cung cấp sẽ nhận được thông báo kèm lý do.' : 'Hồ sơ chuyển sang Cần chỉnh sửa / bổ sung. Nhà cung cấp sẽ nhận được thông báo kèm lý do.'}
+        notice={isUpdate ? 'Hồ sơ vẫn hiển thị với khách trong lúc nhà cung cấp chỉnh sửa. Nhà cung cấp sẽ nhận được thông báo kèm lý do.' : 'Hồ sơ chuyển sang Cần chỉnh sửa. Nhà cung cấp sẽ nhận được thông báo kèm lý do.'}
         onConfirm={submitReview}
       >
         Yêu cầu <strong className="text-ink">{v.businessName}</strong> chỉnh sửa với lý do: “{note.trim()}”.

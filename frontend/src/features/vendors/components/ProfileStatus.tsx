@@ -27,7 +27,7 @@ export function ProfileStatusNotice({ profile }: { profile: VendorProfile }) {
         return <Notice tone="info" title="Bản cập nhật đang chờ Admin kiểm tra. Hồ sơ và các gói vẫn hiển thị, nội dung chỉ đọc cho tới khi Admin xử lý." />
       }
       return profile.revisionRequested ? (
-        <Notice tone="warn" title="Admin yêu cầu chỉnh sửa / bổ sung bản cập nhật hồ sơ">
+        <Notice tone="warn" title="Admin yêu cầu chỉnh sửa bản cập nhật hồ sơ">
           {profile.reviewNote && (
             <p>
               <b>Lý do:</b> {profile.reviewNote}
@@ -39,7 +39,7 @@ export function ProfileStatusNotice({ profile }: { profile: VendorProfile }) {
     case 'HIDDEN':
       return (
         <Notice tone="warn" title="Hồ sơ và các gói dịch vụ của bạn đang được ẩn khỏi nền tảng.">
-          <p>Bạn vẫn xử lý được các đơn đã đặt cọc và thanh toán hoa hồng. Liên hệ Everly nếu cần hiển thị lại.</p>
+          <p>Bạn vẫn xử lý được các đơn đã đặt cọc và thanh toán hoa hồng. Liên hệ Forever nếu cần hiển thị lại.</p>
         </Notice>
       )
     case 'PENDING':

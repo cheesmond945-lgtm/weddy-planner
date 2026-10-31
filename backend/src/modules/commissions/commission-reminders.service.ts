@@ -62,7 +62,7 @@ export function planReminders(s: ReminderStatement, today: string, sent: SentNot
         userId: s.vendorUserId,
         type: DUE_SOON,
         title: 'Sắp đến hạn thanh toán hoa hồng',
-        content: `Bảng kê hoa hồng ${periodText} (${money}) đến hạn ngày ${vnDate(s.dueDate)}${late < 0 ? `, còn ${-late} ngày` : ', hạn là hôm nay'}. Vui lòng chuyển khoản cho WebPlan đúng hạn.`,
+        content: `Bảng kê hoa hồng ${periodText} (${money}) đến hạn ngày ${vnDate(s.dueDate)}${late < 0 ? `, còn ${-late} ngày` : ', hạn là hôm nay'}. Vui lòng chuyển khoản cho Forever đúng hạn.`,
       });
     }
     return out;

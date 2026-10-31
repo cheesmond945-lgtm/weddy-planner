@@ -21,7 +21,7 @@ export function useDeleteConsultation() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.all })
       refresh()
-      toast('Đã xóa yêu cầu tư vấn.')
+      toast('Đã xóa yêu cầu hợp tác.')
     },
     onError: (e) => toast(e.message),
   })

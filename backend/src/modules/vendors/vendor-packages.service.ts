@@ -203,7 +203,7 @@ export class VendorPackagesService {
     const money = price > 0 ? `${price.toLocaleString('vi-VN')}đ${perTable ? '/mâm (mỗi mâm 10 khách)' : ''}` : null;
 
     const system =
-      'Bạn là biên tập viên nội dung cho nền tảng đặt dịch vụ cưới Everly. Viết phần mô tả một gói dịch vụ bằng tiếng Việt, một đoạn văn liền mạch dài khoảng 50 đến 90 từ. ' +
+      'Bạn là biên tập viên nội dung cho nền tảng đặt dịch vụ cưới Forever. Viết phần mô tả một gói dịch vụ bằng tiếng Việt, một đoạn văn liền mạch dài khoảng 50 đến 90 từ. ' +
       `${style.instruction} Nói với cặp đôi, trung thực. ` +
       'BẮT BUỘC nêu cụ thể tên gói và mọi thông tin có trong dữ liệu (phong cách, sức chứa, giá). Mỗi câu phải mang ít nhất một thông tin cụ thể từ dữ liệu; không viết câu chung chung có thể áp cho gói nào cũng được. ' +
       'Giá trong dữ liệu là giá khởi điểm, không phải giá cố định: khi nhắc tới giá PHẢI viết "giá chỉ từ ..." hoặc "chỉ từ ...", tuyệt đối không viết như giá cố định (không dùng "với mức giá ...", "chi phí ...", "chỉ với ..."). ' +
@@ -381,7 +381,7 @@ export class VendorPackagesService {
   }
 
   private async move(userId: string, id: string, from: string, to: string, message: string) {
-    if ((await this.vendorOf(userId)).status === 'Hidden') return fail('VENDOR_HIDDEN', 'Hồ sơ đang bị ẩn nên chưa thay đổi hiển thị gói được. Vui lòng liên hệ Everly.', 409);
+    if ((await this.vendorOf(userId)).status === 'Hidden') return fail('VENDOR_HIDDEN', 'Hồ sơ đang bị ẩn nên chưa thay đổi hiển thị gói được. Vui lòng liên hệ Forever.', 409);
     const { pkg } = await this.loadOwned(userId, id);
     if (pkg.status !== from) return fail('CONFLICT', message, 409);
     if (openUpdate(pkg)?.status === 'Pending') return fail('CONFLICT', 'Gói đang chờ duyệt bản cập nhật, không thể ẩn lúc này.', 409);

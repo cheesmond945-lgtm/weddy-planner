@@ -100,7 +100,7 @@ export default function AdminPaymentDetailPage() {
       />
 
       {recordable && (
-        <Notice tone="info" title="Nhà cung cấp chuyển khoản trực tiếp cho WebPlan (ví dụ tài khoản bị khóa nên không thanh toán qua VietQR được)? Nhập ngày thanh toán và mã giao dịch rồi bấm “Ghi nhận đã thanh toán”." />
+        <Notice tone="info" title="Nhà cung cấp chuyển khoản trực tiếp cho Forever (ví dụ tài khoản bị khóa nên không thanh toán qua VietQR được)? Nhập ngày thanh toán và mã giao dịch rồi bấm “Ghi nhận đã thanh toán”." />
       )}
 
       <div className={card}>

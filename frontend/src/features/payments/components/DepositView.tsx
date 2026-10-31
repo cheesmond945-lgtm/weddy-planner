@@ -65,7 +65,7 @@ export function DepositView({ order, service, planStatus }: DepositViewProps) {
           {paid ? (
             <PaidBody order={order} service={service} onBackToChat={backToChat} />
           ) : service.paused ? (
-            <p>Nhà cung cấp tạm ngừng nhận đơn mới nên chưa đặt cọc được đơn này. Bạn có thể nhắn tin cho Everly để được hỗ trợ.</p>
+            <p>Nhà cung cấp tạm ngừng nhận đơn mới nên chưa đặt cọc được đơn này. Bạn có thể nhắn tin cho Forever để được hỗ trợ.</p>
           ) : order.status !== 'SENT' ? (
             <p>Đơn đang chờ nhà cung cấp chỉnh sửa, chưa thanh toán được. Quay lại tin nhắn để xem đơn mới nhất.</p>
           ) : (
@@ -116,7 +116,7 @@ function PayForm({ order, service, onBackToChat }: { order: Order; service: Serv
         </>
       )}
       <p className="text-[13px] text-muted-foreground">
-        Sau khi nhận được tiền, WebPlan ghi nhận cọc, đổi trạng thái dịch vụ thành đã chốt và tạo timeline chi tiết.
+        Sau khi nhận được tiền, Forever ghi nhận cọc, đổi trạng thái dịch vụ thành đã chốt và tạo timeline chi tiết.
       </p>
       <DepositTermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
       <div className="mt-1 flex flex-wrap justify-end gap-2.5">

@@ -12,7 +12,7 @@ export function ProfileReminder({ profile }: { profile: VendorProfile }) {
     </Link>
   )
   return profile.status === 'NEEDS_REVISION' ? (
-    <Notice tone="warn" title="WebPlan yêu cầu bổ sung hồ sơ nhà cung cấp.">
+    <Notice tone="warn" title="Forever yêu cầu bổ sung hồ sơ nhà cung cấp.">
       {profile.reviewNote && <p>Lý do: {profile.reviewNote}</p>}
       {link}
     </Notice>

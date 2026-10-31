@@ -8,7 +8,7 @@ import { PanelDialog } from '@/features/serviceOrders/components/PanelDialog'
 import type { ConsultationRequest } from '@/types/admin'
 import { useUpdateConsultation } from '../hooks'
 
-/** Ghi chú nội bộ cho một yêu cầu tư vấn (chỉ Admin thấy). */
+/** Ghi chú nội bộ cho một yêu cầu hợp tác (chỉ Admin thấy). */
 export function NoteDialog({ item, onClose }: { item: ConsultationRequest; onClose: () => void }) {
   const update = useUpdateConsultation()
   const [note, setNote] = useState(item.note ?? '')

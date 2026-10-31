@@ -176,7 +176,7 @@ export class AdminReviewsService {
         userId: v.user_id,
         type: 'VendorHidden',
         title: 'Hồ sơ đã được ẩn',
-        content: 'Hồ sơ và các gói dịch vụ của bạn đã được ẩn khỏi nền tảng. Bạn vẫn đăng nhập để hoàn thành các đơn đã đặt cọc và thanh toán hoa hồng. Liên hệ Everly nếu cần hiển thị lại.',
+        content: 'Hồ sơ và các gói dịch vụ của bạn đã được ẩn khỏi nền tảng. Bạn vẫn đăng nhập để hoàn thành các đơn đã đặt cọc và thanh toán hoa hồng. Liên hệ Forever nếu cần hiển thị lại.',
         referenceType: 'VendorProfile',
         referenceId: id,
       });

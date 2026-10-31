@@ -33,7 +33,7 @@ export const adminApi = {
   counts: (): Promise<AdminCounts> => http.get('/admin/counts'),
   dashboard: (): Promise<AdminDashboard> => http.get('/admin/dashboard'),
 
-  // Yêu cầu tư vấn
+  // Yêu cầu hợp tác
   listConsultations: (query: ConsultationQuery): Promise<ConsultationList> =>
     http.get('/admin/consultation-requests', { query: { ...query } }),
   updateConsultation: (id: string, body: UpdateConsultationBody): Promise<ConsultationRequest> =>

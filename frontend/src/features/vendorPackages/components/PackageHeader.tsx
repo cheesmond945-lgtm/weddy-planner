@@ -39,7 +39,7 @@ function PackageStatusNotice({ pkg }: { pkg: VendorPackage }) {
       return <Notice tone="info" title="Gói đang chờ Admin duyệt, nội dung chỉ đọc." />
     case 'NEEDS_REVISION':
       return (
-        <Notice tone="warn" title="Admin yêu cầu chỉnh sửa / bổ sung gói dịch vụ">
+        <Notice tone="warn" title="Admin yêu cầu chỉnh sửa gói dịch vụ">
           {reason(pkg.reviewNote)}
           <p>Sửa các mục liên quan rồi gửi lại duyệt.</p>
         </Notice>
@@ -50,7 +50,7 @@ function PackageStatusNotice({ pkg }: { pkg: VendorPackage }) {
         return <Notice tone="info" title="Bản cập nhật đang chờ Admin duyệt. Khách vẫn thấy phiên bản đang đăng, nội dung chỉ đọc cho tới khi Admin xử lý." />
       }
       return update === 'NEEDS_REVISION' ? (
-        <Notice tone="warn" title="Admin yêu cầu chỉnh sửa / bổ sung bản cập nhật gói dịch vụ">
+        <Notice tone="warn" title="Admin yêu cầu chỉnh sửa bản cập nhật gói dịch vụ">
           {reason(pkg.reviewNote)}
           <p>Gói vẫn hiển thị phiên bản đang đăng trong lúc bạn chỉnh sửa. Sửa xong bấm “Gửi lại duyệt” để Admin kiểm tra lại.</p>
         </Notice>

@@ -24,7 +24,7 @@ export function DepositTermsDialog({ open, onOpenChange }: { open: boolean; onOp
               <DialogTitle className="bg-[linear-gradient(90deg,var(--sage),var(--gold))] bg-clip-text pr-1 pb-1 font-serif text-[clamp(30px,5.5vw,42px)] leading-[1.1] font-medium tracking-normal text-transparent italic">
                 Điều khoản đặt dịch vụ
               </DialogTitle>
-              <DialogDescription className="mt-1.5 text-[13px] text-muted-foreground">Dành cho khách hàng của Everly</DialogDescription>
+              <DialogDescription className="mt-1.5 text-[13px] text-muted-foreground">Dành cho khách hàng của Forever</DialogDescription>
             </div>
           </div>
         </div>

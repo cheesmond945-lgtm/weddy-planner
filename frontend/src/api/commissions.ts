@@ -3,7 +3,7 @@ import type { PayInfo } from '@/types/payment'
 import { http } from './client'
 
 /**
- * Hoa hồng NCC trả WebPlan. Hợp đồng: docs/api/commissions.md.
+ * Hoa hồng NCC trả Forever. Hợp đồng: docs/api/commissions.md.
  * Tệp minh chứng upload trước qua vendorsApi.uploadFile('PAYMENT_PROOF').
  */
 export const commissionsApi = {

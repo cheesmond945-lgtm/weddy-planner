@@ -4,7 +4,7 @@ import { categorySlug } from '../catalog/services.service';
 import { lateDaysOf, ymd, ymdVN } from '../orders/order-mapping';
 
 /*
- * Hoa hồng NCC trả WebPlan (docs/api/commissions.md), theo mô hình của CSDL:
+ * Hoa hồng NCC trả Forever (docs/api/commissions.md), theo mô hình của CSDL:
  * - Một bảng kê cho mỗi NCC mỗi tháng; đơn vào kỳ của THÁNG HOÀN THÀNH (khi NCC thu đủ phần còn lại).
  * - Tỷ lệ lấy từ service_categories.commission_rate, lưu cố định vào từng dòng (commissions.rate).
  * - Bảng kê chỉ có hai trạng thái Unpaid/Paid do Admin ghi nhận (mã giao dịch, ngày trả); không có minh chứng NCC tự gửi.
@@ -131,6 +131,6 @@ export class CommissionsService {
 
   /** CSDL không lưu minh chứng NCC gửi; Admin là người ghi nhận khoản đã trả (mã giao dịch, ngày trả). */
   submitPayment() {
-    throw new HttpException({ code: 'COMMISSION_NOT_PAYABLE', message: 'Thanh toán hoa hồng do quản trị viên WebPlan ghi nhận sau khi nhận chuyển khoản.' }, 409);
+    throw new HttpException({ code: 'COMMISSION_NOT_PAYABLE', message: 'Thanh toán hoa hồng do quản trị viên Forever ghi nhận sau khi nhận chuyển khoản.' }, 409);
   }
 }
