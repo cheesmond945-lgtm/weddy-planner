@@ -149,6 +149,17 @@ export class AdminController {
     return this.reviews.reviewPackage(id, body?.note ?? '');
   }
 
+  /** Ẩn gói đang đăng, bắt buộc lý do. */
+  @Post('packages/:id/hide')
+  hidePackage(@Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.reviews.hidePackage(id, body?.reason ?? '');
+  }
+
+  @Post('packages/:id/unhide')
+  unhidePackage(@Param('id') id: string) {
+    return this.reviews.unhidePackage(id);
+  }
+
   // ----- Thanh toán hoa hồng -----
   @Get('commissions')
   listStatements(@Query() q: StatementQueryDto) {

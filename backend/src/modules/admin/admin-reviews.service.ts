@@ -239,7 +239,10 @@ export class AdminReviewsService {
       photos: shown.photos.map((u) => this.storage.publicAlbumUrl(u)),
       category: catRef(p.vendor_profiles!.service_categories),
       vendor: { id: p.vendor_profiles!.id, name: p.vendor_profiles!.business_name, city: p.vendor_profiles!.city },
-      status: upd ? (upd.status === 'Pending' ? 'PENDING' : 'NEEDS_REVISION') : (PACKAGE_STATUS_OUT[p.status ?? ''] ?? 'PENDING'),
+      status: p.status !== 'Hidden' && upd ? (upd.status === 'Pending' ? 'PENDING' : 'NEEDS_REVISION') : (PACKAGE_STATUS_OUT[p.status ?? ''] ?? 'PENDING'),
+      /** Gói đang ẩn: 'ADMIN' (kèm lý do) hoặc 'VENDOR' (NCC tự ẩn) */
+      hiddenBy: p.status === 'Hidden' ? (p.hidden_by === 'Admin' ? 'ADMIN' : 'VENDOR') : null,
+      hiddenReason: p.status === 'Hidden' && p.hidden_by === 'Admin' ? p.hidden_reason : null,
       /** Duyệt lần đầu (gói chưa đăng) hoặc duyệt bản cập nhật của gói đã đăng */
       reviewKind: upd?.status === 'Pending' ? 'UPDATE' : p.status === 'Pending' ? 'INITIAL' : null,
       reviewNote: p.status === 'NeedRevision' ? (last?.admin_note ?? null) : upd?.status === 'NeedRevision' ? upd.admin_note : null,
@@ -339,5 +342,47 @@ export class AdminReviewsService {
       referenceId: id,
     });
     return (await this.loadPackages({ id })).map((x) => this.packageDto(x))[0];
+  }
+
+  /** Admin ẩn gói đang đăng (bắt buộc lý do). Khách ngừng thấy gói; NCC không tự khôi phục được, chỉ Admin khôi phục. */
+  async hidePackage(id: string, reason?: string) {
+    const p = UUID.test(id) ? (await this.loadPackages({ id }))[0] : undefined;
+    if (!p) return fail('PACKAGE_NOT_FOUND', 'Không tìm thấy gói dịch vụ.', 404);
+    if (p.status !== 'Approved') return fail('PACKAGE_NOT_HIDEABLE', 'Chỉ ẩn được gói đang đăng.', 409);
+    const text = this.checkNote(reason);
+    const { count } = await this.prisma.service_packages.updateMany({
+      where: { id, status: 'Approved' },
+      data: { status: 'Hidden', hidden_by: 'Admin', hidden_reason: text, updated_date: new Date() },
+    });
+    if (!count) return fail('PACKAGE_NOT_HIDEABLE', 'Chỉ ẩn được gói đang đăng.', 409);
+    await notify(this.prisma, {
+      userId: p.vendor_profiles!.user_id!,
+      type: 'PackageHidden',
+      title: 'Gói dịch vụ đã bị ẩn',
+      content: `Quản trị viên đã ẩn gói "${p.name}". Lý do: ${text}`,
+      referenceType: 'ServicePackage',
+      referenceId: id,
+    });
+    return this.getPackage(id);
+  }
+
+  /** Admin khôi phục gói đang ẩn (kể cả gói NCC tự ẩn): gói hiển thị lại với khách như trước khi ẩn. */
+  async unhidePackage(id: string) {
+    const p = UUID.test(id) ? (await this.loadPackages({ id }))[0] : undefined;
+    if (!p) return fail('PACKAGE_NOT_FOUND', 'Không tìm thấy gói dịch vụ.', 404);
+    const { count } = await this.prisma.service_packages.updateMany({
+      where: { id, status: 'Hidden' },
+      data: { status: 'Approved', hidden_by: null, hidden_reason: null, updated_date: new Date() },
+    });
+    if (!count) return fail('PACKAGE_NOT_HIDDEN', 'Gói không ở trạng thái đang ẩn.', 409);
+    await notify(this.prisma, {
+      userId: p.vendor_profiles!.user_id!,
+      type: 'PackageUnhidden',
+      title: 'Gói dịch vụ đã hiển thị lại',
+      content: `Gói "${p.name}" đã được khôi phục và hiển thị lại với khách.`,
+      referenceType: 'ServicePackage',
+      referenceId: id,
+    });
+    return this.getPackage(id);
   }
 }

@@ -1,10 +1,10 @@
-import { Check, LoaderCircle, MessageSquareWarning } from 'lucide-react'
+import { Check, EyeOff, LoaderCircle, MessageSquareWarning, RotateCcw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
 import { Button } from '@/components/ui/button'
-import { useAdminPackage, useReviewPackage } from '@/features/adminCatalog/hooks'
+import { useAdminPackage, useReviewPackage, useTogglePackageHidden } from '@/features/adminCatalog/hooks'
 import { AdminConfirm } from '@/features/adminShared/components/AdminConfirm'
 import { ReviewKindBadge } from '@/features/adminVendors/components/ReviewKindBadge'
 import { PackageEditor } from '@/features/vendorPackages/components/PackageEditor'
@@ -66,10 +66,13 @@ export default function AdminPackageDetailPage() {
   const navigate = useNavigate()
   const { data: p, isPending, isError, error, refetch } = useAdminPackage(id)
   const review = useReviewPackage()
+  const toggleHidden = useTogglePackageHidden()
   const [asking, setAsking] = useState(false)
+  const [hiding, setHiding] = useState(false)
   const [note, setNote] = useState('')
+  const [hideReason, setHideReason] = useState('')
   const [formError, setFormError] = useState('')
-  const [confirm, setConfirm] = useState<'approve' | 'revision' | null>(null)
+  const [confirm, setConfirm] = useState<'approve' | 'revision' | 'hide' | 'unhide' | null>(null)
   const pkg = useMemo(() => (p ? toVendorPackage(p) : undefined), [p])
 
   if (isPending) return <div aria-busy="true" aria-label="Đang tải gói dịch vụ" className="mx-auto h-[560px] max-w-[980px] animate-pulse rounded-md bg-muted" />
@@ -108,7 +111,69 @@ export default function AdminPackageDetailPage() {
     else review.mutate({ id: p!.id, note: note.trim() }, done)
   }
 
-  const actions = pending && (
+  function openHideConfirm() {
+    if (!hideReason.trim()) return setFormError('Nhập lý do ẩn để nhà cung cấp biết vì sao gói bị ẩn.')
+    setFormError('')
+    setConfirm('hide')
+  }
+  /** Sau khi Admin xác nhận trong popup: ẩn hoặc khôi phục gói, ở lại trang để thấy trạng thái mới. */
+  function submitToggleHidden() {
+    const done = {
+      onSuccess: () => (setConfirm(null), setHiding(false), setHideReason('')),
+      onError: (e: Error) => (setConfirm(null), setFormError(e.message)),
+    }
+    toggleHidden.mutate(confirm === 'hide' ? { id: p!.id, reason: hideReason.trim() } : { id: p!.id }, done)
+  }
+
+  // Gói đã đăng: Ẩn gói (nhập lý do); gói đang ẩn: Khôi phục (cả gói NCC tự ẩn). Chỉ Admin khôi phục được gói do Admin ẩn.
+  const hideActions = (p.status === 'PUBLISHED' || p.status === 'HIDDEN') && (
+    <div className="grid gap-3">
+      {hiding && (
+        <label className="grid gap-1.5 rounded-md border border-warn/35 bg-warn-soft px-4 py-3.5">
+          <span className="text-[13px] font-medium text-warn">Lý do ẩn *</span>
+          <textarea
+            rows={4}
+            autoFocus
+            maxLength={1000}
+            className={cn(controlClass, 'h-auto bg-surface py-2.5 leading-relaxed')}
+            placeholder="VD: Gói có nội dung không đúng thực tế, nhà cung cấp cần liên hệ Forever để làm rõ."
+            value={hideReason}
+            onChange={(e) => setHideReason(e.target.value)}
+          />
+        </label>
+      )}
+      {formError && (
+        <p role="alert" className="text-[13px] text-destructive">
+          {formError}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>button]:flex-1">
+        {p.status === 'HIDDEN' ? (
+          <Button type="button" variant="success" className="h-10" onClick={() => (setFormError(''), setConfirm('unhide'))} disabled={toggleHidden.isPending}>
+            <RotateCcw />
+            Khôi phục gói
+          </Button>
+        ) : hiding ? (
+          <>
+            <Button type="button" variant="outline" className="h-10 border-line-strong" onClick={() => (setHiding(false), setFormError(''))} disabled={toggleHidden.isPending}>
+              Quay lại
+            </Button>
+            <Button type="button" variant="outline" className="h-10 border-warn/50 text-warn hover:bg-warn-soft" onClick={openHideConfirm} disabled={toggleHidden.isPending}>
+              <EyeOff />
+              Ẩn gói
+            </Button>
+          </>
+        ) : (
+          <Button type="button" variant="outline" className="h-10 border-warn/50 text-warn hover:bg-warn-soft" onClick={() => (setFormError(''), setHiding(true))} disabled={toggleHidden.isPending}>
+            <EyeOff />
+            Ẩn gói
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+
+  const actions = hideActions || (pending && (
     <div className="grid gap-3">
       {asking && (
         <label className="grid gap-1.5 rounded-md border border-warn/35 bg-warn-soft px-4 py-3.5">
@@ -154,7 +219,7 @@ export default function AdminPackageDetailPage() {
         )}
       </div>
     </div>
-  )
+  ))
 
   return (
     <div className="mx-auto max-w-[980px]">
@@ -194,6 +259,21 @@ export default function AdminPackageDetailPage() {
             <b>Lý do:</b> {p.reviewNote}
           </p>
           {p.published && <p>Gói vẫn hiển thị phiên bản đang đăng trong lúc nhà cung cấp chỉnh sửa.</p>}
+        </Notice>
+      )}
+
+      {p.status === 'HIDDEN' && (
+        <Notice tone="warn" title={p.hiddenBy === 'ADMIN' ? 'Gói đã bị Admin ẩn' : 'Gói đang được nhà cung cấp ẩn'}>
+          {p.hiddenBy === 'ADMIN' ? (
+            <>
+              <p>
+                <b>Lý do:</b> {p.hiddenReason}
+              </p>
+              <p>Nhà cung cấp không tự khôi phục được gói này, chỉ Admin khôi phục.</p>
+            </>
+          ) : (
+            <p>Khách không thấy gói này. Nhà cung cấp tự khôi phục được, hoặc bạn bấm “Khôi phục gói”.</p>
+          )}
         </Notice>
       )}
 
@@ -237,6 +317,35 @@ export default function AdminPackageDetailPage() {
         onConfirm={submitReview}
       >
         Yêu cầu chỉnh sửa gói <strong className="text-ink">{p.name}</strong> với lý do: “{note.trim()}”.
+      </AdminConfirm>
+
+      <AdminConfirm
+        open={confirm === 'hide'}
+        onOpenChange={(o) => !o && !toggleHidden.isPending && setConfirm(null)}
+        icon={EyeOff}
+        confirmIcon={EyeOff}
+        title="Ẩn gói dịch vụ này?"
+        confirmLabel="Ẩn gói"
+        danger
+        pending={toggleHidden.isPending}
+        notice="Khách không còn thấy gói này. Nhà cung cấp sẽ nhận được thông báo kèm lý do và không tự khôi phục được."
+        onConfirm={submitToggleHidden}
+      >
+        Ẩn gói <strong className="text-ink">{p.name}</strong> của {p.vendor.name} với lý do: “{hideReason.trim()}”.
+      </AdminConfirm>
+
+      <AdminConfirm
+        open={confirm === 'unhide'}
+        onOpenChange={(o) => !o && !toggleHidden.isPending && setConfirm(null)}
+        icon={RotateCcw}
+        confirmIcon={RotateCcw}
+        title="Khôi phục gói này?"
+        confirmLabel="Khôi phục"
+        pending={toggleHidden.isPending}
+        notice="Gói hiển thị lại với khách như trước khi ẩn. Nhà cung cấp sẽ nhận được thông báo."
+        onConfirm={submitToggleHidden}
+      >
+        Gói <strong className="text-ink">{p.name}</strong> của {p.vendor.name} sẽ trở lại trạng thái Đã đăng.
       </AdminConfirm>
     </div>
   )

@@ -85,6 +85,9 @@ export class VendorPackagesService {
       price: live.price,
       category: { id: category.id, slug: categorySlug(category.name), name: category.name },
       status: STATUS_OUT[p.status ?? ''] ?? 'DRAFT',
+      /** Gói đang ẩn: ai ẩn ('VENDOR' | 'ADMIN') và lý do Admin ẩn; Admin ẩn thì NCC không tự khôi phục được */
+      hiddenBy: p.status === 'Hidden' ? (p.hidden_by === 'Admin' ? 'ADMIN' : 'VENDOR') : null,
+      hiddenReason: p.status === 'Hidden' && p.hidden_by === 'Admin' ? p.hidden_reason : null,
       /** Lý do Admin yêu cầu chỉnh sửa: gói chưa đăng bị trả về, hoặc bản cập nhật của gói đã đăng bị trả về */
       reviewNote: p.status === 'NeedRevision' ? (p.package_verifications[0]?.admin_note ?? null) : upd?.status === 'NeedRevision' ? upd.admin_note : null,
       tags: live.tags,
@@ -385,7 +388,13 @@ export class VendorPackagesService {
     const { pkg } = await this.loadOwned(userId, id);
     if (pkg.status !== from) return fail('CONFLICT', message, 409);
     if (openUpdate(pkg)?.status === 'Pending') return fail('CONFLICT', 'Gói đang chờ duyệt bản cập nhật, không thể ẩn lúc này.', 409);
-    await this.prisma.service_packages.update({ where: { id }, data: { status: to } });
+    if (from === 'Hidden' && pkg.hidden_by === 'Admin') {
+      return fail('PACKAGE_HIDDEN_BY_ADMIN', 'Gói do Admin ẩn nên bạn không tự khôi phục được. Vui lòng liên hệ Forever.', 409);
+    }
+    await this.prisma.service_packages.update({
+      where: { id },
+      data: { status: to, hidden_by: to === 'Hidden' ? 'Vendor' : null, hidden_reason: null, updated_date: new Date() },
+    });
     return this.get(userId, id);
   }
 

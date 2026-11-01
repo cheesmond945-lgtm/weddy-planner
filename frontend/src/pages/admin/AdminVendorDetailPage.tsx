@@ -121,7 +121,7 @@ export default function AdminVendorDetailPage() {
           ) : (
             <Button type="button" variant="success" className="h-10" onClick={() => (setFormError(''), setConfirm('unhide'))} disabled={toggleHidden.isPending}>
               <Eye />
-              Hiện lại hồ sơ
+              Khôi phục hồ sơ
             </Button>
           )}
         </div>
@@ -212,7 +212,7 @@ export default function AdminVendorDetailPage() {
       )}
       {v.status === 'HIDDEN' && (
         <Notice tone="warn" title="Hồ sơ đang được ẩn">
-          Hồ sơ và toàn bộ gói dịch vụ của nhà cung cấp không còn hiển thị với khách. Nhà cung cấp vẫn đăng nhập để hoàn thành đơn đã cọc và thanh toán hoa hồng. Bấm “Hiện lại hồ sơ” để hiển thị lại.
+          Hồ sơ và toàn bộ gói dịch vụ của nhà cung cấp không còn hiển thị với khách. Nhà cung cấp vẫn đăng nhập để hoàn thành đơn đã cọc và thanh toán hoa hồng. Bấm “Khôi phục hồ sơ” để hiển thị lại.
         </Notice>
       )}
       {pending && missing.length > 0 && (
@@ -243,8 +243,8 @@ export default function AdminVendorDetailPage() {
         onOpenChange={(o) => !o && !toggleHidden.isPending && setConfirm(null)}
         icon={Eye}
         confirmIcon={Eye}
-        title="Hiện lại hồ sơ này?"
-        confirmLabel="Hiện lại"
+        title="Khôi phục hồ sơ này?"
+        confirmLabel="Khôi phục"
         pending={toggleHidden.isPending}
         notice="Hồ sơ và các gói dịch vụ sẽ hiển thị lại với khách như trước khi ẩn. Nhà cung cấp sẽ nhận được thông báo."
         onConfirm={submitToggleHidden}

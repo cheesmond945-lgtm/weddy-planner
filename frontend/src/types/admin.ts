@@ -268,6 +268,9 @@ export interface AdminPackage {
   /** Duyệt lần đầu (gói chưa đăng) hoặc duyệt bản cập nhật của gói đã đăng; null khi không chờ duyệt */
   reviewKind: 'INITIAL' | 'UPDATE' | null
   reviewNote: string | null
+  /** Gói HIDDEN: ai ẩn; lý do chỉ có khi Admin ẩn */
+  hiddenBy?: 'ADMIN' | 'VENDOR' | null
+  hiddenReason?: string | null
   /** Bản đang hiển thị với khách khi gói có bản cập nhật đã gửi (các trường trên là bản cập nhật); null nếu không có */
   published: { name: string; description: string; price: number; capacity: number | null; minTables?: number | null; tags: string[]; photos: string[] } | null
   submittedAt: string | null

@@ -19,6 +19,9 @@ export interface VendorPackage extends ServicePackage {
   status: PackageStatus
   /** Lý do Admin yêu cầu chỉnh sửa (gói NEEDS_REVISION, hoặc bản cập nhật NEEDS_REVISION của gói đã đăng) */
   reviewNote: string | null
+  /** Gói HIDDEN: ai ẩn. Admin ẩn thì NCC không tự khôi phục được, hiddenReason là lý do Admin nhập */
+  hiddenBy?: 'ADMIN' | 'VENDOR' | null
+  hiddenReason?: string | null
   /**
    * Bản cập nhật của gói đã đăng (hoặc đang ẩn). Các trường của gói vẫn là bản khách đang thấy;
    * bản này chỉ thay vào khi Admin duyệt. null: không có bản cập nhật.

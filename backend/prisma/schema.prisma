@@ -346,6 +346,10 @@ model service_packages {
   updated_date          DateTime?               @default(now()) @db.Timestamptz(6)
   /// Số mâm tối thiểu để được kèm sảnh (Trung tâm tổ chức sự kiện; giá gói là giá mỗi mâm 10 khách, đã gồm sảnh)
   min_tables            Int?
+  /// Ai ẩn gói khi status = Hidden: Vendor (NCC tự ẩn, tự khôi phục được) hoặc Admin (chỉ Admin khôi phục)
+  hidden_by             String?                 @db.VarChar(10)
+  /// Lý do Admin ẩn gói (NCC tự ẩn thì để trống)
+  hidden_reason         String?
   order_items           order_items[]
   orders                orders[]
   package_albums        package_albums[]
