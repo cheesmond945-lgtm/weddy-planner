@@ -223,3 +223,74 @@ Tab **Bảng việc** ở Lịch làm việc (`/vendor/calendar`), giữa "Lịc
 - **Bộ lọc** dùng chung với Lịch tháng: chọn khách / đơn (chỉ hiện đơn Đã cọc), "Việc của tôi" ẩn cột Chờ khách làm và việc của khách.
 - **Không có** cột "Đang làm" (trạng thái việc trong CSDL chỉ có Todo / Done, thêm cần đổi CHECK của `TimelineTasks.Status`) và không tự sắp thứ tự thẻ trong cột (`display_order` dùng chung với timeline của khách).
 
+---
+
+## Hướng mới 11/2026: việc chi tiết do NCC khai theo gói
+
+Thay đổi hướng ở đợt 2. Các mục cũ ở trên về việc chi tiết sinh từ mẫu (mục 2-3, 8-9) chỉ còn đúng với dữ liệu cũ; khi mâu thuẫn, lấy mục này.
+
+### Nguyên tắc
+
+- Hệ thống chỉ tự sinh **timeline khung** (Tự làm, Chọn NCC, Mốc chốt: 31 việc trong `timeline-templates.ts`). Mẫu trong code không còn việc chi tiết (DETAIL / EVENT / PAYMENT), `MIN_AFTER_DEPOSIT`, `needsMeeting`, mốc D / S.
+- **Việc chi tiết của đơn** lấy từ `package_tasks` của các gói gắn với đơn, do NCC khai ở tab "Công việc" của gói (không qua Admin duyệt), sinh **lúc khách cọc**.
+- NCC **tự chủ** việc của đơn mình (đổi trạng thái, đổi / chốt ngày, cho mọi việc kể cả việc của khách). Khách **chỉ xem**.
+
+### Dữ liệu
+
+| Bảng | Vai trò |
+|---|---|
+| `package_tasks` | Việc NCC khai cho gói: `title`, `note`, `owner` (CUSTOMER / VENDOR / BOTH), `offset_days` so với ngày thực hiện E (âm = trước), `sort_order`, `deleted_at` (xóa mềm) |
+| `task_confirmations` | Một dòng cho mỗi việc đã được NCC chốt ngày: `task_id` (khóa chính), `confirmed_date`, `confirmed_by`, `confirmed_at` |
+| `order_items.package_id` | Gói của từng dòng hạng mục. Nhà hàng vẫn dùng `orders.package_id` (sảnh) |
+
+`packagesOfOrder(order)` = `{orders.package_id}` ∪ `{order_items.package_id}` (bỏ null, bỏ trùng).
+
+### Trạng thái việc: Todo | Waiting | Done
+
+status có 3 giá trị Todo/Waiting/Done — cần SQL 2026-11-01-timeline-status-waiting.sql (đã chạy).
+
+`timeline_tasks.status` nhận thêm `Waiting` (chờ khách). Cột là varchar nhưng DB có ràng buộc `timeline_tasks_status_check` (trước chỉ cho Todo, Done). Mọi nơi trước đây coi `Todo` là "chưa xong" nay dùng `status !== 'Done'`. Việc của khách (`owner = CUSTOMER`) và việc thanh toán bắt đầu ở `Waiting`, còn lại `Todo`.
+
+### Sinh việc khi cọc (`syncOrderPackageTasks`)
+
+- Mỗi việc trong gói: dòng `task_code = 'PKG:<package_tasks.id>'`, `task_type = 'Detail'`, `title = tên (+ " — " + ghi chú)` (≤ 255).
+- Mỗi đơn thêm một việc `task_code = 'PAY:<orderId>'` "Thanh toán phần còn lại cho <NCC>", status `Waiting`, hạn = max(E + 7, hạn lớn nhất của việc gói).
+- Đơn không gắn gói hoặc gói chưa có việc: chỉ sinh việc PAY; Mốc chốt trả cờ `vendorProcessMissing`.
+- Hạn tính bằng `planPackageTasks({ D, E, I, tasks })` (công thức co giãn cũ): `lo = D + 2`, `scale = min(1, (E − lo) / xmax)`, việc trước E: `n = min(E − round(x · scale), E − 1)`, `n < lo` thì `n = lo`; `E − lo ≤ 0` dồn về `max(I + 1, D + 1)` (gấp); việc từ E trở đi: `E + offset`. E = `orders.event_date`, D = `payments.paid_date` (giờ VN).
+
+### Chủ việc và quyền
+
+- `ownerOf(code, pkgOwners)`: `PKG:<id>` lấy `package_tasks.owner` (nạp theo lô, kể cả việc đã xóa mềm); `PAY:` là CUSTOMER; 34 mã chi tiết cũ theo `LEGACY_OWNER` (giữ đúng kết quả cũ); mã khung và mã lạ là BOTH.
+- NCC đổi trạng thái mọi việc chi tiết của đơn mình, chỉ khi đơn `Deposited` (409 `ORDER_NOT_ACTIVE`); việc không thuộc đơn: 404.
+- Khách không tick, đổi hạn, đổi tên, xóa việc có `order_id`: 403 `TIMELINE_ITEM_READONLY`. Việc khung và việc tự thêm giữ nguyên quyền.
+
+### API
+
+| Method + route | Body | Trả về |
+|---|---|---|
+| `GET /vendors/me/packages/:id/tasks` | | danh sách `{ id, title, note, owner, offsetDays, sortOrder }` |
+| `PUT /vendors/me/packages/:id/tasks` | `{ tasks: [{ id?, title, note?, owner, offsetDays }] }` | danh sách mới; thay toàn bộ trong 1 transaction, xóa mềm việc vắng mặt |
+| `GET /vendors/me/packages` | | mỗi gói thêm `taskCount` |
+| `PATCH /vendors/me/orders/:id/tasks/:taskId` | `{ status: 'Todo' \| 'Waiting' \| 'Done' }` (vẫn nhận `{ isDone }`: true là Done, false là trạng thái mặc định theo chủ việc) | `{ items, progress }` |
+| `PATCH /vendors/me/orders/:id/tasks/:taskId/schedule` | `{ date?: 'YYYY-MM-DD' }` (không gửi: "Chốt ngày này"; có: "Đổi ngày") | `{ items, progress }`; thông báo cho khách |
+| `DELETE /vendors/me/orders/:id/tasks/:taskId/schedule` | | "Bỏ chốt": xóa dòng `task_confirmations`, giữ ngày |
+| `POST/PUT /vendors/me/orders` | mỗi dòng `items[].packageId` (tùy chọn, phải là gói của NCC, 400 nếu không) | đơn kèm `items[].packageId`, `items[].packageName` |
+
+Mọi API trả việc chi tiết (timeline khách, bảng việc, lịch, tiến độ đơn) có `status`, `owner`, `isPackageTask`, `dateStatus` (`PLANNED` | `CONFIRMED`), `confirmedAt`; phía NCC thêm `needsRecheck`.
+
+### Khi đơn thay đổi
+
+- **NCC sửa ngày thực hiện:** việc PKG / PAY chưa Done và chưa chốt được tính lại theo E mới; việc đã chốt giữ ngày, nếu chốt trước E mà ngày chốt sau E mới thì `needsRecheck`. Sau cọc không đổi được gói của dòng hạng mục.
+- **NCC hủy đơn:** xóa việc chưa Done, giữ việc đã Done; Mốc chốt về Todo nếu không còn đơn Deposited / Completed cùng hạng mục. Bỏ luồng "đơn cũ nhường việc cho đơn mới theo mã mẫu".
+- **Hoàn thành đơn:** mọi việc chưa Done (Todo và Waiting) của đơn chuyển Done.
+- **Đổi ngày cưới:** chỉ tính lại việc khung chưa xong; việc của đơn không đổi.
+
+### Nhắc hạn
+
+- NCC: việc chưa Done quá hạn; việc đang Todo sắp đến hạn; mỗi ngày một thông báo "N việc chưa chốt lịch với khách" cho việc owner BOTH chưa chốt ngày còn ≤ 7 ngày.
+- Khách: việc `Waiting` sắp đến hạn ("<NCC> đang chờ bạn: <tên việc>") hoặc quá hạn.
+
+### Dữ liệu cũ
+
+Không xóa. Việc chi tiết cũ (mã mẫu) vẫn hiện nhờ `LEGACY_OWNER`, NCC vẫn đổi được trạng thái. Script `timelines:rebuild` chỉ dựng lại việc khung (giữ việc gắn đơn), `timelines:repair` sinh bù việc PKG / PAY cho đơn Deposited thiếu việc; cả hai mặc định dry-run, chưa chạy ở đợt này. SQL `appointment_date` đã bỏ (không chạy).
+
