@@ -34,6 +34,26 @@ export interface VendorPackage extends ServicePackage {
   /** publicId của ảnh bìa; null thì dùng ảnh đầu tiên */
   coverPublicId: string | null
   updatedAt: string
+  /** Số công việc NCC đã khai cho gói (chưa xóa). API NCC luôn trả; bản Admin dựng lại gói thì không có */
+  taskCount?: number
+}
+
+/** Ai làm một công việc của gói. */
+export type PackageTaskOwner = 'CUSTOMER' | 'VENDOR' | 'BOTH'
+
+/** Công việc NCC khai cho gói; offsetDays so với ngày thực hiện của đơn (âm = trước, 0 = đúng ngày, dương = sau). */
+export interface PackageTask {
+  id: string
+  title: string
+  note: string | null
+  owner: PackageTaskOwner
+  offsetDays: number
+  sortOrder: number
+}
+
+/** Body của PUT /vendors/me/packages/:id/tasks: thay toàn bộ danh sách (có id: sửa, không id: thêm, vắng mặt: xóa mềm). */
+export interface SavePackageTasksRequest {
+  tasks: { id?: string; title: string; note: string | null; owner: PackageTaskOwner; offsetDays: number }[]
 }
 
 /** Trạng thái bản cập nhật: nháp chưa gửi, chờ Admin duyệt, bị yêu cầu chỉnh sửa. */

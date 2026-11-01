@@ -1,5 +1,5 @@
 import type { AiSuggestion } from '@/types/ai'
-import type { SavePackageRequest, VendorPackage } from '@/types/vendorPackage'
+import type { PackageTask, SavePackageRequest, SavePackageTasksRequest, VendorPackage } from '@/types/vendorPackage'
 import { http } from './client'
 
 /** Hợp đồng: docs/api/catalog.md (phần Nhà cung cấp). Ảnh gói upload qua vendorsApi.uploadFile('PACKAGE_PHOTO'). */
@@ -11,6 +11,12 @@ export const vendorPackagesApi = {
     http.post('/vendors/me/packages/suggest-description', body),
 
   get: (id: string): Promise<VendorPackage> => (http.get(`/vendors/me/packages/${id}`)),
+
+  /** Công việc NCC khai cho gói (theo mốc rồi thứ tự) */
+  tasks: (id: string): Promise<PackageTask[]> => http.get(`/vendors/me/packages/${id}/tasks`),
+
+  /** Thay toàn bộ danh sách công việc; không qua Admin duyệt */
+  saveTasks: (id: string, body: SavePackageTasksRequest): Promise<PackageTask[]> => http.put(`/vendors/me/packages/${id}/tasks`, body),
 
   create: (body: SavePackageRequest): Promise<VendorPackage> =>
     http.post('/vendors/me/packages', body),

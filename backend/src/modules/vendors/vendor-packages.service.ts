@@ -8,6 +8,7 @@ import { notify } from '../chat/chat-messages';
 import { ALBUM_BUCKET, StorageService } from '../../integrations/storage/storage.service';
 import { GUESTS_PER_TABLE, categorySlug, priceUnitOf } from '../catalog/services.service';
 import { fileNameOfPath, mimeOfPath } from './vendor-files';
+import { parseTasks, syncPackageTasks, toTaskDto } from './package-tasks';
 import { hasChanges, livePhotos, liveSnapshot, openUpdate, UPDATE_STATUS_OUT, type PackageSnapshot } from './package-update';
 
 export interface SavePackageBody {
@@ -75,7 +76,7 @@ export class VendorPackagesService {
     );
   }
 
-  private async toDto(p: PackageRow, category: { id: string; name: string }) {
+  private async toDto(p: PackageRow, category: { id: string; name: string }, taskCount = 0) {
     const live = liveSnapshot(p);
     const upd = openUpdate(p);
     return {
@@ -108,6 +109,8 @@ export class VendorPackagesService {
           }
         : null,
       updatedAt: upd?.data.savedAt ?? p.updated_date?.toISOString() ?? '',
+      /** Số việc NCC đã khai cho gói (chưa xóa) */
+      taskCount,
     };
   }
 
@@ -118,12 +121,36 @@ export class VendorPackagesService {
       include: this.include,
       orderBy: [{ updated_date: 'desc' }, { id: 'asc' }],
     });
-    return Promise.all(rows.map((p) => this.toDto(p, vendor.service_categories)));
+    // Một query gom đếm việc của mọi gói, không N+1
+    const counts = await this.prisma.package_tasks.groupBy({ by: ['package_id'], where: { package_id: { in: rows.map((p) => p.id) }, deleted_at: null }, _count: { _all: true } });
+    const countOf = new Map(counts.map((c) => [c.package_id, c._count._all]));
+    return Promise.all(rows.map((p) => this.toDto(p, vendor.service_categories, countOf.get(p.id) ?? 0)));
   }
 
   async get(userId: string, id: string) {
     const { vendor, pkg } = await this.loadOwned(userId, id);
-    return this.toDto(pkg, vendor.service_categories);
+    const taskCount = await this.prisma.package_tasks.count({ where: { package_id: pkg.id, deleted_at: null } });
+    return this.toDto(pkg, vendor.service_categories, taskCount);
+  }
+
+  /** Việc NCC khai cho gói, theo mốc rồi thứ tự (bỏ việc đã xóa mềm). Xem được ở mọi trạng thái gói. */
+  async listTasks(userId: string, id: string) {
+    const { pkg } = await this.loadOwned(userId, id);
+    const rows = await this.prisma.package_tasks.findMany({ where: { package_id: pkg.id, deleted_at: null }, orderBy: [{ offset_days: 'asc' }, { sort_order: 'asc' }, { id: 'asc' }] });
+    return rows.map(toTaskDto);
+  }
+
+  /**
+   * Thay toàn bộ danh sách việc trong một transaction (xóa mềm việc vắng mặt). Không qua Admin duyệt, sửa được ở mọi trạng thái gói;
+   * đơn đã cọc không bị ảnh hưởng (chưa có chỗ nào đọc package_tasks để sinh việc).
+   */
+  async saveTasks(userId: string, id: string, body: { tasks?: unknown }) {
+    const { pkg } = await this.loadOwned(userId, id);
+    const { tasks, errors } = parseTasks(body?.tasks);
+    if (errors.length) return fail('VALIDATION_ERROR', `Công việc chưa hợp lệ${errors[0].index >= 0 ? ` (dòng ${errors[0].index + 1})` : ''}: ${errors[0].message}`, 400, errors);
+    const { foreign } = await this.prisma.$transaction((tx) => syncPackageTasks(tx as never, pkg.id, tasks));
+    if (foreign.length) return fail('VALIDATION_ERROR', `Công việc không thuộc gói này (dòng ${foreign[0] + 1}).`, 400, foreign.map((index) => ({ index, field: 'id', message: 'Công việc không thuộc gói này.' })));
+    return this.listTasks(userId, id);
   }
 
   /** Kiểm tra và chuẩn hóa dữ liệu lưu nháp. */

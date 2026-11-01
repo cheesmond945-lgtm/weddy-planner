@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { vendorPackagesApi } from '@/api/vendorPackages'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/store/auth'
-import type { SavePackageRequest, VendorPackage } from '@/types/vendorPackage'
+import type { PackageTask, SavePackageRequest, VendorPackage } from '@/types/vendorPackage'
+import { useMemo, useState } from 'react'
+import { fromServer, isDirty, toRequest, type TaskDraft } from './packageTasks'
 
 const keys = {
   all: (userId: string | undefined) => ['vendor-packages', userId] as const,
@@ -117,4 +119,77 @@ export function usePackageAction() {
 /** "Tạo với AI": gợi ý đoạn mô tả gói từ tên, tags, giá, sức chứa. */
 export function useSuggestPackageDescription() {
   return useMutation({ mutationFn: vendorPackagesApi.suggestDescription, onError: (err) => toast(err.message) })
+}
+
+const taskKeys = (userId: string | undefined, id: string) => ['vendor-packages', userId, id, 'tasks'] as const
+
+export interface PackageTasksDraft {
+  /** Danh sách đang sửa trên màn (luôn theo mốc) */
+  rows: TaskDraft[]
+  /** Có thay đổi chưa lưu so với CSDL */
+  dirty: boolean
+  loading: boolean
+  loadError: Error | null
+  saving: boolean
+  setRows: (update: (rows: TaskDraft[]) => TaskDraft[]) => void
+  /** Bỏ thay đổi, về danh sách đã lưu */
+  discard: () => void
+  /**
+   * Lưu xuống CSDL (PUT .../tasks) cho gói `id`; không có thay đổi thì bỏ qua. Trả true khi xong, false khi lỗi (giữ danh sách và trạng thái chưa lưu).
+   * afterPackage: vừa lưu gói xong, báo lỗi theo kiểu "Đã lưu gói, công việc chưa lưu được".
+   */
+  save: (id: string, opts?: { afterPackage?: boolean }) => Promise<boolean>
+}
+
+/**
+ * Danh sách công việc của gói đang sửa. Giữ ở trang (không ở form) để còn nguyên khi form nạp lại hoặc khi gói mới vừa tạo đổi sang trang của nó.
+ * `draft` rỗng: theo dữ liệu đã lưu. Mỗi bản nháp gắn với gói của nó (gói mới chưa có id), sang gói khác thì không dùng.
+ */
+export function usePackageTasksDraft(packageId: string | undefined): PackageTasksDraft {
+  const { user } = useAuth()
+  const qc = useQueryClient()
+  const query = useQuery({
+    queryKey: taskKeys(user?.id, packageId ?? ''),
+    queryFn: () => vendorPackagesApi.tasks(packageId!),
+    enabled: user?.role === 'VENDOR' && !!packageId,
+  })
+  const saved = useMemo(() => fromServer(query.data ?? []), [query.data])
+  const [draft, setDraft] = useState<{ pid: string | undefined; rows: TaskDraft[] } | null>(null)
+  const [saving, setSaving] = useState(false)
+  const mine = draft && draft.pid === packageId ? draft.rows : null
+  const rows = mine ?? saved
+  const dirty = mine !== null && isDirty(mine, saved)
+
+  async function save(id: string, opts?: { afterPackage?: boolean }) {
+    // Gói mới vừa tạo: bản nháp còn gắn với "chưa có id"
+    const current = mine ?? (draft && draft.pid === undefined ? draft.rows : null)
+    if (!current || !isDirty(current, id === packageId ? saved : [])) return true
+    setSaving(true)
+    try {
+      const out: PackageTask[] = await vendorPackagesApi.saveTasks(id, toRequest(current))
+      qc.setQueryData(taskKeys(user?.id, id), out)
+      qc.setQueryData<VendorPackage>(keys.detail(user?.id, id), (p) => p && { ...p, taskCount: out.length })
+      qc.setQueryData<VendorPackage[]>(keys.all(user?.id), (list) => list?.map((p) => (p.id === id ? { ...p, taskCount: out.length } : p)))
+      setDraft(null)
+      toast(opts?.afterPackage ? 'Đã lưu công việc.' : 'Đã lưu công việc của gói.')
+      return true
+    } catch (e) {
+      setDraft({ pid: id, rows: current })
+      toast(opts?.afterPackage ? 'Đã lưu gói, công việc chưa lưu được — thử lại' : `Chưa lưu được công việc: ${(e as Error).message}`)
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return {
+    rows,
+    dirty,
+    loading: !!packageId && query.isPending,
+    loadError: query.isError ? query.error : null,
+    saving,
+    setRows: (update) => setDraft({ pid: packageId, rows: update(rows) }),
+    discard: () => setDraft(null),
+    save,
+  }
 }

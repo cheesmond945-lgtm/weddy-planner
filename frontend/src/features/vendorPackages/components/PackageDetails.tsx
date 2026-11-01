@@ -1,5 +1,5 @@
 import { EyeOff, PencilLine, RotateCcw } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ComponentProps } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
@@ -16,6 +16,8 @@ interface PackageDetailsProps {
   category: CategoryRef
   /** Bấm "Cập nhật" (gói đã đăng, chưa có bản cập nhật): chuyển sang form sửa */
   onEdit: () => void
+  /** Tab "Công việc" (sửa được ở mọi trạng thái gói, kể cả khi form gói chỉ đọc) */
+  editorExtras?: Pick<ComponentProps<typeof PackageEditor>, 'tasks' | 'tab' | 'onTabChange' | 'tasksPanel'>
 }
 
 /**
@@ -24,7 +26,7 @@ interface PackageDetailsProps {
  * - Đã đăng: Cập nhật, Ẩn.
  * - Đang ẩn: chỉ Khôi phục (khôi phục rồi mới cập nhật được).
  */
-export function PackageDetails({ pkg, profile, category, onEdit }: PackageDetailsProps) {
+export function PackageDetails({ pkg, profile, category, onEdit, editorExtras }: PackageDetailsProps) {
   const action = usePackageAction()
   const listHref = useListHref()
   const [confirm, setConfirm] = useState<'hide' | 'republish' | null>(null)
@@ -62,5 +64,5 @@ export function PackageDetails({ pkg, profile, category, onEdit }: PackageDetail
     </div>
   )
 
-  return <PackageEditor key={pkg.updatedAt} pkg={pkg} profile={profile} category={category} readOnly actions={actions} />
+  return <PackageEditor key={pkg.updatedAt} pkg={pkg} profile={profile} category={category} readOnly actions={actions} {...editorExtras} />
 }

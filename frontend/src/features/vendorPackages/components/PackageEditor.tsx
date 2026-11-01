@@ -18,7 +18,7 @@ import type { CategoryRef } from '@/types/catalog'
 import type { VendorFile, VendorProfile } from '@/types/vendor'
 import type { VendorPackage } from '@/types/vendorPackage'
 import { canSubmitPackage, isVenue, workingCopy } from '../constants'
-import { usePackageAction, useSavePackage } from '../hooks'
+import { usePackageAction, useSavePackage, type PackageTasksDraft } from '../hooks'
 import { PACKAGE_AI_STYLES } from '../constants'
 import { EMPTY_PACKAGE, GUESTS_PER_TABLE, suggestMinTables, toFormValues, toRequest, validatePackage, type PackageFormValues } from '../packageForm'
 import { useListHref } from './PackageHeader'
@@ -63,6 +63,12 @@ interface PackageEditorProps {
   actions?: ReactNode
   /** Gói đã đăng: thoát form sửa bản cập nhật về chế độ xem (nút Hủy khi chưa lưu bản cập nhật nào, sau khi xóa bản cập nhật) */
   onExitUpdate?: () => void
+  /** Công việc của gói (chỉ trang NCC; Admin không truyền). Lưu gói xong thì lưu tiếp công việc. */
+  tasks?: PackageTasksDraft
+  /** Tab đang mở: "info" (form gói) hoặc "tasks" (tasksPanel). Form gói vẫn nằm trong trang khi ở tab công việc để không mất dữ liệu đang nhập. */
+  tab?: 'info' | 'tasks'
+  onTabChange?: (tab: 'info' | 'tasks') => void
+  tasksPanel?: ReactNode
 }
 
 /**
@@ -71,7 +77,7 @@ interface PackageEditorProps {
  * Lưu nháp: cần tên gói và giá. Gửi duyệt: thêm mô tả, ít nhất một ảnh, và hồ sơ đã được duyệt đúng lĩnh vực.
  * Đặt key theo pkg.updatedAt để nạp lại sau khi lưu.
  */
-export function PackageEditor({ pkg, profile, category, vendorName, readOnly, actions, onExitUpdate }: PackageEditorProps) {
+export function PackageEditor({ pkg, profile, category, vendorName, readOnly, actions, onExitUpdate, tasks, tab = 'info', onTabChange, tasksPanel }: PackageEditorProps) {
   const navigate = useNavigate()
   const listHref = useListHref()
   const save = useSavePackage()
@@ -88,9 +94,10 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
 
   const venue = isVenue(category)
   const canSubmit = canSubmitPackage(profile, category)
-  const busy = save.isPending || action.isPending
+  const busy = save.isPending || action.isPending || !!tasks?.saving
   const off = busy || !!readOnly
   const dirty = JSON.stringify(values) !== JSON.stringify(baseline)
+  const tasksDirty = !!tasks?.dirty
   const errors = checkMode ? validatePackage(values, { mode: checkMode, venue, canSubmit }) : {}
 
   // Gợi ý số mâm tối thiểu khi đã nhập sức chứa hợp lệ
@@ -109,6 +116,8 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
       // Chỉ thiếu quyền gửi duyệt thì báo ngắn; còn lỗi nhập liệu thì báo đỏ và cuộn tới ô lỗi
       if (found.permission) toast(found.permission)
       if (keys.some((k) => k !== 'permission')) {
+        // Ô báo đỏ nằm ở tab Thông tin gói: chuyển sang đó trước khi cuộn
+        onTabChange?.('info')
         toast(`Gói còn ${keys.filter((k) => k !== 'permission').length} mục chưa hợp lệ, vui lòng kiểm tra các ô báo đỏ.`)
         scrollToFirstError()
       }
@@ -122,8 +131,12 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
     save.mutate(
       { id: pkg?.id, body: toRequest(values, venue), submit },
       {
-        // Gói mới: sang trang của gói vừa tạo
-        onSuccess: ({ pkg: saved }) => !pkg && navigate(paths.vendor.package(saved.id), { replace: true }),
+        // Lưu gói xong mới lưu công việc (gói mới có id rồi); công việc lỗi thì giữ danh sách và trạng thái chưa lưu.
+        // Gói mới: sau đó sang trang của gói vừa tạo
+        onSuccess: async ({ pkg: saved }) => {
+          if (tasks) await tasks.save(saved.id, { afterPackage: true })
+          if (!pkg) navigate(paths.vendor.package(saved.id), { replace: true })
+        },
       },
     )
   }
@@ -135,10 +148,12 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
-        if (!readOnly) handleSave(true)
+        if (!readOnly && tab === 'info') handleSave(true)
       }}
       className="grid min-w-0 gap-5"
     >
+      {tab === 'tasks' && tasksPanel}
+      <div className="grid gap-5" hidden={tab === 'tasks'}>
       <div className={card}>
         <FormSection title="Thông tin gói">
           <div className="grid grid-cols-2 gap-x-5 gap-y-4 max-sm:grid-cols-1">
@@ -287,11 +302,60 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
           </div>
         </FormSection>
       </div>
+      </div>
 
       {readOnly ? (
-        actions
+        <>
+          {tasks && pkg && (tasksDirty || tab === 'tasks') && (
+            <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
+              {tasksDirty && <span className="mr-auto text-[13px] font-medium text-gold-ink max-sm:w-full">Có thay đổi chưa lưu</span>}
+              {tasksDirty ? (
+                <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={tasks.discard}>
+                  Hủy
+                </Button>
+              ) : (
+                <Button asChild variant="outline" className="h-10 border-line-strong">
+                  <Link to={listHref}>Hủy</Link>
+                </Button>
+              )}
+              <Button type="button" className="h-10" disabled={busy || !tasksDirty} onClick={() => void tasks.save(pkg.id)}>
+                {tasks.saving ? 'Đang lưu…' : 'Lưu công việc'}
+              </Button>
+            </div>
+          )}
+          {/* Tab Công việc: chỉ thanh lưu công việc, không có Ẩn / Cập nhật của gói */}
+          {!(tab === 'tasks' && tasks) && actions}
+        </>
+      ) : tab === 'tasks' && tasks ? (
+        // Tab Công việc: lưu ngay, không cần Admin duyệt, nên không có Lưu nháp / Gửi duyệt
+        <div className="grid gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
+            {tasksDirty && <span className="mr-auto text-[13px] font-medium text-gold-ink max-sm:w-full">Có thay đổi chưa lưu</span>}
+            {pkg && tasksDirty ? (
+              <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={tasks.discard}>
+                Hủy
+              </Button>
+            ) : (
+              <Button asChild variant="outline" className="h-10 border-line-strong">
+                <Link to={listHref}>Hủy</Link>
+              </Button>
+            )}
+            {pkg ? (
+              <Button type="button" className="h-10" disabled={busy || !tasksDirty} onClick={() => void tasks.save(pkg.id)}>
+                {tasks.saving ? 'Đang lưu…' : 'Lưu công việc'}
+              </Button>
+            ) : (
+              <Button type="button" className="h-10" disabled={busy} onClick={() => handleSave(false)}>
+                {busy ? 'Đang lưu…' : 'Lưu gói và công việc'}
+              </Button>
+            )}
+          </div>
+          {pkg && dirty && <p className="text-right text-[12.5px] text-muted-foreground">Thông tin gói còn thay đổi chưa lưu — chuyển sang tab Thông tin gói để lưu hoặc gửi duyệt</p>}
+          {!pkg && <p className="text-right text-[12.5px] text-muted-foreground">Công việc được lưu ngay, không cần duyệt. Gửi duyệt gói ở tab Thông tin gói.</p>}
+        </div>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
+          {(dirty || tasksDirty) &&<span className="text-[13px] font-medium text-gold-ink max-sm:w-full">Có thay đổi chưa lưu</span>}
           {pkg && (!isUpdate || hasUpdate) && (
             <Button type="button" variant="outline" className="mr-auto h-10 border-warn/50 text-warn hover:bg-warn-soft" disabled={busy} onClick={() => setConfirm('remove')}>
               <Trash2 />
@@ -311,6 +375,11 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
           ) : (
             <Button asChild variant="outline" className="h-10 border-line-strong">
               <Link to={listHref}>Hủy</Link>
+            </Button>
+          )}
+          {tasks && pkg && tasksDirty && !dirty && (
+            <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={() => void tasks.save(pkg.id)}>
+              {tasks.saving ? 'Đang lưu…' : 'Lưu công việc'}
             </Button>
           )}
           <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={() => handleSave(false)}>
@@ -380,7 +449,7 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
         }
         onUse={(description) => set({ description })}
       />
-      <UnsavedChangesGuard when={dirty && !readOnly && !busy} />
+      <UnsavedChangesGuard when={((dirty && !readOnly) || tasksDirty) && !busy} />
     </form>
   )
 }
