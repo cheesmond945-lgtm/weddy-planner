@@ -60,7 +60,7 @@ export function DashboardLayout({ area, nav }: DashboardLayoutProps) {
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-20 border-b border-line bg-header backdrop-blur-md">
+        <header className="sticky top-0 z-20 bg-header backdrop-blur-md">
           <div className="flex items-center gap-3 px-4 py-3 md:px-8">
             <div className="md:hidden">
               <Brand to={nav[0]?.to ?? '/'} className="text-lg" />

@@ -6,6 +6,7 @@ import { formatMoney } from '@/lib/format'
 import { useReveal } from '@/lib/useReveal'
 import { paths } from '@/routes/paths'
 import type { ServiceSummary } from '@/types/catalog'
+import { isTablePriced } from '../price'
 import { RatingMeta } from './RatingMeta'
 
 interface ServiceCardProps {
@@ -68,7 +69,7 @@ export function ServiceCard({ service, index = 0, imageAction, extraActions, bad
                 formatMoney(service.priceFrom)
               )}
             </span>
-            <span className="text-[13px] text-ink-2"> / gói</span>
+            <span className="text-[13px] text-ink-2">{isTablePriced(service) ? ' / mâm · đã gồm sảnh' : ' / gói'}</span>
           </p>
           {/* Trung tâm tiệc cưới: trạng thái từng gói theo ngày cưới của khách */}
           {service.category.slug === VENUE_SLUG && <ServiceCardAvailability serviceId={service.id} />}

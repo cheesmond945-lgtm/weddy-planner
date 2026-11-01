@@ -10,20 +10,27 @@ import type { Prisma } from '../../generated/prisma/client';
 import { categorySlug } from '../catalog/services.service';
 
 export const ORDER_INCLUDE = {
-  order_items: { orderBy: { id: 'asc' as const } },
+  order_items: { orderBy: { id: 'asc' as const }, include: { service_packages: { select: { id: true, name: true } } } },
   payments: true,
   order_revisions: { orderBy: { created_date: 'desc' as const }, include: { order_revision_changes: true } },
   invoices: { orderBy: { created_date: 'asc' as const } },
-  weddings: { select: { user_id: true } },
-  vendor_profiles: { select: { id: true, user_id: true, business_name: true, service_categories: { select: { id: true, name: true } } } },
+  weddings: { select: { user_id: true, wedding_date: true } },
+  vendor_profiles: { select: { id: true, user_id: true, status: true, business_name: true, service_categories: { select: { id: true, name: true } } } },
+  service_packages: { select: { id: true, name: true } },
 } satisfies Prisma.ordersInclude;
 
 export type OrderRow = Prisma.ordersGetPayload<{ include: typeof ORDER_INCLUDE }>;
 
 /** Ngày thuần (cột @db.Date) -> "YYYY-MM-DD". */
-export const ymd = (d: Date) => d.toISOString().slice(0, 10);
+export const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
 /** Thời điểm (timestamptz) -> "YYYY-MM-DD" theo giờ Việt Nam. */
 export const ymdVN = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+/** Số ngày trả trễ so với hạn (ngày thanh toán theo giờ Việt Nam); null nếu chưa trả hoặc trả đúng hạn. */
+export const lateDaysOf = (due: Date | null, paidAt: Date | null) => {
+  if (!due || !paidAt) return null;
+  const days = Math.round((Date.parse(`${ymdVN(paidAt)}T00:00:00Z`) - Date.parse(`${ymd(due)}T00:00:00Z`)) / 86_400_000);
+  return days > 0 ? days : null;
+};
 
 const REVISION_CHANGE_ORDER = ['Item', 'Quantity', 'EventDate', 'Other'];
 
@@ -34,19 +41,33 @@ const REVISION_CHANGE_ORDER = ['Item', 'Quantity', 'EventDate', 'Other'];
 export function toOrderDto(o: OrderRow, conversationId: string) {
   const cancel = o as unknown as { cancel_reason?: string | null };
   const sent = o.status !== 'Draft';
-  const cat = o.vendor_profiles.service_categories;
+  const cat = o.vendor_profiles!.service_categories!;
   return {
     id: o.id,
     orderCode: o.order_code,
     conversationId,
-    serviceId: o.vendor_profiles.id,
-    vendorName: o.vendor_profiles.business_name,
+    serviceId: o.vendor_profiles!.id,
+    vendorName: o.vendor_profiles!.business_name!,
     category: { id: cat.id, slug: categorySlug(cat.name), name: cat.name },
+    /** Sảnh (gói) của đơn, Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md); null với dịch vụ khác và đơn cũ */
+    package: o.service_packages ? { id: o.service_packages.id, name: o.service_packages.name ?? '' } : null,
     status: o.status,
     customerName: o.customer_name,
     customerPhone: o.customer_phone,
     eventDate: ymd(o.event_date),
-    items: o.order_items.map((i) => ({ id: i.id, itemName: i.item_name, unit: i.unit, quantity: i.quantity, unitPrice: Number(i.unit_price), amount: Number(i.amount) })),
+    /** Ngày cưới của khách (null nếu chưa có), để form đơn điền sẵn và thẻ đơn báo khi ngày thực hiện lệch */
+    weddingDate: ymd(o.weddings?.wedding_date ?? null) || null,
+    items: o.order_items.map((i) => ({
+      id: i.id,
+      itemName: i.item_name,
+      unit: i.unit,
+      quantity: i.quantity,
+      unitPrice: Number(i.unit_price),
+      amount: Number(i.amount),
+      /** Gói dịch vụ của dòng (quy trình của gói sinh việc chi tiết khi cọc); null: dòng không gắn gói */
+      packageId: i.package_id ?? null,
+      packageName: i.service_packages?.name ?? null,
+    })),
     totalAmount: Number(o.total_amount),
     depositPercent: Number(o.deposit_percent),
     depositAmount: Number(o.deposit_amount),
@@ -63,14 +84,14 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
       oldTotalAmount: Number(r.old_total_amount),
       newTotalAmount: r.new_total_amount === null ? null : Number(r.new_total_amount),
       status: r.status,
-      createdDate: r.created_date.toISOString(),
+      createdDate: (r.created_date ?? new Date(0)).toISOString(),
       appliedDate: r.applied_date ? r.applied_date.toISOString() : null,
     })),
-    invoices: o.invoices.map((i) => ({ id: i.id, invoiceCode: i.invoice_code, type: i.type, createdDate: i.created_date.toISOString() })),
+    invoices: o.invoices.map((i) => ({ id: i.id, invoiceCode: i.invoice_code, type: i.type, createdDate: (i.created_date ?? new Date(0)).toISOString() })),
     completedDate: o.completed_date ? o.completed_date.toISOString() : null,
     cancelledDate: o.cancelled_date ? o.cancelled_date.toISOString() : null,
     cancelReason: cancel.cancel_reason ?? null,
-    createdDate: o.created_date.toISOString(),
+    createdDate: (o.created_date ?? new Date(0)).toISOString(),
   };
 }
 

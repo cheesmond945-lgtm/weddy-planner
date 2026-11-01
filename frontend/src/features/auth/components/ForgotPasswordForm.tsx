@@ -1,8 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { isMock } from '@/api'
 import { FormError } from '@/components/FormField'
 import { toast } from '@/components/ui/toast'
-import { MOCK_OTP } from '@/mocks/auth'
 import type { OtpSent, Session } from '@/types/auth'
 import { useForgotPassword, useResendResetOtp, useResetPassword } from '../hooks'
 import { MIN_PASSWORD, forgotPasswordSchema, resetPasswordSchema, validate, type FieldErrors } from '../schemas'
@@ -41,7 +39,7 @@ export function ForgotPasswordForm({ defaultEmail = '', onSuccess, onStepChange 
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      <p className="text-sm text-ink-2">Nhập email bạn đã dùng để đăng ký. WebPlan sẽ gửi mã OTP về email đó để bạn đặt mật khẩu mới.</p>
+      <p className="text-sm text-ink-2">Nhập email bạn đã dùng để đăng ký. Forever sẽ gửi mã OTP về email đó để bạn đặt mật khẩu mới.</p>
       <AuthField
         label="Email"
         type="email"
@@ -118,7 +116,6 @@ function ResetStep({ sent, onResent, onBack, onSuccess }: ResetStepProps) {
         value={values.otp}
         onChange={change('otp')}
         error={errors.otp}
-        hint={isMock('auth') ? `Dữ liệu giả: mã OTP là ${MOCK_OTP}.` : undefined}
         autoFocus
       />
       <AuthField

@@ -1,184 +1,235 @@
-import { Check, Flag, Lock, MessageSquareText, Pencil, Sparkles } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Ban, CalendarDays, Check, Clock, Lock, MessageSquareText, Pencil, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
+import { createContext, useContext, type KeyboardEvent } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { daysBetween, formatDate, formatShortDate, parseDate, today } from '@/lib/date'
+import { daysBetween, formatShortDate, parseDate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { TimelineItem, TimelineItemPatch, WeddingMember } from '@/types/wedding'
-import { AssignMenu, DueButton } from './TaskControls'
+import { DUE_SOON_DAYS } from '../timelineFilter'
+import { AssignMenu } from './TaskControls'
 
-interface TimelineRowProps {
-  item: TimelineItem
-  onToggle: (item: TimelineItem) => void
-  onEdit: (item: TimelineItem) => void
-  /** Sửa nhanh (giao việc, đổi hạn) kèm thông báo có nút Hoàn tác */
-  onPatch: (item: TimelineItem, patch: TimelineItemPatch, message: string) => void
-  /** Người thân giao việc được */
+/**
+ * Phần nhiều người cùng lập kế hoạch: quyền chỉ xem, người phụ trách, ghi chú. TimelineView cấp một lần,
+ * mọi thẻ (kể cả trong nhóm và lịch) đọc chung. Không có Provider: coi như owner, không hiện giao việc.
+ */
+export const TimelineMembersContext = createContext<{
+  readOnly: boolean
   relatives: WeddingMember[]
-  /** Khoảng hạn hợp lệ "YYYY-MM-DD" */
-  dueBounds: { min: string; max: string }
-  onAiSuggest: (categorySlug: string) => void
-  onOpenChat: (serviceId: string) => void
-  /** Viewer: không tích xong, không sửa */
-  readOnly?: boolean
-  /** Được chat với NCC (owner, editor có tab Dịch vụ) */
-  canChat?: boolean
+  onPatch: (item: TimelineItem, patch: TimelineItemPatch, message: string) => void
+} | null>(null)
+
+/** Tên hạng mục dùng trong chữ ("Gợi ý nhà hàng", "Việc chi tiết của nhà hàng"); danh mục lạ thì dùng tên từ API. */
+export const SERVICE_LABEL: Record<string, string> = {
+  'nha-hang': 'nhà hàng',
+  'chup-anh': 'chụp ảnh & quay phim',
+  'trang-phuc': 'trang phục',
+  decor: 'trang trí',
+  makeup: 'makeup',
+  'hoa-cuoi': 'hoa cưới',
+}
+export const serviceLabel = (item: TimelineItem) => SERVICE_LABEL[item.category?.slug ?? ''] ?? item.category?.name.toLowerCase() ?? 'dịch vụ'
+
+/** "14/7/2026": ngày, tháng không đệm số 0 (như thiết kế mẫu). */
+export const dmy = (s: string) => {
+  const d = parseDate(s)
+  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
+}
+export const dm = (s: string) => {
+  const d = parseDate(s)
+  return `${d.getDate()}/${d.getMonth() + 1}`
 }
 
-const rowBase = 'flex items-start gap-3.5 border-t border-line px-4 py-3.5 first:border-t-0'
+const card =
+  'group relative flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[22px] border border-line bg-surface px-5 py-[18px] shadow-card transition-all duration-150 ease-out max-[640px]:px-4'
+/** Thẻ bấm được (việc chưa xong, chưa khóa): nảy nhẹ, viền xanh nhạt, bóng mềm khi rê chuột. */
+const clickable =
+  'cursor-pointer hover:-translate-y-0.5 hover:border-sage/40 hover:shadow-[0_12px_28px_rgb(var(--shadow-rgb)/0.14)] focus-visible:-translate-y-0.5 focus-visible:border-sage/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage motion-reduce:transition-none motion-reduce:hover:translate-y-0'
 
-/** Hàng "Ngày đám cưới" ở cuối danh sách. */
-export function WeddingDayRow({ date }: { date: string }) {
-  return (
-    <div className={rowBase}>
-      <Flag className="mt-px size-5 shrink-0 text-gold-700" aria-hidden />
-      <div className="min-w-0 flex-1 font-medium">Ngày đám cưới</div>
-      <div className="text-[13px] whitespace-nowrap text-muted-foreground">{formatDate(date)}</div>
-    </div>
-  )
+interface TimelineCardProps {
+  item: TimelineItem
+  /** Đang trượt ra khỏi danh sách sau khi hoàn thành */
+  leaving?: boolean
+  /** Mở hộp "Xác nhận hoàn thành" (bấm thẻ, ô tick hoặc Enter) */
+  onComplete: (item: TimelineItem) => void
+  /** Đưa việc đã xong về Chưa xong (nút ↺) */
+  onReopen: (item: TimelineItem) => void
+  onEdit: (item: TimelineItem) => void
+  onRemove: (item: TimelineItem) => void
+  /** "Nhắn NCC" cho việc chi tiết đang chờ khách / cùng NCC chưa chốt lịch */
+  onChat?: (item: TimelineItem) => void
+  /** Việc con trong thẻ nhóm: nhỏ gọn hơn, thụt vào */
+  nested?: boolean
+  /** Cách xem THEO THỜI GIAN: việc con có thêm tên dịch vụ ở dòng hạn ("Hạn: d/m · Nhà hàng") */
+  showService?: boolean
+  /** Hạn dạng d/m (không năm): nhóm theo tháng đã có năm ở tiêu đề */
+  compactDate?: boolean
 }
 
-/** Dòng gộp các việc chi tiết chưa mở: "Việc chi tiết của a, b, c" (P4). */
-export function LockedGroupRow({ names }: { names: string[] }) {
-  return (
-    <div className={cn(rowBase, 'bg-[color-mix(in_srgb,var(--line)_35%,var(--surface))]')}>
-      <Lock className="mt-px size-[18px] shrink-0 text-muted-foreground" aria-hidden />
-      <div className="min-w-0 flex-1">
-        <div className="font-medium">Việc chi tiết của {names.join(', ')}</div>
-        <div className="text-[13px] text-muted-foreground">Mở sau khi bạn đặt cọc cho nhà cung cấp.</div>
-      </div>
-    </div>
-  )
-}
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-const shortDate = (iso: string) => formatShortDate(iso.slice(0, 10))
-
-/** Một mốc trên timeline (rowHtml trong prototype). */
-export function TimelineRow({ item, onToggle, onEdit, onPatch, relatives, dueBounds, onAiSuggest, onOpenChat, readOnly = false, canChat = true }: TimelineRowProps) {
-  if (item.kind === 'SERVICE_DATE') {
-    return (
-      <div className={rowBase}>
-        <Flag className="mt-px size-5 shrink-0 text-gold-700" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">{item.title}</div>
-          <div className="text-[13px] text-muted-foreground">Ngày đã thống nhất với nhà cung cấp</div>
-        </div>
-        <div className="text-[13px] whitespace-nowrap text-muted-foreground">{formatDate(item.dueDate!)}</div>
-      </div>
-    )
-  }
-
-  if (item.kind === 'LOCKED') {
-    return (
-      <div className={cn(rowBase, 'bg-[color-mix(in_srgb,var(--line)_35%,var(--surface))]')}>
-        <Lock className="mt-px size-[18px] shrink-0 text-muted-foreground" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">{item.title}</div>
-          <div className="text-[13px] text-muted-foreground">Mở sau khi bạn đặt cọc cho nhà cung cấp.</div>
-        </div>
-      </div>
-    )
-  }
-
+/** Thẻ một việc: ô tick tròn, tên, dòng hạn, và nút chỉ khi nghiệp vụ cần. */
+export function TimelineCard({ item, leaving, nested, showService, compactDate, onComplete, onReopen, onEdit, onRemove, onChat }: TimelineCardProps) {
   const due = parseDate(item.dueDate!)
-  const over = !item.isDone && due < today()
-  const soon = !item.isDone && !over && daysBetween(today(), due) <= 7
-  const dueLabel = item.isDone ? 'Đã xong' : `${over ? 'Quá hạn' : 'Hạn'} ${formatShortDate(item.dueDate!)}`
+  const done = item.isDone
+  const overdue = !done && due < today()
+  // Sắp đến hạn: còn 0 đến 2 ngày (cùng ngưỡng với thông báo của backend)
+  const dueSoon = !done && !overdue && daysBetween(today(), due) <= DUE_SOON_DAYS
+  // Mốc "Chốt" tự xong khi đặt cọc: không tick tay
+  const autoDone = item.kind === 'CATEGORY_DEADLINE'
+  // Việc chi tiết của đơn do NCC quản lý (mọi việc, kể cả việc của khách): khách chỉ xem, NCC cập nhật ở "Tiến độ đơn"
+  const vendorOwned = item.kind === 'SERVICE_TASK'
+  const waiting = vendorOwned && item.status === 'Waiting' && !done
+  // Việc làm cùng NCC mà ngày mới là dự kiến: NCC sẽ hẹn lịch với khách
+  const togetherUnconfirmed = vendorOwned && !done && !waiting && item.owner === 'BOTH' && item.dateStatus !== 'CONFIRMED'
+  const members = useContext(TimelineMembersContext)
+  const readOnly = members?.readOnly ?? false
+  const canComplete = !done && !autoDone && !vendorOwned && !readOnly
+  // Việc chi tiết của đơn đã xong: vẫn hiện đúng chỗ theo ngày, nhưng cả thẻ sang tông xám (không gạch ngang)
+  const grayDone = done && vendorOwned
+  const doneDay = grayDone && item.completedDate ? dm(new Date(new Date(item.completedDate).getTime() + 7 * 3600_000).toISOString().slice(0, 10)) : null
+  // Nút "Gợi ý {dịch vụ}" theo cờ `suggest` của backend (việc Chọn NCC đầu tiên của dịch vụ; Mốc chốt Todo có đơn đã hủy). Việc đã tick xong vẫn giữ nút.
+  const suggests = item.suggest && !!item.category
+  const label = serviceLabel(item)
+  const hintId = `hint-${item.id}`
 
-  let mark: ReactNode
-  let extra: ReactNode = null
-  if (item.kind === 'CATEGORY_DEADLINE') {
-    mark = (
-      <span
-        role="img"
-        aria-label={item.isDone ? 'Đã chốt' : 'Chưa chốt'}
-        className={cn('mt-px grid size-5 shrink-0 place-items-center rounded-full border-2', item.isDone ? 'border-sage bg-sage text-white' : 'border-line')}
-      >
-        {item.isDone && <Check className="size-[13px]" strokeWidth={3} />}
-      </span>
-    )
-    const slug = item.category!.slug
-    extra = item.isDone ? (
-      <div className="text-[13px] text-muted-foreground">Đã chốt {item.serviceName}. Việc chi tiết nằm trong danh sách bên dưới.</div>
-    ) : (
-      <>
-        <div className="text-[13px] text-muted-foreground">{item.serviceName ? `Đang cân nhắc ${item.serviceName}` : 'Chưa chọn nhà cung cấp'}</div>
-        {/* Viewer chỉ xem kế hoạch, không mở trang dịch vụ hay gợi ý AI */}
-        <div className={cn('mt-[9px] flex flex-wrap gap-2', readOnly && 'hidden')}>
-          <Button variant="secondary" size="sm" onClick={() => onAiSuggest(slug)}>
-            <Sparkles className="size-[15px]" />
-            Gợi ý bằng AI
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to={`${paths.services}?category=${slug}`}>Xem dịch vụ</Link>
-          </Button>
-          {item.serviceId && canChat && (
-            <Button variant="outline" size="sm" onClick={() => onOpenChat(item.serviceId!)}>
-              Nhắn tin
-            </Button>
-          )}
-        </div>
-      </>
-    )
-  } else {
-    mark = (
-      <input
-        type="checkbox"
-        checked={item.isDone}
-        disabled={readOnly}
-        onChange={() => onToggle(item)}
-        aria-label={item.title}
-        className="mt-px size-5 shrink-0 cursor-pointer accent-sage"
-      />
-    )
-    if (item.kind === 'SERVICE_TASK') extra = <div className="text-[13px] text-muted-foreground">{item.serviceName}</div>
+  // Enter trên chính thẻ mở hộp xác nhận (Enter trên nút bên trong thẻ giữ nguyên việc của nút)
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (canComplete && e.key === 'Enter' && e.target === e.currentTarget) {
+      e.preventDefault()
+      onComplete(item)
+    }
   }
 
   return (
-    <div className={rowBase}>
-      {mark}
-      <div className="min-w-0 flex-1">
-        <div className={cn('font-medium', item.isDone && item.kind !== 'CATEGORY_DEADLINE' && 'text-muted-foreground line-through')}>{item.title}</div>
-        {extra}
+    <div
+      role={canComplete ? 'button' : undefined}
+      tabIndex={canComplete || (autoDone && !done) ? 0 : undefined}
+      aria-label={canComplete ? `Hoàn thành: ${item.title}` : undefined}
+      aria-describedby={autoDone && !done ? hintId : undefined}
+      data-state={done ? 'done' : 'todo'}
+      onClick={canComplete ? () => onComplete(item) : undefined}
+      onKeyDown={onKeyDown}
+      className={cn(card, nested && 'rounded-2xl px-4 py-3 shadow-sm max-[640px]:px-3', grayDone && 'border-line/70 bg-surface-2/60 opacity-60 shadow-none', canComplete && clickable, leaving && !done && 'pointer-events-none -translate-x-6 scale-[0.98] opacity-0 duration-300')}
+    >
+      {done ? (
+        <span aria-hidden className={cn('grid size-[26px] shrink-0 place-items-center rounded-full', grayDone ? 'bg-sage/25 text-sage' : 'bg-sage text-white')}>
+          <Check className="size-4" strokeWidth={3} />
+        </span>
+      ) : (
+        <span aria-hidden className={cn('grid size-[26px] shrink-0 place-items-center rounded-full border-2 bg-surface transition-colors', autoDone ? 'border-line' : 'border-line group-hover:border-sage')} />
+      )}
+
+      <div className="min-w-0 flex-1 basis-[220px]">
+        <div className={cn(nested ? 'text-[15.5px]' : 'text-[17px]', 'leading-snug font-semibold', done && !autoDone && !grayDone && 'text-muted-foreground line-through', grayDone && 'text-muted-foreground', done && autoDone && 'text-sage')}>{item.title}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[12.5px] font-medium text-muted-foreground">
+          <CalendarDays className="size-3.5" aria-hidden />
+          <span className={cn(overdue && 'text-warn')}>Hạn: {compactDate ? dm(item.dueDate!) : dmy(item.dueDate!)}</span>
+          {showService && item.kind === 'SERVICE_TASK' && <span>· {capitalize(serviceLabel(item))}</span>}
+          {dueSoon && <span className="font-semibold text-gold-ink">· Sắp đến hạn</span>}
+          {overdue && !vendorOwned && <span className="font-semibold text-warn">· Quá hạn</span>}
+          {!done && item.urgent && <span className="font-semibold text-warn">· Gấp</span>}
+          {waiting && <span className={cn('font-semibold', overdue ? 'text-warn' : 'text-gold-ink')}>· Đang chờ bạn</span>}
+          {vendorOwned && !done && !waiting && <span className={cn(overdue && 'font-semibold text-warn')}>· {overdue ? 'NCC chưa cập nhật' : 'NCC thực hiện'}</span>}
+          {grayDone && <span>· Đã xong{doneDay ? ` · ${doneDay}` : ''}</span>}
+          {vendorOwned && !done && <span>· {item.dateStatus === 'CONFIRMED' ? 'Đã chốt lịch' : 'Dự kiến'}</span>}
+        </div>
+        {waiting && <div className="mt-1 text-[12.5px] text-muted-foreground">Gửi cho NCC qua tin nhắn; NCC sẽ đánh dấu khi đã nhận</div>}
+        {togetherUnconfirmed && <div className="mt-1 text-[12.5px] text-muted-foreground">NCC sẽ hẹn lịch với bạn</div>}
+        {autoDone && done && (
+          <div className="mt-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-sage">
+            <Check className="size-3.5" strokeWidth={3} aria-hidden />
+            Đã chốt{item.serviceName ? ` · ${item.serviceName}` : ''}
+          </div>
+        )}
+        {/* Mốc chốt chưa cọc: gộp khối khóa vào ngay trong thẻ, không xổ ra */}
+        {autoDone && !done && item.cancelledOrder && (
+          <div className="mt-1 flex items-center gap-1.5 text-[12.5px] font-medium text-warn">
+            <Ban className="size-3.5" aria-hidden />
+            Đơn {item.cancelledOrder.orderCode} với {item.cancelledOrder.vendorName} đã hủy ngày {dm(item.cancelledOrder.date)}
+          </div>
+        )}
+        {autoDone && !done && (
+          <div className="mt-1 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+            <Lock className="size-3.5" aria-hidden />
+            Các việc phục vụ của nhà cung cấp mở ra sau khi bạn đặt cọc
+          </div>
+        )}
+        {autoDone && done && item.vendorProcessMissing && (
+          <div className="mt-1 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+            <Ban className="size-3.5" aria-hidden />
+            Nhà cung cấp chưa khai quy trình công việc cho dịch vụ này
+          </div>
+        )}
+        {autoDone && done && item.processSyncFailed && (
+          <div className="mt-1 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+            <Clock className="size-3.5" aria-hidden />
+            Đang cập nhật quy trình công việc của nhà cung cấp
+          </div>
+        )}
         {item.note && (
           <p className="mt-1.5 flex gap-1.5 text-[13px]">
             <MessageSquareText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span>
               {item.note.text}
-              <span className="text-muted-foreground">
-                {' '}
-                ({[item.note.by?.name, item.note.date && shortDate(item.note.date)].filter(Boolean).join(', ')})
-              </span>
+              <span className="text-muted-foreground"> ({[item.note.by?.name, item.note.date && formatShortDate(item.note.date.slice(0, 10))].filter(Boolean).join(', ')})</span>
             </span>
           </p>
         )}
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 empty:hidden">
-          <AssignMenu
-            assignee={item.assignee}
-            relatives={relatives}
-            readOnly={readOnly}
-            onPick={(v) => onPatch(item, v, v.assignee ? 'Đã giao việc' : 'Đã bỏ giao việc')}
-          />
-          {item.isDone && item.completedBy && item.kind !== 'CATEGORY_DEADLINE' && <span className="text-xs text-muted-foreground">Xong bởi {item.completedBy.name}</span>}
-        </div>
+        {members && !vendorOwned && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 empty:hidden" onClick={(e) => e.stopPropagation()}>
+            <AssignMenu
+              assignee={item.assignee}
+              relatives={members.relatives}
+              readOnly={readOnly}
+              onPick={(v) => members.onPatch(item, v, v.assignee ? 'Đã giao việc' : 'Đã bỏ giao việc')}
+            />
+            {done && item.completedBy && !autoDone && <span className="text-xs text-muted-foreground">Xong bởi {item.completedBy.name}</span>}
+          </div>
+        )}
       </div>
-      <div className="flex flex-col items-end gap-1.5">
-        <DueButton
-          label={dueLabel}
-          value={item.dueDate!}
-          min={dueBounds.min}
-          max={dueBounds.max}
-          readOnly={readOnly || item.isDone}
-          onPick={(d) => onPatch(item, { dueDate: d }, `Đã đổi hạn sang ${formatShortDate(d)}`)}
-          className={cn('text-right text-[13px] whitespace-nowrap text-muted-foreground', soon && 'font-semibold text-gold', over && 'font-semibold text-warn')}
-        />
-        {!readOnly && (
-          <Button variant="outline" size="icon" className="size-8" aria-label={`Sửa ${item.title}`} onClick={() => onEdit(item)}>
-            <Pencil className="size-3.5" />
+
+      {/* Bấm nút trong thẻ không mở hộp xác nhận */}
+      <div className="flex flex-wrap items-center gap-2 max-[640px]:w-full max-[640px]:pl-[42px]" onClick={(e) => e.stopPropagation()}>
+        {(waiting || togetherUnconfirmed) && onChat && item.serviceId && (
+          <Button variant="outline" size="sm" onClick={() => onChat(item)}>
+            Nhắn NCC
+          </Button>
+        )}
+        {suggests && item.category && (
+          <Button asChild variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5">
+            <Link to={`${paths.services}?category=${item.category.slug}`}>
+              <Sparkles className="size-[15px] shrink-0" />
+              <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${label}`} →</span>
+            </Link>
+          </Button>
+        )}
+        {!done && item.isCustom && !readOnly && (
+          <span className="flex gap-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
+            <Button variant="outline" size="icon" className="size-8" aria-label={`Sửa ${item.title}`} onClick={() => onEdit(item)}>
+              <Pencil className="size-3.5" />
+            </Button>
+            <Button variant="outline" size="icon" className="size-8" aria-label={`Xóa ${item.title}`} onClick={() => onRemove(item)}>
+              <Trash2 className="size-3.5" />
+            </Button>
+          </span>
+        )}
+        {done && !autoDone && !vendorOwned && !readOnly && (
+          <Button variant="outline" size="icon" className="size-8" aria-label={`Đưa về Chưa xong: ${item.title}`} title="Đưa về Chưa xong" onClick={() => onReopen(item)}>
+            <RotateCcw className="size-3.5" />
           </Button>
         )}
       </div>
+
+      {autoDone && !done && (
+        <span
+          id={hintId}
+          role="tooltip"
+          className="pointer-events-none absolute top-1/2 right-5 z-10 hidden -translate-y-1/2 rounded-md bg-ink px-3 py-1.5 text-xs text-bg shadow-card group-focus-visible:block group-hover:block"
+        >
+          Tự hoàn thành khi bạn đặt cọc cho nhà cung cấp
+        </span>
+      )}
     </div>
   )
 }

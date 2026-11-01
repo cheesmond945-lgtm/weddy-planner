@@ -7,13 +7,20 @@ import ForbiddenPage from '@/pages/ForbiddenPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import PublicPlanPage from '@/pages/PublicPlanPage'
 import InvitePage from '@/pages/couple/InvitePage'
+import TimelinePage from '@/pages/couple/TimelinePage'
+import DepositTermsPreviewPage from '@/pages/preview/DepositTermsPreviewPage'
+import TermsPreviewPage from '@/pages/preview/TermsPreviewPage'
+import AdminAccountPage from '@/pages/admin/AdminAccountPage'
 import AdminCatalogPage from '@/pages/admin/AdminCatalogPage'
 import AdminCommissionsPage from '@/pages/admin/AdminCommissionsPage'
 import AdminConsultationRequestsPage from '@/pages/admin/AdminConsultationRequestsPage'
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage'
 import AdminOrdersPage from '@/pages/admin/AdminOrdersPage'
+import AdminPackageDetailPage from '@/pages/admin/AdminPackageDetailPage'
+import AdminPaymentDetailPage from '@/pages/admin/AdminPaymentDetailPage'
 import AdminPaymentsPage from '@/pages/admin/AdminPaymentsPage'
 import AdminUsersPage from '@/pages/admin/AdminUsersPage'
+import AdminVendorDetailPage from '@/pages/admin/AdminVendorDetailPage'
 import AdminVendorsPage from '@/pages/admin/AdminVendorsPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 import LoginPage from '@/pages/auth/LoginPage'
@@ -34,14 +41,19 @@ import VendorCatalogPage from '@/pages/vendor/VendorCatalogPage'
 import VendorChatPage from '@/pages/vendor/VendorChatPage'
 import VendorCommissionsPage from '@/pages/vendor/VendorCommissionsPage'
 import VendorDashboardPage from '@/pages/vendor/VendorDashboardPage'
+import VendorCalendarPage from '@/pages/vendor/VendorCalendarPage'
 import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
 import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
 import VendorProfilePage from '@/pages/vendor/VendorProfilePage'
 import { RedirectKeepSearch } from './RedirectKeepSearch'
+import VendorAccountPage from '@/pages/vendor/VendorAccountPage'
 import { RequireRole } from './RequireRole'
 import { paths } from './paths'
 
 export const router = createBrowserRouter([
+  // TẠM THỜI: xem thử điều khoản, xóa sau
+  { path: '/preview/terms', element: <TermsPreviewPage /> },
+  { path: '/preview/deposit-terms', element: <DepositTermsPreviewPage /> },
   // Phía cặp đôi
   {
     element: <CoupleLayout />,
@@ -65,16 +77,15 @@ export const router = createBrowserRouter([
               // /plan: trang khung tự chuyển sang tab đầu tiên được xem
               { index: true, element: null },
               { path: paths.planTab.overview, element: <PlanOverviewPage /> },
-              // Tab Timeline đã bỏ: link cũ /plan/timeline để trang khung chuyển sang tab đầu tiên
-              { path: '/plan/timeline', element: null },
               { path: paths.planTab.services, element: <PlanServicesPage /> },
               { path: paths.planTab.budget, element: <PlanBudgetPage /> },
               { path: paths.planTab.guests, element: <PlanGuestsPage /> },
             ],
           },
           { path: '/plan/deal/:dealId', element: <DealPage /> },
-          // Link cũ /timeline sang Kế hoạch của tôi
-          { path: '/timeline', element: <RedirectKeepSearch to={paths.plan} /> },
+          { path: paths.timeline, element: <TimelinePage /> },
+          // Link cũ /plan/timeline sang trang Timeline
+          { path: '/plan/timeline', element: <RedirectKeepSearch to={paths.timeline} /> },
           { path: paths.chat, element: <ChatPage /> },
         ],
       },
@@ -101,10 +112,12 @@ export const router = createBrowserRouter([
         children: [
           { path: paths.vendor.dashboard, element: <VendorDashboardPage /> },
           { path: paths.vendor.profile, element: <VendorProfilePage /> },
+          { path: paths.vendor.account, element: <VendorAccountPage /> },
           { path: paths.vendor.catalog, element: <VendorCatalogPage /> },
           { path: paths.vendor.packageNew, element: <VendorPackagePage /> },
           { path: '/vendor/catalog/:packageId', element: <VendorPackagePage /> },
           { path: paths.vendor.orders, element: <VendorOrdersPage /> },
+          { path: paths.vendor.calendar, element: <VendorCalendarPage /> },
           { path: paths.vendor.chat, element: <VendorChatPage /> },
           { path: paths.vendor.commissions, element: <VendorCommissionsPage /> },
         ],
@@ -122,11 +135,15 @@ export const router = createBrowserRouter([
           { path: paths.admin.dashboard, element: <AdminDashboardPage /> },
           { path: paths.admin.consultationRequests, element: <AdminConsultationRequestsPage /> },
           { path: paths.admin.vendors, element: <AdminVendorsPage /> },
+          { path: '/admin/vendors/:id', element: <AdminVendorDetailPage /> },
           { path: paths.admin.catalog, element: <AdminCatalogPage /> },
+          { path: '/admin/catalog/:id', element: <AdminPackageDetailPage /> },
           { path: paths.admin.orders, element: <AdminOrdersPage /> },
           { path: paths.admin.payments, element: <AdminPaymentsPage /> },
+          { path: '/admin/payments/:id', element: <AdminPaymentDetailPage /> },
           { path: paths.admin.commissions, element: <AdminCommissionsPage /> },
           { path: paths.admin.users, element: <AdminUsersPage /> },
+          { path: paths.admin.account, element: <AdminAccountPage /> },
         ],
       },
     ],

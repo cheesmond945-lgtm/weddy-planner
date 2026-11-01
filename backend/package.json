@@ -4,12 +4,19 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "test": "npm run test:ts && npm run test:cjs",
+    "test:ts": "node --test test/**/*.test.ts",
+    "seed:package-tasks": "tsc -p scripts/tsconfig.json && node node_modules/.cache/timeline-scripts/scripts/seed-package-tasks.js",
+    "delete:test-order": "tsc -p scripts/tsconfig.json && node node_modules/.cache/timeline-scripts/scripts/delete-test-order.js",
+    "timelines:repair": "tsc -p scripts/tsconfig.json && node node_modules/.cache/timeline-scripts/scripts/repair-order-details.js",
+    "timelines:restore": "tsc -p scripts/tsconfig.json && node node_modules/.cache/timeline-scripts/scripts/restore-timelines.js",
+    "timelines:rebuild": "tsc -p scripts/tsconfig.json && node node_modules/.cache/timeline-scripts/scripts/rebuild-timelines.js",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "db:pull": "prisma db pull",
     "db:generate": "prisma generate",
-    "test": "nest build && node --test \"test/**/*.test.cjs\""
+    "test:cjs": "nest build && node --test \"test/**/*.test.cjs\""
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

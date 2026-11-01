@@ -7,14 +7,14 @@ export type MessageSender = 'COUPLE' | 'VENDOR' | 'SYSTEM';
 export type MessageRow = Awaited<ReturnType<typeof postMessage>>;
 
 /** SenderId rỗng là tin hệ thống; còn lại so với tài khoản cặp đôi của hội thoại. */
-export const senderOf = (m: { sender_id: string | null }, coupleId: string): MessageSender =>
+export const senderOf = (m: { sender_id: string | null }, coupleId: string | null): MessageSender =>
   m.sender_id === null ? 'SYSTEM' : m.sender_id === coupleId ? 'COUPLE' : 'VENDOR';
 
 /**
  * Tin nhắn dùng chung cho cả hai vai trò (docs/database.md 4.18). `order` là phần thêm cho tin Order,
  * DepositReceipt, FinalInvoice để FE vẽ ô đơn gọn khi chưa nối API đơn hàng.
  */
-export function toMessage(m: MessageRow, coupleId: string) {
+export function toMessage(m: MessageRow, coupleId: string | null) {
   return {
     id: m.id,
     conversationId: m.conversation_id,
@@ -23,13 +23,13 @@ export function toMessage(m: MessageRow, coupleId: string) {
     orderId: m.order_id,
     content: m.content,
     isRead: m.is_read,
-    sentDate: m.sent_date.toISOString(),
+    sentDate: (m.sent_date ?? new Date(0)).toISOString(),
     order: m.orders ? { orderCode: m.orders.order_code, status: m.orders.status } : null,
   };
 }
 
 /** Tin cuối của một hội thoại, dùng trong danh sách. */
-export function toLastMessage(m: MessageRow, coupleId: string) {
+export function toLastMessage(m: MessageRow, coupleId: string | null) {
   const { sender, type, content, sentDate, order } = toMessage(m, coupleId);
   return { sender, type, content, sentDate, orderCode: order?.orderCode ?? null };
 }

@@ -1,6 +1,6 @@
-import { mockAuth } from '@/mocks/auth'
-import { authStore } from '@/store/auth'
 import type {
+  ChangeEmailRequest,
+  ChangePasswordRequest,
   LoginRequest,
   OtpSent,
   RegisterRequest,
@@ -11,34 +11,47 @@ import type {
   VerifyRegisterOtpRequest,
 } from '@/types/auth'
 import { http } from './client'
-import { isMock, mockDelay } from './mock'
 
 /** Hợp đồng: docs/api/auth.md */
 export const authApi = {
   login: (body: LoginRequest): Promise<Session> =>
-    isMock('auth') ? mockDelay(null).then(() => mockAuth.login(body)) : http.post('/auth/login', body),
+    http.post('/auth/login', body),
 
   register: (body: RegisterRequest): Promise<OtpSent> =>
-    isMock('auth') ? mockDelay(null).then(() => mockAuth.register(body)) : http.post('/auth/register', body),
+    http.post('/auth/register', body),
 
   resendRegisterOtp: (email: string): Promise<OtpSent> =>
-    isMock('auth') ? mockDelay(null).then(() => mockAuth.resendOtp(email)) : http.post('/auth/register/resend-otp', { email }),
+    http.post('/auth/register/resend-otp', { email }),
 
   verifyRegisterOtp: (body: VerifyRegisterOtpRequest): Promise<Session> =>
-    isMock('auth') ? mockDelay(null).then(() => mockAuth.verifyRegisterOtp(body)) : http.post('/auth/register/verify-otp', body),
+    http.post('/auth/register/verify-otp', body),
 
   forgotPassword: (email: string): Promise<OtpSent> =>
-    isMock('auth') ? mockDelay(null).then(() => mockAuth.forgotPassword(email)) : http.post('/auth/forgot-password', { email }),
+    http.post('/auth/forgot-password', { email }),
 
   resendResetOtp: (email: string): Promise<OtpSent> =>
-    isMock('auth') ? mockDelay(null).then(() => mockAuth.resendResetOtp(email)) : http.post('/auth/forgot-password/resend-otp', { email }),
+    http.post('/auth/forgot-password/resend-otp', { email }),
 
   resetPassword: (body: ResetPasswordRequest): Promise<Session> =>
-    isMock('auth') ? mockDelay(null).then(() => mockAuth.resetPassword(body)) : http.post('/auth/reset-password', body),
+    http.post('/auth/reset-password', body),
 
   me: (): Promise<SessionUser> =>
-    isMock('auth') ? mockDelay(null).then(() => mockAuth.me(authStore.getToken())) : http.get('/auth/me'),
+    http.get('/auth/me'),
 
   updateProfile: (body: UpdateProfileRequest): Promise<SessionUser> =>
-    isMock('auth') ? mockDelay(null).then(() => mockAuth.updateProfile(authStore.getToken(), body)) : http.patch('/auth/me', body),
+    http.patch('/auth/me', body),
+
+  /** Đổi mật khẩu khi đang đăng nhập (quy tắc ở features/auth/passwordRules.ts) */
+  changePassword: (body: ChangePasswordRequest): Promise<null> =>
+    http.post('/auth/me/password', body),
+
+  /** Đổi email đăng nhập: bước 1 gửi OTP tới email mới, bước 2 nhập OTP */
+  requestEmailChange: (body: ChangeEmailRequest): Promise<OtpSent> =>
+    http.post('/auth/me/email', body),
+
+  resendEmailChangeOtp: (): Promise<OtpSent> =>
+    http.post('/auth/me/email/resend-otp'),
+
+  verifyEmailChange: (otp: string): Promise<SessionUser> =>
+    http.post('/auth/me/email/verify-otp', { otp }),
 }

@@ -5,5 +5,6 @@ import { defineConfig, env } from 'prisma/config';
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: { path: 'prisma/migrations' },
-  datasource: { url: env('DATABASE_URL') },
+  // db:pull cần Session pooler (DIRECT_URL, cổng 5432); app chạy qua Transaction pooler (DATABASE_URL, xem src/prisma/prisma.service.ts)
+  datasource: { url: process.env.DIRECT_URL ? env('DIRECT_URL') : env('DATABASE_URL') },
 });

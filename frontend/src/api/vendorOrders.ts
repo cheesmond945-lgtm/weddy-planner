@@ -1,72 +1,93 @@
-import { mockVendorOrders } from '@/mocks/vendorOrders'
-import { authStore } from '@/store/auth'
 import type { Paginated } from '@/types/api'
-import type { CancelReason, Order, OrderContent, OrderListQuery, OrderStatus } from '@/types/vendorOrder'
-import { ApiError, http, requestRaw } from './client'
-import { isMock, mockDelay } from './mock'
-
-function mockUserId() {
-  const user = authStore.getSession()?.user
-  if (!user) throw new ApiError(401, 'UNAUTHORIZED', 'Bạn cần đăng nhập.')
-  return user.id
-}
-
-const mock = <T>(fn: (userId: string) => T, ms = 300) => mockDelay(null, ms).then(() => fn(mockUserId()))
+import type { BoardTask, CalendarItem, CancelReason, Order, OrderContent, OrderListQuery, OrderProgress, OrderStatus, OrderTasks, TaskStatus } from '@/types/vendorOrder'
+import { http, requestRaw } from './client'
 
 /** Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp). */
 export const vendorOrdersApi = {
   /** Danh sách đơn có lọc, phân trang (trang Quản lý đơn hàng). Gồm cả bản nháp. */
   list: async (query: OrderListQuery): Promise<Paginated<Order>> => {
-    if (isMock('orders')) return mock((u) => mockVendorOrders.listOrders(u, query), 250)
     const res = await requestRaw<Order[]>('/vendors/me/orders', { query: { ...query } })
     return { data: res.data, meta: res.meta! }
   },
 
   /** Số đơn theo từng trạng thái (không theo bộ lọc). */
   counts: (): Promise<Record<OrderStatus, number>> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.orderCounts(u), 150) : http.get('/vendors/me/orders/counts'),
+    http.get('/vendors/me/orders/counts'),
 
   /** Đơn của một hội thoại (gồm cả bản nháp), để vẽ thẻ đơn trong chat. */
   listByConversation: async (conversationId: string): Promise<Order[]> => {
-    if (isMock('orders')) return mock((u) => mockVendorOrders.listOrders(u, { conversationId, pageSize: 100 }).data, 200)
     const res = await requestRaw<Order[]>('/vendors/me/orders', { query: { conversationId, pageSize: 100 } })
     return res.data
   },
 
   get: (orderId: string): Promise<Order> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.getOrder(u, orderId)) : http.get(`/vendors/me/orders/${orderId}`),
+    http.get(`/vendors/me/orders/${orderId}`),
+
+  /** "Tiến độ đơn": việc chi tiết gắn với đơn và tóm tắt. */
+  tasks: (orderId: string): Promise<OrderTasks> =>
+    http.get(`/vendors/me/orders/${orderId}/tasks`),
+
+  /** NCC đánh dấu xong / mở lại việc của NCC (hoặc hai bên); khách nhận thông báo khi việc xong. */
+  setTaskDone: (orderId: string, taskId: string, isDone: boolean): Promise<OrderTasks> =>
+    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}`, { isDone }),
+
+  /** Đổi trạng thái một việc của đơn (Todo | Waiting | Done), cho mọi việc kể cả việc của khách */
+  setTaskStatus: (orderId: string, taskId: string, status: TaskStatus): Promise<OrderTasks> =>
+    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}`, { status }),
+
+  /** "Chốt ngày này" (không gửi date) hoặc "Đổi ngày" (date: YYYY-MM-DD) */
+  confirmTaskDate: (orderId: string, taskId: string, date?: string): Promise<OrderTasks> =>
+    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}/schedule`, date ? { date } : {}),
+
+  /** "Bỏ chốt": xóa xác nhận ngày, giữ nguyên ngày */
+  unconfirmTaskDate: (orderId: string, taskId: string): Promise<OrderTasks> =>
+    http.delete(`/vendors/me/orders/${orderId}/tasks/${taskId}/schedule`),
+
+  /** Lịch làm việc trong khoảng [from, to] (YYYY-MM-DD, tối đa 100 ngày): ngày thực hiện của đơn và việc chi tiết của đơn đã cọc. */
+  calendar: async (from: string, to: string): Promise<CalendarItem[]> => {
+    const res = await http.get<{ items: CalendarItem[] }>('/vendors/me/orders/calendar', { query: { from, to } })
+    return res.items
+  },
+
+  /** Bảng việc (kanban): mọi việc chi tiết của các đơn đang thực hiện, kèm mã đơn, tên khách, ngày thực hiện. */
+  board: async (): Promise<BoardTask[]> => {
+    const res = await http.get<{ items: BoardTask[] }>('/vendors/me/orders/tasks')
+    return res.items
+  },
+
+  /** Tiến độ của các đơn đang thực hiện: { [orderId]: OrderProgress } (nhãn "Trễ tiến độ" ở danh sách đơn). */
+  progress: (): Promise<Record<string, OrderProgress>> =>
+    http.get('/vendors/me/orders/progress'),
 
   /** Tạo đơn trong hội thoại: send = false lưu nháp, true gửi luôn. BE tự suy WeddingId từ hội thoại. */
   create: (body: { conversationId: string; content: OrderContent; send: boolean }): Promise<Order> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.createOrder(u, body), 600) : http.post('/vendors/me/orders', body),
+    http.post('/vendors/me/orders', body),
 
   /** Lưu bản nháp của đơn Draft. */
   saveDraft: (orderId: string, content: OrderContent): Promise<Order> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.saveDraft(u, orderId, content)) : http.put(`/vendors/me/orders/${orderId}/draft`, { content }),
+    http.put(`/vendors/me/orders/${orderId}/draft`, { content }),
 
   /** Gửi đơn Draft lần đầu, hoặc "Cập nhật đơn" đơn Pending / NeedRevision (đặt lại hạn cọc 1 ngày). */
   send: (orderId: string, content: OrderContent): Promise<Order> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.sendOrder(u, orderId, content), 600) : http.post(`/vendors/me/orders/${orderId}/send`, { content }),
+    http.post(`/vendors/me/orders/${orderId}/send`, { content }),
 
   /** Sửa đơn đã cọc: hạng mục, ngày, ghi chú. Khóa tỷ lệ cọc và tiền cọc. */
   edit: (orderId: string, content: OrderContent, changeNote: string): Promise<Order> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.editDeposited(u, orderId, content, changeNote), 500) : http.patch(`/vendors/me/orders/${orderId}`, { content, changeNote }),
+    http.patch(`/vendors/me/orders/${orderId}`, { content, changeNote }),
 
   /** NCC hủy đơn đã cọc, chỉ khi hôm nay còn trước ngày sự kiện. reason: CUSTOMER_REQUEST (khách mất cọc) hoặc VENDOR_UNABLE (NCC hoàn cọc ngoài hệ thống). */
   cancel: (orderId: string, body: { reason: CancelReason; note?: string }): Promise<Order> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.cancelOrder(u, orderId, body), 500) : http.post(`/vendors/me/orders/${orderId}/cancel`, body),
+    http.post(`/vendors/me/orders/${orderId}/cancel`, body),
 
   /** Từ chối yêu cầu chỉnh sửa của khách với đơn đã cọc (đơn giữ nguyên). Dữ liệu giả không có yêu cầu sau cọc nên không hỗ trợ. */
   rejectRevision: (orderId: string, note?: string): Promise<Order> =>
-    isMock('orders')
-      ? Promise.reject(new ApiError(400, 'BAD_REQUEST', 'Chỉ dùng được với dữ liệu thật.'))
-      : http.post(`/vendors/me/orders/${orderId}/revision-requests/reject`, { note }),
+    http.post(`/vendors/me/orders/${orderId}/revision-requests/reject`, { note }),
 
   /** Hoàn tất đơn (chỉ khi đã qua ngày sự kiện). */
   complete: (orderId: string): Promise<Order> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.completeOrder(u, orderId), 400) : http.post(`/vendors/me/orders/${orderId}/complete`),
+    http.post(`/vendors/me/orders/${orderId}/complete`),
 
   /** Xuất hóa đơn (mỗi đơn một lần). */
   issueFinalInvoice: (orderId: string): Promise<Order> =>
-    isMock('orders') ? mock((u) => mockVendorOrders.issueFinalInvoice(u, orderId), 400) : http.post(`/vendors/me/orders/${orderId}/final-invoice`),
+    http.post(`/vendors/me/orders/${orderId}/final-invoice`),
 }

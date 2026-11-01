@@ -1,8 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { isMock } from '@/api'
 import { FormError } from '@/components/FormField'
-import { MOCK_PASSWORD } from '@/mocks/auth'
+import { Button } from '@/components/ui/button'
 import { paths } from '@/routes/paths'
 import type { Session } from '@/types/auth'
 import { useLogin } from '../hooks'
@@ -13,12 +12,14 @@ interface LoginFormProps {
   onSuccess: (session: Session) => void
   /** Trang đang định vào trước khi bị chuyển sang đăng nhập; giữ lại khi sang trang quên mật khẩu */
   from?: string
+  /** Có thì hiện nút Hủy (khi mở trong hộp thoại) */
+  onCancel?: () => void
 }
 
 type Values = { identifier: string; password: string }
 
-/** Đăng nhập (1.2). Ô đầu ghi "Email" nhưng vẫn nhận số điện thoại / tên đăng nhập như BE cho phép. */
-export function LoginForm({ onSuccess, from }: LoginFormProps) {
+/** Đăng nhập bằng email (1.2). */
+export function LoginForm({ onSuccess, from, onCancel }: LoginFormProps) {
   const [values, setValues] = useState<Values>({ identifier: '', password: '' })
   const [errors, setErrors] = useState<FieldErrors<Values>>({})
   const login = useLogin()
@@ -70,14 +71,12 @@ export function LoginForm({ onSuccess, from }: LoginFormProps) {
       </div>
       <FormError message={login.error?.message} />
 
-      {isMock('auth') && (
-        <p className="rounded-lg bg-accent-soft px-3.5 py-2.5 text-[13px]">
-          Dữ liệu giả: <b>minh.anh@example.com</b> (cặp đôi), <b>vendor@example.com</b>, <b>admin@example.com</b>. Mật khẩu{' '}
-          <b>{MOCK_PASSWORD}</b>.
-        </p>
-      )}
-
       <AuthSubmit disabled={login.isPending}>{login.isPending ? 'Đang đăng nhập…' : 'Đăng nhập'}</AuthSubmit>
+      {onCancel && (
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Hủy
+        </Button>
+      )}
     </form>
   )
 }

@@ -14,12 +14,14 @@ import { previewWeddingSetup, WeddingSetupDialog } from '@/features/weddings/com
 import { usePlan, useWedding, useWeddingAccess } from '@/features/weddings/hooks'
 import { ChatPanelResume, ReplacePlanDialog, usePlanActions } from '@/features/weddings/planActions'
 import { cn } from '@/lib/utils'
-import { NotificationBell, PartnerButton, UserMenu } from './HeaderActions'
+import { CoupleNotificationBell } from '@/features/coupleNotifications/components/CoupleNotificationBell'
+import { PartnerButton, UserMenu } from './HeaderActions'
 import { homeOf, paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
 
 const NAV = [
   { to: paths.services, label: 'Dịch vụ cưới' },
+  { to: paths.timeline, label: 'Lập Timeline' },
   { to: paths.favorites, label: 'Dịch vụ yêu thích' },
   { to: paths.plan, label: 'Kế hoạch của tôi' },
 ]
@@ -160,7 +162,7 @@ function Header() {
             {user && (
               <>
                 {user.role === 'COUPLE' && <PartnerButton />}
-                <NotificationBell />
+                {user.role === 'COUPLE' && <CoupleNotificationBell />}
                 <span aria-hidden className="mx-1 h-7 w-px bg-line" />
                 <UserMenu
                   user={user}
@@ -267,7 +269,7 @@ function QuickActions({ hideClassName }: { hideClassName?: string }) {
 function Footer() {
   return (
     <footer className="mx-auto flex w-full max-w-content flex-wrap items-center justify-between gap-4 px-[clamp(16px,4vw,32px)] pb-8 text-[13px] text-ink-2">
-      <span>© {new Date().getFullYear()} WebPlan. Nền tảng lập kế hoạch đám cưới.</span>
+      <span>© {new Date().getFullYear()} Forever. Nền tảng lập kế hoạch đám cưới.</span>
     </footer>
   )
 }

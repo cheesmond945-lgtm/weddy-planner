@@ -54,7 +54,7 @@ function HeroStrip() {
             <span className="pointer-events-none absolute inset-0 rounded-[2px] shadow-[inset_0_0_24px_rgb(0_0_0/0.35)]" />
             {/* Chữ in dọc mép phim (kiểu số khung trên cuộn phim), nằm trong dải đáy */}
             <span className="film-label absolute top-full left-2 mt-[7px]">
-              WEBPLAN 400 <span className="mx-1.5">▸</span> {String((i % PHOTOS.length) + 1).padStart(2, '0')}A
+              FOREVER 400 <span className="mx-1.5">▸</span> {String((i % PHOTOS.length) + 1).padStart(2, '0')}A
             </span>
           </div>
         ))}
@@ -79,7 +79,7 @@ export function ServicesHero({ search }: { search: ReactNode }) {
       <span aria-hidden className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_55%_75%_at_50%_45%,rgb(20_15_10/0.55),rgb(20_15_10/0.12))]" />
 
       <span className="mb-4 inline-flex rounded-pill border border-white/35 bg-white/15 px-3.5 py-1.5 text-xs leading-snug font-semibold tracking-[0.16em] text-white backdrop-blur-[6px]">
-        WEBPLAN · NỀN TẢNG DỊCH VỤ CƯỚI
+        FOREVER · NỀN TẢNG DỊCH VỤ CƯỚI
       </span>
       {/* Ngắt dòng cố định sau "Hiện thực hóa", cụm chữ script không bị tách đôi */}
       <h1 className="mx-auto mb-7 text-[clamp(34px,4.6vw,56px)] leading-[1.12] tracking-[-0.02em] text-balance text-white [text-shadow:0_2px_16px_rgb(0_0_0/0.35)]">

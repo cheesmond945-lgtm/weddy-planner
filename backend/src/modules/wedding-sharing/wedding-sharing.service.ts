@@ -272,7 +272,8 @@ export class WeddingSharingService {
     const link = isTokenShape(token)
       ? await this.prisma.wedding_share_links.findUnique({ where: { token_hash: hashToken(token) }, include: { weddings: true } })
       : null;
-    if (!link || !link.is_enabled) return fail('SHARE_LINK_NOT_FOUND', 'Link xem kế hoạch không tồn tại hoặc đã tắt.', 404);
+    // Cột weddings.user_id cho phép null trong DB: đám cưới không có owner coi như không có link
+    if (!link || !link.is_enabled || !link.weddings.user_id) return fail('SHARE_LINK_NOT_FOUND', 'Link xem kế hoạch không tồn tại hoặc đã tắt.', 404);
     return { link, ownerId: link.weddings.user_id, tabs: link.tabs as PlanTab[] };
   }
 

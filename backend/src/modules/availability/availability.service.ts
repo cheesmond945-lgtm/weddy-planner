@@ -38,8 +38,8 @@ const REMINDER_JOB_EVERY_MS = 6 * 3_600_000;
 const todayVn = () => new Date(`${isoDate(new Date(Date.now() + 7 * 3_600_000))}T00:00:00Z`);
 const toDbDate = (s: string) => new Date(`${s}T00:00:00Z`);
 
-type PackageRow = { id: string; name: string; status: string; price: unknown; package_resources: { resource_name: string } | null };
-const toRule = (p: PackageRow): RulePackage => ({ id: p.id, name: p.name, resource: p.package_resources?.resource_name ?? null });
+type PackageRow = { id: string; name: string | null; status: string | null; price: unknown; package_resources: { resource_name: string } | null };
+const toRule = (p: PackageRow): RulePackage => ({ id: p.id, name: p.name ?? '', resource: p.package_resources?.resource_name ?? null });
 
 /**
  * Lịch khả dụng theo gói, dùng cho mọi hạng mục (docs/api/availability.md).
@@ -109,7 +109,7 @@ export class AvailabilityService implements OnModuleInit, OnModuleDestroy {
       const all = v.service_packages.map(toRule);
       services[v.id] = v.service_packages
         .filter((p) => p.status === 'Approved')
-        .map((p) => ({ packageId: p.id, name: p.name, status: effectiveDay(toRule(p), all, stored, date).status }));
+        .map((p) => ({ packageId: p.id, name: p.name ?? '', status: effectiveDay(toRule(p), all, stored, date).status }));
     }
     return { date, services };
   }
@@ -125,7 +125,7 @@ export class AvailabilityService implements OnModuleInit, OnModuleDestroy {
         })
       : null;
     if (!pkg) return fail('PACKAGE_NOT_FOUND', 'Không tìm thấy gói dịch vụ.', 404);
-    const all = await this.vendorPackages(pkg.vendor_id);
+    const all = pkg.vendor_id ? await this.vendorPackages(pkg.vendor_id) : [];
     const rules = all.map(toRule);
     const self = rules.find((p) => p.id === pkg.id)!;
     const stored = await this.stored(siblingsOf(self, rules).map((p) => p.id), days[0], days[days.length - 1]);
@@ -234,7 +234,7 @@ export class AvailabilityService implements OnModuleInit, OnModuleDestroy {
     return { applicable: true as const, ...(await this.checkVendor(vendor.id, vendor.user_id)) };
   }
 
-  private async checkVendor(vendorId: string, vendorUserId: string) {
+  private async checkVendor(vendorId: string, vendorUserId: string | null) {
     const pkgs = await this.prisma.service_packages.findMany({ where: { vendor_id: vendorId, status: 'Approved' }, select: { id: true, name: true } });
     const today = todayVn();
     const end = new Date(today.getTime() + (REMIND_WINDOW_DAYS - 1) * DAY_MS);
@@ -252,7 +252,7 @@ export class AvailabilityService implements OnModuleInit, OnModuleDestroy {
     const lastUpdated = last._max.updated_date ?? null;
     const since = daysSince(lastUpdated, new Date());
     const stale = !!ids.length && (since === null || since >= REMIND_AFTER_DAYS);
-    if (stale) await this.ensureReminder(vendorUserId, since);
+    if (stale && vendorUserId) await this.ensureReminder(vendorUserId, since);
     return {
       packages: ids.length,
       lastUpdated: lastUpdated?.toISOString() ?? null,

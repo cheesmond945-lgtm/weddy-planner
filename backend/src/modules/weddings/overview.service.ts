@@ -30,7 +30,7 @@ export class OverviewService {
     const [tasks, budget, guests] = await Promise.all([
       can('timeline') ? this.tasks(userId) : null,
       can('budget') ? this.budgetPart(w) : null,
-      can('guests') && dbFeatures.guests ? this.guests(w.id, w.guest_count) : null,
+      can('guests') && dbFeatures.guests ? this.guests(w.id, w.guest_count ?? 0) : null,
     ]);
     return { tasks, budget, guests };
   }

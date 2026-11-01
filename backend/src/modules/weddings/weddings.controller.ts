@@ -56,6 +56,11 @@ export class WeddingsController {
     return this.timeline.get(req.user.sub);
   }
 
+  @Post('timeline/regenerate-preview')
+  regeneratePreview(@Req() req: any, @Body() body: { weddingDate?: string }) {
+    return this.timeline.regeneratePreview(req.user.sub, body?.weddingDate);
+  }
+
   @Post('timeline/tasks')
   @WeddingAccess({ role: 'Editor', tabs: ['timeline'] })
   addTask(@Req() req: any, @Body() body: TimelineUpdateBody) {

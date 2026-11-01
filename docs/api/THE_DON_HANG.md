@@ -84,8 +84,8 @@ Có `OrderRevisions` loại AfterDeposit đang `Requested` thì thêm nhãn ph�
 
 | Nút | Ai | Điều kiện | Hành vi theo CSDL |
 |---|---|---|---|
-| Gửi đơn | NCC | Draft, đủ trường bắt buộc. Hộp xác nhận: "Gửi đơn cho khách? Khách có 24 giờ để đặt cọc." | Draft → Pending; tạo `Payments` (Unpaid); `DepositDueDate` = +1 ngày; gửi tin `Order` vào chat |
-| Thanh toán cọc | Khách | Pending, chưa quá hạn | Mở VNPay. Thành công: Payments Paid, Orders Deposited, thêm vào PlanVendors, tạo Invoices DepositReceipt + tin `DepositReceipt`, sinh timeline chi tiết, thông báo |
+| Gửi đơn | NCC | Draft, đủ trường bắt buộc, và khách chưa cọc đơn nào khác cùng hạng mục (`409 CATEGORY_ALREADY_DEPOSITED`). Hộp xác nhận: "Gửi đơn cho khách? Khách có 24 giờ để đặt cọc." | Draft → Pending; tạo `Payments` (Unpaid); `DepositDueDate` = +1 ngày; gửi tin `Order` vào chat |
+| Thanh toán cọc | Khách | Pending, chưa quá hạn, và hạng mục chưa có đơn `Deposited` khác (nếu có: `409 CATEGORY_ALREADY_DEPOSITED`, thông báo nêu mã đơn và NCC đang giữ hạng mục) | Mở VNPay. Thành công: Payments Paid, Orders Deposited, thêm vào PlanVendors, tạo Invoices DepositReceipt + tin `DepositReceipt`, sinh timeline chi tiết, thông báo |
 | Yêu cầu chỉnh sửa (trước cọc) | Khách | Pending | Chọn nội dung muốn đổi (OrderRevisionChanges: Đổi hạng mục, Đổi số lượng, Đổi ngày thực hiện, Khác) + lời nhắn. Tạo OrderRevisions (BeforeDeposit, Requested); Pending → NeedRevision |
 | Cập nhật đơn | NCC | Pending hoặc NeedRevision. Hộp xác nhận: "Gửi bản cập nhật cho khách? Hạn cọc được đặt lại 24 giờ." | Sửa tự do; OrderRevisions → Applied (ghi tổng mới); về Pending; đặt lại hạn 1 ngày; gửi thẻ mới |
 | Chỉnh sửa | NCC | Deposited. Form có ô bắt buộc **"Nội dung thay đổi (khách sẽ thấy)"**. Hộp xác nhận ghi chú "Tiền cọc đã khóa, tổng mới không thấp hơn tiền cọc." | Sửa hạng mục, ngày, ghi chú. Khóa `DepositPercent`, `DepositAmount`. Tổng mới ≥ tiền đã cọc. Ghi `OrderRevisions` loại `AfterDeposit` trạng thái **`Applied` luôn** (ghi nội dung thay đổi vào `RequestNote`, `OldTotalAmount` → `NewTotalAmount`); gửi thẻ cập nhật vào chat |

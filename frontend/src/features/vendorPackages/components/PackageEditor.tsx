@@ -1,22 +1,27 @@
-import { Send } from 'lucide-react'
-import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { EyeOff, Send, Sparkles, Trash2 } from 'lucide-react'
+import { AiWriteDialog } from '@/components/AiWriteDialog'
+import { formatMoney } from '@/lib/format'
+import { vendorPackagesApi } from '@/api/vendorPackages'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router'
 import { FormField } from '@/components/FormField'
 import { MoneyInput } from '@/components/MoneyInput'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
+import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { controlClass, Field, FormSection } from '@/features/vendors/components/FormParts'
+import { PhotoAlbumCard } from '@/features/vendors/components/PhotoAlbumCard'
 import { UnsavedChangesGuard } from '@/features/vendors/components/UnsavedChangesGuard'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { CategoryRef } from '@/types/catalog'
-import type { VendorProfile } from '@/types/vendor'
+import type { VendorFile, VendorProfile } from '@/types/vendor'
 import type { VendorPackage } from '@/types/vendorPackage'
-import { canSubmitPackage, isVenue, TAG_SUGGESTIONS } from '../constants'
-import { useSavePackage } from '../hooks'
-import { EMPTY_PACKAGE, toFormValues, toRequest, validatePackage, type PackageFormValues } from '../packageForm'
+import { canSubmitPackage, isVenue, workingCopy } from '../constants'
+import { usePackageAction, useSavePackage, type PackageTasksDraft } from '../hooks'
+import { PACKAGE_AI_STYLES } from '../constants'
+import { EMPTY_PACKAGE, GUESTS_PER_TABLE, suggestMinTables, toFormValues, toRequest, validatePackage, type PackageFormValues } from '../packageForm'
 import { useListHref } from './PackageHeader'
-import { PackagePhotoSet, type PhotoSetValue } from './PackagePhotoSet'
 import { TagsInput } from './TagsInput'
 
 /** Ô nhập có chữ đơn vị ở cuối ("đ", "khách"). */
@@ -29,157 +34,169 @@ function WithUnit({ unit, children }: { unit: string; children: ReactNode }) {
   )
 }
 
-/** "Đã lưu lúc 14:05" (hôm nay) hoặc "Đã lưu lúc 14:05 · 20/10/2026". */
-function savedAtLabel(iso: string) {
-  const d = new Date(iso)
-  const tz = { timeZone: 'Asia/Ho_Chi_Minh' } as const
-  const time = d.toLocaleTimeString('vi-VN', { ...tz, hour: '2-digit', minute: '2-digit', hour12: false })
-  const day = (x: Date) => x.toLocaleDateString('vi-VN', { ...tz, day: '2-digit', month: '2-digit', year: 'numeric' })
-  return `Đã lưu lúc ${time}${day(d) === day(new Date()) ? '' : ` · ${day(d)}`}`
-}
-
+/** Cuộn tới ô lỗi đầu tiên và đưa con trỏ vào đó. */
 function scrollToFirstError() {
   requestAnimationFrame(() =>
-    document.querySelector('[data-field-error], [aria-invalid="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+    requestAnimationFrame(() => {
+      const first = document.querySelector<HTMLElement>('[aria-invalid="true"], [data-field-error]')
+      if (!first) return
+      first.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const control = first.matches('input, textarea, select') ? first : first.closest('label, div')?.querySelector<HTMLElement>('input:not([type="file"]), textarea, select')
+      control?.focus({ preventScroll: true })
+    }),
   )
 }
+
+const card = 'rounded-md border border-line bg-surface px-7 pt-[26px] pb-6 shadow-portal max-sm:px-4 max-sm:pt-5 max-sm:pb-4'
+const MAX_PACKAGE_PHOTOS = 30
 
 interface PackageEditorProps {
   /** Không có là tạo gói mới */
   pkg?: VendorPackage
-  profile: VendorProfile
+  /** Không có khi Admin xem (không có hồ sơ của chính mình) */
+  profile?: VendorProfile
   category: CategoryRef
-  /** Mở từ "Gửi duyệt" ở danh sách khi gói còn thiếu: hiện lỗi ngay */
-  initialCheck?: boolean
+  /** Tên nhà cung cấp, hiện ở đầu form khi Admin xem */
+  vendorName?: string
+  /** Chỉ xem (gói chờ duyệt, đã đăng, ẩn): mọi ô bị khóa, hàng nút do `actions` quyết định */
+  readOnly?: boolean
+  actions?: ReactNode
+  /** Gói đã đăng: thoát form sửa bản cập nhật về chế độ xem (nút Hủy khi chưa lưu bản cập nhật nào, sau khi xóa bản cập nhật) */
+  onExitUpdate?: () => void
+  /** Công việc của gói (chỉ trang NCC; Admin không truyền). Lưu gói xong thì lưu tiếp công việc. */
+  tasks?: PackageTasksDraft
+  /** Tab đang mở: "info" (form gói) hoặc "tasks" (tasksPanel). Form gói vẫn nằm trong trang khi ở tab công việc để không mất dữ liệu đang nhập. */
+  tab?: 'info' | 'tasks'
+  onTabChange?: (tab: 'info' | 'tasks') => void
+  tasksPanel?: ReactNode
 }
 
 /**
- * Form thêm/sửa gói ở trạng thái Bản nháp (như prototype NCC). Đặt key theo pkg.updatedAt để nạp lại sau khi lưu.
- * Lưu nháp: cần tên gói. Gửi duyệt: đủ mô tả, giá, ảnh và hồ sơ đã xác minh đúng lĩnh vực.
- * Gói mới lưu xong thì thay URL /new bằng /vendor/catalog/:id (replace) và ở lại form; lần lưu sau cập nhật gói đó.
+ * Form gói dịch vụ, hai khung: thông tin gói; hình ảnh dịch vụ (cùng cách trình bày với trang Hồ sơ NCC).
+ * Thứ tự: tên gói, giá (trung tâm tổ chức sự kiện: giá mỗi mâm), tags, sức chứa và số mâm tối thiểu (trung tâm tổ chức sự kiện), mô tả (có "Tạo với AI"), ảnh.
+ * Lưu nháp: cần tên gói và giá. Gửi duyệt: thêm mô tả, ít nhất một ảnh, và hồ sơ đã được duyệt đúng lĩnh vực.
+ * Đặt key theo pkg.updatedAt để nạp lại sau khi lưu.
  */
-export function PackageEditor({ pkg, profile, category, initialCheck }: PackageEditorProps) {
+export function PackageEditor({ pkg, profile, category, vendorName, readOnly, actions, onExitUpdate, tasks, tab = 'info', onTabChange, tasksPanel }: PackageEditorProps) {
   const navigate = useNavigate()
-  const location = useLocation()
   const listHref = useListHref()
   const save = useSavePackage()
-  const baseline = useMemo(() => (pkg ? toFormValues(pkg) : EMPTY_PACKAGE), [pkg])
+  const action = usePackageAction()
+  // Gói đã đăng: form là bản cập nhật (nếu đã có), bản đang đăng giữ nguyên tới khi Admin duyệt
+  const baseline = useMemo(() => (pkg ? toFormValues(workingCopy(pkg)) : EMPTY_PACKAGE), [pkg])
   const [values, setValues] = useState(baseline)
-  const [checkMode, setCheckMode] = useState<'draft' | 'submit' | null>(initialCheck ? 'submit' : null)
-  const [uploading, setUploading] = useState(0)
-  // Id gói vừa tạo: lần lưu sau (trước khi trang kịp chuyển sang gói đó) vẫn cập nhật, không tạo trùng
-  const createdId = useRef<string | undefined>(undefined)
+  const [checkMode, setCheckMode] = useState<'draft' | 'submit' | null>(null)
+  const [confirm, setConfirm] = useState<'submit' | 'remove' | 'hide' | null>(null)
+  const [aiOpen, setAiOpen] = useState(false)
+  const isUpdate = pkg?.status === 'PUBLISHED'
+  const hasUpdate = isUpdate && !!pkg.pendingUpdate
+  const resubmit = pkg?.status === 'NEEDS_REVISION' || pkg?.pendingUpdate?.status === 'NEEDS_REVISION'
 
   const venue = isVenue(category)
   const canSubmit = canSubmitPackage(profile, category)
-  const busy = save.isPending
-  const savingDraft = busy && save.variables?.submit === false
+  const busy = save.isPending || action.isPending || !!tasks?.saving
+  const off = busy || !!readOnly
   const dirty = JSON.stringify(values) !== JSON.stringify(baseline)
+  const tasksDirty = !!tasks?.dirty
   const errors = checkMode ? validatePackage(values, { mode: checkMode, venue, canSubmit }) : {}
 
+  // Gợi ý số mâm tối thiểu khi đã nhập sức chứa hợp lệ
+  const capacityNum = Number(values.capacity)
+  const suggestedTables = venue && Number.isInteger(capacityNum) && capacityNum >= GUESTS_PER_TABLE ? suggestMinTables(capacityNum) : null
+
   const set = (patch: Partial<PackageFormValues>) => setValues((v) => ({ ...v, ...patch }))
-  const setPhotos = (update: (prev: PhotoSetValue) => PhotoSetValue) =>
-    setValues((v) => ({ ...v, ...update({ photos: v.photos, coverPublicId: v.coverPublicId }) }))
+  const input = (invalid?: boolean) => cn(controlClass, off && 'bg-surface-2', invalid && 'border-destructive')
 
   function handleSave(submit: boolean) {
-    if (busy) return
-    if (uploading) {
-      toast(`Còn ${uploading} ảnh đang tải lên. Đợi tải xong rồi ${submit ? 'gửi duyệt' : 'lưu nháp'}.`)
-      return
-    }
     const mode = submit ? 'submit' : 'draft'
     const found = validatePackage(values, { mode, venue, canSubmit })
     setCheckMode(mode)
     const keys = Object.keys(found)
     if (keys.length) {
-      // Chỉ thiếu quyền gửi duyệt thì báo ngắn; còn lỗi nhập liệu thì cuộn tới ô lỗi
+      // Chỉ thiếu quyền gửi duyệt thì báo ngắn; còn lỗi nhập liệu thì báo đỏ và cuộn tới ô lỗi
       if (found.permission) toast(found.permission)
-      if (keys.some((k) => k !== 'permission')) scrollToFirstError()
+      if (keys.some((k) => k !== 'permission')) {
+        // Ô báo đỏ nằm ở tab Thông tin gói: chuyển sang đó trước khi cuộn
+        onTabChange?.('info')
+        toast(`Gói còn ${keys.filter((k) => k !== 'permission').length} mục chưa hợp lệ, vui lòng kiểm tra các ô báo đỏ.`)
+        scrollToFirstError()
+      }
       return
     }
+    if (submit) return setConfirm('submit')
+    doSave(false)
+  }
+
+  function doSave(submit: boolean) {
     save.mutate(
-      { id: pkg?.id ?? createdId.current, body: toRequest(values, venue), submit },
+      { id: pkg?.id, body: toRequest(values, venue), submit },
       {
-        // Gói mới: thay /new bằng trang của gói (Back về danh sách, không về form trống), giữ bộ lọc danh sách
-        onSuccess: ({ pkg: saved }) => {
-          if (pkg) return
-          createdId.current = saved.id
-          navigate(paths.vendor.package(saved.id), { replace: true, state: location.state })
+        // Lưu gói xong mới lưu công việc (gói mới có id rồi); công việc lỗi thì giữ danh sách và trạng thái chưa lưu.
+        // Gói mới: sau đó sang trang của gói vừa tạo
+        onSuccess: async ({ pkg: saved }) => {
+          if (tasks) await tasks.save(saved.id, { afterPackage: true })
+          if (!pkg) navigate(paths.vendor.package(saved.id), { replace: true })
         },
       },
     )
   }
 
-  const area = cn(controlClass, 'h-auto py-2 leading-relaxed')
+  const setPhotos = (files: VendorFile[]) => set({ photos: files })
 
   return (
     <form
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
-        handleSave(true)
+        if (!readOnly && tab === 'info') handleSave(true)
       }}
-      className="max-w-[980px] min-w-0 rounded-md border border-line bg-surface px-7 pt-[26px] pb-[22px] shadow-portal max-sm:px-4 max-sm:pt-5 max-sm:pb-4"
+      className="grid min-w-0 gap-5"
     >
-      <fieldset disabled={busy} className="min-w-0">
+      {tab === 'tasks' && tasksPanel}
+      <div className="grid gap-5" hidden={tab === 'tasks'}>
+      <div className={card}>
         <FormSection title="Thông tin gói">
           <div className="grid grid-cols-2 gap-x-5 gap-y-4 max-sm:grid-cols-1">
+            {vendorName && (
+              <div className="col-span-full">
+                <FormField label="Nhà cung cấp" className={input()} disabled value={vendorName} readOnly />
+              </div>
+            )}
             <div className="col-span-full">
               <FormField
                 label="Tên gói *"
-                className={controlClass}
+                className={input()}
+                disabled={off}
                 placeholder={venue ? 'VD: Tiệc cưới – Menu A' : 'VD: Gói trang trí gia tiên tông trắng'}
                 value={values.name}
                 onChange={(e) => set({ name: e.target.value })}
                 error={errors.name}
               />
             </div>
-            <Field label="Mô tả ngắn *" error={errors.description} full>
-              <textarea
-                rows={3}
-                className={area}
-                aria-invalid={errors.description ? true : undefined}
-                placeholder="Giới thiệu ngắn gọn điểm nổi bật của gói"
-                value={values.description}
-                onChange={(e) => set({ description: e.target.value })}
-              />
-            </Field>
-            <Field label="Tags" hint="Tags hiển thị công khai khi gói được duyệt đăng." full group>
-              <TagsInput tags={values.tags} onChange={(tags) => set({ tags })} suggestions={TAG_SUGGESTIONS[category.slug] ?? []} />
-            </Field>
-            <Field label="Giá *" error={errors.price}>
-              <WithUnit unit="đ">
+            <Field
+              label={venue ? 'Giá mỗi mâm *' : 'Giá *'}
+              error={errors.price}
+              hint={venue ? `Mâm ${GUESTS_PER_TABLE} khách, đã gồm sảnh và dịch vụ đi kèm. Khách đặt theo số mâm khi lên đơn.` : undefined}
+            >
+              <WithUnit unit={venue ? 'đ/mâm' : 'đ'}>
                 <MoneyInput
-                  className={cn(controlClass, 'pr-8 text-right tabular-nums')}
+                  className={cn(input(!!errors.price), venue ? 'pr-16' : 'pr-8', 'text-right tabular-nums')}
+                  disabled={off}
                   aria-invalid={errors.price ? true : undefined}
                   value={values.price}
                   onChange={(price) => set({ price })}
                 />
               </WithUnit>
             </Field>
+            <Field label="Tags" full group>
+              <TagsInput tags={values.tags} onChange={(tags) => set({ tags })} disabled={off} />
+            </Field>
             {venue && (
               <Field label="Đơn vị tính giá">
-                <select className={controlClass} value={values.unit} onChange={(e) => set({ unit: e.target.value as 'TABLE' | 'PACKAGE' })}>
+                <select className={input()} disabled={off} value={values.unit} onChange={(e) => set({ unit: e.target.value as 'TABLE' | 'PACKAGE' })}>
                   <option value="TABLE">Theo bàn (giá một bàn)</option>
                   <option value="PACKAGE">Trọn gói</option>
                 </select>
-              </Field>
-            )}
-            {venue && values.unit === 'TABLE' && (
-              <Field label="Số bàn tối thiểu" error={errors.minTables} hint="Tùy chọn · khách đặt ít hơn vẫn tính theo số này.">
-                <WithUnit unit="bàn">
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    inputMode="numeric"
-                    placeholder="VD: 20"
-                    className={cn(controlClass, 'pr-12 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none')}
-                    aria-invalid={errors.minTables ? true : undefined}
-                    value={values.minTables}
-                    onChange={(e) => set({ minTables: e.target.value })}
-                  />
-                </WithUnit>
               </Field>
             )}
             {venue && (
@@ -190,8 +207,9 @@ export function PackageEditor({ pkg, profile, category, initialCheck }: PackageE
                     min={1}
                     step={1}
                     inputMode="numeric"
+                    disabled={off}
                     placeholder="VD: 500"
-                    className={cn(controlClass, 'pr-14 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none')}
+                    className={cn(input(!!errors.capacity), 'pr-14 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none')}
                     aria-invalid={errors.capacity ? true : undefined}
                     value={values.capacity}
                     onChange={(e) => set({ capacity: e.target.value })}
@@ -199,31 +217,247 @@ export function PackageEditor({ pkg, profile, category, initialCheck }: PackageE
                 </WithUnit>
               </Field>
             )}
+            {venue && values.unit === 'TABLE' && (
+              <Field
+                label="Số mâm tối thiểu"
+                error={errors.minTables}
+                hint={
+                  suggestedTables && String(suggestedTables) !== values.minTables.trim() && !off ? (
+                    <>
+                      Đặt từ số mâm này mới được kèm sảnh.{' '}
+                      <button type="button" onClick={() => set({ minTables: String(suggestedTables) })} className="font-medium text-gold-ink underline underline-offset-2">
+                        Dùng gợi ý {suggestedTables} mâm
+                      </button>
+                    </>
+                  ) : (
+                    'Đặt từ số mâm này mới được kèm sảnh.'
+                  )
+                }
+              >
+                <WithUnit unit="mâm">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    disabled={off}
+                    placeholder={suggestedTables ? `VD: ${suggestedTables}` : 'VD: 20'}
+                    className={cn(input(!!errors.minTables), 'pr-14 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none')}
+                    aria-invalid={errors.minTables ? true : undefined}
+                    value={values.minTables}
+                    onChange={(e) => set({ minTables: e.target.value })}
+                  />
+                </WithUnit>
+              </Field>
+            )}
+            <div className="col-span-full grid gap-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label htmlFor="package-description" className="text-[13px] font-medium">
+                  Mô tả *
+                </label>
+                {!readOnly && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 rounded-pill border-line-strong px-4"
+                    disabled={off}
+                    onClick={() => setAiOpen(true)}
+                  >
+                    <Sparkles className="text-[#7c3aed]" />
+                    Tạo với AI
+                  </Button>
+                )}
+              </div>
+              <textarea
+                id="package-description"
+                rows={6}
+                maxLength={3000}
+                disabled={off}
+                aria-invalid={errors.description ? true : undefined}
+                placeholder="Giới thiệu điểm nổi bật, những gì có trong gói và đối tượng phù hợp…"
+                className={cn(input(!!errors.description), 'h-auto min-h-[140px] resize-y py-2.5 leading-relaxed')}
+                value={values.description}
+                onChange={(e) => set({ description: e.target.value })}
+              />
+              {errors.description ? (
+                <span role="alert" data-field-error className="text-[13px] text-destructive">
+                  {errors.description}
+                </span>
+              ) : (
+                <span className="text-[13px] text-muted-foreground">{values.description.length}/3000 ký tự</span>
+              )}
+            </div>
           </div>
         </FormSection>
-
-        <FormSection title="Hình ảnh dịch vụ">
-          <PackagePhotoSet photos={values.photos} coverPublicId={values.coverPublicId} onChange={setPhotos} readOnly={busy} error={errors.photos} onUploadingChange={setUploading} />
-        </FormSection>
-      </fieldset>
-
-      <div className="sticky bottom-0 z-[5] -mx-7 -mb-[22px] flex flex-wrap items-center gap-2.5 rounded-b-md border-t border-line bg-surface/95 px-7 pt-3.5 pb-[calc(14px+env(safe-area-inset-bottom,0px))] backdrop-blur-sm max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
-        <span aria-live="polite" className="flex-1 text-[12.5px] text-muted-foreground max-sm:basis-full">
-          {busy ? 'Đang lưu…' : uploading ? `Đang tải ${uploading} ảnh lên…` : dirty ? 'Có thay đổi chưa lưu' : pkg ? savedAtLabel(pkg.updatedAt) : ''}
-        </span>
-        <Button asChild variant="outline" className={cn('h-10 border-line-strong', busy && 'pointer-events-none opacity-50')} aria-disabled={busy || undefined}>
-          <Link to={listHref}>{pkg ? 'Quay lại danh sách' : 'Hủy'}</Link>
-        </Button>
-        <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={() => handleSave(false)}>
-          {savingDraft ? 'Đang lưu…' : 'Lưu nháp'}
-        </Button>
-        <Button type="submit" className="h-10" disabled={busy} title={canSubmit ? undefined : 'Cần hồ sơ đã xác minh đúng lĩnh vực'}>
-          <Send />
-          {busy && !savingDraft ? 'Đang gửi…' : 'Gửi duyệt'}
-        </Button>
       </div>
 
-      <UnsavedChangesGuard when={dirty && !busy} />
+      <div className={card}>
+        <FormSection title="Hình ảnh dịch vụ">
+          <div>
+            <PhotoAlbumCard
+              label="Ảnh dịch vụ"
+              galleryTitle="dịch vụ"
+              required
+              purpose="PACKAGE_PHOTO"
+              maxMB={5}
+              maxPhotos={MAX_PACKAGE_PHOTOS}
+              mosaic
+              photos={values.photos}
+              locked={off}
+              error={errors.photos}
+              onChange={setPhotos}
+            />
+          </div>
+        </FormSection>
+      </div>
+      </div>
+
+      {readOnly ? (
+        <>
+          {tasks && pkg && (tasksDirty || tab === 'tasks') && (
+            <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
+              {tasksDirty && <span className="mr-auto text-[13px] font-medium text-gold-ink max-sm:w-full">Có thay đổi chưa lưu</span>}
+              {tasksDirty ? (
+                <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={tasks.discard}>
+                  Hủy
+                </Button>
+              ) : (
+                <Button asChild variant="outline" className="h-10 border-line-strong">
+                  <Link to={listHref}>Hủy</Link>
+                </Button>
+              )}
+              <Button type="button" className="h-10" disabled={busy || !tasksDirty} onClick={() => void tasks.save(pkg.id)}>
+                {tasks.saving ? 'Đang lưu…' : 'Lưu công việc'}
+              </Button>
+            </div>
+          )}
+          {/* Tab Công việc: chỉ thanh lưu công việc, không có Ẩn / Cập nhật của gói */}
+          {!(tab === 'tasks' && tasks) && actions}
+        </>
+      ) : tab === 'tasks' && tasks ? (
+        // Tab Công việc: lưu ngay, không cần Admin duyệt, nên không có Lưu nháp / Gửi duyệt
+        <div className="grid gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
+            {tasksDirty && <span className="mr-auto text-[13px] font-medium text-gold-ink max-sm:w-full">Có thay đổi chưa lưu</span>}
+            {pkg && tasksDirty ? (
+              <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={tasks.discard}>
+                Hủy
+              </Button>
+            ) : (
+              <Button asChild variant="outline" className="h-10 border-line-strong">
+                <Link to={listHref}>Hủy</Link>
+              </Button>
+            )}
+            {pkg ? (
+              <Button type="button" className="h-10" disabled={busy || !tasksDirty} onClick={() => void tasks.save(pkg.id)}>
+                {tasks.saving ? 'Đang lưu…' : 'Lưu công việc'}
+              </Button>
+            ) : (
+              <Button type="button" className="h-10" disabled={busy} onClick={() => handleSave(false)}>
+                {busy ? 'Đang lưu…' : 'Lưu gói và công việc'}
+              </Button>
+            )}
+          </div>
+          {pkg && dirty && <p className="text-right text-[12.5px] text-muted-foreground">Thông tin gói còn thay đổi chưa lưu — chuyển sang tab Thông tin gói để lưu hoặc gửi duyệt</p>}
+          {!pkg && <p className="text-right text-[12.5px] text-muted-foreground">Công việc được lưu ngay, không cần duyệt. Gửi duyệt gói ở tab Thông tin gói.</p>}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
+          {(dirty || tasksDirty) &&<span className="text-[13px] font-medium text-gold-ink max-sm:w-full">Có thay đổi chưa lưu</span>}
+          {pkg && (!isUpdate || hasUpdate) && (
+            <Button type="button" variant="outline" className="mr-auto h-10 border-warn/50 text-warn hover:bg-warn-soft" disabled={busy} onClick={() => setConfirm('remove')}>
+              <Trash2 />
+              Xóa bản nháp
+            </Button>
+          )}
+          {hasUpdate && (
+            <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={() => setConfirm('hide')}>
+              <EyeOff />
+              Ẩn dịch vụ
+            </Button>
+          )}
+          {isUpdate && !hasUpdate && onExitUpdate ? (
+            <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={onExitUpdate}>
+              Hủy
+            </Button>
+          ) : (
+            <Button asChild variant="outline" className="h-10 border-line-strong">
+              <Link to={listHref}>Hủy</Link>
+            </Button>
+          )}
+          {tasks && pkg && tasksDirty && !dirty && (
+            <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={() => void tasks.save(pkg.id)}>
+              {tasks.saving ? 'Đang lưu…' : 'Lưu công việc'}
+            </Button>
+          )}
+          <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={() => handleSave(false)}>
+            Lưu nháp
+          </Button>
+          <Button type="submit" className="h-10" disabled={busy} title={canSubmit ? undefined : 'Cần hồ sơ đã được duyệt đúng lĩnh vực'}>
+            <Send />
+            {busy ? 'Đang lưu…' : resubmit ? 'Gửi lại duyệt' : 'Gửi duyệt'}
+          </Button>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirm === 'submit'}
+        onOpenChange={(o) => !o && setConfirm(null)}
+        title={isUpdate ? (resubmit ? 'Gửi lại bản cập nhật để duyệt?' : 'Gửi bản cập nhật để duyệt?') : resubmit ? 'Gửi lại gói để duyệt?' : 'Gửi gói để duyệt?'}
+        confirmLabel="Gửi duyệt"
+        onConfirm={() => doSave(true)}
+      >
+        <p>
+          {isUpdate
+            ? 'Sau khi gửi, bản cập nhật chỉ đọc cho tới khi Admin xử lý. Trong thời gian này khách vẫn thấy phiên bản đang đăng.'
+            : 'Sau khi gửi, gói chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý. Gói chưa hiển thị công khai cho tới khi được duyệt.'}
+        </p>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirm === 'remove'}
+        onOpenChange={(o) => !o && setConfirm(null)}
+        danger
+        title={isUpdate ? 'Xóa bản cập nhật nháp?' : 'Xóa bản nháp?'}
+        confirmLabel={isUpdate ? 'Xóa bản cập nhật' : 'Xóa gói'}
+        onConfirm={() =>
+          pkg &&
+          (isUpdate
+            ? action.mutate({ action: 'discardUpdate', pkg }, { onSuccess: () => onExitUpdate?.() })
+            : action.mutate({ action: 'remove', pkg }, { onSuccess: () => navigate(listHref, { replace: true }) }))
+        }
+      >
+        <p>
+          {isUpdate
+            ? `Mọi thay đổi chưa được duyệt sẽ bị bỏ. Gói “${pkg?.name}” giữ nguyên phiên bản đang đăng.`
+            : `Gói “${pkg?.name}” và toàn bộ ảnh của nó sẽ bị xóa. Không thể hoàn tác.`}
+        </p>
+      </ConfirmDialog>
+      <ConfirmDialog open={confirm === 'hide'} onOpenChange={(o) => !o && setConfirm(null)} title="Ẩn dịch vụ?" confirmLabel="Ẩn dịch vụ" onConfirm={() => pkg && action.mutate({ action: 'hide', pkg })}>
+        <p>Khách sẽ không còn thấy dịch vụ này. Bản cập nhật đang sửa được giữ lại, bạn sửa tiếp được sau khi khôi phục.</p>
+      </ConfirmDialog>
+      <AiWriteDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        fieldName="Mô tả"
+        facts={[
+          values.name.trim() ? `Tên gói: ${values.name.trim()}` : '',
+          category?.name ? `Lĩnh vực: ${category.name}` : '',
+          Number(values.price) > 0 ? `Giá chỉ từ: ${formatMoney(Number(values.price))}${venue ? ' / mâm' : ''}` : '',
+          venue && values.capacity.trim() ? `Sức chứa: ${values.capacity.trim()} khách` : '',
+          values.tags.length ? `Phong cách: ${values.tags.join(', ')}` : '',
+        ].filter(Boolean)}
+        blocked={
+          values.name.trim() && (Number(values.price) > 0 || values.tags.length || (venue && values.capacity.trim()))
+            ? null
+            : 'Hãy nhập Tên gói và ít nhất một trong: Giá, Sức chứa, Phong cách (tags) để AI có thông tin thật mà viết.'
+        }
+        styles={PACKAGE_AI_STYLES}
+        write={(style) =>
+          vendorPackagesApi.suggestDescription({ style, name: values.name.trim() || null, tags: values.tags, price: values.price || null, capacity: venue && values.capacity.trim() ? Number(values.capacity) : null })
+        }
+        onUse={(description) => set({ description })}
+      />
+      <UnsavedChangesGuard when={((dirty && !readOnly) || tasksDirty) && !busy} />
     </form>
   )
 }

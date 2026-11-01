@@ -1,18 +1,16 @@
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
-import { useService } from '@/features/catalog/hooks'
-import { useOrder } from '@/features/orders/hooks'
+import { useOrder, useOrderService } from '@/features/orders/hooks'
 import { DepositView } from '@/features/payments/components/DepositView'
 import { usePlan } from '@/features/weddings/hooks'
 import { paths } from '@/routes/paths'
 
-/** Trang thanh toán cọc cho một đơn (7.3). URL: /plan/deal/:orderId, cổng VNPay quay về kèm ?vnp_ResponseCode=. */
+/** Trang thanh toán cọc cho một đơn (7.3). URL: /plan/deal/:orderId. Cọc trả bằng VietQR, DepositView hiện mã QR và tự kiểm tra. */
 export default function DealPage() {
   const { dealId = '' } = useParams()
-  const [params] = useSearchParams()
   const order = useOrder(dealId)
-  const service = useService(order.data?.serviceId ?? '')
+  const service = useOrderService(dealId)
   const { data: plan } = usePlan()
 
   if (order.isError) {
@@ -28,8 +26,10 @@ export default function DealPage() {
       />
     )
   }
-  if (!order.data || !service.data) return <div className="h-[360px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải" />
+  if (!order.data || !service.data) {
+    return <div className="h-[360px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải" />
+  }
 
   const planStatus = plan?.items.find((i) => i.service.id === order.data.serviceId)?.status ?? null
-  return <DepositView order={order.data} service={service.data} planStatus={planStatus} returnCode={params.get('vnp_ResponseCode')} />
+  return <DepositView order={order.data} service={service.data} planStatus={planStatus} />
 }

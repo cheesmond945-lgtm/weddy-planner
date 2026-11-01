@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { useNow } from '@/lib/clock'
-import { currentPeriod, withCurrentPeriod } from '@/features/commissions/calc'
-import { useCommissions } from '@/features/commissions/hooks'
+import { useCommissionStatements } from '@/features/commissions/hooks'
 import { useVendorConversations } from '@/features/vendorChat/hooks'
 import { useOrders } from '@/features/vendorOrders/hooks'
 import { usePackages } from '@/features/vendorPackages/hooks'
@@ -20,16 +19,16 @@ export function useVendorDashboard() {
   const orders = useOrders(ALL_ORDERS)
   const conversations = useVendorConversations(15_000)
   const packages = usePackages()
-  const commissions = useCommissions()
-  // Việc cần làm, hạn cọc, số liệu theo ngày: tính lại mỗi 30 giây và khi tua đồng hồ giả lập
+  const commissions = useCommissionStatements()
+  // Việc cần làm, hạn cọc, số liệu theo ngày: tính lại mỗi 30 giây
   const tick = Math.floor(useNow().getTime() / 30_000)
 
   const data = useMemo(() => {
     const o = orders.data?.data ?? []
-    const st = commissions.data ? withCurrentPeriod(commissions.data.statements) : []
+    const st = commissions.data ?? []
     return {
       stats: orderStats(o),
-      currentCommission: st.find((s) => s.periodMonth === currentPeriod()),
+      currentCommission: st.find((s) => s.status === 'OPEN'),
       todos: todoItems({ orders: o, conversations: conversations.data ?? [], packages: packages.data ?? [], statements: st }),
       upcoming: upcomingOrders(o),
       recent: recentOrders(o),

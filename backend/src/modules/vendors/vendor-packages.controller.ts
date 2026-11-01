@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { SavePackageBody, VendorPackagesService } from './vendor-packages.service';
@@ -15,9 +15,25 @@ export class VendorPackagesController {
     return this.packages.list(req.user.sub);
   }
 
+  @Post('suggest-description')
+  suggestDescription(@Req() req: any, @Body() body: { style?: string; name?: string | null; tags?: string[]; price?: number | null; capacity?: number | null }) {
+    return this.packages.suggestDescription(req.user.sub, body ?? {});
+  }
+
   @Get(':id')
   get(@Req() req: any, @Param('id') id: string) {
     return this.packages.get(req.user.sub, id);
+  }
+
+  @Get(':id/tasks')
+  tasks(@Req() req: any, @Param('id') id: string) {
+    return this.packages.listTasks(req.user.sub, id);
+  }
+
+  /** Thay toàn bộ việc của gói (xóa mềm việc vắng mặt) */
+  @Put(':id/tasks')
+  saveTasks(@Req() req: any, @Param('id') id: string, @Body() body: { tasks?: unknown }) {
+    return this.packages.saveTasks(req.user.sub, id, body ?? {});
   }
 
   @Post()
@@ -33,6 +49,12 @@ export class VendorPackagesController {
   @Delete(':id')
   remove(@Req() req: any, @Param('id') id: string) {
     return this.packages.remove(req.user.sub, id);
+  }
+
+  /** Xóa bản cập nhật nháp của gói đã đăng (gói giữ nguyên bản đang đăng) */
+  @Delete(':id/update')
+  discardUpdate(@Req() req: any, @Param('id') id: string) {
+    return this.packages.discardUpdate(req.user.sub, id);
   }
 
   @Post(':id/submit')

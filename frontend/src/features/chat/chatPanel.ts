@@ -3,7 +3,7 @@ import type { Conversation } from '@/types/chat'
 
 /**
  * Cách nút "Nhắn tin với NCC" liên hệ nhà cung cấp, đổi bằng biến VITE_CHAT_MODE:
- * - internal (mặc định, phương án A): chat trong WebPlan, hội thoại lưu ở BE, NCC nhận thông báo và trả lời ở trang NCC.
+ * - internal (mặc định, phương án A): chat trong Forever, hội thoại lưu ở BE, NCC nhận thông báo và trả lời ở trang NCC.
  * - zalo (phương án B, tạm thời): mở Zalo của NCC theo số điện thoại; Zalo không nhận nội dung soạn sẵn qua link
  *   nên tin soạn sẵn được chép vào bộ nhớ tạm để khách dán.
  */

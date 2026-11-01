@@ -41,7 +41,7 @@ interface Row {
 }
 
 /**
- * Lịch thanh toán 2 đợt cố định, chỉ để xem (CSDL mục 9.6): Đợt 1 đặt cọc qua VNPay, Đợt 2 phần còn lại tiền mặt
+ * Lịch thanh toán 2 đợt cố định, chỉ để xem (CSDL mục 9.6): Đợt 1 đặt cọc qua VietQR, Đợt 2 phần còn lại tiền mặt
  * ngoài hệ thống. Đây là lịch yêu cầu thanh toán, không phải tiền đã thu.
  * Màn rộng: bảng cố định độ rộng cột, chữ tự xuống dòng nên không cuộn ngang. Điện thoại: mỗi đợt một thẻ dọc.
  */
@@ -53,7 +53,7 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
       percent: pct(o.depositPercent),
       amount: formatMoney(o.depositAmount),
       due: o.depositDueDate ? formatDayTime(o.depositDueDate) : '1 ngày sau khi gửi đơn',
-      method: 'VNPay (trực tuyến)',
+      method: 'VietQR (trực tuyến)',
       state: depositState(o),
     },
     {
@@ -124,7 +124,7 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
       </ul>
 
       <p className="border-t border-line bg-surface-2 px-3 py-2 text-[12.5px] text-muted-foreground">
-        Hệ thống chỉ ghi nhận khoản cọc qua VNPay.{o.completedDate ? ` Hoàn thành ngày ${formatDay(o.completedDate)}.` : ''}
+        Hệ thống chỉ ghi nhận khoản cọc qua VietQR.{o.completedDate ? ` Hoàn thành ngày ${formatDay(o.completedDate)}.` : ''}
       </p>
     </div>
   )

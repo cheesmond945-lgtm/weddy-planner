@@ -5,8 +5,8 @@ export const paths = {
   // Phía cặp đôi (theo prototype)
   services: '/',
   serviceDetail: (id: string | number) => `/services/${id}`,
-  /** Tab Timeline đã bỏ; link cũ chuyển về Kế hoạch của tôi (còn dùng ở module đơn hàng) */
-  timeline: '/plan/timeline',
+  /** Trang Timeline (cách xem theo thời gian / dịch vụ / lịch) */
+  timeline: '/timeline',
   favorites: '/favorites',
   compare: '/favorites/compare',
   /** Kế hoạch của tôi: vào /plan thì chuyển sang subtab Tổng quan */
@@ -38,8 +38,10 @@ export const paths = {
     packageNew: '/vendor/catalog/new',
     package: (id: string) => `/vendor/catalog/${id}`,
     orders: '/vendor/orders',
+    calendar: '/vendor/calendar',
     chat: '/vendor/chat',
     commissions: '/vendor/commissions',
+    account: '/vendor/account',
   },
 
   // Admin
@@ -47,11 +49,15 @@ export const paths = {
     dashboard: '/admin',
     consultationRequests: '/admin/consultation-requests',
     vendors: '/admin/vendors',
+    vendor: (id: string) => `/admin/vendors/${id}`,
     catalog: '/admin/catalog',
+    package: (id: string) => `/admin/catalog/${id}`,
     orders: '/admin/orders',
     payments: '/admin/payments',
+    payment: (id: string) => `/admin/payments/${id}`,
     commissions: '/admin/commissions',
     users: '/admin/users',
+    account: '/admin/account',
   },
 
   forbidden: '/403',

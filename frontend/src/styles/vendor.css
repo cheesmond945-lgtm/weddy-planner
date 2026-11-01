@@ -1,4 +1,6 @@
 /*
+ * (Cổng Admin dùng chung bộ token này: <html data-portal="admin"> do AdminLayout gắn.)
+ *
  * Design tokens phía Nhà cung cấp, lấy từ :root của docs/prototype/prototype_vendor/prototype-ncc.slim.html
  * (khối gốc + khối "v6: luxury champagne gold" ghi đè ở cuối CSS).
  *
@@ -10,7 +12,7 @@
  * 1. Gán lại biến dùng chung (--bg, --ink, --accent...) để component có sẵn (Button, Dialog...) ra màu NCC.
  * 2. Biến chỉ NCC mới có (--side, --surface-2, --gold-ink...). Tên class Tailwind nằm ở theme.css.
  */
-:root[data-portal='vendor'] {
+:root:is([data-portal='vendor'], [data-portal='admin']) {
   /* 1. Biến dùng chung, giá trị theo prototype NCC */
   --bg: #f7f4ee;
   --surface: #ffffff;
@@ -81,7 +83,7 @@
 
 /* Chế độ tối như prototype: theo hệ điều hành, hoặc ép bằng data-theme trên <html> */
 @media (prefers-color-scheme: dark) {
-  :root[data-portal='vendor']:not([data-theme='light']) {
+  :root:is([data-portal='vendor'], [data-portal='admin']):not([data-theme='light']) {
     --bg: #101312;
     --surface: #191d1b;
     --ink: #ece7de;
@@ -115,7 +117,7 @@
   }
 }
 
-:root[data-portal='vendor'][data-theme='dark'] {
+:root:is([data-portal='vendor'], [data-portal='admin'])[data-theme='dark'] {
   --bg: #101312;
   --surface: #191d1b;
   --ink: #ece7de;
@@ -146,4 +148,35 @@
   --side: #0b0d0d;
   --side-2: #171b1b;
   --side-muted: #7d847c;
+}
+
+/* Cổng Admin: tiêu đề dùng font sans như thiết kế Admin (cổng NCC dùng serif) */
+:root[data-portal='admin'] :is(h1, h2, h3, h4) {
+  font-family: var(--sans);
+  letter-spacing: -0.01em;
+}
+
+/* Bảng màu vàng của NCC cho hộp thoại điều khoản phía khách (hộp thoại render ngoài vùng NCC nên tự khai báo lại) */
+.gold-palette {
+  --gold: #a9823a;
+  --gold-soft: #f6eedd;
+  --gold-ink: #7c5a1e;
+  --gold-grad: linear-gradient(135deg, #b88d3f 0%, #d9b86e 38%, #f0dda6 52%, #c9a157 68%, #a57a31 100%);
+  --gold-on: #2a1d07;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .gold-palette {
+    --gold: #d4af66;
+    --gold-soft: #2b2519;
+    --gold-ink: #e8cb8c;
+    --gold-grad: linear-gradient(135deg, #b8904a 0%, #ddbe78 38%, #f3e1ae 52%, #cfa75e 68%, #a9803a 100%);
+    --gold-on: #1e1505;
+  }
+}
+:root[data-theme='dark'] .gold-palette {
+  --gold: #d4af66;
+  --gold-soft: #2b2519;
+  --gold-ink: #e8cb8c;
+  --gold-grad: linear-gradient(135deg, #b8904a 0%, #ddbe78 38%, #f3e1ae 52%, #cfa75e 68%, #a9803a 100%);
+  --gold-on: #1e1505;
 }

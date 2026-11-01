@@ -10,19 +10,14 @@ export default function VendorProfilePage() {
   const { data: profile, isPending, isError, error, refetch } = useVendorProfile()
 
   return (
-    <>
-      <PageTitle
-        title="Hồ sơ nhà cung cấp"
-        description={`Thông tin doanh nghiệp, ảnh cơ sở và giấy tờ xác minh${profile?.businessName ? ` của ${profile.businessName}` : ''}.`}
-        actions={profile && <ProfileStatusBadge status={profile.status} />}
-      />
-      {isPending && <div aria-busy="true" aria-label="Đang tải hồ sơ" className="h-[560px] max-w-[980px] animate-pulse rounded-md bg-muted" />}
+    <div className="mx-auto max-w-[980px]">
+      <PageTitle title="Hồ sơ nhà cung cấp" actions={profile && <ProfileStatusBadge status={profile.revisionRequested ? 'NEEDS_REVISION' : profile.status} large />} />
+      {isPending && <div aria-busy="true" aria-label="Đang tải hồ sơ" className="h-[560px] animate-pulse rounded-md bg-muted" />}
       {isError && (
         <EmptyState
           title="Chưa tải được hồ sơ"
           description={error.message}
           action={<Button onClick={() => refetch()}>Thử lại</Button>}
-          className="max-w-[980px]"
         />
       )}
       {profile && (
@@ -31,6 +26,6 @@ export default function VendorProfilePage() {
           <VendorProfileForm key={profile.updatedAt} profile={profile} />
         </>
       )}
-    </>
+    </div>
   )
 }

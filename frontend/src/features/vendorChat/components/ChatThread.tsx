@@ -10,7 +10,6 @@ import type { VendorConversation } from '@/types/vendorConversation'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { useMarkRead, useSendVendorMessage, useVendorMessages } from '../hooks'
 import { PersonAvatar } from '../preview'
-import { CustomerSimulator } from './CustomerSimulator'
 import { MessageItem } from './MessageItem'
 
 interface ChatThreadProps {
@@ -94,7 +93,6 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
             )}
           </div>
         </div>
-        <CustomerSimulator conversationId={c.id} orders={orders} />
         {latestOrder && (
           <Button asChild variant="outline" className="rounded-pill whitespace-nowrap max-[640px]:hidden">
             <Link to={orderPageHref(latestOrder.id)}>Xem đơn ›</Link>

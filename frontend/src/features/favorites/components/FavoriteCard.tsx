@@ -3,6 +3,7 @@ import { memo } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { RatingMeta } from '@/features/catalog/components/RatingMeta'
+import { isTablePriced } from '@/features/catalog/price'
 import { ComparePill } from '@/features/compare/components/ComparePill'
 import { AddToPlanButton } from '@/features/weddings/planActions'
 import { formatPriceRange } from '@/lib/format'
@@ -53,6 +54,7 @@ export const FavoriteCard = memo(function FavoriteCard({ service, onToggleCompar
         <RatingMeta service={service} />
         <div className="text-xs text-muted-foreground">
           <b className="text-sm font-semibold text-ink">{formatPriceRange(service.priceFrom, service.priceTo)}</b>
+          {isTablePriced(service) && '/mâm · đã gồm sảnh'}
         </div>
         <div className="mt-auto flex gap-[7px] pt-2">
           <Button asChild size="sm" className="min-h-9 min-w-0 flex-1 rounded-[9px] text-xs">

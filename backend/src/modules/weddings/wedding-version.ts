@@ -4,7 +4,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 type Tx = Pick<PrismaService, 'weddings'>;
 
 /** Phiên bản của đám cưới (weddings.updated_date dạng ISO) gửi kèm mỗi lần ghi để phát hiện ghi đồng thời. */
-export const versionOf = (w: { updated_date: Date }) => w.updated_date.toISOString();
+export const versionOf = (w: { updated_date: Date | null }) => (w.updated_date ?? new Date(0)).toISOString();
 
 /**
  * Ghi có kiểm tra phiên bản: chỉ đổi updated_date khi bản trong DB đúng là bản người gọi đã đọc.

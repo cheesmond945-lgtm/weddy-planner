@@ -22,7 +22,7 @@ export class WeddingMembersService {
   /** Đám cưới người này đang tham gia và quyền của họ; null nếu chưa có. */
   async resolve(userId: string): Promise<WeddingAccess | null> {
     const m = await this.prisma.wedding_members.findUnique({ where: { user_id: userId }, select: { wedding_id: true, role: true, tabs: true, weddings: { select: { user_id: true } } } });
-    if (m) {
+    if (m?.weddings.user_id) {
       const role = m.role as MemberRole;
       return { weddingId: m.wedding_id, ownerId: m.weddings.user_id, role, tabs: tabsOf(role, m.tabs) };
     }

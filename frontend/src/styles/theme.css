@@ -1,7 +1,7 @@
 /*
  * Cấu hình Tailwind v4 (thay cho tailwind.config.js): ánh xạ tokens.css thành class.
  * Có thêm tên ngữ nghĩa của shadcn/ui (background, primary, muted...) để component
- * shadcn dùng đúng màu WebPlan.
+ * shadcn dùng đúng màu Forever.
  *
  * Ví dụ: bg-bg, bg-surface, text-ink, text-muted-foreground, border-line, bg-primary,
  *        text-gold, bg-sage-soft, text-cat-1, font-serif, rounded-pill, shadow-card.

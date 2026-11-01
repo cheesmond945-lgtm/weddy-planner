@@ -8,13 +8,15 @@ import { ORDER_UNITS, type OrderUnit } from '@/types/vendorOrder'
 import { isBlankItem, itemAmount, newItem, totalOf, type FormItem } from '../calc'
 import type { OrderErrors } from '../validation'
 
-/** Gói đã đăng dùng để điền nhanh một dòng (chỉ tiện nhập, đơn không liên kết với gói). */
+/** Gói đã đăng dùng để điền nhanh một dòng. Dòng điền từ gói được gắn với gói đó: khi khách cọc, các việc NCC khai cho gói tự thành việc của đơn. */
 export interface QuickFillPackage {
   id: string
   name: string
   price: number
   /** Nhà hàng tính theo Bàn, lĩnh vực khác theo Gói */
   unit: OrderUnit
+  /** Số công việc NCC đã khai cho gói (hiện cạnh tên gói) */
+  taskCount: number
 }
 
 interface OrderItemsEditorProps {
@@ -35,10 +37,21 @@ export function OrderItemsEditor({ items, onChange, errors, packages }: OrderIte
     onChange(rest.length ? rest : [newItem()])
   }
 
+  /** Chọn gói cho một dòng: gắn gói, và gợi ý tên + giá + đơn vị nếu dòng còn trống. */
+  function pickPackage(it: FormItem, id: string) {
+    const p = packages.find((x) => x.id === id)
+    if (!p) return update(it.key, { packageId: null })
+    update(it.key, {
+      packageId: p.id,
+      ...(it.itemName.trim() === '' && { itemName: p.name }),
+      ...(!(it.unitPrice > 0) && { unitPrice: p.price, unit: p.unit, ...(p.unit === 'Gói' && { quantity: 1 }) }),
+    })
+  }
+
   function quickFill(id: string) {
     const p = packages.find((x) => x.id === id)
     if (!p) return
-    const filled: FormItem = { ...newItem(p.unit), itemName: p.name, unitPrice: p.price }
+    const filled: FormItem = { ...newItem(p.unit), itemName: p.name, unitPrice: p.price, packageId: p.id }
     const blank = items.findIndex(isBlankItem)
     onChange(blank >= 0 ? items.map((i, k) => (k === blank ? filled : i)) : [...items, filled])
   }
@@ -49,7 +62,7 @@ export function OrderItemsEditor({ items, onChange, errors, packages }: OrderIte
     <div>
       {packages.length > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-2.5">
-          <span className="text-[12.5px] text-muted-foreground">Điền nhanh từ gói đã đăng (vẫn sửa được):</span>
+          <span className="text-[12.5px] text-muted-foreground">Điền nhanh từ gói đã đăng (vẫn sửa được; dòng gắn với gói để sinh việc chi tiết khi khách cọc):</span>
           <select aria-label="Điền nhanh từ gói" value="" onChange={(e) => quickFill(e.target.value)} className={cn(controlClass, 'h-[34px] w-auto text-[13px]')}>
             <option value="">Chọn gói…</option>
             {packages.map((p) => (
@@ -91,6 +104,23 @@ export function OrderItemsEditor({ items, onChange, errors, packages }: OrderIte
               onChange={(e) => update(it.key, { itemName: e.target.value })}
             />
             {err(errors[`item:${i}:itemName`])}
+            {packages.length > 0 && (
+              <select
+                className={cn(cell, 'mt-1 h-8 text-[12.5px]')}
+                aria-label={`Gói dịch vụ ${i + 1}`}
+                value={it.packageId ?? ''}
+                onChange={(e) => pickPackage(it, e.target.value)}
+              >
+                <option value="">Gói dịch vụ: không gắn gói</option>
+                {it.packageId && !packages.some((p) => p.id === it.packageId) && <option value={it.packageId}>Gói đã gắn (đang ẩn)</option>}
+                {packages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} · {p.taskCount} công việc
+                  </option>
+                ))}
+              </select>
+            )}
+            {it.packageId && packages.find((p) => p.id === it.packageId)?.taskCount === 0 && <span className="mt-0.5 block text-xs text-warn">Gói này chưa có công việc nào</span>}
           </div>
           <div className="min-w-0 max-md:[grid-area:unit]">
             <select

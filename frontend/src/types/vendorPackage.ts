@@ -9,7 +9,7 @@ import type { CategoryRef, ServicePackage } from './catalog'
 import type { VendorFile } from './vendor'
 
 /** Trạng thái gói. Nhãn tiếng Việt ở features/vendorPackages/constants.ts. */
-export const PACKAGE_STATUSES = ['DRAFT', 'PENDING', 'PUBLISHED', 'HIDDEN'] as const
+export const PACKAGE_STATUSES = ['DRAFT', 'PENDING', 'NEEDS_REVISION', 'PUBLISHED', 'HIDDEN'] as const
 export type PackageStatus = (typeof PACKAGE_STATUSES)[number]
 
 /** Mọi gói (kể cả bản nháp) đều có giá: price là giá "từ", đơn vị đồng. */
@@ -17,16 +17,61 @@ export interface VendorPackage extends ServicePackage {
   /** Lĩnh vực của gói, lấy từ hồ sơ NCC lúc tạo, không đổi sau đó */
   category: CategoryRef
   status: PackageStatus
+  /** Lý do Admin yêu cầu chỉnh sửa (gói NEEDS_REVISION, hoặc bản cập nhật NEEDS_REVISION của gói đã đăng) */
+  reviewNote: string | null
+  /**
+   * Bản cập nhật của gói đã đăng (hoặc đang ẩn). Các trường của gói vẫn là bản khách đang thấy;
+   * bản này chỉ thay vào khi Admin duyệt. null: không có bản cập nhật.
+   */
+  pendingUpdate: PackageUpdate | null
   tags: string[]
   /** Sức chứa tối đa (khách), chỉ dùng cho nhà hàng */
   capacity: number | null
   /** Đơn vị tính (API trả TABLE/PACKAGE) */
   unit?: string
+  /** Trung tâm sự kiện: số mâm tối thiểu để được kèm sảnh (giá gói là giá mỗi mâm 10 khách) */
+  minTables?: number | null
   /** Bộ ảnh của gói, theo thứ tự hiển thị */
   photos: VendorFile[]
   /** publicId của ảnh bìa; null thì dùng ảnh đầu tiên */
   coverPublicId: string | null
   updatedAt: string
+  /** Số công việc NCC đã khai cho gói (chưa xóa). API NCC luôn trả; bản Admin dựng lại gói thì không có */
+  taskCount?: number
+}
+
+/** Ai làm một công việc của gói. */
+export type PackageTaskOwner = 'CUSTOMER' | 'VENDOR' | 'BOTH'
+
+/** Công việc NCC khai cho gói; offsetDays so với ngày thực hiện của đơn (âm = trước, 0 = đúng ngày, dương = sau). */
+export interface PackageTask {
+  id: string
+  title: string
+  note: string | null
+  owner: PackageTaskOwner
+  offsetDays: number
+  sortOrder: number
+}
+
+/** Body của PUT /vendors/me/packages/:id/tasks: thay toàn bộ danh sách (có id: sửa, không id: thêm, vắng mặt: xóa mềm). */
+export interface SavePackageTasksRequest {
+  tasks: { id?: string; title: string; note: string | null; owner: PackageTaskOwner; offsetDays: number }[]
+}
+
+/** Trạng thái bản cập nhật: nháp chưa gửi, chờ Admin duyệt, bị yêu cầu chỉnh sửa. */
+export type PackageUpdateStatus = 'DRAFT' | 'PENDING' | 'NEEDS_REVISION'
+
+export interface PackageUpdate {
+  status: PackageUpdateStatus
+  name: string
+  description: string
+  price: number
+  tags: string[]
+  capacity: number | null
+  minTables?: number | null
+  photos: VendorFile[]
+  coverPublicId: string | null
+  savedAt: string
 }
 
 /** Body của POST /vendors/me/packages, PATCH /vendors/me/packages/:id. */

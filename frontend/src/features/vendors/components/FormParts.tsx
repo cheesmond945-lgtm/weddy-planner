@@ -9,7 +9,7 @@ export const controlClass =
 /** Khối "Thông tin doanh nghiệp", "Ảnh cơ sở"... (.form-section trong prototype NCC). */
 export function FormSection({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
   return (
-    <section className="mb-6 border-b border-line pb-6">
+    <section className="mb-6 last:mb-0">
       <div className="mb-4">
         <h2 className="font-sans text-[17px] font-semibold tracking-normal">{title}</h2>
         {description && <p className="mt-1 text-[13px] text-muted-foreground">{description}</p>}

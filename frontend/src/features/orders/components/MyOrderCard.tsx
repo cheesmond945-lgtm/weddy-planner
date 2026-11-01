@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { InvoiceType, Order } from '@/types/order'
 import { hintOf, hintTone } from '../hint'
+import { EventDateNote } from './EventDateNote'
 
 const HOUR = 3_600_000
 
@@ -26,7 +27,7 @@ const row = (label: string, value: ReactNode) => (
 
 /**
  * Một đơn trên trang Kế hoạch của tôi (dưới hạng mục của đơn): cùng nội dung với thẻ đơn trong chat (docs/THE_DON_PHIA_KHACH.md), gọn hơn,
- * kèm nút mở cuộc trò chuyện với NCC. Đợt 1 (cọc) thanh toán qua VNPay, đợt 2 (còn lại) trả tiền mặt cho NCC.
+ * kèm nút mở cuộc trò chuyện với NCC. Đợt 1 (cọc) thanh toán qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC.
  */
 /** `readOnly` (viewer): chỉ xem đơn, không thanh toán, không yêu cầu sửa, không nhắn NCC. */
 export function MyOrderCard({ order: o, onRevise, readOnly = false }: { order: Order; onRevise: (o: Order) => void; readOnly?: boolean }) {
@@ -57,9 +58,11 @@ export function MyOrderCard({ order: o, onRevise, readOnly = false }: { order: O
       <p className="mt-2 mb-1 line-clamp-2 text-[13px] [overflow-wrap:anywhere]" title={items}>
         {items}
       </p>
+      {o.package && row('Sảnh', o.package.name)}
       {row('Ngày thực hiện', formatDate(o.eventDate))}
+      <EventDateNote order={o} />
       {row('Tổng giá trị', formatMoney(o.totalAmount))}
-      {row(`Đợt 1 · Cọc ${Math.round(o.depositPercent * 100) / 100}% (VNPay)`, <span className="text-gold-700">{formatMoney(o.depositAmount)}</span>)}
+      {row(`Đợt 1 · Cọc ${Math.round(o.depositPercent * 100) / 100}% (VietQR)`, <span className="text-gold-700">{formatMoney(o.depositAmount)}</span>)}
       {row('Đợt 2 · Còn lại (tiền mặt cho NCC)', formatMoney(o.totalAmount - o.depositAmount))}
       {o.status === 'Pending' && o.depositDueDate && row('Hạn đặt cọc', <span className={cn(urgent && 'text-warn')}>{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</span>)}
       {paidDate && (

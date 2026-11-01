@@ -28,9 +28,15 @@ export interface ServiceSummary {
   /** Giá cao nhất trong các gói, đồng (dữ liệu giả có thể không có) */
   priceTo?: number
   // Điểm Google Maps không thuộc catalog (CSDL không có cột điểm): lấy riêng qua GET /vendors/{id}/google-rating
+  /** TABLE: giá mỗi mâm 10 khách, đã gồm sảnh (trung tâm sự kiện); PACKAGE: giá trọn gói. Thiếu thì coi là PACKAGE */
+  priceUnit?: 'TABLE' | 'PACKAGE'
+  /** Giá theo mâm: số mâm tối thiểu của gói rẻ nhất để được kèm sảnh */
+  minTables?: number | null
   coverImageUrl: string
   /** Link Google Maps của NCC (vendor_profiles.google_maps_url); hiện thay điểm khi chưa lấy được điểm Google */
   googleMapsUrl?: string | null
+  /** NCC đang bị Admin ẩn nhưng bạn đã có đơn với họ: tạm ngừng nhận đơn mới */
+  paused?: boolean
 }
 
 export interface ServicePackage {

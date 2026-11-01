@@ -9,6 +9,7 @@ import { CANCEL_REASON } from '../constants'
 import { changesLabel, depositDeadline, formatDay, formatDayTime, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
 import { OrderStatusBadge } from './OrderBadges'
+import { OrderProgressPanel } from './OrderProgressPanel'
 import type { OrderFormMode } from './OrderFormDialog'
 import { PanelDialog } from './PanelDialog'
 import { PaymentScheduleTable } from './PaymentScheduleTable'
@@ -131,6 +132,7 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
           <Item label="Khách hàng">{o.customerName}</Item>
           <Item label="Số điện thoại">{o.customerPhone || '—'}</Item>
           <Item label="Ngày thực hiện">{formatDate(o.eventDate)}</Item>
+          {o.package && <Item label="Sảnh">{o.package.name}</Item>}
           {o.status === 'Pending' && o.depositDueDate && <Item label="Hạn đặt cọc">{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</Item>}
           {o.completedDate && <Item label="Ngày hoàn thành">{formatDay(o.completedDate)}</Item>}
           {o.cancelledDate && <Item label="Ngày hủy">{formatDay(o.cancelledDate)}</Item>}
@@ -142,6 +144,12 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
           </Item>
         </dl>
       </Section>
+
+      {vendorView && (o.status === 'Deposited' || o.status === 'Completed') && (
+        <Section title="Tiến độ đơn">
+          <OrderProgressPanel orderId={o.id} readOnly={o.status !== 'Deposited'} />
+        </Section>
+      )}
 
       <Section title="Hạng mục báo giá">
         <div className="overflow-x-auto rounded-md border border-line">
@@ -160,7 +168,10 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
               {o.items.map((i, k) => (
                 <tr key={i.id}>
                   <td className={cn(td, 'text-center text-muted-foreground tabular-nums')}>{k + 1}</td>
-                  <td className={cn(td, 'font-medium')}>{i.itemName}</td>
+                  <td className={cn(td, 'font-medium')}>
+                    {i.itemName}
+                    {i.packageName && <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Gói: {i.packageName}</span>}
+                  </td>
                   <td className={td}>{i.unit}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{i.quantity}</td>
                   <td className={cn(td, 'text-right whitespace-nowrap tabular-nums')}>{formatMoney(i.unitPrice)}</td>

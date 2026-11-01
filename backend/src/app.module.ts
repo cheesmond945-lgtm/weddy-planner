@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
-import { StorageModule } from './integrations/storage/storage.module';
 import { MailModule } from './integrations/mail/mail.module';
+import { StorageModule } from './integrations/storage/storage.module';
 import { GooglePlacesModule } from './integrations/google-places/google-places.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -13,12 +13,17 @@ import { WeddingsModule } from './modules/weddings/weddings.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { CommissionsModule } from './modules/commissions/commissions.module';
+import { AiModule } from './integrations/ai/ai.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ConsultationRequestsModule } from './modules/consultation-requests/consultation-requests.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { WeddingMembersModule } from './modules/wedding-members/wedding-members.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
+import { HallsModule } from './modules/halls/halls.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingMembersModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, NotificationsModule, RealtimeModule, AvailabilityModule],
+  imports: [PrismaModule, AiModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingMembersModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, RealtimeModule, HallsModule, ReviewsModule, AvailabilityModule],
 })
 export class AppModule {}

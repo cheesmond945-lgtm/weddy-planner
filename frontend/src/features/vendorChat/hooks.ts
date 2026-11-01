@@ -2,10 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { vendorConversationsApi } from '@/api/vendorConversations'
 import { toast } from '@/components/ui/toast'
 import { vendorKeys } from '@/features/vendorOrders/keys'
-import { advanceClock, resetClock } from '@/lib/clock'
 import { useLivePoll } from '@/lib/realtime'
 import { useAuth } from '@/store/auth'
-import type { CustomerSimulation, VendorMessage } from '@/types/vendorConversation'
+import type { VendorMessage } from '@/types/vendorConversation'
 
 // Có realtime (lib/realtime.ts) thì dữ liệu được đẩy tới; mất kết nối thì hỏi lại định kỳ khi đang mở trang Tin nhắn, như phía cặp đôi (5 giây)
 const POLL_MS = 5000
@@ -84,29 +83,5 @@ export function useWeddingReminder(conversationId: string) {
     reminded,
     isPending: send.isPending,
     remind: () => send.mutate(WEDDING_REMINDER, { onSuccess: () => toast('Đã nhắc khách điền thông tin đám cưới.') }),
-  }
-}
-
-/** CHỈ KHI DÙNG DỮ LIỆU GIẢ: giả lập khách, xong tải lại hội thoại, tin, đơn. */
-export function useSimulateCustomer(conversationId: string) {
-  const uid = useVendorId()
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (sim: CustomerSimulation) => vendorConversationsApi.simulate(conversationId, sim),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: vendorKeys.all(uid) }),
-    onError: (e) => toast(e.message),
-  })
-}
-
-/** CHỈ KHI DÙNG DỮ LIỆU GIẢ: tua đồng hồ (giờ) để thử đơn hết hạn cọc, tự hoàn thành. hours = 0: về giờ thật. */
-export function useAdvanceTime() {
-  const uid = useVendorId()
-  const qc = useQueryClient()
-  return (hours: number) => {
-    if (hours === 0) resetClock()
-    else advanceClock(hours)
-    void qc.invalidateQueries({ queryKey: vendorKeys.all(uid) })
-    // Hoa hồng đổi theo đồng hồ: đơn tự hoàn tất, kỳ chuyển Chưa nộp / Quá hạn
-    void qc.invalidateQueries({ queryKey: ['vendor-commissions'] })
   }
 }

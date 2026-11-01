@@ -1,27 +1,26 @@
-import { mockVendorCommissions } from '@/mocks/vendorCommissions'
-import { authStore } from '@/store/auth'
-import type { CommissionLine, CommissionOverview, PayStatementResult } from '@/types/commission'
-import { ApiError, http } from './client'
-import { isMock, mockDelay } from './mock'
+import type { CommissionPaymentResult, CommissionStatement, CommissionStatementSummary, SubmitCommissionPaymentBody } from '@/types/commission'
+import type { PayInfo } from '@/types/payment'
+import { http } from './client'
 
-function mockUserId() {
-  const user = authStore.getSession()?.user
-  if (!user) throw new ApiError(401, 'UNAUTHORIZED', 'Bạn cần đăng nhập.')
-  return user.id
-}
-
-const mock = <T>(fn: (userId: string) => T, ms = 300) => mockDelay(null, ms).then(() => fn(mockUserId()))
-
-/** Hoa hồng NCC trả WebPlan. Hợp đồng: docs/api/commissions.md. */
+/**
+ * Hoa hồng NCC trả Forever. Hợp đồng: docs/api/commissions.md.
+ * Tệp minh chứng upload trước qua vendorsApi.uploadFile('PAYMENT_PROOF').
+ */
 export const commissionsApi = {
-  list: (): Promise<CommissionOverview> => (isMock('commissions') ? mock((u) => mockVendorCommissions.list(u)) : http.get('/vendors/me/commissions')),
+  list: (): Promise<CommissionStatementSummary[]> => (http.get('/vendors/me/commissions')),
 
-  /** Hoa hồng từng đơn của một bảng kê. */
-  lines: (statementId: string): Promise<CommissionLine[]> =>
-    isMock('commissions') ? mock((u) => mockVendorCommissions.lines(u, statementId)) : http.get(`/vendors/me/commissions/${statementId}/lines`),
+  get: (id: string): Promise<CommissionStatement> => (http.get(`/vendors/me/commissions/${id}`)),
 
-  /** Nộp một lần cho cả bảng kê. Dữ liệu thật: trả paymentUrl (VNPay). Dữ liệu giả: nộp thành công ngay. */
-  pay: (statementId: string): Promise<PayStatementResult> =>
-    isMock('commissions') ? mock((u) => mockVendorCommissions.pay(u, statementId), 700) : http.post(`/vendors/me/commissions/${statementId}/pay`),
+  /** Mã QR VietQR cho hoa hồng (số tiền lấy từ bảng kê, nội dung EVHH + mã bảng kê) */
+  pay: (id: string): Promise<PayInfo> => http.post(`/vendors/me/commissions/${id}/pay`),
+
+  /** Backend hỏi SePay đã nhận đủ hoa hồng chưa và ghi nhận nếu đã nhận */
+  check: (id: string): Promise<CommissionPaymentResult> => http.post(`/vendors/me/commissions/${id}/check`),
+
+  /** Chỉ dùng khi thử (PAYMENT_DEMO_MODE=true): ghi nhận đã thanh toán hoa hồng ngay */
+  demoConfirm: (id: string): Promise<CommissionPaymentResult> => http.post(`/vendors/me/commissions/${id}/demo-confirm`),
+
+  submitPayment: (id: string, body: SubmitCommissionPaymentBody): Promise<CommissionStatement> =>
+    http.post(`/vendors/me/commissions/${id}/payments`, body),
+
 }
-

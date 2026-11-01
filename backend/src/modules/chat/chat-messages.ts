@@ -24,7 +24,7 @@ export async function postMessage(
     }),
     prisma.conversations.update({ where: { id: data.conversationId }, data: { last_message_date: now }, select: { couple_id: true, vendor_id: true } }),
   ]);
-  publish({ users: [conv.couple_id, conv.vendor_id], event: 'message', data: { conversationId: data.conversationId, orderId: message.order_id, type: message.type } });
+  publish({ users: [conv.couple_id!, conv.vendor_id!], event: 'message', data: { conversationId: data.conversationId, orderId: message.order_id, type: message.type } });
   return message;
 }
 

@@ -18,6 +18,7 @@ export interface ServiceQuery {
 const CATEGORY_SLUGS: Record<string, string> = {
   'Chụp ảnh': 'chup-anh',
   'Hoa cưới': 'hoa-cuoi',
+  'Trang điểm': 'makeup',
   Makeup: 'makeup',
   'Trang phục': 'trang-phuc',
   'Trang trí': 'decor',
@@ -27,7 +28,21 @@ const CATEGORY_SLUGS: Record<string, string> = {
 const slugify = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-export const categorySlug = (name: string) => CATEGORY_SLUGS[name] ?? slugify(name);
+export const categorySlug = (name: string | null) => (name ? (CATEGORY_SLUGS[name] ?? slugify(name)) : '');
+
+/**
+ * Trung tâm tổ chức sự kiện báo giá theo mâm (menu cho 10 khách), đã gồm sảnh và dịch vụ đi kèm;
+ * đặt từ số mâm tối thiểu (service_packages.min_tables) mới được kèm sảnh. Các danh mục khác: giá trọn gói.
+ */
+export const TABLE_PRICED_SLUGS = ['nha-hang'];
+export const GUESTS_PER_TABLE = 10;
+export const priceUnitOf = (slug: string) => (TABLE_PRICED_SLUGS.includes(slug) ? ('TABLE' as const) : ('PACKAGE' as const));
+/** Số mâm cần đặt: đủ chỗ cho số khách, không dưới số mâm tối thiểu của sảnh, ít nhất 1. */
+export const tablesFor = (guests: number | null | undefined, minTables: number | null | undefined) =>
+  Math.max(Math.ceil((guests ?? 0) / GUESTS_PER_TABLE), minTables ?? 0, 1);
+/** Chi phí ước tính của một gói cho đám cưới: giá theo mâm thì nhân số mâm, giá trọn gói thì giữ nguyên. */
+export const estimateCost = (slug: string, price: number, minTables: number | null | undefined, guests: number | null | undefined) =>
+  priceUnitOf(slug) === 'TABLE' ? { total: price * tablesFor(guests, minTables), tables: tablesFor(guests, minTables) } : { total: price, tables: null };
 
 /** Bỏ dấu tiếng Việt và viết thường để so khớp từ khóa: "Cầu Giấy" -> "cau giay". */
 const foldText = (s: string) =>
@@ -66,9 +81,17 @@ export const categoryRank = (slug: string) => {
 export class ServicesService {
   constructor(private readonly prisma: PrismaService, private readonly storage: StorageService) {}
 
-  private async loadVisible() {
+  /**
+   * NCC khách nhìn thấy: hồ sơ Approved, tài khoản Active, có gói Approved.
+   * `alsoHidden`: id các NCC đang bị ẩn (Hidden) vẫn được trả về, dành cho cặp đôi đã có đơn với NCC đó (xem withOrderWith).
+   */
+  private async loadVisible(alsoHidden: string[] = []) {
     return this.prisma.vendor_profiles.findMany({
-      where: { status: 'Approved', users: { status: 'Active' }, service_packages: { some: { status: 'Approved' } } },
+      where: {
+        users: { status: 'Active' },
+        service_packages: { some: { status: 'Approved' } },
+        OR: [{ status: 'Approved' }, ...(alsoHidden.length ? [{ status: 'Hidden', id: { in: alsoHidden } }] : [])],
+      },
       orderBy: [{ created_date: 'asc' }, { id: 'asc' }],
       include: {
         service_categories: { select: { id: true, name: true } },
@@ -81,7 +104,7 @@ export class ServicesService {
     });
   }
 
-  private img(path: string) {
+  private img(path: string | null) {
     return this.storage.publicAlbumUrl(path);
   }
 
@@ -100,25 +123,47 @@ export class ServicesService {
     // Ảnh đại diện: ảnh bìa (is_cover) đầu tiên theo thứ tự gói; gói nào chưa đặt ảnh bìa thì bỏ qua. Không gói nào có thì lấy ảnh đầu tiên.
     const albums = v.service_packages.flatMap((p) => p.package_albums);
     const cover = albums.find((a) => a.is_cover) ?? albums[0];
+    const slug = categorySlug(v.service_categories!.name);
     return {
       id: v.id,
       name: v.business_name,
-      category: { id: v.service_categories.id, slug: categorySlug(v.service_categories.name), name: v.service_categories.name },
+      category: { id: v.service_categories!.id, slug, name: v.service_categories!.name ?? '' },
       location: v.city,
       address: [v.address, v.ward, v.city].filter(Boolean).join(', '),
       priceFrom: Math.min(...prices),
       priceTo: Math.max(...prices),
+      /** TABLE: giá mỗi mâm 10 khách, đã gồm sảnh; PACKAGE: giá trọn gói */
+      priceUnit: priceUnitOf(slug),
+      /** Số mâm tối thiểu của gói rẻ nhất (gói xếp theo giá tăng dần) */
+      minTables: v.service_packages[0]?.min_tables ?? null,
       rating: 0,
       reviewCount: 0,
       coverImageUrl: cover ? this.img(cover.url) : '',
       googleMapsUrl: v.google_maps_url,
+      /** NCC đang bị Admin ẩn (chỉ thấy được với cặp đôi đã có đơn): tạm ngừng nhận đơn mới */
+      paused: v.status === 'Hidden',
     };
   }
 
   /** Dịch vụ dạng thẻ của các NCC đang hiển thị (NCC bị ẩn thì bỏ qua). */
-  async summaries(ids: string[]) {
+  /**
+   * Trong `ids`, các NCC đang bị ẩn nhưng cặp đôi `coupleUserId` đã có đơn (không tính nháp): vẫn phải thấy để theo dõi đơn đã tạo / đã cọc.
+   */
+  private async withOrderWith(coupleUserId: string, ids: string[]) {
+    if (!ids.length) return [];
+    const rows = await this.prisma.orders.findMany({
+      where: { vendor_id: { in: ids }, status: { not: 'Draft' }, weddings: { user_id: coupleUserId } },
+      select: { vendor_id: true },
+      distinct: ['vendor_id'],
+    });
+    return rows.flatMap((r) => (r.vendor_id ? [r.vendor_id] : []));
+  }
+
+  /** `forCouple`: thêm cả NCC đang bị ẩn mà cặp đôi này đã có đơn (kế hoạch, hội thoại của họ). */
+  async summaries(ids: string[], forCouple?: string) {
     const wanted = new Set(ids);
-    return (await this.loadVisible()).filter((v) => wanted.has(v.id)).map((v) => this.summarize(v));
+    const hidden = forCouple ? await this.withOrderWith(forCouple, ids) : [];
+    return (await this.loadVisible(hidden)).filter((v) => wanted.has(v.id)).map((v) => this.summarize(v));
   }
 
   async isVisible(id: string) {
@@ -183,8 +228,9 @@ export class ServicesService {
     return Paginated.of(rows, items.length, { page, pageSize });
   }
 
-  async detail(id: string) {
-    const v = (await this.loadVisible()).find((x) => x.id === id);
+  /** `includeHidden`: chỉ truyền true khi người gọi đã kiểm tra cặp đôi có đơn với NCC này (OrdersService.serviceOf). */
+  async detail(id: string, includeHidden = false) {
+    const v = (await this.loadVisible(includeHidden ? [id] : [])).find((x) => x.id === id);
     if (!v) throw new HttpException({ code: 'SERVICE_NOT_FOUND', message: 'Không tìm thấy dịch vụ.' }, 404);
 
     const prices = v.service_packages.map((p) => Number(p.price));
@@ -199,6 +245,8 @@ export class ServicesService {
         ? [...coverPkg.package_albums, ...v.service_packages.filter((p) => p !== coverPkg).flatMap((p) => p.package_albums)]
         : [...covers, ...others];
     const tags = [...new Set(v.service_packages.flatMap((p) => p.package_tags.map((t) => t.tag)))];
+    const tablePriced = priceUnitOf(categorySlug(v.service_categories?.name ?? null)) === 'TABLE';
+    const isTable = (p: { unit?: string | null; description?: string | null }) => tablePriced || unitOf(p) === 'mâm';
 
     return {
       ...this.summarize(v),
@@ -208,9 +256,9 @@ export class ServicesService {
       capacity: capacities.length ? Math.max(...capacities) : null,
       styles: tags,
       workingHours: v.working_hours ?? '',
-      packageLayout: packageLayoutOf(categorySlug(v.service_categories.name)),
+      packageLayout: packageLayoutOf(categorySlug(v.service_categories?.name ?? null)),
       // Số điện thoại NCC: dùng khi FE chọn nhắn qua Zalo (VITE_CHAT_MODE=zalo)
-      contactPhone: (await this.prisma.users.findUnique({ where: { id: v.user_id }, select: { phone_number: true } }))?.phone_number ?? null,
+      contactPhone: (await this.prisma.users.findUnique({ where: { id: v.user_id ?? undefined }, select: { phone_number: true } }))?.phone_number ?? null,
       isVerified: true,
       isGuaranteed: false,
       images: gallery.slice(0, 60).map((a) => this.img(a.url)),
@@ -218,17 +266,16 @@ export class ServicesService {
         id: p.id,
         name: p.name,
         // Nhà hàng tính theo bàn: mô tả NCC còn ghi "mâm" thì đổi sang "bàn" cho thống nhất
-        description: tablesNotTrays(p.description),
+        description: tablesNotTrays(p.description ?? ''),
         price: Number(p.price),
         capacity: p.capacity,
-        // Số bàn tối thiểu phải đặt (nhà hàng), null khi gói không ghi
-        minTables: p.min_tables,
-        // Đơn vị tính (cột service_packages.unit): "mâm" là giá một mâm, giao diện gọi là "bàn"; còn lại là trọn gói
-        unit: unitOf(p) === 'mâm' ? 'bàn' : 'gói',
-        pricingUnit: unitOf(p) === 'mâm' ? ('TABLE' as const) : ('PACKAGE' as const),
+        // Đơn vị tính (cột service_packages.unit, hoặc danh mục báo giá theo mâm): "mâm" là giá một mâm, giao diện gọi là "bàn"; còn lại là trọn gói
+        unit: isTable(p) ? 'bàn' : 'gói',
+        pricingUnit: isTable(p) ? ('TABLE' as const) : ('PACKAGE' as const),
         // Ảnh bìa và thẻ (tag) của gói: chỉ dùng cho tìm kiếm và bộ lọc, không so với đám cưới
         imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null,
         tags: p.package_tags.map((t) => t.tag),
+        minTables: p.min_tables,
       })),
       albums: v.service_packages.map((p) => ({
         id: p.id,

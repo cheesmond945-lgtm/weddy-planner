@@ -1,16 +1,25 @@
 /*
  * CHỜ ĐỐI CHIẾU docs/database.md: giá trị role và tên trường người dùng đang suy từ prototype.
- * Khi database.md được chốt, sửa ở đây trước rồi sửa mocks/ và docs/api/auth.md theo.
+ * Khi database.md được chốt, sửa ở đây trước rồi sửa docs/api/auth.md theo.
  */
 export const ROLES = ['COUPLE', 'VENDOR', 'ADMIN'] as const
 export type Role = (typeof ROLES)[number]
 
 export interface SessionUser {
   id: string
+  /** Tên đăng nhập (tài khoản NCC do Admin tạo) */
+  username?: string | null
   name: string
   email: string | null
   phone: string | null
   role: Role
+}
+
+/** Body của POST /auth/me/password. */
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
+  confirmPassword: string
 }
 
 export interface Session {
@@ -21,7 +30,7 @@ export interface Session {
 // ---- Request / response theo docs/api/auth.md ----
 
 export interface LoginRequest {
-  /** Email hoặc số điện thoại */
+  /** Email */
   identifier: string
   password: string
 }
@@ -54,8 +63,15 @@ export interface ResetPasswordRequest {
   password: string
 }
 
+/** Trường không gửi thì giữ nguyên. Email không đổi ở đây mà qua đổi email (mật khẩu + OTP) */
 export interface UpdateProfileRequest {
-  name: string
-  email: string | null
-  phone: string | null
+  name?: string
+  username?: string
+  phone?: string | null
+}
+
+/** Đổi email đăng nhập, bước 1: BE gửi OTP tới email mới (phản hồi OtpSent) */
+export interface ChangeEmailRequest {
+  currentPassword: string
+  newEmail: string
 }

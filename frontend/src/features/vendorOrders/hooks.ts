@@ -2,9 +2,10 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { vendorOrdersApi } from '@/api/vendorOrders'
 import { toast } from '@/components/ui/toast'
 import { vendorKeys } from '@/features/vendorOrders/keys'
+import { toISODate, today } from '@/lib/date'
 import { useLivePoll } from '@/lib/realtime'
 import { useAuth } from '@/store/auth'
-import type { CancelReason, Order, OrderContent, OrderListQuery } from '@/types/vendorOrder'
+import type { BoardTask, CancelReason, Order, OrderContent, OrderListQuery, TaskStatus } from '@/types/vendorOrder'
 
 // Có realtime thì đơn đổi trạng thái (khách cọc, hết hạn…) được đẩy tới; mất kết nối thì hỏi lại định kỳ khi đang mở khung chat
 const POLL_MS = 2500
@@ -27,6 +28,9 @@ export function useSyncOrder() {
     void qc.invalidateQueries({ queryKey: vendorKeys.conversations(uid) })
     void qc.invalidateQueries({ queryKey: vendorKeys.orderLists(uid) })
     void qc.invalidateQueries({ queryKey: vendorKeys.orderCounts(uid) })
+    // Hoàn thành / hủy / sửa ngày thực hiện đổi việc của đơn; hủy / sửa ngày, đổi sảnh đổi lịch bận theo sảnh
+    void qc.invalidateQueries({ queryKey: vendorKeys.taskBoard(uid) })
+    void qc.invalidateQueries({ queryKey: ['vendor', uid, 'busy'] })
   }
 }
 
@@ -168,5 +172,118 @@ export function useIssueFinalInvoice() {
       toast(`Đã xuất hóa đơn cho đơn ${o.orderCode} và gửi vào cuộc trò chuyện.`)
     },
     onError: (e) => toast(e.message),
+  })
+}
+
+/** "Tiến độ đơn" của một đơn đã cọc (việc chi tiết gắn với đơn). */
+export function useOrderTasks(orderId: string | null, enabled = true) {
+  const uid = useVendorId()
+  return useQuery({
+    queryKey: vendorKeys.orderTasks(uid, orderId ?? ''),
+    queryFn: () => vendorOrdersApi.tasks(orderId!),
+    enabled: !!uid && !!orderId && enabled,
+  })
+}
+
+/** NCC tick / bỏ tick việc của mình; khách thấy ngay vì dùng chung bảng việc. */
+export function useSetOrderTask(orderId: string) {
+  const uid = useVendorId()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { taskId: string; isDone: boolean }) => vendorOrdersApi.setTaskDone(orderId, v.taskId, v.isDone),
+    onSuccess: (data) => {
+      qc.setQueryData(vendorKeys.orderTasks(uid, orderId), data)
+      void qc.invalidateQueries({ queryKey: vendorKeys.orderProgress(uid) })
+      void qc.invalidateQueries({ queryKey: vendorKeys.calendar(uid) })
+      void qc.invalidateQueries({ queryKey: vendorKeys.taskBoard(uid) })
+    },
+    onError: (e: unknown) => toast(e instanceof Error ? e.message : 'Không cập nhật được việc.'),
+  })
+}
+
+/** NCC chốt ngày ("Chốt ngày này" hoặc đổi sang date) / bỏ chốt một việc của đơn; khách nhận thông báo khi chốt. */
+export function useConfirmTaskDate(orderId: string) {
+  const uid = useVendorId()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { taskId: string; date?: string; unconfirm?: boolean }) =>
+      v.unconfirm ? vendorOrdersApi.unconfirmTaskDate(orderId, v.taskId) : vendorOrdersApi.confirmTaskDate(orderId, v.taskId, v.date),
+    onSuccess: (data) => {
+      qc.setQueryData(vendorKeys.orderTasks(uid, orderId), data)
+      void qc.invalidateQueries({ queryKey: vendorKeys.calendar(uid) })
+      void qc.invalidateQueries({ queryKey: vendorKeys.taskBoard(uid) })
+    },
+    onError: (e: unknown) => toast(e instanceof Error ? e.message : 'Không cập nhật được ngày.'),
+  })
+}
+
+/** "Đổi ngày…" từ Bảng việc / Lịch (đơn khác nhau nên đơn nằm trong tham số). */
+export function useRescheduleTask() {
+  const uid = useVendorId()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { orderId: string; taskId: string; date: string }) => vendorOrdersApi.confirmTaskDate(v.orderId, v.taskId, v.date),
+    onSuccess: (data, v) => {
+      qc.setQueryData(vendorKeys.orderTasks(uid, v.orderId), data)
+      void qc.invalidateQueries({ queryKey: vendorKeys.calendar(uid) })
+      void qc.invalidateQueries({ queryKey: vendorKeys.taskBoard(uid) })
+      toast('Đã chốt ngày mới với khách.')
+    },
+    onError: (e: unknown) => toast(e instanceof Error ? e.message : 'Không đổi được ngày.'),
+  })
+}
+
+/** Tiến độ tóm tắt của mọi đơn đang thực hiện ({ [orderId]: OrderProgress }), để hiện nhãn "Trễ tiến độ". */
+export function useOrderProgress() {
+  const uid = useVendorId()
+  return useQuery({ queryKey: vendorKeys.orderProgress(uid), queryFn: vendorOrdersApi.progress, enabled: !!uid, staleTime: 60_000 })
+}
+
+/** Bảng việc (kanban): mọi việc của các đơn đang thực hiện. */
+export function useTaskBoard() {
+  const uid = useVendorId()
+  return useQuery({ queryKey: vendorKeys.taskBoard(uid), queryFn: vendorOrdersApi.board, enabled: !!uid })
+}
+
+/** Kéo thả trên Bảng việc: thẻ đổi cột ngay (cập nhật lạc quan), lỗi thì trả thẻ về chỗ cũ kèm thông báo. */
+export function useMoveBoardTask() {
+  const uid = useVendorId()
+  const qc = useQueryClient()
+  const key = vendorKeys.taskBoard(uid)
+  return useMutation({
+    mutationFn: (v: { orderId: string; taskId: string; status: TaskStatus }) => vendorOrdersApi.setTaskStatus(v.orderId, v.taskId, v.status),
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: key })
+      const prev = qc.getQueryData<BoardTask[]>(key)
+      const now = toISODate(today())
+      qc.setQueryData<BoardTask[]>(key, (list) =>
+        list?.map((t) => {
+          const isDone = v.status === 'Done'
+          return t.id === v.taskId ? { ...t, status: v.status, isDone, completedDate: isDone ? new Date().toISOString() : null, overdue: !isDone && !!t.dueDate && t.dueDate < now } : t
+        }),
+      )
+      return { prev }
+    },
+    onError: (e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(key, ctx.prev)
+      toast(e instanceof Error ? e.message : 'Không cập nhật được việc.')
+    },
+    onSuccess: (data, v) => qc.setQueryData(vendorKeys.orderTasks(uid, v.orderId), data),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key })
+      void qc.invalidateQueries({ queryKey: vendorKeys.orderProgress(uid) })
+      void qc.invalidateQueries({ queryKey: vendorKeys.calendar(uid) })
+    },
+  })
+}
+
+/** Lịch làm việc trong khoảng ngày của lưới tháng đang xem. */
+export function useVendorCalendar(from: string, to: string) {
+  const uid = useVendorId()
+  return useQuery({
+    queryKey: vendorKeys.calendar(uid, from, to),
+    queryFn: () => vendorOrdersApi.calendar(from, to),
+    enabled: !!uid,
+    placeholderData: keepPreviousData,
   })
 }

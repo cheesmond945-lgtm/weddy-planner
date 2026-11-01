@@ -18,10 +18,10 @@ export const EXT_BY_MIME: Record<string, string> = {
 
 export const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 
-export const mimeOfPath = (path: string) => MIME_BY_EXT[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
+export const mimeOfPath = (path: string | null) => MIME_BY_EXT[path?.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
 
 /** Tệp upload qua API có tên "<uuid>_<tên gốc>"; tệp dữ liệu mẫu chỉ có tên thường. */
-export const fileNameOfPath = (path: string) => (path.split('/').pop() ?? path).replace(/^[0-9a-f-]{36}_/, '');
+export const fileNameOfPath = (path: string | null) => (path?.split('/').pop() ?? '').replace(/^[0-9a-f-]{36}_/, '');
 
 /** Tên tệp an toàn để đưa vào đường dẫn Storage (bỏ dấu, chỉ chữ-số-gạch). */
 export function safeBaseName(original: string) {

@@ -103,7 +103,7 @@ export class ImportExportService {
 
   private async memberRefs(weddingId: string): Promise<MemberRef[]> {
     const rows = await this.prisma.wedding_members.findMany({ where: { wedding_id: weddingId, role: { not: 'Owner' } }, include: { users: { select: { full_name: true } } } });
-    return rows.map((m) => ({ userId: m.user_id, name: m.display_name || m.users.full_name, relation: m.relation as MemberRef['relation'] }));
+    return rows.map((m) => ({ userId: m.user_id, name: m.display_name || m.users.full_name || '', relation: m.relation as MemberRef['relation'] }));
   }
 
   /** Công việc chỉ thêm vào (không thay toàn bộ, vì việc mẫu gắn với hạng mục và đơn). */

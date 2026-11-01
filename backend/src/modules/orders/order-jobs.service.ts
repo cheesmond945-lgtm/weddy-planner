@@ -2,12 +2,17 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import type { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { autoComplete, expirePending } from './order-lifecycle';
+import { remindFrameTasks, remindTaskDeadlines } from './order-reminders';
 
 /** Hai lần quét cùng một phạm vi cách nhau tối thiểu từng này giây (FE hỏi lại mỗi 2,5 đến 5 giây). */
 const MIN_GAP_MS = 15_000;
 const GLOBAL_EVERY_MS = 3_600_000;
 /** Đơn quá hạn cọc 24 giờ phải tự hủy (Expired) gần như ngay: quét riêng việc hết hạn mỗi phút (một câu SELECT nhẹ). */
 const EXPIRE_EVERY_MS = 60_000;
+/** Nhắc hạn việc chỉ quét lại sau từng này giây cho cùng một phạm vi (việc hạn theo ngày, không cần dày). */
+const REMIND_GAP_MS = 600_000;
+/** Một tài khoản tải thông báo thì chỉ quét nhắc hạn lại sau từng này giây. */
+const USER_GAP_MS = 300_000;
 
 /**
  * Việc theo thời gian của đơn hàng (docs/database.md mục 9.12): hết hạn cọc và tự hoàn thành.
@@ -22,6 +27,8 @@ export class OrderJobsService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('OrderJobs');
   private readonly timers: NodeJS.Timeout[] = [];
   private readonly last = new Map<string, number>();
+  private readonly lastRemind = new Map<string, number>();
+  private readonly lastUser = new Map<string, number>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -52,11 +59,28 @@ export class OrderJobsService implements OnModuleInit, OnModuleDestroy {
     return { expired, completed };
   }
 
+  /** Nhắc hạn việc chi tiết (docs/TIMELINE.md mục 8.2). Lỗi không làm hỏng việc đọc. */
+  private async remind(key: string, where: Prisma.ordersWhereInput, couple?: { all: true } | { coupleId: string }) {
+    const now = Date.now();
+    if (now - (this.lastRemind.get(key) ?? 0) < REMIND_GAP_MS) return 0;
+    this.lastRemind.set(key, now);
+    try {
+      const perOrder = await remindTaskDeadlines(this.prisma, where);
+      // Khách: thêm một thông báo tổng hợp mỗi ngày cho việc không gắn đơn (việc khung, việc tự thêm)
+      const digest = couple ? await remindFrameTasks(this.prisma, 'coupleId' in couple ? couple.coupleId : undefined) : 0;
+      return perOrder + digest;
+    } catch (e) {
+      this.log.error(`Nhắc hạn ${key} lỗi: ${(e as Error).message}`);
+      return 0;
+    }
+  }
+
   /** Toàn hệ thống (chỉ khi ORDER_JOBS_ENABLED=true). */
   async runAll() {
     try {
       const r = await this.run({});
-      this.log.log(`Quét toàn hệ thống: ${r.expired} đơn hết hạn, ${r.completed} đơn tự hoàn thành`);
+      const reminded = await this.remind('all', {}, { all: true });
+      this.log.log(`Quét toàn hệ thống: ${r.expired} đơn hết hạn, ${r.completed} đơn tự hoàn thành, ${reminded} nhắc hạn việc`);
     } catch (e) {
       this.log.error(`Quét toàn hệ thống lỗi: ${(e as Error).message}`);
     }
@@ -73,6 +97,24 @@ export class OrderJobsService implements OnModuleInit, OnModuleDestroy {
       await this.run(where);
     } catch (e) {
       this.log.error(`Quét ${key} lỗi: ${(e as Error).message}`);
+    }
+    await this.remind(key, where, 'coupleId' in scope ? { coupleId: scope.coupleId } : undefined);
+  }
+
+  /**
+   * Gọi khi một tài khoản tải thông báo của mình (chuông ở mọi trang): quét đơn của NCC đó và / hoặc của khách đó để nhắc hạn kịp thời
+   * mà không cần bật job nền. Tối đa mỗi 5 phút mỗi tài khoản. Không ném lỗi.
+   */
+  async sweepUser(userId: string) {
+    const now = Date.now();
+    if (now - (this.lastUser.get(userId) ?? 0) < USER_GAP_MS) return;
+    this.lastUser.set(userId, now);
+    try {
+      const vendor = await this.prisma.vendor_profiles.findUnique({ where: { user_id: userId }, select: { id: true } });
+      if (vendor) await this.sweep({ vendorId: vendor.id });
+      else await this.sweep({ coupleId: userId });
+    } catch (e) {
+      this.log.error(`Quét theo tài khoản ${userId} lỗi: ${(e as Error).message}`);
     }
   }
 

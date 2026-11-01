@@ -66,7 +66,7 @@ export class GuestsService {
     requireDbFeature('guests');
     const w = await this.weddings.requireWedding(userId);
     const rows = await this.prisma.wedding_guests.findMany({ where: { wedding_id: w.id }, orderBy: [{ created_date: 'asc' }, { id: 'asc' }] });
-    return { items: rows.map(toGuest), stats: guestStats(rows, w.guest_count) };
+    return { items: rows.map(toGuest), stats: guestStats(rows, w.guest_count ?? 0) };
   }
 
   /** Khóa trùng của khách hiện có (bỏ qua một khách khi đang sửa chính khách đó). */

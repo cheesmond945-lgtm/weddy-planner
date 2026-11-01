@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
@@ -14,6 +13,8 @@ import { paths } from '@/routes/paths'
 import type { InvoiceType, Order } from '@/types/order'
 import { hintOf, hintTone } from '../hint'
 import { useOrder } from '../hooks'
+import { DepositTermsDialog } from './DepositTermsDialog'
+import { EventDateNote } from './EventDateNote'
 
 interface OrderCardProps {
   orderId: string
@@ -33,6 +34,7 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
   const navigate = useNavigate()
   const [detail, setDetail] = useState(false)
   const [invoice, setInvoice] = useState<InvoiceType | null>(null)
+  const [termsOpen, setTermsOpen] = useState(false)
 
   if (!o) return <div className="h-[230px] w-[min(360px,100%)] animate-pulse self-start rounded-[22px] bg-muted" />
   if (o.status === 'Draft') return null
@@ -82,7 +84,9 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
         {more > 0 && <div className="border-b border-dashed border-line py-1.5 text-xs text-muted-foreground">và {more} hạng mục khác</div>}
       </div>
 
+      {o.package && row('Sảnh', o.package.name)}
       {row('Ngày thực hiện', formatDate(o.eventDate))}
+      <EventDateNote order={o} />
       {row('Tổng giá trị', formatMoney(o.totalAmount))}
       {updated && (
         <div className="border-b border-dashed border-line py-1.5 text-[12.5px] text-gold-700">
@@ -147,6 +151,12 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
         )}
       </div>
 
+      {o.status === 'Pending' && !overdue && (
+        <button type="button" className="mt-2.5 text-xs text-muted-foreground underline underline-offset-2 hover:text-ink" onClick={() => setTermsOpen(true)}>
+          Xem điều khoản đặt dịch vụ
+        </button>
+      )}
+      <DepositTermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
       {detail && <OrderDetailDialog order={o} viewer="couple" onClose={() => setDetail(false)} onViewInvoice={(_, type) => setInvoice(type)} />}
       {invoice && <InvoiceDialog order={o} type={invoice} vendorName={o.vendorName} onClose={() => setInvoice(null)} />}
     </div>

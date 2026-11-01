@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WeddingAccess } from '../../common/guards/wedding-access.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { OrderTasksService } from './order-tasks.service';
 import { ListQuery, OrdersService } from './orders.service';
 import type { ContentInput } from './order-rules';
 
@@ -28,6 +29,12 @@ export class CoupleOrdersController {
     return this.orders.getForCouple(req.wedding.ownerId, id);
   }
 
+  /** Dịch vụ của đơn (kể cả khi NCC đang bị ẩn). */
+  @Get(':id/service')
+  service(@Req() req: any, @Param('id') id: string) {
+    return this.orders.serviceOfOrder(req.user.sub, id);
+  }
+
   /** Yêu cầu chỉnh sửa (Pending; hoặc Deposited trước ngày thực hiện, tiền cọc giữ nguyên): { changes?: ['Item'|'Quantity'|'EventDate'|'Other'], note } */
   @HttpCode(200)
   @Post(':id/revision-requests')
@@ -37,7 +44,7 @@ export class CoupleOrdersController {
   }
 }
 
-/** Đặt cọc (docs/api/payments.md). Chế độ thanh toán theo PAYMENT_MODE: xem paymentMode() trong order-rules.ts. */
+/** Đặt cọc qua VietQR + SePay (docs/api/payments.md): xem OrdersService.createDeposit. */
 @UseGuards(JwtAuthGuard)
 @Roles('Couple')
 @Controller('payments')
@@ -47,8 +54,20 @@ export class PaymentsController {
   @HttpCode(200)
   @Post()
   @WeddingAccess({ role: 'Editor', tabs: ['services'] })
-  create(@Req() req: any, @Body() body: { orderId?: string; method?: string }) {
+  create(@Req() req: any, @Body() body: { orderId?: string }) {
     return this.orders.createDeposit(req.wedding.ownerId, String(body?.orderId ?? ''));
+  }
+
+  /** Chế độ thử (PAYMENT_DEMO_MODE=true): ghi nhận đã cọc ngay. Tắt chế độ thì trả 404. */
+  @Post('demo-confirm')
+  demoConfirm(@Req() req: any, @Body() body: { orderId?: string }) {
+    return this.orders.confirmDemoDeposit(req.user.sub, String(body?.orderId ?? ''));
+  }
+
+  /** Kiểm tra với SePay đã nhận đủ tiền cọc chưa và ghi nhận nếu đã nhận. */
+  @Post('check')
+  check(@Req() req: any, @Body() body: { orderId?: string }) {
+    return this.orders.checkDeposit(req.user.sub, String(body?.orderId ?? ''));
   }
 }
 
@@ -57,7 +76,7 @@ export class PaymentsController {
 @Roles('Vendor')
 @Controller('vendors/me/orders')
 export class VendorOrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(private readonly orders: OrdersService, private readonly tasks: OrderTasksService) {}
 
   @Get()
   list(@Req() req: any, @Query() q: ListQuery) {
@@ -69,9 +88,51 @@ export class VendorOrdersController {
     return this.orders.countsForVendor(req.user.sub);
   }
 
+  /** Tiến độ việc của các đơn đang thực hiện: { [orderId]: { open, overdueVendor, overdueCustomer, dueSoonVendor } }. */
+  @Get('progress')
+  progress(@Req() req: any) {
+    return this.tasks.progress(req.user.sub);
+  }
+
+  /** Lịch làm việc: ?from=YYYY-MM-DD&to=YYYY-MM-DD (tối đa 100 ngày). */
+  @Get('calendar')
+  calendar(@Req() req: any, @Query('from') from: string, @Query('to') to: string) {
+    return this.tasks.calendar(req.user.sub, from, to);
+  }
+
+  /** Bảng việc (kanban): mọi việc chi tiết của các đơn đang thực hiện, kèm mã đơn, tên khách, ngày thực hiện. */
+  @Get('tasks')
+  board(@Req() req: any) {
+    return this.tasks.board(req.user.sub);
+  }
+
   @Get(':id')
   get(@Req() req: any, @Param('id') id: string) {
     return this.orders.getForVendor(req.user.sub, id);
+  }
+
+  /** "Tiến độ đơn": việc chi tiết gắn với đơn và tóm tắt. */
+  @Get(':id/tasks')
+  taskList(@Req() req: any, @Param('id') id: string) {
+    return this.tasks.list(req.user.sub, id);
+  }
+
+  /** NCC đổi trạng thái một việc chi tiết của đơn (mọi việc, kể cả việc của khách): { status: 'Todo' | 'Waiting' | 'Done' }; vẫn nhận { isDone } của FE cũ. */
+  @Patch(':id/tasks/:taskId')
+  taskStatus(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: { status?: unknown; isDone?: unknown }) {
+    return this.tasks.setStatus(req.user.sub, id, taskId, body ?? {});
+  }
+
+  /** "Chốt ngày này" (không gửi date) hoặc "Đổi ngày" ({ date: 'YYYY-MM-DD' }) của một việc. */
+  @Patch(':id/tasks/:taskId/schedule')
+  taskSchedule(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: { date?: unknown }) {
+    return this.tasks.confirmSchedule(req.user.sub, id, taskId, body?.date);
+  }
+
+  /** "Bỏ chốt": xóa xác nhận ngày, giữ nguyên ngày. */
+  @Delete(':id/tasks/:taskId/schedule')
+  taskUnconfirm(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string) {
+    return this.tasks.unconfirmSchedule(req.user.sub, id, taskId);
   }
 
   @Post()

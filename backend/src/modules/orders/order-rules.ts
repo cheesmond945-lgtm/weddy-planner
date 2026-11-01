@@ -10,6 +10,29 @@ export const fail = (code: string, message: string, status: number, details?: un
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
 };
 
+/** Đơn của một đám cưới, rút gọn để kiểm tra luật "mỗi hạng mục tối đa MỘT đơn Deposited cùng lúc". */
+export interface CategoryOrder {
+  id: string;
+  status: string | null;
+  categoryId: string | null;
+  code: string;
+  vendorName: string;
+  categoryName: string;
+}
+
+/** Đơn Deposited khác cùng hạng mục (nếu có). Đơn Completed không tính: đã xong, không giữ chỗ. */
+export const depositedConflict = (orders: readonly CategoryOrder[], categoryId: string | null, exceptOrderId?: string) =>
+  categoryId ? orders.find((o) => o.status === 'Deposited' && o.categoryId === categoryId && o.id !== exceptOrderId) : undefined;
+
+/** Thông báo 409 CATEGORY_ALREADY_DEPOSITED cho khách (đặt cọc) hoặc NCC (gửi / tạo lại đơn). */
+export const categoryTakenMessage = (who: 'COUPLE' | 'VENDOR', o: CategoryOrder) =>
+  who === 'COUPLE'
+    ? `Hạng mục ${o.categoryName} đã có đơn ${o.code} của ${o.vendorName} đang đặt cọc. Mỗi hạng mục chỉ có một đơn đã cọc cùng lúc: nhờ nhà cung cấp hủy đơn đó trước khi đặt cọc đơn mới.`
+    : `Khách đã đặt cọc đơn ${o.code} của ${o.vendorName} cho hạng mục ${o.categoryName}. Mỗi hạng mục chỉ có một đơn đã cọc cùng lúc: chỉ gửi đơn mới sau khi đơn đó được hủy.`;
+
+/** Tạo đơn: `send = true` gửi luôn (Draft → Pending), thiếu / false / giá trị khác = chỉ lưu nháp (docs/api/orders.md). */
+export const wantsSend = (body: { send?: unknown } | null | undefined) => body?.send === true;
+
 export const HOUR = 3_600_000;
 export const DAY = 86_400_000;
 
@@ -25,12 +48,41 @@ export const addDaysYmd = (s: string, n: number) => new Date(Date.parse(`${s}T00
 export const startOfDayVn = (s: string) => new Date(`${s}T00:00:00+07:00`);
 export const endOfDayVn = (s: string) => new Date(`${s}T23:59:00+07:00`);
 const validYmd = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+/** "YYYY-MM-DD" -> "dd/mm/yyyy" để đưa vào thông báo. */
+export const dmy = (s: string) => s.split('-').reverse().join('/');
+
+// ---------- Ngày thực hiện so với ngày cưới (docs/TIMELINE.md mục 7) ----------
+
+/** Ngày thực hiện sau ngày cưới của khách (không có ngày cưới thì không xét). So sánh chuỗi "YYYY-MM-DD" đúng thứ tự thời gian. */
+export const eventAfterWedding = (eventDate: string, weddingDate: string | null | undefined) => !!weddingDate && eventDate > weddingDate;
+
+/**
+ * Lỗi ngày thực hiện / ngày cưới khi NCC gửi hoặc sửa đơn; null nếu hợp lệ. Hàm thuần, parseContent ném lỗi theo kết quả.
+ * - send: ngày cưới của khách phải còn ở phía sau (WEDDING_DATE_PASSED, 409); ngày thực hiện không sau ngày cưới
+ *   (EVENT_DATE_AFTER_WEDDING, 422), kể cả khi cập nhật đơn Pending / NeedRevision: khách chưa cọc nên NCC phải sửa.
+ * - edit (sau cọc): chỉ kiểm ngày thực hiện, và giữ nguyên ngày đang có thì qua, để đơn cũ lệch ngày vẫn sửa được ghi chú, hạng mục.
+ * - draft: không kiểm (nháp chưa tới tay khách).
+ */
+export function weddingDateIssue(
+  eventDate: string,
+  weddingDate: string | null | undefined,
+  opts: { mode: ParseMode; currentEventDate?: string; today?: string },
+): { code: string; message: string; status: number } | null {
+  if (!weddingDate || opts.mode === 'draft') return null;
+  if (opts.mode === 'send' && weddingDate <= (opts.today ?? todayVn())) {
+    return { code: 'WEDDING_DATE_PASSED', message: `Ngày cưới của khách (${dmy(weddingDate)}) đã qua hoặc là hôm nay. Nhắn khách cập nhật ngày cưới trước khi gửi đơn.`, status: 409 };
+  }
+  if (eventAfterWedding(eventDate, weddingDate) && !(opts.mode === 'edit' && eventDate === opts.currentEventDate)) {
+    return { code: 'EVENT_DATE_AFTER_WEDDING', message: `Ngày thực hiện (${dmy(eventDate)}) không được sau ngày cưới của khách (${dmy(weddingDate)}).`, status: 422 };
+  }
+  return null;
+}
 
 // ---------- Tiền cọc ----------
 
 export const DEPOSIT_ROUNDING = 100_000;
 export const DEPOSIT_MIN = 100_000;
-/** Tỷ lệ cọc tối thiểu khi gửi đơn (%). Đợt 1 (cọc) khách chuyển khoản qua VNPay, đợt 2 (còn lại) trả tiền mặt cho NCC. */
+/** Tỷ lệ cọc tối thiểu khi gửi đơn (%). Đợt 1 (cọc) khách chuyển khoản qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC. */
 export const DEPOSIT_PERCENT_MIN = 10;
 
 /** Tổng × tỷ lệ / 100, làm tròn gần nhất đến 100.000đ, tối thiểu 100.000đ (cọc 0đ thì khách không thanh toán được). */
@@ -77,7 +129,9 @@ export interface ContentInput {
   eventDate?: string;
   note?: string | null;
   depositPercent?: number | string | null;
-  items?: { itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string }[];
+  items?: { itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string; packageId?: string | null }[];
+  /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tổ chức sự kiện gửi / sửa đơn (docs/LICH_BAN_SANH.md); dịch vụ khác bỏ qua */
+  packageId?: string | null;
 }
 
 export interface ParsedItem {
@@ -85,6 +139,8 @@ export interface ParsedItem {
   unit: string;
   quantity: number;
   unitPrice: number;
+  /** Gói dịch vụ của dòng (order_items.package_id), để sinh việc chi tiết từ quy trình của gói khi cọc. Chỉ kiểm định dạng ở đây; thuộc NCC nào: OrdersService */
+  packageId?: string | null;
 }
 
 export interface ParsedContent {
@@ -95,6 +151,8 @@ export interface ParsedContent {
   depositPercent: number;
   items: ParsedItem[];
   total: number;
+  /** Sảnh đã chọn (chỉ kiểm định dạng ở đây; thuộc NCC nào, có bận không: OrdersService.checkHall) */
+  packageId: string | null;
 }
 
 /** draft: lưu nháp (chỉ bắt buộc ngày). send: gửi hoặc cập nhật đơn (kiểm tra đủ, kiểm tra cọc). edit: sửa sau cọc (như send, không kiểm tra cọc). */
@@ -104,9 +162,9 @@ export type ParseMode = 'draft' | 'send' | 'edit';
  * Kiểm tra và chuẩn hóa nội dung đơn. Lỗi trường: 400 VALIDATION_ERROR kèm `details` theo trường
  * (customerName, customerPhone, eventDate, depositPercent, items, items.<i>.itemName|quantity|unitPrice|unit, deposit).
  * Ngày thực hiện trước hôm nay (giờ VN): 422 EVENT_DATE_IN_PAST, trừ khi giữ nguyên ngày hiện có của đơn (currentEventDate)
- * hoặc đang lưu nháp.
+ * hoặc đang lưu nháp. Có `weddingDate`: thêm 409 WEDDING_DATE_PASSED và 422 EVENT_DATE_AFTER_WEDDING (xem weddingDateIssue).
  */
-export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEventDate?: string } = {}): ParsedContent {
+export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEventDate?: string; weddingDate?: string | null } = {}): ParsedContent {
   const strict = mode !== 'draft';
   const errors: Record<string, string> = {};
 
@@ -128,8 +186,11 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
       if (!(unitPrice >= 0)) errors[`items.${idx}.unitPrice`] = 'Đơn giá không âm.';
       if (!(UNITS as readonly string[]).includes(unit)) errors[`items.${idx}.unit`] = 'Đơn vị tính là Gói hoặc Bàn.';
     }
+    const itemPackage = i.packageId === undefined || i.packageId === null || String(i.packageId).trim() === '' ? null : String(i.packageId).trim();
+    if (itemPackage && !UUID.test(itemPackage)) errors[`items.${idx}.packageId`] = 'Gói không hợp lệ.';
     // Lưu nháp: ràng buộc của CSDL (số lượng > 0, đơn giá ≥ 0) vẫn phải đúng nên chuẩn hóa lại
     return {
+      packageId: itemPackage,
       itemName: i.itemName?.trim() ?? '',
       unit: (UNITS as readonly string[]).includes(unit) ? unit : 'Gói',
       quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 1,
@@ -137,6 +198,9 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
     };
   });
   const total = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+
+  const packageId = c.packageId === undefined || c.packageId === null || String(c.packageId).trim() === '' ? null : String(c.packageId).trim();
+  if (packageId && !UUID.test(packageId)) errors.packageId = 'Sảnh không hợp lệ.';
 
   const hasPercent = c.depositPercent !== undefined && c.depositPercent !== null && String(c.depositPercent).trim() !== '';
   const percent = hasPercent ? Number(c.depositPercent) : 30;
@@ -158,19 +222,23 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
   if (strict && eventDate < todayVn() && eventDate !== opts.currentEventDate) {
     fail('EVENT_DATE_IN_PAST', 'Ngày thực hiện phải từ hôm nay trở đi.', 422, { eventDate: 'Ngày thực hiện phải từ hôm nay trở đi.' });
   }
+  const wd = weddingDateIssue(eventDate, opts.weddingDate, { mode, currentEventDate: opts.currentEventDate });
+  if (wd) fail(wd.code, wd.message, wd.status, { eventDate: wd.message, weddingDate: opts.weddingDate });
 
-  return { customerName, customerPhone, eventDate, note: c.note?.trim() || null, depositPercent: percent, items, total };
+  return { customerName, customerPhone, eventDate, note: c.note?.trim() || null, depositPercent: percent, items, total, packageId };
 }
 
 /** Các thay đổi nội dung giữa đơn hiện tại và nội dung mới, theo ChangeType (để ghi OrderRevisionChanges sau cọc). */
 export function changeTypesBetween(
-  prev: { eventDate: string; note: string | null; items: ParsedItem[] },
-  next: { eventDate: string; note: string | null; items: ParsedItem[] },
+  prev: { eventDate: string; note: string | null; items: ParsedItem[]; packageId?: string | null },
+  next: { eventDate: string; note: string | null; items: ParsedItem[]; packageId?: string | null },
 ): ChangeType[] {
   const out = new Set<ChangeType>();
   const key = (i: ParsedItem) => i.itemName.trim().toLowerCase();
   const names = (x: ParsedItem[]) => x.map(key).sort().join('|');
-  if (names(prev.items) !== names(next.items)) out.add('Item');
+  // Đổi sảnh, đổi gói của dòng hạng mục tính là đổi hạng mục
+  const pkgs = (x: ParsedItem[]) => x.map((i) => i.packageId ?? '').sort().join('|');
+  if (names(prev.items) !== names(next.items) || (prev.packageId ?? null) !== (next.packageId ?? null) || pkgs(prev.items) !== pkgs(next.items)) out.add('Item');
   for (const n of next.items) {
     const p = prev.items.find((i) => key(i) === key(n));
     if (p && (p.quantity !== n.quantity || p.unit !== n.unit)) out.add('Quantity');
@@ -184,27 +252,16 @@ export function changeTypesBetween(
   return [...out];
 }
 
-/** Hai nội dung giống nhau (cùng hạng mục theo thứ tự, ngày, ghi chú, tên, số điện thoại, tỷ lệ cọc). */
+/** Hai nội dung giống nhau (cùng hạng mục theo thứ tự, ngày, ghi chú, tên, số điện thoại, tỷ lệ cọc, sảnh). */
 export function sameContent(a: ParsedContent, b: ParsedContent): boolean {
   return (
+    (a.packageId ?? null) === (b.packageId ?? null) &&
     a.customerName === b.customerName &&
     a.customerPhone === b.customerPhone &&
     a.eventDate === b.eventDate &&
     (a.note ?? '') === (b.note ?? '') &&
     a.depositPercent === b.depositPercent &&
     a.items.length === b.items.length &&
-    a.items.every((x, i) => x.itemName === b.items[i].itemName && x.unit === b.items[i].unit && x.quantity === b.items[i].quantity && x.unitPrice === b.items[i].unitPrice)
+    a.items.every((x, i) => x.itemName === b.items[i].itemName && x.unit === b.items[i].unit && x.quantity === b.items[i].quantity && x.unitPrice === b.items[i].unitPrice && (x.packageId ?? null) === (b.items[i].packageId ?? null))
   );
-}
-
-// ---------- Thanh toán đặt cọc ----------
-
-/**
- * Chế độ thanh toán cọc (biến PAYMENT_MODE): 'simulate' ghi nhận thanh toán thành công ngay; 'vnpay' (chưa tích hợp).
- * Chưa đặt biến: giả lập khi chạy dev; nếu NODE_ENV=production thì KHÔNG giả lập, phải đặt rõ PAYMENT_MODE=simulate.
- */
-export function paymentMode(): 'simulate' | 'vnpay' | 'off' {
-  const mode = process.env.PAYMENT_MODE?.trim().toLowerCase();
-  if (mode === 'simulate' || mode === 'vnpay') return mode;
-  return process.env.NODE_ENV === 'production' ? 'off' : 'simulate';
 }

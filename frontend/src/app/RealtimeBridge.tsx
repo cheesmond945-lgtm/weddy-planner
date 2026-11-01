@@ -1,7 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import { isMock } from '@/api/mock'
-import { notificationKeys } from '@/features/notifications/keys'
+import { hallKeys } from '@/features/halls/hooks'
 import { coupleOrderKeys } from '@/features/orders/hooks'
 import { vendorKeys } from '@/features/vendorOrders/keys'
 import { planningKeys } from '@/features/weddings/hooks'
@@ -21,7 +20,7 @@ export function RealtimeBridge() {
   const role = user?.role
 
   useEffect(() => {
-    if (!token || !uid || isMock('auth')) return
+    if (!token || !uid) return
     const invalidate = (queryKey: readonly unknown[]) => void qc.invalidateQueries({ queryKey })
 
     connectRealtime(token, {
@@ -35,6 +34,8 @@ export function RealtimeBridge() {
             // Đặt cọc, hủy đơn đổi kế hoạch và việc cần làm của khách
             invalidate(planningKeys.plan(uid))
             invalidate(planningKeys.timeline(uid))
+            // Cọc / hủy làm sảnh bận / trống (lịch của sảnh, số sảnh trống)
+            invalidate(['halls'])
           }
         } else if (role === 'VENDOR') {
           invalidate(vendorKeys.conversations(uid))
@@ -44,8 +45,24 @@ export function RealtimeBridge() {
             invalidate(vendorKeys.orders(uid, conversationId))
             invalidate(vendorKeys.order(uid, orderId))
             invalidate(vendorKeys.orderLists(uid))
+            invalidate(vendorKeys.calendar(uid))
             invalidate(vendorKeys.orderCounts(uid))
+            // Cọc / hủy / đổi ngày thực hiện sinh hoặc gỡ việc chi tiết của đơn
+            invalidate(vendorKeys.orderProgress(uid))
+            invalidate(vendorKeys.taskBoard(uid))
+            // Khách cọc / NCC hủy hoặc đổi ngày, đổi sảnh: lịch bận theo sảnh đổi
+            invalidate(hallKeys.vendorBusy(uid))
           }
+        }
+      },
+      // Việc của đơn đổi (khách tick / đổi hạn, NCC tick / bỏ tick): timeline của khách, lịch và tiến độ của NCC tải lại
+      task: () => {
+        if (role === 'COUPLE') invalidate(planningKeys.timeline(uid))
+        if (role === 'VENDOR') {
+          invalidate(vendorKeys.orderProgress(uid))
+          invalidate(['vendor', uid, 'order-tasks'])
+          invalidate(vendorKeys.calendar(uid))
+          invalidate(vendorKeys.taskBoard(uid))
         }
       },
       read: () => {
@@ -55,7 +72,24 @@ export function RealtimeBridge() {
           invalidate(vendorKeys.unread(uid))
         }
       },
-      notification: () => invalidate(notificationKeys.all(uid)),
+      notification: ({ type }) => {
+        const task = type.startsWith('Task')
+        if (role === 'COUPLE') {
+          invalidate(['couple', 'notifications'])
+          // NCC cập nhật tiến độ: việc trên timeline của khách đổi theo
+          if (task) invalidate(planningKeys.timeline(uid))
+        }
+        if (role === 'VENDOR') {
+          invalidate(['vendor', 'notifications'])
+          if (task || type === 'WeddingDateChanged') {
+            invalidate(vendorKeys.orderProgress(uid))
+            invalidate(['vendor', uid, 'order-tasks'])
+            invalidate(vendorKeys.calendar(uid))
+            invalidate(vendorKeys.taskBoard(uid))
+          }
+        }
+        if (role === 'ADMIN') invalidate(['admin', 'notifications'])
+      },
     })
     return disconnectRealtime
   }, [qc, token, uid, role])

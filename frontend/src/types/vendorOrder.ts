@@ -23,9 +23,12 @@ export interface OrderItem {
   quantity: number
   unitPrice: number
   amount: number
+  /** Gói dịch vụ của dòng (quy trình của gói sinh việc chi tiết khi cọc); null: không gắn gói */
+  packageId?: string | null
+  packageName?: string | null
 }
 
-/** Thanh toán đặt cọc qua VNPay (Payments), mỗi đơn một dòng, tạo lúc gửi đơn. */
+/** Thanh toán đặt cọc qua VietQR (Payments), mỗi đơn một dòng, tạo lúc gửi đơn. */
 export interface OrderPayment {
   status: 'Unpaid' | 'Paid'
   paidDate: string | null
@@ -83,11 +86,15 @@ export interface Order {
   vendorName?: string
   /** Lĩnh vực của NCC (trang Kế hoạch của khách hiện đơn dưới hạng mục này) */
   category?: CategoryRef
+  /** Sảnh (gói) của đơn, Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md); null với dịch vụ khác và đơn cũ */
+  package?: { id: string; name: string } | null
   status: OrderStatus
   customerName: string
   customerPhone: string
   /** Ngày diễn ra sự kiện "YYYY-MM-DD" */
   eventDate: string
+  /** Ngày cưới của khách "YYYY-MM-DD" (chỉ BE thật trả): ngày thực hiện không được sau ngày này */
+  weddingDate?: string | null
   items: OrderItem[]
   totalAmount: number
   /** Tỷ lệ cọc (%), lớn hơn 0 và nhỏ hơn 100 */
@@ -116,6 +123,8 @@ export interface OrderItemInput {
   unit: OrderUnit
   quantity: number
   unitPrice: number
+  /** Gói dịch vụ của dòng (phải là gói của NCC); bỏ trống thì không gắn gói */
+  packageId?: string | null
 }
 
 /** Nội dung đơn NCC nhập (body tạo, lưu nháp, gửi, sửa). Không có totalAmount, depositAmount. */
@@ -126,6 +135,8 @@ export interface OrderContent {
   note: string | null
   depositPercent: number
   items: OrderItemInput[]
+  /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tổ chức sự kiện gửi / sửa đơn; dịch vụ khác để null */
+  packageId: string | null
 }
 
 export interface OrderListQuery {
@@ -141,3 +152,67 @@ export interface OrderListQuery {
   page?: number
   pageSize?: number
 }
+
+/** Ai làm việc chi tiết của đơn: khách, NCC hoặc cả hai (chỉ để hiển thị: NCC đổi được trạng thái mọi việc của đơn mình). */
+export type TaskOwner = 'CUSTOMER' | 'VENDOR' | 'BOTH'
+
+/** Todo: NCC đang làm; Waiting: chờ khách; Done: xong. */
+export type TaskStatus = 'Todo' | 'Waiting' | 'Done'
+
+/** Một việc trong "Tiến độ đơn" (GET /vendors/me/orders/:id/tasks). */
+export interface OrderTask {
+  id: string
+  title: string
+  /** "YYYY-MM-DD" */
+  dueDate: string
+  isDone: boolean
+  completedDate: string | null
+  owner: TaskOwner
+  status: TaskStatus
+  /** NCC đổi được trạng thái việc này (luôn true với mọi việc của đơn mình) */
+  canTick: boolean
+  overdue: boolean
+  /** Việc lấy từ gói của NCC */
+  isPackageTask: boolean
+  /** Ngày dự kiến (PLANNED) hay đã chốt với khách (CONFIRMED) */
+  dateStatus: 'PLANNED' | 'CONFIRMED'
+  confirmedAt: string | null
+  /** Đã chốt trước ngày thực hiện nhưng ngày chốt nằm sau ngày thực hiện hiện tại: cần chốt lại với khách */
+  needsRecheck: boolean
+}
+
+/** Tóm tắt tiến độ một đơn. overdueVendor: việc của NCC (hoặc hai bên) chưa xong và quá hạn = "Trễ tiến độ". */
+export interface OrderProgress {
+  /** Tổng số việc của đơn và số đã xong (thanh tiến độ) */
+  total: number
+  done: number
+  /** Việc chưa xong gần hạn nhất của NCC (NCC làm hoặc hai bên); null khi NCC không còn việc nào */
+  next: { due: string; title: string } | null
+  open: number
+  overdueVendor: number
+  overdueCustomer: number
+  dueSoonVendor: number
+}
+
+export interface OrderTasks {
+  items: OrderTask[]
+  progress: OrderProgress
+  /** Ngày thực hiện của đơn "YYYY-MM-DD" (giới hạn trên của ô đổi ngày = ngày này + 120) */
+  eventDate?: string
+}
+
+/** Một việc trên Bảng việc (GET /vendors/me/orders/tasks): việc của đơn đang thực hiện kèm thông tin đơn để gom theo khách / đơn. */
+export interface BoardTask extends OrderTask {
+  orderId: string
+  orderCode: string
+  customerName: string
+  /** "YYYY-MM-DD" ngày thực hiện của đơn */
+  eventDate: string
+  /** Tên gói của NCC gắn với đơn (sảnh và gói của các dòng) */
+  packageNames: string[]
+}
+
+/** Một mục trên lịch làm việc của NCC (GET /vendors/me/orders/calendar). */
+export type CalendarItem =
+  | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: OrderStatus; isDone: boolean }
+  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isDone: boolean; status: TaskStatus; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean }

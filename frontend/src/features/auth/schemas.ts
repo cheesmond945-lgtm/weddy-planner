@@ -2,10 +2,11 @@ import { z } from 'zod'
 
 // Quy tắc và câu báo lỗi lấy theo prototype (doLogin, doRegister, saveProfile)
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PHONE_RE = /^0\d{9}$/
 export const MIN_PASSWORD = 6
 
 export const loginSchema = z.object({
-  identifier: z.string().trim().min(1, 'Vui lòng nhập email.'),
+  identifier: z.string().trim().regex(EMAIL_RE, 'Email chưa hợp lệ.'),
   password: z.string().min(MIN_PASSWORD, `Mật khẩu cần tối thiểu ${MIN_PASSWORD} ký tự.`),
 })
 
@@ -42,7 +43,8 @@ export const resetPasswordSchema = z
 
 export const profileSchema = z.object({
   name: z.string().trim().min(1, 'Họ và tên không được để trống.'),
-  email: z.string().trim().regex(EMAIL_RE, 'Email chưa hợp lệ.'),
+  username: z.string().trim().min(1, 'Nhập tên đăng nhập.').max(50, 'Tên đăng nhập tối đa 50 ký tự.'),
+  phone: z.union([z.literal(''), z.string().trim().regex(PHONE_RE, 'Số điện thoại cần 10 số, bắt đầu bằng 0.')]),
 })
 
 export type FieldErrors<T> = Partial<Record<keyof T, string>>

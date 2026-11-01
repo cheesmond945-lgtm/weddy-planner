@@ -6,7 +6,7 @@
 
 **Nhiều thành viên (29/10/2026):** đơn thuộc đám cưới, gắn với **owner** (`weddings.user_id`). Thành viên được xem tab Dịch vụ thì `GET /orders`, `GET /orders/:id` được; yêu cầu chỉnh sửa và `POST /payments` (đặt cọc) cần quyền **editor** trở lên. Viewer: 403 `WEDDING_READ_ONLY`; không được xem tab Dịch vụ: 403 `TAB_FORBIDDEN`. Thông báo đơn gửi cho owner thì editor được xem tab Dịch vụ cũng nhận. Xem [weddings.md](weddings.md) mục 5.
 
-**Hai giai đoạn (cập nhật 28/10/2026):** trước cọc (`Pending`, `NeedRevision`) khách có Thanh toán cọc (chỉ `Pending`) và Yêu cầu chỉnh sửa (chỉ `Pending`). Sau cọc (`Deposited`, còn trước `eventDate`) khách **vẫn gửi được Yêu cầu chỉnh sửa**, đơn giữ `Deposited` và **tiền cọc không đổi**; NCC áp dụng bằng `PATCH` hoặc từ chối. **Khách không có API hủy đơn** (muốn hủy thì nhắn NCC; quy tắc hoàn cọc khi hủy gần ngày chưa chốt). Hai đợt thanh toán: đợt 1 cọc (tối thiểu 10%) qua VNPay trong 24 giờ, đợt 2 phần còn lại trả tiền mặt trực tiếp cho NCC, ngoài hệ thống.
+**Hai giai đoạn (cập nhật 28/10/2026):** trước cọc (`Pending`, `NeedRevision`) khách có Thanh toán cọc (chỉ `Pending`) và Yêu cầu chỉnh sửa (chỉ `Pending`). Sau cọc (`Deposited`, còn trước `eventDate`) khách **vẫn gửi được Yêu cầu chỉnh sửa**, đơn giữ `Deposited` và **tiền cọc không đổi**; NCC áp dụng bằng `PATCH` hoặc từ chối. **Khách không có API hủy đơn** (muốn hủy thì nhắn NCC; quy tắc hoàn cọc khi hủy gần ngày chưa chốt). Hai đợt thanh toán: đợt 1 cọc (tối thiểu 10%) qua VietQR trong 24 giờ, đợt 2 phần còn lại trả tiền mặt trực tiếp cho NCC, ngoài hệ thống.
 
 ### GET /orders
 **Đơn của khách** (trang Kế hoạch của tôi `/plan`, hiện dưới từng hạng mục): mọi đơn đã gửi của khách, **không có bản nháp**, mới nhất trước (tối đa 200). Lọc tùy chọn `?status=` (một trong 6 trạng thái trừ `Draft`; sai thì 400). Mỗi `Order` có thêm `category: { id, slug, name }` (lĩnh vực của NCC) để FE nhóm theo hạng mục. Trước khi đọc, backend quét hết hạn / tự hoàn thành riêng đơn của khách.
@@ -50,13 +50,14 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 ## Quy tắc nghiệp vụ (tóm tắt)
 
 - **7 trạng thái:** `Draft` → `Pending` → (`NeedRevision` ↔ `Pending`) → `Deposited` → `Completed`; `Pending` quá hạn thành `Expired`; `Deposited` bị **NCC hủy** (trước `eventDate`) thành `Cancelled`.
-- **Chỉ một khoản trong hệ thống: tiền cọc qua VNPay** (`Payments`). Phần còn lại khách trả **tiền mặt trực tiếp cho NCC, ngoài hệ thống, không ghi nhận**. Không có nhiều đợt, không có "ghi nhận thanh toán", không có "đã thu / còn phải thu".
+- **Chỉ một khoản trong hệ thống: tiền cọc qua VietQR** (`Payments`). Phần còn lại khách trả **tiền mặt trực tiếp cho NCC, ngoài hệ thống, không ghi nhận**. Không có nhiều đợt, không có "ghi nhận thanh toán", không có "đã thu / còn phải thu".
 - **Hai giai đoạn.** Trước cọc: khách Thanh toán cọc, Yêu cầu chỉnh sửa; NCC Cập nhật đơn. Sau cọc (`Deposited`): khách **Yêu cầu chỉnh sửa** được (trước `eventDate`, `AfterDeposit` / `Requested`, đơn vẫn `Deposited`, tiền cọc giữ nguyên), không hủy; **NCC Chỉnh sửa** (áp dụng yêu cầu nếu có), **Từ chối yêu cầu**, hoặc **Hủy đơn**.
+- **Mỗi hạng mục tối đa MỘT đơn `Deposited` cùng lúc** (một đám cưới, tính theo hạng mục của NCC, không phân biệt NCC). Khách đặt cọc đơn thứ hai cùng hạng mục, hoặc NCC Gửi / Cập nhật / Tạo lại đơn khi hạng mục đã có đơn `Deposited` khác, đều bị chặn `409 CATEGORY_ALREADY_DEPOSITED`; muốn đổi NCC thì NCC cũ hủy đơn trước. Đơn `Completed` không giữ chỗ; lưu nháp không bị chặn. Kiểm tra cả trong transaction ghi nhận cọc (khóa theo đám cưới + hạng mục) để hai khoản cọc song song không cùng thành công.
 - **NCC hủy đơn:** chỉ khi `Deposited` và hôm nay (giờ VN) **nhỏ hơn** `eventDate` (xem `POST …/cancel`). Đơn `Pending` không cọc thì tự `Expired`, không hủy được.
 - Đơn `Expired` và `Cancelled` bị khóa. Muốn tiếp tục: NCC tạo **đơn mới** (mã mới) bằng cách chép hạng mục và ghi chú (FE gọi `POST /vendors/me/orders`, không có endpoint riêng).
 - **Backend tính tiền**, không tin số tiền từ giao diện:
   - `OrderItems.amount = quantity × unitPrice`; `totalAmount = SUM(amount)`.
-  - `depositAmount = totalAmount × depositPercent / 100`, **làm tròn gần nhất đến 100.000đ, TỐI THIỂU 100.000đ** (cọc 0đ thì khách không thanh toán được qua VNPay). Chờ nhóm xác nhận, xem mục "Chưa chốt" của CHOT; FE dùng đúng công thức này (`frontend/src/lib/deposit.ts`), backend làm giống hệt.
+  - `depositAmount = totalAmount × depositPercent / 100`, **làm tròn gần nhất đến 100.000đ, TỐI THIỂU 100.000đ** (cọc 0đ thì khách không thanh toán được qua VietQR). Chờ nhóm xác nhận, xem mục "Chưa chốt" của CHOT; FE dùng đúng công thức này (`frontend/src/lib/deposit.ts`), backend làm giống hệt.
   - **Tổng đơn quá nhỏ để đặt cọc:** nếu `depositAmount` (đã làm tròn, tối thiểu) **lớn hơn hoặc bằng** `totalAmount` thì không cho Gửi đơn (`400 VALIDATION_ERROR`, `details.deposit` = "Tổng đơn quá nhỏ để đặt cọc."). Lưu nháp vẫn được. Không kiểm khi Chỉnh sửa sau cọc (tiền cọc đã khóa).
   - `depositDueDate` = thời điểm gửi đơn + 1 ngày (24 giờ).
   - NCC chỉ nhập: hạng mục, `depositPercent`, `eventDate`, `note` (cùng tên và số điện thoại khách, điền sẵn từ tài khoản khách).
@@ -150,6 +151,8 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 
 Không có `totalAmount`, `depositAmount`, `amount`: backend tính.
 
+`OrderContent` có thêm `packageId` (sảnh, uuid hoặc `null`) cho **Trung tâm tổ chức sự kiện**; dịch vụ khác gửi lên cũng bị bỏ qua. `Order` trả `package: { id, name } | null`. Lịch bận theo sảnh: [../LICH_BAN_SANH.md](../LICH_BAN_SANH.md).
+
 ## Kiểm tra
 
 | Khi | Quy tắc |
@@ -158,6 +161,8 @@ Không có `totalAmount`, `depositAmount`, `amount`: backend tính.
 | Gửi đơn (`send`) | Đủ `customerName`, `customerPhone` (9 đến 15 ký tự gồm số, khoảng trắng, `+ ( ) . -`), `eventDate`, ít nhất một hạng mục (`itemName` không rỗng, `quantity` nguyên > 0, `unitPrice` ≥ 0), `totalAmount` > 0, `depositPercent` lớn hơn 0 và nhỏ hơn 100 |
 | Cập nhật đơn / Chỉnh sửa sau cọc | Như gửi đơn, và phải có thay đổi so với nội dung hiện tại |
 | **Ngày sự kiện** (Gửi đơn, Tạo lại đơn, Chỉnh sửa sau cọc) | `eventDate` phải **từ hôm nay trở đi** (giờ Việt Nam), nếu không trả **`422 EVENT_DATE_IN_PAST`** (`details.eventDate`). Cập nhật đơn hoặc Chỉnh sửa mà **giữ nguyên** `eventDate` đang có của đơn thì không kiểm (đơn đã qua ngày vẫn sửa được hạng mục để Hoàn tất). **Lưu nháp không chặn.** |
+| **Sảnh** (Trung tâm tổ chức sự kiện: Gửi đơn, Cập nhật đơn, Tạo lại đơn, Chỉnh sửa sau cọc) | Bắt buộc `packageId` là gói của chính NCC (`400 VALIDATION_ERROR`, `details.packageId`), gói đang đăng (giữ được sảnh đơn đang có dù đã ẩn). Sảnh **bận** ngày `eventDate` (đơn khác Đã cọc / Hoàn thành cùng sảnh, hoặc NCC đánh dấu bận) thì **`409 HALL_BUSY`**. Chỉnh sửa sau cọc mà giữ nguyên sảnh và ngày thì không kiểm lại. Lưu nháp chỉ kiểm sảnh thuộc NCC. |
+| **Ngày thực hiện so với ngày cưới** (Gửi đơn, Cập nhật đơn, Tạo lại đơn, Chỉnh sửa sau cọc) | `eventDate` **không được sau ngày cưới của khách** (`Weddings.WeddingDate`), nếu không **`422 EVENT_DATE_AFTER_WEDDING`** (`details.eventDate`, `details.weddingDate`). Gửi hoặc Cập nhật đơn khi ngày cưới của khách đã qua hoặc là hôm nay: **`409 WEDDING_DATE_PASSED`**. Chỉnh sửa sau cọc mà **giữ nguyên** `eventDate` đang có (đơn cũ lệch ngày) thì không kiểm; Cập nhật đơn `Pending` / `NeedRevision` **không** được miễn (khách chưa cọc, NCC phải sửa). Khách **đặt cọc** cũng bị kiểm lại (`409 EVENT_DATE_AFTER_WEDDING`) phòng khi khách đổi ngày cưới sau lúc đơn được gửi. **Lưu nháp không chặn.** DTO đơn và hội thoại NCC (`customer.weddingDate`) trả ngày cưới để form điền sẵn. |
 
 Lỗi kiểm tra trả `400 VALIDATION_ERROR` với `details` theo trường: `customerName`, `customerPhone`, `eventDate`, `depositPercent`, `items`, `items.<i>.itemName`, `items.<i>.quantity`, `items.<i>.unitPrice`.
 
@@ -248,6 +253,18 @@ Response 200: `{ "data": Order }`. Lỗi: 404, 409 `ORDER_NOT_COMPLETABLE` (khô
 
 Response 200: `{ "data": Order }` (đã có hóa đơn trong `invoices`). Lỗi: 404, 409 `INVOICE_NOT_AVAILABLE` (đơn chưa cọc, hết hạn hoặc đã hủy), 409 `INVOICE_EXISTS`.
 
+### GET /vendors/me/orders/:id/tasks, PATCH /vendors/me/orders/:id/tasks/:taskId, GET /vendors/me/orders/progress
+
+**Tiến độ đơn** (việc chi tiết của đơn trên timeline khách, dùng chung dữ liệu). `GET :id/tasks` trả `{ items, progress }`, mỗi việc có `owner` (`CUSTOMER` / `VENDOR` / `BOTH`), `canTick`, `overdue`. `PATCH :id/tasks/:taskId` body `{ isDone: boolean }`: chỉ việc của NCC hoặc hai bên (khác: `403 TIMELINE_ITEM_READONLY`), chỉ khi đơn `Deposited` (`409 ORDER_NOT_ACTIVE`); khách nhận thông báo `TaskUpdated` khi việc xong. `GET progress` trả `{ [orderId]: { total, done, next, open, overdueVendor, overdueCustomer, dueSoonVendor } }` (`next` = việc chưa xong gần hạn nhất của NCC `{ due, title }` hoặc `null`) cho nhãn "Trễ tiến độ" và thẻ "Theo đơn" của lịch. Quy tắc và nhắc hạn: [../TIMELINE.md](../TIMELINE.md) mục 8.
+
+### GET /vendors/me/orders/tasks
+
+**Bảng việc** (kanban ở Lịch làm việc): mọi việc chi tiết của các đơn `Deposited` của NCC trong một lần gọi. Trả `{ items }`, mỗi việc có các trường như `GET :id/tasks` (`id, title, dueDate, isDone, completedDate, owner, canTick, overdue`) cộng thông tin đơn `orderId, orderCode, customerName, eventDate`. Kéo thả trên bảng dùng `PATCH :id/tasks/:taskId`. Xem [../TIMELINE.md](../TIMELINE.md) mục 9.2.
+
+### GET /vendors/me/orders/calendar
+
+Lịch làm việc của NCC: `?from=YYYY-MM-DD&to=YYYY-MM-DD` (tối đa 100 ngày; thiếu, sai định dạng, `from` sau `to` hoặc quá 100 ngày là `400 VALIDATION_ERROR`). Trả `{ items }` sắp theo ngày: mốc `ORDER` (ngày thực hiện của đơn Chờ cọc / Chờ chỉnh sửa / Đã cọc / Hoàn thành) và `TASK` (việc chi tiết của đơn Đã cọc, có `owner`, `canTick`, `overdue`). Xem [../TIMELINE.md](../TIMELINE.md) mục 9.
+
 ## Mã lỗi riêng
 
 | HTTP | `code` | Khi nào |
@@ -259,8 +276,12 @@ Response 200: `{ "data": Order }` (đã có hóa đơn trong `invoices`). Lỗi:
 | 409 | `WEDDING_NOT_SET` | Khách chưa có thông tin đám cưới, chưa tạo được đơn |
 | 409 | `ORDER_NOT_DRAFT` | Lưu nháp đơn không còn là `Draft` |
 | 409 | `ORDER_NOT_SENDABLE` | Gửi đơn không ở `Draft`, `Pending`, `NeedRevision` |
+| 409 | `HALL_BUSY` | Trung tâm tổ chức sự kiện: sảnh của đơn đã bận ngày thực hiện, khi NCC Gửi / Cập nhật / Tạo lại / Chỉnh sửa (đổi sảnh hoặc ngày) hoặc khách đặt cọc (`POST /payments`). NCC thấy nguồn (mã đơn, lý do đã ghi); khách chỉ thấy sảnh không nhận ngày đó. Chưa đổi gì. Đã thu cọc qua VietQR mà sảnh vừa bận (hai khách cọc cùng lúc): không ghi nhận, trang quay về báo liên hệ hoàn tiền |
+| 409 | `CATEGORY_ALREADY_DEPOSITED` | Gửi / Cập nhật / Tạo lại đơn (có `send`) khi hạng mục của khách đã có đơn `Deposited` khác. Khách đặt cọc đơn thứ hai cùng hạng mục cũng trả mã này (`POST /payments`, xem payments.md). Chưa tạo / đổi gì |
 | 409 | `ORDER_NOT_EDITABLE` | Sửa sau cọc nhưng đơn không phải `Deposited` |
 | 422 | `EVENT_DATE_IN_PAST` | Gửi đơn, Tạo lại đơn hoặc Chỉnh sửa sau cọc với `eventDate` trước hôm nay (giờ VN) |
+| 422 | `EVENT_DATE_AFTER_WEDDING` | Gửi / Cập nhật / Tạo lại / Chỉnh sửa sau cọc với `eventDate` sau ngày cưới của khách. Khách đặt cọc đơn có `eventDate` sau ngày cưới (409, `POST /payments`) cũng trả mã này |
+| 409 | `WEDDING_DATE_PASSED` | Gửi hoặc Cập nhật đơn khi ngày cưới của khách đã qua hoặc là hôm nay: nhắn khách cập nhật ngày cưới |
 | 422 | `ORDER_NOT_CANCELLABLE` | Hủy đơn không phải `Deposited`, hoặc đã tới `eventDate` |
 | 409 | `ORDER_NOT_COMPLETABLE`, `ORDER_EVENT_NOT_PASSED` | Hoàn thành sai trạng thái, hoặc chưa qua `eventDate` |
 | 409 | `INVOICE_NOT_AVAILABLE`, `INVOICE_EXISTS` | Xuất hóa đơn cuối sai trạng thái, hoặc đã xuất |
