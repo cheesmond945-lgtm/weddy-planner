@@ -28,7 +28,8 @@ const row = (label: string, value: ReactNode) => (
  * Một đơn trên trang Kế hoạch của tôi (dưới hạng mục của đơn): cùng nội dung với thẻ đơn trong chat (docs/THE_DON_PHIA_KHACH.md), gọn hơn,
  * kèm nút mở cuộc trò chuyện với NCC. Đợt 1 (cọc) thanh toán qua VNPay, đợt 2 (còn lại) trả tiền mặt cho NCC.
  */
-export function MyOrderCard({ order: o, onRevise }: { order: Order; onRevise: (o: Order) => void }) {
+/** `readOnly` (viewer): chỉ xem đơn, không thanh toán, không yêu cầu sửa, không nhắn NCC. */
+export function MyOrderCard({ order: o, onRevise, readOnly = false }: { order: Order; onRevise: (o: Order) => void; readOnly?: boolean }) {
   useNow()
   const navigate = useNavigate()
   const [detail, setDetail] = useState(false)
@@ -70,12 +71,12 @@ export function MyOrderCard({ order: o, onRevise }: { order: Order; onRevise: (o
       {hint && <div className={cn('mt-2.5 rounded-sm px-2.5 py-2 text-[13px] whitespace-pre-wrap', hintTone(o))}>{hint}</div>}
 
       <div className="mt-auto flex flex-wrap gap-2 pt-3">
-        {o.status === 'Pending' && (
+        {o.status === 'Pending' && !readOnly && (
           <Button variant="success" size="sm" disabled={overdue} onClick={() => navigate(paths.deal(o.id))}>
             {overdue ? 'Đã hết hạn đặt cọc' : 'Thanh toán cọc'}
           </Button>
         )}
-        {canRequestRevision(o) && (
+        {canRequestRevision(o) && !readOnly && (
           <Button variant="outline" size="sm" onClick={() => onRevise(o)}>
             Yêu cầu chỉnh sửa
           </Button>
@@ -88,7 +89,7 @@ export function MyOrderCard({ order: o, onRevise }: { order: Order; onRevise: (o
             Xem hóa đơn
           </Button>
         )}
-        {o.conversationId && (
+        {o.conversationId && !readOnly && (
           <Button variant="ghost" size="sm" onClick={() => navigate(`${paths.chat}?c=${encodeURIComponent(o.conversationId)}`)}>
             <MessageCircle />
             Nhắn NCC

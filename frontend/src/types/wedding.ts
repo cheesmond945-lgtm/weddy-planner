@@ -17,12 +17,55 @@ export interface Wedding {
   guestCount: number | null
   /** Tổng ngân sách, đồng */
   budget: number
-  styles: string[]
+  /** Mức chi tiêu (bỏ phong cách 30/10/2026) */
+  spendingTier: SpendingTier
+  /** Số bàn khách tự nhập; null là tự tính */
+  tableCountOverride: number | null
+  /** Phiên bản dữ liệu (weddings.updated_date) */
+  version?: string
   /** Danh mục dịch vụ muốn sử dụng (slug) */
   categorySlugs: string[]
+  /** Quyền của người đang xem trên đám cưới này (chế độ dữ liệu giả: không có, coi như owner) */
+  access?: WeddingAccess | null
 }
 
-export type WeddingInput = Omit<Wedding, 'id' | 'location'>
+export type WeddingInput = Omit<Wedding, 'id' | 'location' | 'access' | 'tableCountOverride' | 'version'> & { version?: string }
+
+export interface WeddingPatch {
+  budget?: number
+  guestCount?: number
+  spendingTier?: SpendingTier
+  /** null: về số bàn tự tính */
+  tableCountOverride?: number | null
+  version: string
+}
+
+// ---- Thành viên và quyền (GĐ 2) ----
+
+/** Subtab của Kế hoạch */
+export type PlanTab = 'overview' | 'timeline' | 'services' | 'budget' | 'guests'
+export const PLAN_TABS: PlanTab[] = ['overview', 'timeline', 'services', 'budget', 'guests']
+
+export type MemberRole = 'OWNER' | 'EDITOR' | 'VIEWER'
+
+export interface WeddingAccess {
+  role: MemberRole
+  /** Subtab được xem, ít nhất 1 */
+  tabs: PlanTab[]
+}
+
+export interface WeddingMember {
+  userId: string
+  fullName: string
+  email: string
+  /** Tên owner đặt khi mời, ví dụ "Mẹ cô dâu" */
+  displayName: string | null
+  role: MemberRole
+  relation: 'BRIDE' | 'GROOM' | 'RELATIVE' | null
+  tabs: PlanTab[]
+  joinedDate: string
+  isMe: boolean
+}
 
 // ---- Timeline (4.2, 4.4) ----
 
@@ -54,6 +97,27 @@ export interface TimelineItem {
   planStatus: PlanItemStatus | null
   /** Với CATEGORY_DEADLINE: id dịch vụ trong kế hoạch (để mở tin nhắn) */
   serviceId: string | null
+  /** Người phụ trách; null là chưa giao */
+  assignee: TaskAssignee | null
+  /** Ghi chú (tối đa 200 ký tự), kèm người viết */
+  note: { text: string; by: PersonRef | null; date: string | null } | null
+  /** Người đánh dấu xong ("Xong bởi ...") */
+  completedBy: PersonRef | null
+}
+
+export interface PersonRef {
+  userId: string
+  name: string
+}
+
+/** BRIDE, GROOM, BOTH; MEMBER là một người thân (userId) */
+export type AssigneeKind = 'BRIDE' | 'GROOM' | 'BOTH' | 'MEMBER'
+
+export interface TaskAssignee {
+  kind: AssigneeKind
+  userId: string | null
+  /** Tên thành viên khi kind = MEMBER */
+  name: string | null
 }
 
 export interface Timeline {
@@ -64,6 +128,193 @@ export interface TimelineItemPatch {
   title?: string
   dueDate?: string
   isDone?: boolean
+  /** null: bỏ giao */
+  assignee?: AssigneeKind | null
+  assigneeUserId?: string | null
+  /** Chuỗi rỗng hoặc null: xóa ghi chú */
+  note?: string | null
+}
+
+export interface NewTask {
+  title: string
+  dueDate: string
+  assignee?: AssigneeKind | null
+  assigneeUserId?: string | null
+  note?: string
+}
+
+// ---- Tổng quan (6) ----
+
+export interface Overview {
+  /** null khi không được xem tab Timeline */
+  tasks: {
+    done: number
+    total: number
+    overdue: number
+    upcoming: { id: string; title: string; dueDate: string; daysLeft: number; category: CategoryRef | null; assignee: TaskAssignee | null }[]
+    /** slug null là "Việc chung" */
+    byCategory: { slug: string | null; name: string; done: number; total: number }[]
+    assignees: { kind: AssigneeKind; userId: string | null; name: string | null; done: number; total: number }[]
+  } | null
+  /** null khi không được xem tab Ngân sách */
+  budget: {
+    total: number
+    planned: number
+    deposited: number
+    remaining: number
+    /** Chi phí theo hạng mục; slug "other" là Chi phí khác */
+    slices: { slug: string; name: string; amount: number; budget: number; isOver: boolean }[]
+  } | null
+  /** null khi không được xem tab Khách mời */
+  guests: GuestStats | null
+}
+
+// ---- Ngân sách (7) ----
+
+/** Mức chi tiêu: AUTO chọn mức cao nhất vừa ngân sách */
+export type SpendingTier = 'AUTO' | 'SAVING' | 'BALANCED' | 'PREMIUM'
+export type ConcreteTier = Exclude<SpendingTier, 'AUTO'>
+
+/** Gói đang tính của một nhà cung cấp: ORDER theo đơn (khóa), SELECTED khách chọn, PLANNED gói dự kiến */
+export interface PlanPackageRef {
+  id: string | null
+  name: string | null
+  source: 'ORDER' | 'SELECTED' | 'PLANNED'
+  /** Gói khách chọn đã ngừng bán, đang tính theo gói dự kiến */
+  unavailable: boolean
+}
+
+export interface BudgetVendor {
+  id: string
+  name: string
+  status: PlanItemStatus | null
+  /** Chi phí theo gói (có đơn thì tổng đơn) */
+  cost: number
+  hasOrder: boolean
+  package: PlanPackageRef & { unit: 'TABLE' | 'PACKAGE' | null }
+}
+
+export interface BudgetCategory {
+  categoryId: string
+  slug: string
+  name: string
+  /** Ngân sách hiển thị: số sửa tay nếu có, ngược lại số gợi ý */
+  budget: number
+  /** Số gợi ý theo mức chi đang áp dụng */
+  suggested: number
+  /** Khách đã sửa tay ("đã sửa") */
+  manual: boolean
+  /** Lý do dưới số, ví dụ "Theo giá gói mức Cân đối" */
+  reason: string
+  source: 'PACKAGES' | 'FALLBACK'
+  packageCount: number
+  vendors: BudgetVendor[]
+  /** Tổng chi phí theo gói của hạng mục; null khi chưa có nhà cung cấp */
+  cost: number | null
+  /** budget - cost: dương là còn, âm là vượt; null khi chưa có nhà cung cấp */
+  diff: number | null
+}
+
+export interface ExtraCost {
+  id: string
+  name: string
+  amount: number
+  createdDate: string
+}
+
+export interface BudgetWarning {
+  code: 'BELOW_SAVING' | 'TIER_OVER_BUDGET' | 'ALLOCATED_OVER_BUDGET' | 'PACKAGE_UNAVAILABLE'
+  message: string
+  amount?: number
+  vendorId?: string
+}
+
+export interface Budget {
+  /** Phiên bản dữ liệu, gửi kèm mỗi lần ghi (ghi đồng thời thì nhận 409 STALE_DATA) */
+  version: string
+  tier: SpendingTier
+  effectiveTier: ConcreteTier
+  /** "Tự động, đang áp dụng mức Cân đối" */
+  tierLabel: string
+  tierTotals: Record<ConcreteTier, number>
+  guestCount: number
+  tables: { count: number; auto: number; override: number | null }
+  categories: BudgetCategory[]
+  totals: {
+    total: number
+    extraCosts: number
+    /** Ngân sách đã chia: tổng ngân sách hiển thị của các hạng mục */
+    allocated: number
+    /** Tổng − chi phí khác − ngân sách đã chia: dương là còn dư, âm là vượt */
+    unallocated: number
+    /** Chi phí theo gói đã chọn */
+    packagesCost: number
+    /** Tổng − chi phí theo gói − chi phí khác: dương là còn lại, âm là vượt */
+    remaining: number
+  }
+  extraCosts: ExtraCost[]
+  warnings: BudgetWarning[]
+}
+
+// ---- Khách mời (8) ----
+
+export type GuestSide = 'BRIDE' | 'GROOM'
+export type GuestRsvp = 'PENDING' | 'ATTENDING' | 'DECLINED'
+export const GUEST_GROUPS = ['Gia đình', 'Họ hàng', 'Bạn bè', 'Đồng nghiệp', 'Khác']
+
+export interface Guest {
+  id: string
+  fullName: string
+  side: GuestSide
+  group: string
+  partySize: number
+  isInvited: boolean
+  rsvp: GuestRsvp
+  createdDate: string
+}
+
+export type GuestInput = Omit<Guest, 'id' | 'createdDate'>
+
+/** Thống kê theo số người */
+export interface GuestStats {
+  total: number
+  expected: number
+  invited: number
+  attending: number
+  declined: number
+  /** Đã mời, chưa phản hồi */
+  pending: number
+  notInvited: number
+  bride: number
+  groom: number
+  rows: number
+}
+
+export interface GuestList {
+  items: Guest[]
+  stats: GuestStats
+}
+
+// ---- Nhập và xuất (9) ----
+
+export type ImportType = 'guests' | 'tasks' | 'expenses'
+
+export interface ImportRequest {
+  rows: Record<string, string>[]
+  /** Chi phí khác: phiên bản ngân sách đã đọc (bắt buộc khi ghi) */
+  version?: string
+  mode?: 'APPEND' | 'REPLACE'
+  dryRun?: boolean
+  dateOrder?: 'DMY' | 'MDY'
+}
+
+export interface ImportReport {
+  total: number
+  valid: number
+  invalid: number
+  created: number
+  /** Chỉ các dòng có lỗi hoặc cảnh báo; row bắt đầu từ 1 */
+  issues: { row: number; errors: string[]; warnings: string[] }[]
 }
 
 // ---- Kế hoạch (5.1) ----
@@ -76,17 +327,44 @@ export interface PlanItem {
   status: PlanItemStatus
   /** Tên gói đang tính (gói đầu tiên, hoặc gói trong đơn NCC gửi) */
   packageName: string
-  /** Giá đang tính, đồng */
+  /** Chi phí đang tính (tổng đơn, gói đã chọn hoặc gói dự kiến), đồng */
   price: number
+  /** Gói đang tính; null khi không tính được */
+  package: PlanPackageRef | null
+  /** Các gói đổi được, chi phí theo số bàn hiện tại */
+  packages: PlanPackageOption[]
+  /** Số bàn đang dùng để tính */
+  tables: number
   /** Đơn dịch vụ mới nhất NCC gửi (nếu có) */
   order: Order | null
 }
 
+export interface PlanPackageOption {
+  id: string
+  name: string
+  price: number
+  unit: 'TABLE' | 'PACKAGE'
+  cost: number
+  capacity: number | null
+  minTables: number | null
+  /** Đủ chỗ cho số khách dự kiến */
+  fits: boolean
+}
+
 // ---- Gợi ý AI (4.3) ----
+
+export interface AiSuggestedPackage {
+  id: string
+  name: string
+  cost: number
+  /** Phép tính, ví dụ "Sảnh A: 25 bàn × 5.000.000đ = 125.000.000đ" */
+  calculation: string
+}
 
 export interface AiSuggestion {
   service: ServiceSummary
   reasons: string[]
+  package?: AiSuggestedPackage
 }
 
 export interface AiSuggestionResult {
@@ -94,11 +372,23 @@ export interface AiSuggestionResult {
   /** Ngân sách dùng để lọc */
   budget: number
   budgetSource: 'ALLOCATED' | 'ESTIMATED'
+  /** Lý do của ngân sách hạng mục, ví dụ "Theo giá gói mức Cân đối" */
+  budgetReason?: string
   location: string
-  styles: string[]
   /** Với nhà hàng: số khách cần chứa */
   guestCount: number | null
+  /** Với nhà hàng: số bàn dùng để tính */
+  tables?: number | null
   suggestions: AiSuggestion[]
   /** Khi không có gợi ý: lựa chọn rẻ nhất hiện có */
   cheapest: ServiceSummary | null
+  cheapestPackage?: AiSuggestedPackage | null
+  /** Không gợi ý nào: tăng ngân sách hạng mục lên đúng số này thì có ít nhất một lựa chọn */
+  raiseBudgetTo?: number | null
+  /** Không nhà hàng nào đủ chỗ */
+  noVenueFits?: boolean
+  categoryId?: string
+  /** Hạng mục nằm trong dịch vụ muốn dùng (mới sửa được ngân sách) */
+  isChosenCategory?: boolean
+  version?: string
 }

@@ -3,14 +3,21 @@ import { useSyncExternalStore } from 'react'
 /*
  * Thông báo ngắn ở giữa đáy màn hình, theo .toast trong prototype.
  * Gọi toast('Đã lưu') ở bất cứ đâu; <Toaster /> đặt một lần trong App.
+ * Có nút kèm theo (ví dụ "Hoàn tác"): toast('Đã giao việc', { action: { label: 'Hoàn tác', onClick } }).
  */
-let current: { id: number; message: string } | null = null
+interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
+let current: { id: number; message: string; action?: ToastAction } | null = null
 let timer: ReturnType<typeof setTimeout> | undefined
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((l) => l())
 
-export function toast(message: string, duration = 2600) {
-  current = { id: Date.now(), message }
+export function toast(message: string, options: number | { duration?: number; action?: ToastAction } = {}) {
+  const { duration = 2600, action } = typeof options === 'number' ? { duration: options } : { duration: options.action ? 6000 : undefined, ...options }
+  current = { id: Date.now(), message, action }
   emit()
   clearTimeout(timer)
   timer = setTimeout(() => {
@@ -31,9 +38,22 @@ export function Toaster() {
       {item && (
         <div
           key={item.id}
-          className="max-w-full rounded-md bg-ink px-[18px] py-2.5 text-sm text-bg animate-in fade-in-0 slide-in-from-bottom-2"
+          className="flex max-w-full items-center gap-3.5 rounded-md bg-ink px-[18px] py-2.5 text-sm text-bg animate-in fade-in-0 slide-in-from-bottom-2"
         >
           {item.message}
+          {item.action && (
+            <button
+              type="button"
+              className="pointer-events-auto font-semibold text-primary underline underline-offset-[3px]"
+              onClick={() => {
+                item.action!.onClick()
+                current = null
+                emit()
+              }}
+            >
+              {item.action.label}
+            </button>
+          )}
         </div>
       )}
     </div>

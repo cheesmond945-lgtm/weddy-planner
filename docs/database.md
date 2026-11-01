@@ -2871,3 +2871,133 @@ Dữ liệu mẫu ví dụ minh họa cho mẫu timeline (chưa phải danh sác
 5.  Xác nhận RLS đã bật trên mọi bảng và khóa anon không đọc được dữ liệu.
 
 6.  Truy vấn mẫu: khoảng giá nhà cung cấp (MIN/MAX Price của gói Approved); đơn Pending quá hạn; đơn Deposited đủ 7 ngày sau EventDate; bảng kê Unpaid quá hạn.
+
+
+---
+
+### 9. Chưa chốt (cần nhóm quyết định, AI không tự quyết)
+
+- Kiểu của Id (số tự tăng hay UUID) và kiểu dữ liệu từng cột.
+- Tên cột khóa ngoại cụ thể (suy ra từ mục 3).
+- Đơn vị "dịch vụ" trên giao diện chính là **ServicePackages** (yêu thích, thêm vào kế hoạch và đặt hàng đều gắn với gói), còn nhà cung cấp là **VendorProfiles**. Prototype hiện coi một nhà cung cấp là một dịch vụ, nên khi làm FE cần điều chỉnh theo mô hình này.
+- Trạng thái trong kế hoạch ở prototype có 4 mức (Dự kiến, Đang trao đổi, Chờ thanh toán cọc, Đã chốt), còn DB chỉ có PlanItems.Status gồm Considering, Booked. Gợi ý đối chiếu (cần nhóm xác nhận): "Đang trao đổi" suy ra từ việc đã có Conversation, "Chờ thanh toán cọc" ứng với Orders.Status = Pending, "Đã chốt" ứng với Orders.Status = Deposited và PlanItems.Status = Booked. Trạng thái "Đang chỉnh sửa" của đơn ứng với Orders.Status = NeedRevision.
+- TimelineTasks.Budget: có dùng cho AI gợi ý ngân sách theo từng task hay không.
+- Hoa hồng: cách tính Commissions.Rate lấy từ ServiceCategories.CommissionRate, hạn nộp bảng kê CommissionStatements.DueDate là ngày 25 hằng tháng.
+
+### 10. Bảng bổ sung sau tài liệu gốc
+
+Các bảng thêm khi làm tính năng mới, chưa có trong file Word của nhóm. Mỗi bảng ghi file SQL tạo ra nó; lịch sử chạy SQL xem [LICH_SU_THAY_DOI_DB.md](LICH_SU_THAY_DOI_DB.md).
+
+**WeddingMembers (Người cùng lập kế hoạch)**: `backend/prisma/sql/2026-10-29-01-wedding-members.sql`
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| Id | Mã thành viên |
+| WeddingId | Đám cưới (FK Weddings) |
+| UserId | Tài khoản (FK Users), **duy nhất**: mỗi tài khoản thuộc tối đa một đám cưới |
+| Role | `Owner` (toàn quyền, mỗi đám cưới đúng một), `Editor` (sửa timeline, ngân sách, khách, kế hoạch, chat, đặt cọc; không quản lý thành viên và chia sẻ), `Viewer` (chỉ xem, không xem chat) |
+| Relation | Quan hệ khi được mời: `Bride`, `Groom`, `Relative`; owner để trống |
+| DisplayName | Tên do owner đặt khi mời, tối đa 40 ký tự |
+| Tabs | Subtab của Kế hoạch được xem (`overview`, `timeline`, `services`, `budget`, `guests`), ít nhất 1; NULL là tất cả (owner luôn NULL) |
+| JoinedDate | Ngày tham gia |
+
+Quan hệ: Weddings 1 - n WeddingMembers; Users 1 - 0..1 WeddingMembers. `Weddings.UserId` giữ nguyên và luôn là owner; hội thoại (`Conversations.CoupleId`) và đơn hàng phía khách gắn với owner.
+
+**Cột thêm vào TimelineTasks**: `backend/prisma/sql/2026-10-29-02-timeline-assign.sql`
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| Assignee | Người phụ trách: `Bride`, `Groom`, `Both`, `Member`; NULL là chưa giao |
+| AssigneeUserId | Thành viên được giao khi Assignee = `Member` (FK Users); bắt buộc khi `Member`, NULL với giá trị khác |
+| Note | Ghi chú, tối đa 200 ký tự |
+| NoteBy, NoteDate | Người viết (FK Users) và lúc sửa ghi chú gần nhất |
+| CompletedBy | Người đánh dấu xong (FK Users) |
+
+**Cột thêm vào Weddings**: `backend/prisma/manual/2026-10-30-01-budget-tiers.sql`
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| SpendingTier | Mức chi tiêu: `AUTO` (mặc định), `SAVING`, `BALANCED`, `PREMIUM` (CHECK) |
+| TableCountOverride | Số bàn khách tự nhập (≥ 1). NULL: tự tính ⌈GuestCount / 10⌉ |
+| Style | **Không dùng nữa** (bỏ phong cách 30/10/2026), giữ để không mất dữ liệu cũ |
+
+**Cột thêm vào ServicePackages**: cùng file SQL
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| Unit | Đơn vị tính giá: `mâm` (giá một mâm, chi phí = giá × số mâm; giao diện gọi là "bàn") hoặc `gói` (trọn gói, mặc định). Thay cho việc đọc "/mâm" trong mô tả. Dữ liệu cũ chuyển bằng câu UPDATE trong file SQL |
+| MinTables | (đã có) Số mâm tối thiểu phải đặt, thêm CHECK ≥ 1 |
+
+**Cột thêm vào PlanVendors**: cùng file SQL
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| PackageId | Gói khách chọn (FK ServicePackages, xóa gói thì về NULL). NULL: dùng gói dự kiến theo ngân sách hạng mục |
+
+**WeddingCategoryBudgets (Ngân sách hạng mục sửa tay)**: cùng file SQL. Chỉ lưu ô khách sửa tay; ô chưa sửa không lưu, backend tính lúc đọc.
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| WeddingId, CategoryId | Khóa chính ghép (FK Weddings, FK ServiceCategories) |
+| ManualAmount | Ngân sách khách nhập (≥ 0) |
+| UpdatedDate | Lần sửa gần nhất |
+
+**WeddingExtraCosts (Chi phí khác ngoài WebPlan)**: cùng file SQL
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| Id | Mã khoản chi |
+| WeddingId | Đám cưới (FK Weddings) |
+| Name | Tên khoản chi, tối đa 100 ký tự |
+| Amount | Số tiền, > 0 |
+| CreatedDate | Ngày thêm |
+
+Quan hệ: Weddings 1 - n WeddingCategoryBudgets; ServiceCategories 1 - n WeddingCategoryBudgets; Weddings 1 - n WeddingExtraCosts; ServicePackages 1 - n PlanVendors (qua PackageId).
+
+Ghi đồng thời: mọi thao tác ghi ngân sách đổi `Weddings.UpdatedDate` và chỉ ghi khi bản đang có đúng là bản người gọi đã đọc (xem docs/api/weddings.md mục 7).
+
+**WeddingGuests (Khách mời)**: `backend/prisma/sql/2026-10-29-04-guests.sql`
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| Id | Mã khách |
+| WeddingId | Đám cưới (FK Weddings) |
+| FullName | Tên khách, tối đa 100 ký tự. Trùng tên (bỏ dấu) + bên kiểm tra ở backend |
+| Side | `Bride` (nhà gái), `Groom` (nhà trai) |
+| GroupName | Nhóm: Gia đình, Họ hàng, Bạn bè, Đồng nghiệp, Khác hoặc tự nhập (tối đa 30 ký tự) |
+| PartySize | Số người tính cả khách, 1–50 |
+| IsInvited | Đã mời |
+| RsvpStatus | `Pending`, `Attending`, `Declined`; chưa mời thì luôn `Pending` (ràng buộc CHECK) |
+| CreatedDate, UpdatedDate | Ngày tạo, ngày sửa |
+
+Quan hệ: Weddings 1 - n WeddingGuests.
+
+**WeddingInvites (Link mời cùng lập kế hoạch)**: `backend/prisma/manual/2026-10-30-02-invites-share.sql`
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| Id | Mã lời mời |
+| WeddingId | Đám cưới (FK Weddings) |
+| TokenHash | SHA-256 (hex) của mã trong link, duy nhất. Mã không lưu trong DB |
+| Role | Quyền khi nhận: `Editor`, `Viewer` |
+| Relation | `Bride`, `Groom`, `Relative` |
+| DisplayName | Tên hiển thị owner đặt, tối đa 40 ký tự |
+| Tabs | Subtab được xem, ít nhất 1 |
+| CreatedBy | Owner tạo link (FK Users) |
+| ExpiresDate | Hết hạn (14 ngày sau khi tạo) |
+| UsedBy, UsedDate | Người nhận (FK Users) và lúc nhận; cùng có hoặc cùng trống |
+| RevokedDate | Lúc thu hồi |
+| CreatedDate | Ngày tạo |
+
+**WeddingShareLinks (Link xem công khai)**: cùng file SQL. Mỗi đám cưới tối đa một link.
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| Id | Mã link |
+| WeddingId | Đám cưới (FK Weddings), duy nhất |
+| TokenHash | SHA-256 (hex) của mã trong link, duy nhất |
+| IsEnabled | Đang bật |
+| Tabs | Subtab người xem công khai được xem, ít nhất 1 |
+| CreatedDate, UpdatedDate | Ngày tạo, ngày sửa |
+
+Quan hệ: Weddings 1 - n WeddingInvites; Weddings 1 - 0..1 WeddingShareLinks; Users 1 - n WeddingInvites (người tạo, người nhận).

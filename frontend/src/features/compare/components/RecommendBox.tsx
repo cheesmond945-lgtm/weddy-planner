@@ -41,7 +41,7 @@ export function RecommendBox({ recommendation, recommendedName, hasWedding }: Re
               {!hasWedding && (
                 <>
                   {' '}
-                  <Link to={paths.timeline} className="font-medium text-gold underline underline-offset-[3px]">
+                  <Link to={paths.plan} className="font-medium text-gold underline underline-offset-[3px]">
                     Thiết lập thông tin đám cưới để đề xuất sát hơn
                   </Link>
                 </>

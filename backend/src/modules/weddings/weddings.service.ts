@@ -2,7 +2,13 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService, categoryRank, categorySlug } from '../catalog/services.service';
 import { ORDER_INCLUDE, toOrderDto, ymd } from '../orders/order-mapping';
+import { WeddingMembersService } from '../wedding-members/wedding-members.service';
+import { SPENDING_TIERS, type SpendingTier } from './budget.config';
+import { BudgetCalcService } from './budget-calc.service';
+import { fitsGuests, packageCost } from './budget-engine';
 import { onWeddingCategories } from './timeline-hooks';
+import { bumpVersion, versionOf } from './wedding-version';
+import { dbFeatures, requireDbFeature } from '../../prisma/db-features';
 
 const fail = (code: string, message: string, status: number, details?: unknown): never => {
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
@@ -14,14 +20,26 @@ export interface WeddingInputBody {
   groomName?: string;
   brideName?: string;
   date?: string;
-  location?: string;
   guestCount?: number | null;
   budget?: number;
-  styles?: string[];
+  /** Mức chi tiêu, không bắt buộc (mặc định AUTO khi tạo, giữ nguyên khi sửa) */
+  spendingTier?: string;
   categorySlugs?: string[];
+  /** Phiên bản đã đọc (GET trả về); có gửi thì kiểm tra ghi đồng thời */
+  version?: string;
 }
 
-/** NCC chỉ có ở Hà Nội nên form không hỏi khu vực; vẫn lưu vào city để gợi ý AI lọc theo khu vực. */
+/** PATCH /weddings/me: các giá trị ảnh hưởng ngân sách, đổi nhanh ở tab Ngân sách. */
+export interface WeddingPatchBody {
+  budget?: unknown;
+  guestCount?: unknown;
+  spendingTier?: unknown;
+  /** null: về số bàn tự tính */
+  tableCountOverride?: unknown;
+  version?: unknown;
+}
+
+/** NCC chỉ có ở Hà Nội nên form không hỏi khu vực; backend luôn lưu city là Hà Nội để gợi ý AI lọc theo khu vực. */
 const DEFAULT_CITY = 'Hà Nội';
 /** Tên cô dâu do bản cũ tự điền khi tạo đám cưới (lúc form chưa hỏi tên); trả về rỗng để form bắt nhập lại. */
 const NAME_PLACEHOLDER = '(chưa cập nhật)';
@@ -31,9 +49,16 @@ const todayVN = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0,
 /** Đơn còn hiệu lực trong kế hoạch (bỏ nháp, đã hủy, hết hạn). */
 const ACTIVE_ORDER = ['Pending', 'NeedRevision', 'Deposited', 'Completed'];
 
+const isTier = (v: unknown): v is SpendingTier => typeof v === 'string' && (SPENDING_TIERS as string[]).includes(v);
+
 @Injectable()
 export class WeddingsService {
-  constructor(private readonly prisma: PrismaService, private readonly services: ServicesService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly services: ServicesService,
+    private readonly members: WeddingMembersService,
+    private readonly calc: BudgetCalcService,
+  ) {}
 
   // ---------- Thông tin đám cưới ----------
 
@@ -45,8 +70,15 @@ export class WeddingsService {
     };
   }
 
+  /** Tên hạng mục theo id. */
+  async categoryRows() {
+    return new Map((await this.prisma.service_categories.findMany()).map((c) => [c.id, c.name]));
+  }
+
+  /** Đám cưới người này đang tham gia (owner, editor hoặc viewer), không chỉ đám cưới do họ tạo. */
   async findWedding(userId: string) {
-    return this.prisma.weddings.findUnique({ where: { user_id: userId }, include: { wedding_categories: true } });
+    const access = await this.members.resolve(userId);
+    return access ? this.prisma.weddings.findUnique({ where: { id: access.weddingId }, include: { wedding_categories: true } }) : null;
   }
 
   async requireWedding(userId: string) {
@@ -65,8 +97,10 @@ export class WeddingsService {
       location: w.city,
       guestCount: w.guest_count,
       budget: Number(w.budget),
-      styles: w.style ? w.style.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      spendingTier: (w.spending_tier ?? 'AUTO') as SpendingTier,
+      tableCountOverride: w.table_count_override ?? null,
       categorySlugs: w.wedding_categories.map((c) => slugById.get(c.category_id)).filter((s): s is string => !!s).sort((a, b) => categoryRank(a) - categoryRank(b)),
+      version: versionOf(w),
     };
   }
 
@@ -77,56 +111,106 @@ export class WeddingsService {
 
   async saveMine(userId: string, body: WeddingInputBody) {
     const errors: Record<string, string> = {};
-    // Tên cô dâu, chú rể không bắt buộc; bỏ trống thì lưu chuỗi rỗng (cột NOT NULL)
     const groomName = typeof body.groomName === 'string' ? body.groomName.trim() : '';
-    if (groomName.length > 100) errors.groomName = 'Tối đa 100 ký tự.';
+    if (!groomName) errors.groomName = 'Vui lòng nhập tên chú rể.';
+    else if (groomName.length > 100) errors.groomName = 'Tối đa 100 ký tự.';
     const brideName = typeof body.brideName === 'string' ? body.brideName.trim() : '';
-    if (brideName.length > 100) errors.brideName = 'Tối đa 100 ký tự.';
+    if (!brideName) errors.brideName = 'Vui lòng nhập tên cô dâu.';
+    else if (brideName.length > 100) errors.brideName = 'Tối đa 100 ký tự.';
     const date = typeof body.date === 'string' ? body.date : '';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) errors.date = 'Chọn ngày tổ chức.';
     else if (date <= todayVN()) errors.date = 'Ngày tổ chức phải sau hôm nay.';
-    const location = body.location?.trim() || DEFAULT_CITY;
-    if (location.length > 100) errors.location = 'Tối đa 100 ký tự.';
     const budget = Number(body.budget);
     if (!Number.isInteger(budget) || budget <= 0) errors.budget = 'Ngân sách phải là số nguyên dương.';
     const guest = body.guestCount === null || body.guestCount === undefined ? null : Number(body.guestCount);
     if (guest === null) errors.guestCount = 'Vui lòng nhập số khách dự kiến.';
     else if (!Number.isInteger(guest) || guest < 1) errors.guestCount = 'Số khách là số nguyên từ 1.';
-    const styles = [...new Set((body.styles ?? []).map((s) => String(s).trim()).filter(Boolean))];
-    const style = styles.join(', ');
-    if (style.length > 100) errors.styles = 'Chọn ít phong cách hơn.';
+    if (body.spendingTier !== undefined && !isTier(body.spendingTier)) errors.spendingTier = 'Mức chi tiêu không hợp lệ.';
 
     const { idBySlug } = await this.categoryMaps();
     const slugs = [...new Set(body.categorySlugs ?? [])];
-    if (!slugs.length) errors.categorySlugs = 'Vui lòng chọn ít nhất 1 dịch vụ';
+    if (!slugs.length) errors.categorySlugs = 'Vui lòng chọn ít nhất 1 dịch vụ.';
     else if (slugs.some((s) => !idBySlug.has(s))) errors.categorySlugs = 'Hạng mục không hợp lệ.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin đám cưới chưa hợp lệ.', 400, errors);
 
-    const existing = await this.prisma.weddings.findUnique({ where: { user_id: userId } });
-    const data = { groom_name: groomName, bride_name: brideName, wedding_date: new Date(date), city: location, guest_count: guest!, budget, style: style || null, updated_date: new Date() };
+    const existing = await this.findWedding(userId);
+    // Cột style giữ trong DB nhưng không dùng nữa (bỏ phong cách 30/10/2026)
+    const data = {
+      groom_name: groomName,
+      bride_name: brideName,
+      wedding_date: new Date(date),
+      city: DEFAULT_CITY,
+      guest_count: guest!,
+      budget,
+      ...(isTier(body.spendingTier) && dbFeatures.budgetTiers && { spending_tier: body.spendingTier }),
+    };
+    const categoryIds = slugs.map((s) => idBySlug.get(s)!);
     let weddingId: string;
     if (existing) {
       weddingId = existing.id;
-      await this.prisma.weddings.update({ where: { id: weddingId }, data });
+      await this.prisma.$transaction(async (tx) => {
+        if (body.version !== undefined) await bumpVersion(tx, weddingId, body.version);
+        await tx.weddings.update({ where: { id: weddingId }, data: { ...data, updated_date: new Date() } });
+        // Ngân sách sửa tay của hạng mục bị bỏ chọn không còn ý nghĩa: xóa cùng
+        if (dbFeatures.budgetTiers) await tx.wedding_category_budgets.deleteMany({ where: { wedding_id: weddingId, category_id: { notIn: categoryIds } } });
+        await tx.wedding_categories.deleteMany({ where: { wedding_id: weddingId, category_id: { notIn: categoryIds } } });
+        await tx.wedding_categories.createMany({ data: categoryIds.map((id) => ({ wedding_id: weddingId, category_id: id })), skipDuplicates: true });
+      });
     } else {
-      const created = await this.prisma.weddings.create({ data: { ...data, user_id: userId } });
+      // Người tạo đám cưới là owner (wedding_members), ghi cùng một giao dịch
+      const created = await this.prisma.$transaction(async (tx) => {
+        const w = await tx.weddings.create({ data: { ...data, user_id: userId } });
+        await tx.wedding_members.create({ data: { wedding_id: w.id, user_id: userId, role: 'Owner' } });
+        await tx.wedding_categories.createMany({ data: categoryIds.map((id) => ({ wedding_id: w.id, category_id: id })) });
+        return w;
+      });
       weddingId = created.id;
     }
-    await this.prisma.$transaction([
-      this.prisma.wedding_categories.deleteMany({ where: { wedding_id: weddingId } }),
-      this.prisma.wedding_categories.createMany({ data: slugs.map((s) => ({ wedding_id: weddingId, category_id: idBySlug.get(s)! })) }),
-    ]);
-    await onWeddingCategories(this.prisma, weddingId, new Date(date), slugs.map((s) => idBySlug.get(s)!));
+    await onWeddingCategories(this.prisma, weddingId, new Date(date), categoryIds);
+    return this.getMine(userId);
+  }
+
+  /** Đổi nhanh tổng ngân sách, số khách, mức chi, số bàn. Ô ngân sách sửa tay giữ nguyên. */
+  async patchMine(userId: string, body: WeddingPatchBody) {
+    requireDbFeature('budgetTiers');
+    const w = await this.requireWedding(userId);
+    const errors: Record<string, string> = {};
+    const data: { budget?: number; guest_count?: number; spending_tier?: SpendingTier; table_count_override?: number | null } = {};
+    if (body.budget !== undefined) {
+      const n = Number(body.budget);
+      if (!Number.isInteger(n) || n <= 0 || n > 1e13) errors.budget = 'Ngân sách phải là số nguyên dương.';
+      else data.budget = n;
+    }
+    if (body.guestCount !== undefined) {
+      const n = Number(body.guestCount);
+      if (!Number.isInteger(n) || n < 1 || n > 100000) errors.guestCount = 'Số khách là số nguyên từ 1.';
+      else data.guest_count = n;
+    }
+    if (body.spendingTier !== undefined) {
+      if (!isTier(body.spendingTier)) errors.spendingTier = 'Mức chi tiêu phải là AUTO, SAVING, BALANCED hoặc PREMIUM.';
+      else data.spending_tier = body.spendingTier;
+    }
+    if (body.tableCountOverride !== undefined) {
+      const n = body.tableCountOverride === null ? null : Number(body.tableCountOverride);
+      if (n !== null && (!Number.isInteger(n) || n < 1 || n > 500)) errors.tableCountOverride = 'Số bàn là số nguyên từ 1 đến 500.';
+      else data.table_count_override = n;
+    }
+    if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin chưa hợp lệ.', 400, errors);
+    if (!Object.keys(data).length) return fail('VALIDATION_ERROR', 'Không có gì để cập nhật.', 400);
+    await this.prisma.$transaction(async (tx) => {
+      await bumpVersion(tx, w.id, body.version);
+      await tx.weddings.update({ where: { id: w.id }, data });
+    });
     return this.getMine(userId);
   }
 
   // ---------- Kế hoạch (nhà cung cấp đã chọn) ----------
 
   /** Trạng thái của từng NCC trong kế hoạch, tính từ hội thoại và đơn. */
-  private async statuses(userId: string, weddingId: string, vendors: { id: string; user_id: string }[]) {
+  private async statuses(coupleId: string, weddingId: string, vendors: { id: string; user_id: string }[]) {
     const [orders, convs] = await Promise.all([
       this.prisma.orders.findMany({ where: { wedding_id: weddingId, status: { in: ACTIVE_ORDER } }, include: ORDER_INCLUDE, orderBy: { created_date: 'desc' } }),
-      this.prisma.conversations.findMany({ where: { couple_id: userId } }),
+      this.prisma.conversations.findMany({ where: { couple_id: coupleId } }),
     ]);
     const convByVendorUser = new Map(convs.map((c) => [c.vendor_id, c.id]));
     const out = new Map<string, { status: PlanStatus; order: (typeof orders)[number] | null; conversationId: string | null }>();
@@ -143,9 +227,9 @@ export class WeddingsService {
   }
 
   /** Dịch vụ đang chọn của từng hạng mục (slug), dùng cho timeline. */
-  async planSnapshot(userId: string, weddingId: string) {
+  async planSnapshot(coupleId: string, weddingId: string) {
     const out = new Map<string, { serviceName: string; serviceId: string; status: PlanStatus }>();
-    for (const b of await this.buildItems(userId, weddingId)) out.set(b.slug, { serviceName: b.item.service.name, serviceId: b.item.service.id, status: b.item.status });
+    for (const b of await this.buildItems(coupleId, weddingId, undefined, false)) out.set(b.slug, { serviceName: b.item.service.name, serviceId: b.item.service.id, status: b.item.status });
     return out;
   }
 
@@ -156,7 +240,7 @@ export class WeddingsService {
     if (!w) return out;
     const inPlan = new Set((await this.prisma.plan_vendors.findMany({ where: { wedding_id: w.id } })).map((r) => r.vendor_id));
     const mine = vendors.filter((v) => inPlan.has(v.id));
-    for (const [id, st] of await this.statuses(userId, w.id, mine)) out.set(id, st.status);
+    for (const [id, st] of await this.statuses(w.user_id, w.id, mine)) out.set(id, st.status);
     return out;
   }
 
@@ -169,37 +253,51 @@ export class WeddingsService {
     return rows.map((r) => ({ ...r.vendor_profiles, slug: categorySlug(r.vendor_profiles.service_categories.name) }));
   }
 
-  /** Mặc định của một PlanItem khi chưa có đơn: gói rẻ nhất (đầu tiên) của NCC. */
-  private async firstPackages(vendorIds: string[]) {
-    const pkgs = await this.prisma.service_packages.findMany({ where: { vendor_id: { in: vendorIds }, status: 'Approved' }, orderBy: [{ price: 'asc' }, { id: 'asc' }] });
-    const map = new Map<string, { name: string; price: number }>();
-    for (const p of pkgs) if (!map.has(p.vendor_id)) map.set(p.vendor_id, { name: p.name, price: Number(p.price) });
-    return map;
-  }
-
-  private async buildItems(userId: string, weddingId: string, only?: string[]) {
+  /**
+   * Các mục trong kế hoạch. Giá và gói theo hàm tính ngân sách (budget-engine.ts mục 6): có đơn thì tổng đơn,
+   * khách chọn gói thì gói đó, chưa chọn thì gói dự kiến. `withPrices` false khi chỉ cần trạng thái (timeline).
+   */
+  private async buildItems(coupleId: string, weddingId: string, only?: string[], withPrices = true) {
     let vendors = await this.vendorsInPlan(weddingId);
     if (only) vendors = vendors.filter((v) => only.includes(v.id));
-    const [statuses, summaries, firsts] = await Promise.all([
-      this.statuses(userId, weddingId, vendors),
+    const [statuses, summaries, calc] = await Promise.all([
+      this.statuses(coupleId, weddingId, vendors),
       this.services.summaries(vendors.map((v) => v.id)),
-      this.firstPackages(vendors.map((v) => v.id)),
+      withPrices ? this.calc.compute(weddingId) : null,
     ]);
     const sumById = new Map(summaries.map((s) => [s.id, s]));
+    const costById = new Map((calc?.result.vendors ?? []).map((c) => [c.vendorId, c]));
+    const tables = calc?.result.tables.count ?? 0;
+    const guestCount = calc?.input.guestCount ?? 0;
     return vendors
       .filter((v) => sumById.has(v.id))
       .map((v) => {
         const st = statuses.get(v.id)!;
-        const first = firsts.get(v.id);
         const order = st.order;
+        const cost = costById.get(v.id);
+        const pkgs = calc?.input.planVendors.find((p) => p.vendorId === v.id)?.packages ?? [];
         return {
           slug: v.slug,
           item: {
             id: v.id,
             service: sumById.get(v.id)!,
             status: st.status,
-            packageName: order?.order_items[0]?.item_name ?? first?.name ?? '',
-            price: order ? Number(order.total_amount) : (first?.price ?? 0),
+            packageName: order?.order_items[0]?.item_name ?? cost?.packageName ?? '',
+            price: cost?.cost ?? (order ? Number(order.total_amount) : 0),
+            /** Gói đang tính: ORDER (theo đơn, khóa), SELECTED (khách chọn), PLANNED (gói dự kiến) */
+            package: cost ? { id: cost.packageId, name: cost.packageName, source: cost.packageSource, unavailable: cost.packageUnavailable } : null,
+            /** Các gói đổi được, kèm chi phí theo số bàn hiện tại */
+            packages: pkgs.map((p) => ({
+              id: p.id,
+              name: p.name,
+              price: p.price,
+              unit: p.unit === 'mâm' ? ('TABLE' as const) : ('PACKAGE' as const),
+              cost: packageCost(p, tables),
+              capacity: p.capacity,
+              minTables: p.minTables,
+              fits: fitsGuests(p, v.slug, guestCount),
+            })),
+            tables,
             order: order && st.conversationId ? toOrderDto(order, st.conversationId) : null,
           },
         };
@@ -209,27 +307,34 @@ export class WeddingsService {
 
   async planItems(userId: string) {
     const w = await this.requireWedding(userId);
-    const built = await this.buildItems(userId, w.id);
+    const built = await this.buildItems(w.user_id, w.id);
     const { slugById } = await this.categoryMaps();
     const slugs = new Set<string>([...w.wedding_categories.map((c) => slugById.get(c.category_id)!).filter(Boolean), ...built.map((b) => b.slug)]);
     return { categorySlugs: [...slugs].sort((a, b) => categoryRank(a) - categoryRank(b)), items: built.map((b) => b.item) };
   }
 
   /** Thêm NCC vào kế hoạch. `idempotent`: đã có thì trả lại mục cũ (dùng khi mở chat). */
-  async addPlanItem(userId: string, serviceId: string, replace: boolean, idempotent = false) {
+  async addPlanItem(userId: string, serviceId: string, replace: boolean, idempotent = false, packageId: string | null = null) {
     const vendor = await this.prisma.vendor_profiles.findUnique({ where: { id: serviceId }, include: { service_categories: { select: { name: true } } } }).catch(() => null);
     if (!vendor || !(await this.services.isVisible(serviceId))) return fail('SERVICE_NOT_FOUND', 'Không tìm thấy dịch vụ.', 404);
     const w = await this.requireWedding(userId);
+    if (packageId !== null) requireDbFeature('budgetTiers');
+    if (packageId !== null) await this.sellingPackage(serviceId, packageId);
 
     const current = await this.vendorsInPlan(w.id);
     if (current.some((v) => v.id === serviceId)) {
+      // "Chọn gói này cho kế hoạch" khi nhà cung cấp đã có trong kế hoạch: đổi gói
+      if (packageId !== null && !idempotent) {
+        await this.choosePackage(w, serviceId, packageId);
+        return (await this.buildItems(w.user_id, w.id, [serviceId]))[0].item;
+      }
       if (!idempotent) return fail('PLAN_ITEM_EXISTS', 'Dịch vụ đã có trong kế hoạch.', 409);
-      return (await this.buildItems(userId, w.id, [serviceId]))[0].item;
+      return (await this.buildItems(w.user_id, w.id, [serviceId]))[0].item;
     }
 
     const sameCategory = current.filter((v) => v.category_id === vendor.category_id);
     if (sameCategory.length) {
-      const statuses = await this.statuses(userId, w.id, sameCategory);
+      const statuses = await this.statuses(w.user_id, w.id, sameCategory);
       const locked = sameCategory.find((v) => ['AWAITING_DEPOSIT', 'CONFIRMED'].includes(statuses.get(v.id)!.status));
       if (locked) return fail('PLAN_CATEGORY_LOCKED', 'Hạng mục này đang chờ đặt cọc hoặc đã chốt, không thể thay.', 409);
       if (!replace) {
@@ -238,15 +343,44 @@ export class WeddingsService {
       }
       for (const v of sameCategory) await this.purge(w.id, v);
     }
-    await this.prisma.plan_vendors.create({ data: { wedding_id: w.id, vendor_id: serviceId } });
-    return (await this.buildItems(userId, w.id, [serviceId]))[0].item;
+    await this.prisma.plan_vendors.create({ data: { wedding_id: w.id, vendor_id: serviceId, ...(packageId !== null && { package_id: packageId }) } });
+    return (await this.buildItems(w.user_id, w.id, [serviceId]))[0].item;
+  }
+
+  /** Gói đang bán của nhà cung cấp (đã duyệt, nhà cung cấp đang hiện); không thì 400 PACKAGE_NOT_AVAILABLE. */
+  private async sellingPackage(vendorId: string, packageId: string) {
+    const ok = /^[0-9a-f-]{36}$/i.test(packageId) && (await this.calc.sellingPackages({ vendorIds: [vendorId] })).some((p) => p.id === packageId);
+    if (!ok) return fail('PACKAGE_NOT_AVAILABLE', 'Gói không thuộc nhà cung cấp này hoặc đã ngừng bán.', 400);
+  }
+
+  /** Ghi gói đã chọn; nhà cung cấp đã có đơn thì khóa (giá theo đơn). */
+  private async choosePackage(w: { id: string; user_id: string }, vendorId: string, packageId: string | null, version?: unknown) {
+    requireDbFeature('budgetTiers');
+    const row = await this.prisma.plan_vendors.findUnique({ where: { wedding_id_vendor_id: { wedding_id: w.id, vendor_id: vendorId } } });
+    if (!row) return fail('PLAN_ITEM_NOT_FOUND', 'Nhà cung cấp không có trong kế hoạch.', 404);
+    const ordered = await this.prisma.orders.count({ where: { wedding_id: w.id, vendor_id: vendorId, status: { in: ACTIVE_ORDER } } });
+    if (ordered) return fail('PLAN_VENDOR_LOCKED', 'Nhà cung cấp đã gửi đơn, giá tính theo đơn nên không đổi gói được.', 409);
+    if (packageId !== null) await this.sellingPackage(vendorId, packageId);
+    await this.prisma.$transaction(async (tx) => {
+      if (version !== undefined) await bumpVersion(tx, w.id, version);
+      await tx.plan_vendors.update({ where: { wedding_id_vendor_id: { wedding_id: w.id, vendor_id: vendorId } }, data: { package_id: packageId } });
+    });
+  }
+
+  /** PATCH /weddings/me/plan-vendors/:vendorId: chọn gói (null để về gói dự kiến). */
+  async setPlanVendorPackage(userId: string, vendorId: string, body: { packageId?: unknown; version?: unknown }) {
+    const w = await this.requireWedding(userId);
+    if (body.packageId !== null && typeof body.packageId !== 'string') return fail('VALIDATION_ERROR', 'Chọn gói hợp lệ hoặc null để dùng gói dự kiến.', 400);
+    if (/^[0-9a-f-]{36}$/i.test(vendorId) === false) return fail('PLAN_ITEM_NOT_FOUND', 'Nhà cung cấp không có trong kế hoạch.', 404);
+    await this.choosePackage(w, vendorId, body.packageId, body.version ?? null);
+    return (await this.buildItems(w.user_id, w.id, [vendorId]))[0]?.item ?? null;
   }
 
   async removePlanItem(userId: string, id: string) {
     const w = await this.requireWedding(userId);
     const vendor = (await this.vendorsInPlan(w.id)).find((v) => v.id === id);
     if (!vendor) return fail('PLAN_ITEM_NOT_FOUND', 'Không tìm thấy mục trong kế hoạch.', 404);
-    const st = (await this.statuses(userId, w.id, [vendor])).get(id)!;
+    const st = (await this.statuses(w.user_id, w.id, [vendor])).get(id)!;
     if (['AWAITING_DEPOSIT', 'CONFIRMED'].includes(st.status)) return fail('PLAN_ITEM_LOCKED', 'Dịch vụ đang chờ cọc hoặc đã chốt, không thể bỏ.', 409);
     await this.purge(w.id, vendor);
     return null;

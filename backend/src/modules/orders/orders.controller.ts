@@ -1,10 +1,14 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { WeddingAccess } from '../../common/guards/wedding-access.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ListQuery, OrdersService } from './orders.service';
 import type { ContentInput } from './order-rules';
 
-/** Đơn dịch vụ phía cặp đôi (docs/api/orders.md, docs/THE_DON_PHIA_KHACH.md). */
+/**
+ * Đơn dịch vụ phía cặp đôi (docs/api/orders.md, docs/THE_DON_PHIA_KHACH.md). Đơn thuộc đám cưới, gắn với tài khoản owner:
+ * thành viên được xem tab Dịch vụ thì xem được đơn; chỉ owner và editor yêu cầu sửa hay đặt cọc.
+ */
 @UseGuards(JwtAuthGuard)
 @Roles('Couple')
 @Controller('orders')
@@ -13,20 +17,23 @@ export class CoupleOrdersController {
 
   /** Mọi đơn đã gửi của khách (không có nháp), cho trang Kế hoạch; lọc tùy chọn theo ?status= */
   @Get()
+  @WeddingAccess({ tabs: ['services'] })
   list(@Req() req: any, @Query('status') status?: string) {
-    return this.orders.listForCouple(req.user.sub, { status });
+    return this.orders.listForCouple(req.wedding.ownerId, { status });
   }
 
   @Get(':id')
+  @WeddingAccess({ tabs: ['services'] })
   get(@Req() req: any, @Param('id') id: string) {
-    return this.orders.getForCouple(req.user.sub, id);
+    return this.orders.getForCouple(req.wedding.ownerId, id);
   }
 
   /** Yêu cầu chỉnh sửa (Pending; hoặc Deposited trước ngày thực hiện, tiền cọc giữ nguyên): { changes?: ['Item'|'Quantity'|'EventDate'|'Other'], note } */
   @HttpCode(200)
   @Post(':id/revision-requests')
+  @WeddingAccess({ role: 'Editor', tabs: ['services'] })
   requestRevision(@Req() req: any, @Param('id') id: string, @Body() body: { changes?: unknown; note?: string }) {
-    return this.orders.requestRevision(req.user.sub, id, body ?? {});
+    return this.orders.requestRevision(req.wedding.ownerId, id, body ?? {});
   }
 }
 
@@ -39,8 +46,9 @@ export class PaymentsController {
 
   @HttpCode(200)
   @Post()
+  @WeddingAccess({ role: 'Editor', tabs: ['services'] })
   create(@Req() req: any, @Body() body: { orderId?: string; method?: string }) {
-    return this.orders.createDeposit(req.user.sub, String(body?.orderId ?? ''));
+    return this.orders.createDeposit(req.wedding.ownerId, String(body?.orderId ?? ''));
   }
 }
 

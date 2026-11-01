@@ -15,9 +15,14 @@ export interface CompareRecommendation {
 }
 
 export interface CompareResult {
-  items: ServiceDetail[]
+  /** cost: chi phí gói dùng để so (gói rẻ nhất đủ chỗ, nhà hàng = giá bàn × số bàn); không có ở dữ liệu giả */
+  items: (ServiceDetail & { cost?: number })[]
+  /** Ngân sách hạng mục đang hiển thị trong kế hoạch; null khi chưa có đám cưới hoặc hạng mục chưa chọn */
+  categoryBudget?: number | null
+  /** Số bàn dùng để tính chi phí nhà hàng */
+  tables?: number | null
   /**
-   * BE tính (có gọi Google lấy điểm). null ở chế độ dữ liệu giả: FE tự tính bằng
+   * BE luôn tính (điểm Google thiếu thì bỏ yếu tố điểm). null ở chế độ dữ liệu giả: FE tự tính bằng
    * features/compare/recommend.ts từ điểm Google đã tải.
    */
   recommendation: CompareRecommendation | null

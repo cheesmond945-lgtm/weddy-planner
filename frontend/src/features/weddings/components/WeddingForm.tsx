@@ -1,4 +1,4 @@
-import { CalendarDays, List, Palette, UserRound, UsersRound, Wallet } from 'lucide-react'
+import { CalendarDays, List, UserRound, UsersRound, Wallet } from 'lucide-react'
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { FormError, FormField } from '@/components/FormField'
 import { MoneyInput } from '@/components/MoneyInput'
@@ -6,8 +6,8 @@ import { MultiSelect } from '@/components/MultiSelect'
 import { Button } from '@/components/ui/button'
 import { useCategories } from '@/features/catalog/hooks'
 import { addDays, toISODate, today } from '@/lib/date'
-import type { Wedding, WeddingInput } from '@/types/wedding'
-import { useStyles } from '../hooks'
+import type { SpendingTier, Wedding, WeddingInput } from '@/types/wedding'
+import { SpendingTierPicker } from './SpendingTierPicker'
 
 interface WeddingFormProps {
   initial: Wedding | null
@@ -19,20 +19,19 @@ interface WeddingFormProps {
   secondaryAction?: ReactNode
 }
 
-type Errors = Partial<Record<'date' | 'guestCount' | 'budget' | 'services', string>>
+type Errors = Partial<Record<'brideName' | 'groomName' | 'date' | 'guestCount' | 'budget' | 'services', string>>
 
-/** Form thông tin đám cưới (4.1), như wedForm trong prototype. */
+/** Form thông tin đám cưới (4.1), như wedForm trong prototype. Dùng chung cho tạo mới và chỉnh sửa: cùng thứ tự trường, cùng validate. */
 export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, secondaryAction }: WeddingFormProps) {
   const { data: categories = [] } = useCategories()
-  const { data: styles = [] } = useStyles()
-  const ids = { styles: useId(), services: useId() }
+  const ids = { services: useId() }
 
   const [groomName, setGroomName] = useState(initial?.groomName ?? '')
   const [brideName, setBrideName] = useState(initial?.brideName ?? '')
   const [date, setDate] = useState(initial?.date ?? '')
   const [guestCount, setGuestCount] = useState(initial?.guestCount ? String(initial.guestCount) : '')
   const [budget, setBudget] = useState(initial?.budget ?? 0)
-  const [chosenStyles, setChosenStyles] = useState<string[]>(initial?.styles ?? [])
+  const [spendingTier, setSpendingTier] = useState<SpendingTier>(initial?.spendingTier ?? 'AUTO')
   // Lần đầu: mặc định chọn tất cả dịch vụ như prototype
   const [services, setServices] = useState<string[] | null>(initial?.categorySlugs ?? null)
   const serviceValue = services ?? categories.map((c) => c.slug)
@@ -42,37 +41,47 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
     e.preventDefault()
     const errs: Errors = {}
     const guests = guestCount ? Number(guestCount) : null
+    if (!brideName.trim()) errs.brideName = 'Vui lòng nhập tên cô dâu.'
+    if (!groomName.trim()) errs.groomName = 'Vui lòng nhập tên chú rể.'
     if (!date) errs.date = 'Vui lòng chọn ngày tổ chức.'
     else if (date <= toISODate(today())) errs.date = 'Ngày tổ chức phải sau hôm nay.'
     if (!guestCount || !(guests! >= 1)) errs.guestCount = 'Vui lòng nhập số khách dự kiến (từ 1).'
     if (!(budget > 0)) errs.budget = 'Vui lòng nhập tổng ngân sách lớn hơn 0.'
-    if (!serviceValue.length) errs.services = 'Vui lòng chọn ít nhất 1 dịch vụ'
+    if (!serviceValue.length) errs.services = 'Vui lòng chọn ít nhất 1 dịch vụ.'
     setErrors(errs)
     if (Object.keys(errs).length) return
-    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, guestCount: guests, budget, styles: chosenStyles, categorySlugs: serviceValue })
+    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, guestCount: guests, budget, spendingTier, categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
   }
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField
-          label="Tên cô dâu"
+          label={<Required>Tên cô dâu</Required>}
           icon={<UserRound />}
           maxLength={100}
           autoComplete="off"
           placeholder="Nhập tên cô dâu"
           value={brideName}
-          onChange={(e) => setBrideName(e.target.value)}
+          onChange={(e) => {
+            setBrideName(e.target.value)
+            setErrors((x) => ({ ...x, brideName: undefined }))
+          }}
+          error={errors.brideName}
           className={FIELD}
         />
         <FormField
-          label="Tên chú rể"
+          label={<Required>Tên chú rể</Required>}
           icon={<UserRound />}
           maxLength={100}
           autoComplete="off"
           placeholder="Nhập tên chú rể"
           value={groomName}
-          onChange={(e) => setGroomName(e.target.value)}
+          onChange={(e) => {
+            setGroomName(e.target.value)
+            setErrors((x) => ({ ...x, groomName: undefined }))
+          }}
+          error={errors.groomName}
           className={FIELD}
         />
       </div>
@@ -119,7 +128,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
 
       <div>
         <span id={ids.services} className="mb-1.5 block text-[13px] font-medium">
-          Dịch vụ muốn sử dụng
+          <Required>Dịch vụ muốn sử dụng</Required>
         </span>
         <MultiSelect
           aria-labelledby={ids.services}
@@ -145,20 +154,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
         )}
       </div>
 
-      <div>
-        <span id={ids.styles} className="mb-1.5 block text-[13px] font-medium">
-          Phong cách <span className="font-normal text-muted-foreground">(không bắt buộc)</span>
-        </span>
-        <MultiSelect
-          aria-labelledby={ids.styles}
-          icon={<Palette />}
-          options={styles.map((s) => ({ value: s, label: s }))}
-          value={chosenStyles}
-          onChange={setChosenStyles}
-          placeholder="Chọn phong cách"
-          maxChips={2}
-        />
-      </div>
+      <SpendingTierPicker value={spendingTier} onChange={setSpendingTier} />
 
       <FormError message={error} />
 

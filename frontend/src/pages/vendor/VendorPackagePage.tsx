@@ -1,6 +1,7 @@
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ApiError } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
+import { VendorAvailabilityManager } from '@/features/availability/components/VendorAvailabilityManager'
 import { Button } from '@/components/ui/button'
 import { packageCategoryOf } from '@/features/vendorPackages/constants'
 import { PackageDetails } from '@/features/vendorPackages/components/PackageDetails'
@@ -56,7 +57,11 @@ export default function VendorPackagePage() {
     <>
       <PackageHeader pkg={pkg.data} profile={profile.data} category={category} />
       {pkg.data && pkg.data.status !== 'DRAFT' ? (
-        <PackageDetails pkg={pkg.data} />
+        <>
+          <PackageDetails pkg={pkg.data} />
+          {/* Lịch khả dụng theo từng gói */}
+          <VendorAvailabilityManager packageId={pkg.data.id} packageName={pkg.data.name} />
+        </>
       ) : (
         <PackageEditor
           key={pkg.data?.updatedAt ?? 'new'}

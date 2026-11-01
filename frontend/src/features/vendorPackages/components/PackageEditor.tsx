@@ -158,6 +158,31 @@ export function PackageEditor({ pkg, profile, category, initialCheck }: PackageE
               </WithUnit>
             </Field>
             {venue && (
+              <Field label="Đơn vị tính giá">
+                <select className={controlClass} value={values.unit} onChange={(e) => set({ unit: e.target.value as 'TABLE' | 'PACKAGE' })}>
+                  <option value="TABLE">Theo bàn (giá một bàn)</option>
+                  <option value="PACKAGE">Trọn gói</option>
+                </select>
+              </Field>
+            )}
+            {venue && values.unit === 'TABLE' && (
+              <Field label="Số bàn tối thiểu" error={errors.minTables} hint="Tùy chọn · khách đặt ít hơn vẫn tính theo số này.">
+                <WithUnit unit="bàn">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    placeholder="VD: 20"
+                    className={cn(controlClass, 'pr-12 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none')}
+                    aria-invalid={errors.minTables ? true : undefined}
+                    value={values.minTables}
+                    onChange={(e) => set({ minTables: e.target.value })}
+                  />
+                </WithUnit>
+              </Field>
+            )}
+            {venue && (
               <Field label="Sức chứa tối đa (khách)" error={errors.capacity} hint="Tùy chọn · tính theo khách, không quy đổi sang bàn.">
                 <WithUnit unit="khách">
                   <input

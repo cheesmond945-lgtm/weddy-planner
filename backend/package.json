@@ -8,7 +8,8 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "db:pull": "prisma db pull",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "test": "nest build && node --test \"test/**/*.test.cjs\""
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

@@ -4,6 +4,8 @@
 > Quy ước chung: [README.md](README.md). Role: **Couple**, chỉ thấy đơn của mình và **không thấy bản nháp** (`Draft` trả 404).
 > Khách và NCC dùng **cùng một DTO `Order`** (mô tả ở phần Nhà cung cấp bên dưới, kiểu `frontend/src/types/vendorOrder.ts`), thêm hai trường để khách mở trang dịch vụ và hiện tên NCC: `serviceId` (`VendorProfiles.Id`) và `vendorName`. Trạng thái trả thô như CSDL: `Draft`, `Pending`, `NeedRevision`, `Deposited`, `Completed`, `Expired`, `Cancelled`.
 
+**Nhiều thành viên (29/10/2026):** đơn thuộc đám cưới, gắn với **owner** (`weddings.user_id`). Thành viên được xem tab Dịch vụ thì `GET /orders`, `GET /orders/:id` được; yêu cầu chỉnh sửa và `POST /payments` (đặt cọc) cần quyền **editor** trở lên. Viewer: 403 `WEDDING_READ_ONLY`; không được xem tab Dịch vụ: 403 `TAB_FORBIDDEN`. Thông báo đơn gửi cho owner thì editor được xem tab Dịch vụ cũng nhận. Xem [weddings.md](weddings.md) mục 5.
+
 **Hai giai đoạn (cập nhật 28/10/2026):** trước cọc (`Pending`, `NeedRevision`) khách có Thanh toán cọc (chỉ `Pending`) và Yêu cầu chỉnh sửa (chỉ `Pending`). Sau cọc (`Deposited`, còn trước `eventDate`) khách **vẫn gửi được Yêu cầu chỉnh sửa**, đơn giữ `Deposited` và **tiền cọc không đổi**; NCC áp dụng bằng `PATCH` hoặc từ chối. **Khách không có API hủy đơn** (muốn hủy thì nhắn NCC; quy tắc hoàn cọc khi hủy gần ngày chưa chốt). Hai đợt thanh toán: đợt 1 cọc (tối thiểu 10%) qua VNPay trong 24 giờ, đợt 2 phần còn lại trả tiền mặt trực tiếp cho NCC, ngoài hệ thống.
 
 ### GET /orders

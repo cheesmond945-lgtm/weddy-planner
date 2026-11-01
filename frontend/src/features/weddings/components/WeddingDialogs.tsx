@@ -74,7 +74,7 @@ export function WeddingSetupDialog() {
                   closeSetup()
                   toast('Đã tạo timeline khung')
                   if (then) then()
-                  else navigate(paths.timeline)
+                  else navigate(paths.plan)
                 },
               })
             }

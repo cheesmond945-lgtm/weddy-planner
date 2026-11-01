@@ -30,6 +30,8 @@ export function describeVendorNotification(n: AppNotification): { text: string; 
 
 /** Nơi mở khi bấm thông báo phía NCC: hội thoại hoặc đơn; không biết thì null. */
 export function vendorNotificationHref(n: AppNotification): string | null {
+  // Nhắc cập nhật lịch khả dụng: mở Quản lý dịch vụ (chọn gói để cập nhật)
+  if (n.referenceType === 'Availability') return paths.vendor.catalog
   if (!n.referenceId) return null
   if (n.referenceType === 'Conversation') return `${paths.vendor.chat}?c=${encodeURIComponent(n.referenceId)}`
   if (n.referenceType === 'Order') return orderPageHref(n.referenceId)

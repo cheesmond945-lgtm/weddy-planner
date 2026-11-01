@@ -1,22 +1,20 @@
 /*
- * Đề xuất một phương án trong bảng so sánh (recommendCompare trong prototype).
+ * Đề xuất một phương án trong bảng so sánh.
  *
- * TRUNG LẬP: công thức chỉ dùng điểm Google Maps, giá và độ phù hợp với thông tin đám cưới của
+ * TRUNG LẬP: công thức chỉ dùng điểm Google Maps, chi phí gói và độ phù hợp với ngân sách hạng mục của
  * cặp đôi. KHÔNG có bất kỳ yếu tố nào ưu tiên nhà cung cấp trả phí, quảng cáo hay hoa hồng.
- * Không thêm yếu tố như vậy vào đây.
+ * Không thêm yếu tố như vậy vào đây. Không xét phong cách.
  *
- * Điểm Google lấy lúc gọi (GET /vendors/{id}/google-rating), có thể thiếu: khi đó bỏ yếu tố điểm
- * cho cả nhóm, chỉ so giá và độ phù hợp.
+ * Điểm Google có thể thiếu: khi đó bỏ yếu tố điểm cho cả nhóm, chỉ so giá và độ phù hợp.
  *
- * Hàm thuần, không phụ thuộc React hay alias "@/": FE dùng ở chế độ dữ liệu giả, BE phải tính
- * giống hệt (docs/api/compare.md). Hằng số nằm trong recommend.config.ts. Test: recommend.test.ts.
+ * Hàm thuần, không phụ thuộc React hay alias "@/". Bản sao ở backend/src/modules/compare/recommend.ts
+ * phải giống hệt (docs/api/compare.md). Hằng số nằm trong recommend.config.ts. Test: recommend.test.ts.
  */
 import {
   BAYES_PRIOR_COUNT,
   BAYES_PRIOR_RATING,
   CAPACITY_CATEGORIES,
   CAPACITY_PENALTY,
-  CATEGORY_BUDGET_SHARE,
   MAX_REASONS,
   TIE_THRESHOLD,
   WEIGHTS_NO_RATING,
@@ -27,21 +25,18 @@ import {
 
 export interface RecommendItem {
   id: string
-  /** Giá từ, đồng */
+  /** Chi phí gói (nhà hàng: giá bàn × số bàn), đồng */
   price: number
   /** Điểm Google; null khi chưa có điểm hoặc lấy lỗi */
   rating: number | null
   reviewCount: number | null
-  styles: string[]
-  city: string
   capacity?: number | null
 }
 
 export interface RecommendWedding {
-  budget: number | null
+  /** Ngân sách hạng mục đang hiển thị trong kế hoạch (sau khi khách sửa tay); null khi chưa có */
+  categoryBudget: number | null
   guestCount: number | null
-  city: string | null
-  styles: string[]
 }
 
 export interface Recommendation {
@@ -57,37 +52,25 @@ export interface Recommendation {
 interface Scored {
   item: RecommendItem
   score: number
-  inBudget: number | null
-  styleOverlap: number | null
+  /** min(1, ngân sách hạng mục / chi phí gói); null khi không có ngân sách hạng mục */
+  fit: number | null
   /** true: đủ chỗ; false: thiếu chỗ; null: không xét */
   capacityOk: boolean | null
 }
-
-const average = (xs: number[]) => xs.reduce((a, x) => a + x, 0) / xs.length
 
 export function recommend(items: RecommendItem[], wedding: RecommendWedding | null, categorySlug: string): Recommendation {
   const useRating = items.every((i) => i.rating !== null && i.reviewCount !== null)
   if (items.length < 2) return { recommendedId: null, reasons: [], isTie: false, usedRating: useRating }
 
   const minPrice = Math.min(...items.map((i) => i.price))
-  const share = CATEGORY_BUDGET_SHARE[categorySlug] ?? 0
-  const categoryBudget = wedding?.budget && share ? wedding.budget * share : null
+  const categoryBudget = wedding?.categoryBudget ? wedding.categoryBudget : null
   const hasCapacity = CAPACITY_CATEGORIES.includes(categorySlug)
 
   const scored: Scored[] = items
     .map((item) => {
       const P = minPrice / item.price
-
-      let F: number | null = null
-      let inBudget: number | null = null
-      let styleOverlap: number | null = null
-      if (wedding) {
-        const parts: number[] = []
-        if (categoryBudget) parts.push((inBudget = Math.min(1, categoryBudget / item.price)))
-        if (wedding.styles.length) parts.push((styleOverlap = item.styles.filter((s) => wedding.styles.includes(s)).length / wedding.styles.length))
-        if (wedding.city) parts.push(item.city === wedding.city ? 1 : 0)
-        F = parts.length ? average(parts) : null
-      }
+      // Phù hợp: chỉ còn mức nằm trong ngân sách hạng mục
+      const F = categoryBudget === null ? null : Math.min(1, categoryBudget / item.price)
 
       let score: number
       if (useRating) {
@@ -102,7 +85,7 @@ export function recommend(items: RecommendItem[], wedding: RecommendWedding | nu
       const capacityOk = hasCapacity && wedding?.guestCount && item.capacity != null ? item.capacity >= wedding.guestCount : null
       if (capacityOk === false) score *= CAPACITY_PENALTY
 
-      return { item, score, inBudget, styleOverlap, capacityOk }
+      return { item, score, fit: F, capacityOk }
     })
     .sort((a, b) => b.score - a.score)
 
@@ -113,11 +96,8 @@ export function recommend(items: RecommendItem[], wedding: RecommendWedding | nu
   const t = top.item
   const reasons: string[] = []
   if (top.capacityOk === true && others.some((o) => o.capacityOk === false)) reasons.push(`đủ chỗ cho ${wedding!.guestCount} khách`)
-  const fits = (s: Scored) => s.inBudget !== null && s.inBudget >= 1
+  const fits = (s: Scored) => s.fit !== null && s.fit >= 1
   if (fits(top) && others.some((o) => !fits(o))) reasons.push('nằm trong ngân sách hạng mục')
-  if (top.styleOverlap && others.every((o) => (o.styleOverlap ?? 0) < top.styleOverlap!)) {
-    reasons.push(`hợp phong cách ${t.styles.filter((s) => wedding!.styles.includes(s)).join(', ').toLowerCase()}`)
-  }
   if (t.price === minPrice && items.filter((i) => i.price === minPrice).length === 1) reasons.push('giá thấp nhất')
   if (useRating) {
     const maxRating = Math.max(...items.map((i) => i.rating!))

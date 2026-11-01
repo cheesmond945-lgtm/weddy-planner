@@ -1,6 +1,6 @@
 import { Sparkles, Trash2 } from 'lucide-react'
 import type { CSSProperties } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import { useRemovePlanItem } from '../hooks'
 import { usePlanActions } from '../planActions'
 import { PLAN_STATUS } from '../status'
 import { useAiSuggest } from '../useAiSuggest'
+import { PackageSwitcher } from './PackageSwitcher'
 
 interface PlanSlotsProps {
   categorySlugs: string[]
@@ -25,18 +26,21 @@ interface PlanSlotsProps {
   /** Mọi đơn NCC đã gửi cho khách (GET /orders), hiện dưới đúng hạng mục */
   orders: Order[]
   onRevise: (order: Order) => void
+  /** Viewer: chỉ xem dịch vụ, trạng thái, giá; không nhắn tin, bỏ dịch vụ, đặt cọc */
+  readOnly?: boolean
+  /** Số khách dự kiến (cảnh báo gói không đủ chỗ) */
+  guestCount?: number
 }
 
 /**
  * Các hạng mục của kế hoạch, mỗi hạng mục một dịch vụ (planServices trong prototype), kèm các đơn dịch vụ của hạng mục đó
  * (Thanh toán cọc, Yêu cầu chỉnh sửa, Xem chi tiết, Nhắn NCC). Hạng mục có đơn nhưng không còn trong kế hoạch vẫn hiện ở cuối.
  */
-export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise }: PlanSlotsProps) {
+export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, readOnly = false, guestCount = 0 }: PlanSlotsProps) {
   const { data: categories = [] } = useCategories()
   const { openChat } = usePlanActions()
   const remove = useRemovePlanItem()
   const aiSuggest = useAiSuggest()
-  const navigate = useNavigate()
 
   const ordersOf = (slug: string) => orders.filter((o) => o.category?.slug === slug)
   const extraSlugs = [...new Set(orders.map((o) => o.category?.slug).filter((s): s is string => !!s && !categorySlugs.includes(s)))]
@@ -48,9 +52,11 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise }
         title="Kế hoạch đang trống"
         description="Thêm dịch vụ từ trang dịch vụ, hoặc thiết lập thông tin đám cưới để có sẵn các hạng mục."
         action={
-          <Button asChild>
-            <Link to={paths.services}>Khám phá dịch vụ</Link>
-          </Button>
+          !readOnly && (
+            <Button asChild>
+              <Link to={paths.services}>Khám phá dịch vụ</Link>
+            </Button>
+          )
         }
       />
     )
@@ -85,25 +91,20 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise }
                     <div className="min-w-[200px] flex-1">
                       <b className="font-serif text-base font-semibold">{item.service.name}</b>
                       <RatingMeta service={item.service} />
-                      <div className="mt-1 text-[13px] text-muted-foreground">
-                        {item.packageName}: {formatMoney(item.price)}
-                      </div>
+                      <PackageSwitcher item={item} guestCount={guestCount} readOnly={readOnly} />
                     </div>
                     <Badge tone={PLAN_STATUS[item.status].tone}>{PLAN_STATUS[item.status].label}</Badge>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant={item.status === 'PLANNED' || item.status === 'DISCUSSING' ? 'default' : 'outline'}
-                        onClick={() => openChat(item.service)}
-                      >
-                        Nhắn tin
-                      </Button>
-                      {item.status === 'CONFIRMED' && (
-                        <Button variant="outline" size="sm" onClick={() => navigate(`${paths.timeline}?category=${slug}`)}>
-                          Xem việc cần làm
+                      {!readOnly && (
+                        <Button
+                          size="sm"
+                          variant={item.status === 'PLANNED' || item.status === 'DISCUSSING' ? 'default' : 'outline'}
+                          onClick={() => openChat(item.service)}
+                        >
+                          Nhắn tin
                         </Button>
                       )}
-                      {(item.status === 'PLANNED' || item.status === 'DISCUSSING') && (
+                      {!readOnly && (item.status === 'PLANNED' || item.status === 'DISCUSSING') && (
                         <Button
                           variant="outline"
                           size="icon"
@@ -122,7 +123,8 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise }
             ) : extra ? null : (
               <div className={cn('flex flex-wrap items-center gap-4 rounded-lg border border-dashed border-line px-[18px] py-4')}>
                 <div className="min-w-[200px] flex-1 text-muted-foreground">Chưa chọn dịch vụ cho hạng mục này.</div>
-                <div className="flex flex-wrap items-center gap-2">
+                {/* Viewer chỉ xem kế hoạch, không mở trang dịch vụ hay gợi ý AI */}
+                <div className={cn('flex flex-wrap items-center gap-2', readOnly && 'hidden')}>
                   <Button asChild variant="outline" size="sm">
                     <Link to={`${paths.services}?category=${slug}`}>Xem dịch vụ</Link>
                   </Button>
@@ -135,7 +137,7 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise }
                 </div>
               </div>
             )}
-            <CategoryOrders orders={catOrders} onRevise={onRevise} />
+            <CategoryOrders orders={catOrders} onRevise={onRevise} readOnly={readOnly} />
           </section>
         )
       })}

@@ -2,6 +2,7 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../integrations/storage/storage.service';
 import { Paginated } from '../../common/utils/pagination';
+import { unitOf } from '../../prisma/db-features';
 
 export interface ServiceQuery {
   q?: string;
@@ -222,9 +223,10 @@ export class ServicesService {
         capacity: p.capacity,
         // Số bàn tối thiểu phải đặt (nhà hàng), null khi gói không ghi
         minTables: p.min_tables,
-        // CSDL chưa có cột đơn vị tính: đọc từ mô tả của NCC ("…4.500.000đ/bàn"), không có thì là gói
-        unit: tablesNotTrays(p.description.match(/đ\s*\/\s*(mâm|bàn|khách|người|set|bộ)/i)?.[1].toLowerCase() ?? 'gói'),
-        // Ảnh bìa và thẻ phong cách của gói
+        // Đơn vị tính (cột service_packages.unit): "mâm" là giá một mâm, giao diện gọi là "bàn"; còn lại là trọn gói
+        unit: unitOf(p) === 'mâm' ? 'bàn' : 'gói',
+        pricingUnit: unitOf(p) === 'mâm' ? ('TABLE' as const) : ('PACKAGE' as const),
+        // Ảnh bìa và thẻ (tag) của gói: chỉ dùng cho tìm kiếm và bộ lọc, không so với đám cưới
         imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null,
         tags: p.package_tags.map((t) => t.tag),
       })),

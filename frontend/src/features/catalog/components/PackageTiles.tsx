@@ -6,6 +6,7 @@ import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ServiceDetail, ServicePackage } from '@/types/catalog'
 import { Lightbox } from './GalleryDialog'
+import { PackageAvailabilityPanel } from '@/features/availability/components/PackageAvailabilityPanel'
 import { attrsOf, imagesOf, withoutPrice } from './packageInfo'
 
 interface PackageTilesProps {
@@ -113,7 +114,7 @@ export function PackageTiles({ service }: PackageTilesProps) {
         </div>
       )}
 
-      <PackageDrawer service={service} pkg={opened} onClose={() => setOpened(null)} />
+      <PackageDrawer service={service} pkg={opened} onClose={() => setOpened(null)} onSelect={setOpened} />
     </>
   )
 }
@@ -165,10 +166,12 @@ interface PackageDrawerProps {
    */
   variant?: 'photos' | 'gallery'
   onClose: () => void
+  /** Đổi sang gói khác ngay trong khung (lịch khả dụng của trung tâm tiệc cưới) */
+  onSelect?: (pkg: ServicePackage) => void
 }
 
 /** Khung chi tiết gói trượt từ phải: tên, thuộc tính, giá, mô tả đầy đủ, "Bao gồm" và ảnh của gói. */
-export function PackageDrawer({ service, pkg, variant = 'photos', onClose }: PackageDrawerProps) {
+export function PackageDrawer({ service, pkg, variant = 'photos', onClose, onSelect }: PackageDrawerProps) {
   return (
     <DialogPrimitive.Root open={!!pkg} onOpenChange={(o) => !o && onClose()}>
       <DialogPrimitive.Portal>
@@ -187,9 +190,9 @@ export function PackageDrawer({ service, pkg, variant = 'photos', onClose }: Pac
         >
           {pkg &&
             (variant === 'gallery' ? (
-              <GalleryBody key={pkg.id} images={imagesOf(service, pkg)} pkg={pkg} />
+              <GalleryBody key={pkg.id} images={imagesOf(service, pkg)} pkg={pkg} service={service} onSelect={onSelect} />
             ) : (
-              <DrawerBody key={pkg.id} images={imagesOf(service, pkg)} pkg={pkg} />
+              <DrawerBody key={pkg.id} images={imagesOf(service, pkg)} pkg={pkg} service={service} onSelect={onSelect} />
             ))}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
@@ -197,8 +200,10 @@ export function PackageDrawer({ service, pkg, variant = 'photos', onClose }: Pac
   )
 }
 
-/** Tên, thuộc tính, giá, mô tả, "Bao gồm" của gói (dùng chung cho hai kiểu khung). */
-function PackageInfo({ pkg }: { pkg: ServicePackage }) {
+type Select = ((pkg: ServicePackage) => void) | undefined
+
+/** Tên, thuộc tính, giá, lịch khả dụng (nhập ngày để xem gói đã được đặt chưa), mô tả, "Bao gồm" của gói (dùng chung cho hai kiểu khung). */
+function PackageInfo({ pkg, service, onSelect }: { pkg: ServicePackage; service: ServiceDetail; onSelect: Select }) {
   const attrs = attrsOf(pkg)
   const description = withoutPrice(pkg.description)
   return (
@@ -215,6 +220,7 @@ function PackageInfo({ pkg }: { pkg: ServicePackage }) {
           Đặt tối thiểu <b className="font-semibold text-ink">{pkg.minTables} bàn</b>
         </p>
       )}
+      <PackageAvailabilityPanel service={service} pkg={pkg} onSelect={onSelect} />
       {description && <p className="mt-4 text-[15px] leading-[1.7] text-ink-2">{description}</p>}
       {!!pkg.includes?.length && (
         <>
@@ -234,13 +240,13 @@ function PackageInfo({ pkg }: { pkg: ServicePackage }) {
 }
 
 /** Kiểu "gallery": thông tin gói ở đầu, bên dưới lưới giữ tỉ lệ toàn bộ ảnh; bấm ảnh mới phóng to. */
-function GalleryBody({ pkg, images }: { pkg: ServicePackage; images: string[] }) {
+function GalleryBody({ pkg, images, service, onSelect }: { pkg: ServicePackage; images: string[]; service: ServiceDetail; onSelect: Select }) {
   const [viewing, setViewing] = useState<number | null>(null)
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="relative border-b border-line px-6 pt-6 pb-5 pr-16 max-[700px]:px-4">
-          <PackageInfo pkg={pkg} />
+          <PackageInfo pkg={pkg} service={service} onSelect={onSelect} />
           <DialogPrimitive.Close
             aria-label="Đóng chi tiết gói"
             className="absolute top-4 right-4 grid size-10 place-items-center rounded-full text-ink-2 transition-colors hover:bg-gold-100 hover:text-ink"
@@ -274,7 +280,7 @@ function GalleryBody({ pkg, images }: { pkg: ServicePackage; images: string[] })
  * Kiểu "photos": một cột, ảnh trên chữ dưới. Ảnh hiện nguyên khung (không cắt) trên nền kem, cao tối đa 58% màn hình
  * để tên và giá lộ ngay bên dưới; dải ảnh nhỏ để chuyển ảnh, bấm ảnh lớn để phóng to.
  */
-function DrawerBody({ pkg, images }: { pkg: ServicePackage; images: string[] }) {
+function DrawerBody({ pkg, images, service, onSelect }: { pkg: ServicePackage; images: string[]; service: ServiceDetail; onSelect: Select }) {
   const [index, setIndex] = useState(0)
   const [viewing, setViewing] = useState<number | null>(null)
 
@@ -318,7 +324,7 @@ function DrawerBody({ pkg, images }: { pkg: ServicePackage; images: string[] }) 
         </div>
 
         <div className="px-6 pt-5 pb-6 max-[700px]:px-5">
-          <PackageInfo pkg={pkg} />
+          <PackageInfo pkg={pkg} service={service} onSelect={onSelect} />
         </div>
       </div>
 

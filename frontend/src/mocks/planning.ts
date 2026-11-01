@@ -27,7 +27,6 @@ export const CATEGORY_RULES: Record<string, CategoryRule> = {
   'hoa-cuoi': { share: 0.12, deadline: 0.38, tasks: [['Chọn loại hoa và bảng màu', 0.42], ['Duyệt mẫu hoa cưới', 0.65], ['Xác nhận thời gian giao hoa', 0.9]] },
 }
 
-const STYLES = ['Hiện đại', 'Tối giản', 'Cổ điển', 'Sang trọng', 'Sân vườn', 'Truyền thống']
 
 const DEFAULT_TASKS: [string, number, boolean][] = [
   ['Xác định ngân sách và quy mô tiệc', 0.05, true],
@@ -79,6 +78,10 @@ function toPlanItem(data: UserData, p: UserData['planItems'][number]): PlanItem 
     status: p.status,
     packageName: order?.items[0]?.itemName ?? detail.packages[0].name,
     price: order?.totalAmount ?? detail.packages[0].price,
+    // Dữ liệu giả chưa tính gói theo ngân sách: luôn là gói đầu tiên, không đổi được
+    package: { id: detail.packages[0].id, name: detail.packages[0].name, source: order ? 'ORDER' : 'PLANNED', unavailable: false },
+    packages: [],
+    tables: 0,
     order,
   }
 }
@@ -135,7 +138,8 @@ function buildTimeline(data: UserData): Timeline {
   const w = requireWedding(data)
   type Row = TimelineItem & { f: number }
   const rows: Row[] = []
-  const base = { isCustom: false, category: null, serviceName: null, planStatus: null, serviceId: null }
+  // Dữ liệu giả chưa có phân công và ghi chú
+  const base = { isCustom: false, category: null, serviceName: null, planStatus: null, serviceId: null, assignee: null, note: null, completedBy: null }
 
   for (const t of data.tasks) {
     rows.push({ ...base, id: `task-${t.id}`, kind: 'TASK', title: t.title, f: t.f, dueDate: dateAt(w, t.f), isDone: t.done, isCustom: t.custom })
@@ -195,11 +199,10 @@ function aiSuggest(data: UserData, slug: string): AiSuggestionResult {
   const budget = Math.round((w.budget * CATEGORY_RULES[slug].share) / 1e5) * 1e5
   const guestCount = slug === 'nha-hang' ? w.guestCount : null
   const all = mockCatalog.listServices({ category: slug, pageSize: 1000 }).data.map((s) => mockCatalog.getService(s.id))
-  const styleHits = (s: (typeof all)[number]) => s.styles.filter((x) => w.styles.includes(x))
   const fits = (s: (typeof all)[number]) => s.priceFrom <= budget && (!guestCount || (s.capacity ?? 0) >= guestCount)
   const picked = all
     .filter((s) => s.location === w.location && fits(s))
-    .sort((a, b) => styleHits(b).length - styleHits(a).length || (google(b.id)?.rating ?? 0) - (google(a.id)?.rating ?? 0) || (google(b.id)?.userRatingCount ?? 0) - (google(a.id)?.userRatingCount ?? 0))
+    .sort((a, b) => (google(b.id)?.rating ?? 0) - (google(a.id)?.rating ?? 0) || (google(b.id)?.userRatingCount ?? 0) - (google(a.id)?.userRatingCount ?? 0))
     .slice(0, 3)
   const byPrice = (list: typeof all) => [...list].sort((a, b) => a.priceFrom - b.priceFrom)[0]
   const cheapest = byPrice(all.filter((s) => s.location === w.location)) ?? byPrice(all)
@@ -209,12 +212,9 @@ function aiSuggest(data: UserData, slug: string): AiSuggestionResult {
     budget,
     budgetSource: 'ESTIMATED',
     location: w.location,
-    styles: w.styles,
     guestCount,
     suggestions: picked.map((s) => {
-      const hits = styleHits(s)
       const reasons = [`Giá từ ${formatMillions(s.priceFrom)}, nằm trong ngân sách hạng mục.`]
-      if (hits.length) reasons.push(`Hợp phong cách ${hits.join(', ').toLowerCase()}.`)
       const g = google(s.id)
       if (g?.rating != null) reasons.push(`Điểm ${g.rating.toFixed(1)} trên Google Maps.`)
       if (s.capacity && w.guestCount) reasons.push(`Chứa tối đa ${s.capacity} khách.`)
@@ -227,8 +227,6 @@ function aiSuggest(data: UserData, slug: string): AiSuggestionResult {
 // ---- API giả ----
 
 export const mockPlanning = {
-  styles: () => STYLES,
-
   getWedding: (): Wedding | null => {
     const w = read().wedding
     return w ? toWedding(w) : null
@@ -240,7 +238,13 @@ export const mockPlanning = {
       if (!(input.budget > 0)) throw new ApiError(400, 'VALIDATION_ERROR', 'Vui lòng nhập tổng ngân sách lớn hơn 0.')
       if (!input.categorySlugs.length) throw new ApiError(400, 'VALIDATION_ERROR', 'Vui lòng chọn ít nhất 1 dịch vụ')
       const first = !data.wedding
-      data.wedding = { id: data.wedding?.id ?? nextId(data, 'wd'), ...input, location: 'Hà Nội', startDate: data.wedding?.startDate ?? toISODate(today()) }
+      data.wedding = {
+        id: data.wedding?.id ?? nextId(data, 'wd'),
+        ...input,
+        tableCountOverride: data.wedding?.tableCountOverride ?? null,
+        location: 'Hà Nội',
+        startDate: data.wedding?.startDate ?? toISODate(today()),
+      }
       if (first) {
         data.tasks = DEFAULT_TASKS.map(([title, f, done], i) => ({ id: i + 1, title, f, done, custom: false }))
         data.nextTaskId = DEFAULT_TASKS.length + 1

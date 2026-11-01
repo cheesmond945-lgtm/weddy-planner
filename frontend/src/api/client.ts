@@ -82,6 +82,27 @@ export async function request<T>(path: string, options?: RequestOptions): Promis
   return (await requestRaw<T>(path, options)).data
 }
 
+/** Tải file (CSV) từ API kèm token rồi lưu về máy với tên `filename`. */
+export async function download(path: string, filename: string) {
+  const token = authStore.getToken()
+  let res: Response
+  try {
+    res = await fetch(buildUrl(path), { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  } catch {
+    throw new ApiError(0, 'NETWORK_ERROR', 'Không kết nối được máy chủ.')
+  }
+  if (!res.ok) {
+    const err = ((await res.json().catch(() => null)) as ApiErrorBody | null)?.error
+    throw new ApiError(res.status, err?.code ?? 'UNKNOWN_ERROR', err?.message ?? 'Không tải được file.')
+  }
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 export const http = {
   get: <T>(path: string, options?: RequestOptions) => request<T>(path, { ...options, method: 'GET' }),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>

@@ -1,10 +1,11 @@
 import { Sparkles } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/toast'
 import { RatingMeta } from '@/features/catalog/components/RatingMeta'
-import { formatMillions } from '@/lib/format'
+import { formatMillions, formatMoney } from '@/lib/format'
 import { paths } from '@/routes/paths'
-import { useAiSuggestions } from '../hooks'
+import { useAiSuggestions, useBudgetMutations, useWeddingAccess } from '../hooks'
 import { AddToPlanButton } from '../planActions'
 
 interface AiSuggestionStripProps {
@@ -16,7 +17,28 @@ interface AiSuggestionStripProps {
 /** Khung "Gợi ý bằng AI cho hạng mục …" trên trang Dịch vụ cưới (aiStrip trong prototype). */
 export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSuggestionStripProps) {
   const { data, isPending, isError, error, refetch } = useAiSuggestions(categorySlug, true)
+  const { setManual, clearManual } = useBudgetMutations()
+  const access = useWeddingAccess()
   const cat = categoryName.toLowerCase()
+
+  /** Một chạm: tăng ngân sách hạng mục lên đúng chi phí gói rẻ nhất đủ chỗ, kèm Hoàn tác. */
+  function raiseBudget(categoryId: string, amount: number, previous: { amount: number; manual: boolean }) {
+    setManual.mutate(
+      { categoryId, amount },
+      {
+        onSuccess: () => {
+          void refetch()
+          toast(`Đã tăng ngân sách ${cat} lên ${formatMoney(amount)}`, {
+            action: {
+              label: 'Hoàn tác',
+              onClick: () =>
+                (previous.manual ? setManual.mutateAsync({ categoryId, amount: previous.amount }) : clearManual.mutateAsync(categoryId)).then(() => refetch()),
+            },
+          })
+        },
+      },
+    )
+  }
 
   const head = (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -26,7 +48,7 @@ export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSug
       </h2>
       <div className="flex flex-wrap items-center gap-2">
         <Button asChild variant="outline" size="sm">
-          <Link to={paths.timeline}>Quay lại timeline</Link>
+          <Link to={paths.plan}>Quay lại kế hoạch</Link>
         </Button>
         <button type="button" onClick={onClose} className="text-sm font-medium text-gold-700 underline underline-offset-[3px]">
           Đóng gợi ý
@@ -40,7 +62,7 @@ export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSug
     body = (
       <div className="mt-3.5 flex items-center gap-3" role="status">
         <span className="size-[30px] shrink-0 animate-spin rounded-full border-[3px] border-line border-t-primary" aria-hidden />
-        <span className="text-muted-foreground">Đang chọn nhà cung cấp hợp với ngân sách, địa điểm và phong cách của bạn</span>
+        <span className="text-muted-foreground">Đang chọn nhà cung cấp hợp với ngân sách, địa điểm và số khách của bạn</span>
       </div>
     )
   } else if (isError) {
@@ -53,13 +75,14 @@ export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSug
       </div>
     )
   } else {
-    const need = data.guestCount ? `, sức chứa ${data.guestCount} khách` : ''
+    const need = data.guestCount ? `, đủ chỗ cho ${data.guestCount} khách${data.tables ? ` (${data.tables} bàn)` : ''}` : ''
+    const canRaise = access.canEdit && data.isChosenCategory && !!data.categoryId && !!data.raiseBudgetTo
     body = (
       <>
         <p className="mt-1.5 text-muted-foreground">
-          Dựa trên ngân sách hạng mục {formatMillions(data.budget)}, địa điểm {data.location}
-          {data.styles.length ? `, phong cách ${data.styles.join(', ').toLowerCase()}` : ''}
-          {need}.
+          Dựa trên ngân sách hạng mục {formatMoney(data.budget)}
+          {data.budgetReason ? ` (${data.budgetReason.toLowerCase()})` : ''}, địa điểm {data.location}
+          {need}. Xếp theo điểm đánh giá, rồi số lượt đánh giá.
         </p>
         {data.suggestions.length ? (
           <div className="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-3">
@@ -80,13 +103,25 @@ export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSug
         ) : (
           <>
             <p className="mt-3">
-              Chưa có nhà cung cấp {cat} tại {data.location} trong ngân sách {formatMillions(data.budget)}
-              {need ? ' và đủ chỗ' : ''}.
-              {data.cheapest && ` Lựa chọn thấp nhất hiện có là ${data.cheapest.name} (${data.cheapest.location}), từ ${formatMillions(data.cheapest.priceFrom)}.`}
+              {data.noVenueFits
+                ? `Chưa có nhà hàng nào tại ${data.location} đủ chỗ cho ${data.guestCount} khách.`
+                : `Chưa có nhà cung cấp ${cat} tại ${data.location} trong ngân sách ${formatMillions(data.budget)}${need ? ' và đủ chỗ' : ''}.`}
+              {data.cheapest && ` Lựa chọn rẻ nhất phù hợp là ${data.cheapest.name}${data.cheapestPackage ? `, ${data.cheapestPackage.calculation}` : ''}.`}
             </p>
-            <Button asChild variant="outline" size="sm" className="mt-2.5">
-              <Link to={paths.plan}>Điều chỉnh ngân sách hạng mục</Link>
-            </Button>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {canRaise && (
+                <Button
+                  size="sm"
+                  disabled={setManual.isPending}
+                  onClick={() => raiseBudget(data.categoryId!, data.raiseBudgetTo!, { amount: data.budget, manual: data.budgetSource === 'ALLOCATED' })}
+                >
+                  Tăng ngân sách {cat} lên {formatMoney(data.raiseBudgetTo!)}
+                </Button>
+              )}
+              <Button asChild variant="outline" size="sm">
+                <Link to={paths.planTab.budget}>{data.noVenueFits ? 'Sửa số khách dự kiến' : 'Điều chỉnh ngân sách hạng mục'}</Link>
+              </Button>
+            </div>
           </>
         )}
       </>

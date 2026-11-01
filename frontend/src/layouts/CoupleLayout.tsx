@@ -1,6 +1,6 @@
 import { Heart, Menu, MessageCircle, X } from 'lucide-react'
 import { useEffect, useState, type MouseEvent } from 'react'
-import { Link, NavLink, Outlet, ScrollRestoration, useLocation, useMatch, useNavigate } from 'react-router'
+import { Link, Navigate, NavLink, Outlet, ScrollRestoration, useLocation, useMatch, useNavigate } from 'react-router'
 import { Brand } from '@/components/Brand'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
@@ -11,7 +11,7 @@ import { useConversations, useUnreadMessages } from '@/features/chat/hooks'
 import { useService } from '@/features/catalog/hooks'
 import { useFavorites } from '@/features/favorites/hooks'
 import { previewWeddingSetup, WeddingSetupDialog } from '@/features/weddings/components/WeddingDialogs'
-import { usePlan } from '@/features/weddings/hooks'
+import { usePlan, useWedding, useWeddingAccess } from '@/features/weddings/hooks'
 import { ChatPanelResume, ReplacePlanDialog, usePlanActions } from '@/features/weddings/planActions'
 import { cn } from '@/lib/utils'
 import { NotificationBell, PartnerButton, UserMenu } from './HeaderActions'
@@ -20,7 +20,6 @@ import { useAuth } from '@/store/auth'
 
 const NAV = [
   { to: paths.services, label: 'Dịch vụ cưới' },
-  { to: paths.timeline, label: 'Lập Timeline' },
   { to: paths.favorites, label: 'Dịch vụ yêu thích' },
   { to: paths.plan, label: 'Kế hoạch của tôi' },
 ]
@@ -81,6 +80,7 @@ function Header() {
   const counts: Record<string, number> = { [paths.favorites]: favorites.length, [paths.plan]: plan?.items.length ?? 0 }
   // Tin chưa đọc chỉ hiện ở nút chat nổi và mục Tin nhắn trong menu tài khoản, tách khỏi số đếm kế hoạch
   const unreadMessages = useUnreadMessages()
+  const planOnly = usePlanOnly()
 
   // Trang Dịch vụ cưới: lúc còn ở đầu trang, header nằm trên dải ảnh (trong suốt, chữ trắng); cuộn qua dải ảnh thì về header sáng
   const onPhotoPage = pathname === paths.services
@@ -110,7 +110,7 @@ function Header() {
     toast('Đã đăng xuất')
   }
 
-  const navItems = NAV.map((item) =>
+  const navItems = NAV.filter((item) => !planOnly || item.to === paths.plan).map((item) =>
     item.to === paths.services ? (
       <Link key={item.to} to={item.to} aria-current={isServices ? 'page' : undefined} className={navClass(isServices)}>
         {item.label}
@@ -165,7 +165,7 @@ function Header() {
                 <UserMenu
                   user={user}
                   onProfile={user.role === 'COUPLE' ? () => setProfileOpen(true) : undefined}
-                  unreadMessages={user.role === 'COUPLE' ? unreadMessages : undefined}
+                  unreadMessages={user.role === 'COUPLE' && !planOnly ? unreadMessages : undefined}
                   onLogout={handleLogout}
                 />
               </>
@@ -193,6 +193,27 @@ function Header() {
       {user && <ProfileDialog user={user} open={profileOpen} onOpenChange={setProfileOpen} />}
     </header>
   )
+}
+
+/** Tài khoản cặp đôi là viewer của một đám cưới: chỉ được vào Kế hoạch của tôi. */
+function usePlanOnly() {
+  const { user } = useAuth()
+  const access = useWeddingAccess()
+  return user?.role === 'COUPLE' && access.planOnly
+}
+
+/**
+ * Viewer mở trang ngoài Kế hoạch của tôi (gõ URL, link cũ, trang đầu sau đăng nhập) thì chuyển về /plan.
+ * Chờ tải xong đám cưới để không chuyển nhầm owner/editor.
+ */
+function PlanOnlyGuard() {
+  const { user } = useAuth()
+  const wedding = useWedding()
+  const planOnly = usePlanOnly()
+  const { pathname } = useLocation()
+  if (user?.role === 'COUPLE' && wedding.isPending) return null
+  if (planOnly && pathname !== paths.plan && !pathname.startsWith(`${paths.plan}/`)) return <Navigate to={paths.plan} replace />
+  return <Outlet />
 }
 
 function QuickActions({ hideClassName }: { hideClassName?: string }) {
@@ -257,6 +278,7 @@ export function CoupleLayout() {
   const isChat = useMatch(paths.chat) !== null
   // Chi tiết dịch vụ trên điện thoại (< 900px) có thanh nhắn tin cố định dưới đáy: ẩn nút nổi để không đè lên
   const isServiceDetail = useMatch('/services/:serviceId') !== null
+  const planOnly = usePlanOnly()
   // Dev: thêm ?setup-wedding vào URL để mở hộp "Thiết lập thông tin đám cưới" mà làm giao diện
   const { search } = useLocation()
   useEffect(() => {
@@ -267,11 +289,12 @@ export function CoupleLayout() {
     <div className="flex min-h-dvh flex-col">
       <Header />
       <main className={cn('mx-auto w-full flex-1', isChat ? 'px-7 pt-3.5 pb-7 md:pr-[84px] max-md:px-2' : 'max-w-content px-[clamp(16px,4vw,32px)] pt-8 pb-24')}>
-        <Outlet />
+        <PlanOnlyGuard />
       </main>
       {!isChat && <Footer />}
       {/* Trang chat trên điện thoại: ẩn để không che nút gửi */}
-      <QuickActions hideClassName={isChat ? 'max-md:hidden' : isServiceDetail ? 'max-[900px]:hidden' : undefined} />
+      {/* Viewer: không có Yêu thích và Tin nhắn */}
+      {!planOnly && <QuickActions hideClassName={isChat ? 'max-md:hidden' : isServiceDetail ? 'max-[900px]:hidden' : undefined} />}
       <WeddingSetupDialog />
       <ReplacePlanDialog />
       <ChatPanel />

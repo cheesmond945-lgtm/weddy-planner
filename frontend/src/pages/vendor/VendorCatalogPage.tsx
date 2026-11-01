@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react'
 import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
+import { AvailabilityReminderBanner } from '@/features/availability/components/VendorAvailabilityManager'
 import { Button } from '@/components/ui/button'
 import { PackageStatusSummary } from '@/features/vendorPackages/components/PackageStatusSummary'
 import { PackageToolbar, StatusTabs } from '@/features/vendorPackages/components/PackageFilters'
@@ -35,6 +36,7 @@ export default function VendorCatalogPage() {
     <>
       <PageTitle title="Quản lý dịch vụ" description={profile && <PackageStatusSummary profile={profile} />} actions={addButton} />
       {profile && <PackageStatusSummary profile={profile} notice />}
+      <AvailabilityReminderBanner />
 
       <StatusTabs value={filters.status} onChange={(status) => update({ status })} matched={matched} />
       <PackageToolbar filters={filters} allTags={allTagsOf(all)} onChange={update} onReset={reset} />

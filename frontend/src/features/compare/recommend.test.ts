@@ -6,8 +6,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { recommend, type RecommendItem } from './recommend.ts'
 
-const A: RecommendItem = { id: 'A', price: 128_000_000, rating: 4.7, reviewCount: 1824, capacity: 600, styles: ['Sang trọng', 'Truyền thống'], city: 'Hà Nội' }
-const B: RecommendItem = { id: 'B', price: 96_000_000, rating: 4.5, reviewCount: 932, capacity: 400, styles: ['Truyền thống', 'Cổ điển'], city: 'Hà Nội' }
+const A: RecommendItem = { id: 'A', price: 128_000_000, rating: 4.7, reviewCount: 1824, capacity: 600 }
+const B: RecommendItem = { id: 'B', price: 96_000_000, rating: 4.5, reviewCount: 932, capacity: 400 }
 
 describe('recommend', () => {
   it('không có thông tin đám cưới: đề xuất gói rẻ hơn với lý do "giá thấp nhất"', () => {
@@ -17,8 +17,8 @@ describe('recommend', () => {
     assert.ok(r.reasons.includes('giá thấp nhất'))
   })
 
-  it('có đám cưới 500 khách, 300 triệu, phong cách Sang trọng: đề xuất A, có lý do đủ chỗ', () => {
-    const r = recommend([A, B], { budget: 300_000_000, guestCount: 500, city: null, styles: ['Sang trọng'] }, 'nha-hang')
+  it('có đám cưới 500 khách, ngân sách hạng mục 120 triệu: đề xuất A, có lý do đủ chỗ', () => {
+    const r = recommend([A, B], { categoryBudget: 120_000_000, guestCount: 500 }, 'nha-hang')
     assert.equal(r.recommendedId, 'A')
     assert.ok(r.reasons.includes('đủ chỗ cho 500 khách'))
     assert.ok(r.reasons.length <= 3)
@@ -43,7 +43,7 @@ describe('recommend', () => {
   })
 
   it('thiếu điểm nhưng có thông tin đám cưới: vẫn dùng giá và độ phù hợp', () => {
-    const wedding = { budget: 300_000_000, guestCount: 500, city: 'Hà Nội', styles: ['Sang trọng'] }
+    const wedding = { categoryBudget: 120_000_000, guestCount: 500 }
     const r = recommend([{ ...A, rating: null, reviewCount: null }, B], wedding, 'nha-hang')
     assert.equal(r.usedRating, false)
     assert.equal(r.recommendedId, 'A')
@@ -56,6 +56,23 @@ describe('recommend', () => {
     assert.equal(r.isTie, true)
   })
 
+  it('phù hợp = min(1, ngân sách hạng mục / chi phí gói): gói vừa ngân sách có lý do riêng', () => {
+    // Cùng điểm, A rẻ hơn một chút nhưng vượt ngân sách 100 triệu; B đắt hơn nhưng vẫn vượt; C vừa ngân sách
+    const C: RecommendItem = { id: 'C', price: 95_000_000, rating: 4.5, reviewCount: 900 }
+    const D: RecommendItem = { id: 'D', price: 140_000_000, rating: 4.5, reviewCount: 900 }
+    const r = recommend([C, D], { categoryBudget: 100_000_000, guestCount: 200 }, 'decor')
+    assert.equal(r.recommendedId, 'C')
+    assert.ok(r.reasons.includes('nằm trong ngân sách hạng mục'))
+  })
+
+  it('không có ngân sách hạng mục: dùng trọng số không có đám cưới (chỉ điểm và giá)', () => {
+    const withBudget = recommend([A, B], { categoryBudget: 1, guestCount: null }, 'decor')
+    const without = recommend([A, B], { categoryBudget: null, guestCount: null }, 'decor')
+    const noWedding = recommend([A, B], null, 'decor')
+    assert.deepEqual(without, noWedding)
+    assert.ok(withBudget.recommendedId !== null)
+  })
+
   it('ít hơn 2 phương án: không đề xuất', () => {
     const r = recommend([A], null, 'nha-hang')
     assert.equal(r.recommendedId, null)
@@ -63,7 +80,7 @@ describe('recommend', () => {
   })
 
   it('hạng mục không phải nhà hàng: không xét sức chứa', () => {
-    const r = recommend([A, B], { budget: null, guestCount: 500, city: null, styles: [] }, 'decor')
+    const r = recommend([A, B], { categoryBudget: null, guestCount: 500 }, 'decor')
     assert.ok(!r.reasons.some((x) => x.startsWith('đủ chỗ')))
   })
 })

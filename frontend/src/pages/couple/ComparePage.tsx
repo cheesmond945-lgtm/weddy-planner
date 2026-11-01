@@ -9,7 +9,6 @@ import { useGoogleRatings } from '@/features/catalog/useGoogleRating'
 import { CompareTable, type RatingCell } from '@/features/compare/components/CompareTable'
 import { RecommendBox } from '@/features/compare/components/RecommendBox'
 import { recommend } from '@/features/compare/recommend'
-import { CATEGORY_BUDGET_SHARE } from '@/features/compare/recommend.config'
 import { useWedding } from '@/features/weddings/hooks'
 import { AddToPlanButton, OpenChatButton } from '@/features/weddings/planActions'
 import { formatMoney } from '@/lib/format'
@@ -41,7 +40,7 @@ export default function ComparePage() {
   const ratingsSettled = ids.every((id) => ratings[id].status !== 'loading')
   const ratingsKey = ids.map((id) => JSON.stringify(ratings[id])).join('|')
 
-  // BE trả sẵn đề xuất; chế độ dữ liệu giả (null) thì FE tự tính khi đã có đủ kết quả điểm (có thể là lỗi)
+  // BE luôn trả đề xuất; chế độ dữ liệu giả (null) thì FE tự tính khi đã có đủ kết quả điểm (có thể là lỗi)
   const recommendation = useMemo<CompareRecommendation | null>(() => {
     if (!result.data) return null
     if (result.data.recommendation) return result.data.recommendation
@@ -52,16 +51,13 @@ export default function ComparePage() {
         const r = ratings[s.id]
         return {
           id: s.id,
-          price: s.priceFrom,
+          price: s.cost ?? s.priceFrom,
           rating: r.status === 'ok' ? r.rating : null,
           reviewCount: r.status === 'ok' ? r.count : null,
-          styles: s.styles,
-          city: s.location,
           capacity: s.capacity,
         }
       }),
-      // Module weddings dùng location/styles; đổi sang city/styles cho hàm đề xuất
-      wedding ? { budget: wedding.budget, guestCount: wedding.guestCount, city: wedding.location, styles: wedding.styles } : null,
+      wedding ? { categoryBudget: result.data.categoryBudget ?? null, guestCount: wedding.guestCount } : null,
       slug,
     )
     return { serviceId: rec.recommendedId, reasons: rec.reasons, isTie: rec.isTie }
@@ -97,9 +93,8 @@ export default function ComparePage() {
   const { items } = result.data
   const recommended = recommendation ? (items.find((s) => s.id === recommendation.serviceId) ?? null) : null
   const category = items[0].category
-  const share = CATEGORY_BUDGET_SHARE[category.slug]
-  // Ngân sách hạng mục ước tính theo tỷ lệ gợi ý (cùng cách tính với đề xuất)
-  const budget = wedding && share ? Math.round((wedding.budget * share) / 1e6) * 1e6 : null
+  // Ngân sách hạng mục đang hiển thị trong kế hoạch (tab Ngân sách), cùng số với đề xuất
+  const budget = result.data.categoryBudget ?? null
 
   return (
     <>
@@ -111,8 +106,8 @@ export default function ComparePage() {
       )}
       {budget !== null && (
         <p className="mb-3 text-[14px] text-muted-foreground">
-          Ngân sách {category.name.toLowerCase()}: <b className="font-semibold text-ink">{formatMoney(budget)}</b> (ước tính{' '}
-          {Math.round(share * 100)}% tổng ngân sách {formatMoney(wedding!.budget)})
+          Ngân sách {category.name.toLowerCase()} trong kế hoạch: <b className="font-semibold text-ink">{formatMoney(budget)}</b>
+          {result.data.tables ? `. Chi phí nhà hàng tính cho ${result.data.tables} bàn.` : ''}
         </p>
       )}
       <CompareTable

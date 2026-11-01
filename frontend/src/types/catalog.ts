@@ -42,12 +42,14 @@ export interface ServicePackage {
   capacity?: number | null
   /** Ảnh bìa của gói; dữ liệu giả có thể không có (khi đó lấy ảnh album cùng id hoặc ảnh dịch vụ) */
   imageUrl?: string | null
-  /** Thẻ phong cách của gói (Hiện đại, Pha lê...) */
+  /** Thẻ của gói do NCC nhập (Hiện đại, Pha lê...): chỉ để tìm kiếm và lọc */
   tags?: string[]
   /** Số bàn tối thiểu phải đặt (nhà hàng), null khi gói không ghi */
   minTables?: number | null
-  /** Đơn vị tính giá: "gói" (mặc định), "bàn"... */
+  /** Đơn vị hiển thị: "bàn" (giá một bàn) hoặc "gói" (trọn gói) */
   unit?: string
+  /** Đơn vị tính: TABLE (giá × số bàn) hoặc PACKAGE (trọn gói) */
+  pricingUnit?: 'TABLE' | 'PACKAGE'
   /** Nhãn ưu đãi trên ảnh gói (CSDL chưa có, để sẵn cho sau) */
   promotion?: string | null
   /** Gói nổi bật: ô lớn ở layout tiles (CSDL chưa có: mặc định gói đầu tiên) */
@@ -73,6 +75,7 @@ export interface ServiceDetail extends ServiceSummary {
   highlights: string[]
   /** Sức chứa tối đa (khách), chỉ có ở nhà hàng */
   capacity: number | null
+  /** Thẻ của các gói (chỉ hiện ở trang chi tiết, dùng cho tìm kiếm), không so với đám cưới */
   styles: string[]
   workingHours: string
   /** Cách hiện gói: "tiles" mỗi gói một ô ảnh (chụp ảnh, váy, trang điểm), "album" card ảnh ghép (mặc định) */

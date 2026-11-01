@@ -10,7 +10,7 @@ const closed = (o: Order) => o.status === 'Expired' || o.status === 'Cancelled'
  * Đơn của một hạng mục trên trang Kế hoạch của tôi (mới nhất trước). Đơn hết hạn / đã hủy thu gọn sau nút "Xem …"
  * để hạng mục không dài khi NCC đã tạo lại đơn nhiều lần.
  */
-export function CategoryOrders({ orders, onRevise }: { orders: Order[]; onRevise: (o: Order) => void }) {
+export function CategoryOrders({ orders, onRevise, readOnly = false }: { orders: Order[]; onRevise: (o: Order) => void; readOnly?: boolean }) {
   const [showClosed, setShowClosed] = useState(false)
   if (!orders.length) return null
   const open = orders.filter((o) => !closed(o))
@@ -23,7 +23,7 @@ export function CategoryOrders({ orders, onRevise }: { orders: Order[]; onRevise
       {shown.length > 0 && (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3.5 max-sm:grid-cols-1">
           {shown.map((o) => (
-            <MyOrderCard key={o.id} order={o} onRevise={onRevise} />
+            <MyOrderCard key={o.id} order={o} onRevise={onRevise} readOnly={readOnly} />
           ))}
         </div>
       )}

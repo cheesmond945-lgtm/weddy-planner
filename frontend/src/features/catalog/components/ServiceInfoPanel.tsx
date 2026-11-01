@@ -1,6 +1,11 @@
-import { Check, Flower2, ImageIcon } from 'lucide-react'
+import { Check, ChevronRight, Flower2, ImageIcon } from 'lucide-react'
 import { useState } from 'react'
 import { FitImage } from '@/components/FitImage'
+import { StatusBadge } from '@/features/availability/components/AvailabilityParts'
+import { useServiceAvailability, useWeddingDate } from '@/features/availability/hooks'
+import { VENUE_SLUG } from '@/features/availability/status'
+import { formatDate } from '@/lib/date'
+import type { DayStatus } from '@/types/availability'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ServiceDetail, ServicePackage } from '@/types/catalog'
@@ -24,6 +29,11 @@ export function ServiceInfoPanel({ service }: ServiceInfoPanelProps) {
   const [viewing, setViewing] = useState<Viewing | null>(null)
   // Gói đang mở trong khung bên phải (layout album)
   const [opened, setOpened] = useState<ServicePackage | null>(null)
+  // Trung tâm tiệc cưới: trạng thái từng gói theo ngày cưới của khách (lỗi / chưa có ngày cưới thì không hiện)
+  const isVenue = service.category.slug === VENUE_SLUG
+  const { date: weddingDate } = useWeddingDate()
+  const availability = useServiceAvailability(service.id, weddingDate, isVenue)
+  const statusOf = (id: string) => availability.data?.find((p) => p.packageId === id)?.status
   const highlights = service.capacity ? [...service.highlights, `Sức chứa tối đa ${service.capacity} khách`] : service.highlights
 
   // Ảnh không thuộc gói nào. Chỉ tính được khi mọi album có đủ danh sách ảnh (dữ liệu giả thiếu thì ẩn khối này)
@@ -47,7 +57,11 @@ export function ServiceInfoPanel({ service }: ServiceInfoPanelProps) {
 
       <DetailCard
         title="Gói dịch vụ"
-        subtitle="Lựa chọn gói phù hợp cho ngày trọng đại của bạn"
+        subtitle={
+          isVenue && weddingDate && availability.data
+            ? `Trạng thái từng gói theo ngày cưới của bạn (${formatDate(weddingDate)}). Bấm Xem chi tiết để xem lịch tháng.`
+            : 'Lựa chọn gói phù hợp cho ngày trọng đại của bạn'
+        }
         icon={<Flower2 className="size-9" strokeWidth={1.25} />}
       >
         {service.packageLayout === 'tiles' ? (
@@ -61,6 +75,8 @@ export function ServiceInfoPanel({ service }: ServiceInfoPanelProps) {
                 pkg={p}
                 images={imagesOf(service, p)}
                 onOpen={() => setOpened(p)}
+                status={isVenue ? statusOf(p.id) : undefined}
+                showDetailButton={isVenue}
               />
             ))}
           </div>
@@ -85,7 +101,7 @@ export function ServiceInfoPanel({ service }: ServiceInfoPanelProps) {
         </DetailCard>
       )}
 
-      <PackageDrawer service={service} pkg={opened} variant="gallery" onClose={() => setOpened(null)} />
+      <PackageDrawer service={service} pkg={opened} variant="gallery" onClose={() => setOpened(null)} onSelect={setOpened} />
 
       <Lightbox
         title={viewing?.title ?? ''}
@@ -102,13 +118,17 @@ interface PackageCardProps {
   pkg: ServicePackage
   images: string[]
   onOpen: () => void
+  /** Trạng thái gói theo ngày cưới của khách (trung tâm tiệc cưới) */
+  status?: DayStatus
+  /** Hiện nút "Xem chi tiết" dưới card (trung tâm tiệc cưới: chi tiết có lịch khả dụng) */
+  showDetailButton?: boolean
 }
 
 /**
  * Card một gói (gọn): ảnh ghép, tên + thuộc tính, giá. Mô tả và toàn bộ ảnh nằm trong khung bên phải khi bấm card,
  * để lưới không giãn lệch khi mở rộng mô tả.
  */
-function PackageCard({ pkg, images, onOpen }: PackageCardProps) {
+function PackageCard({ pkg, images, onOpen, status, showDetailButton }: PackageCardProps) {
   const attrs = attrsOf(pkg)
 
   return (
@@ -133,6 +153,17 @@ function PackageCard({ pkg, images, onOpen }: PackageCardProps) {
             <span className="block text-[13px] text-ink-2">/ {pkg.unit ?? 'gói'}</span>
           </div>
         </div>
+        {(status || showDetailButton) && (
+          <div className="mt-auto flex items-center justify-between gap-2 border-t border-line pt-3">
+            {status ? <StatusBadge status={status} /> : <span />}
+            {showDetailButton && (
+              <span className="inline-flex items-center gap-0.5 text-sm font-semibold text-gold-700 group-hover:underline">
+                Xem chi tiết
+                <ChevronRight className="size-4" aria-hidden />
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </button>
   )

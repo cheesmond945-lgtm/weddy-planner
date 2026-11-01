@@ -14,7 +14,7 @@ export function useAiSuggest() {
     requireCouple(() => {
       if (!wedding) {
         toast('Hãy thiết lập thông tin đám cưới trước')
-        navigate(paths.timeline)
+        navigate(paths.plan)
         return
       }
       navigate(`${paths.services}?category=${categorySlug}&ai=1`)

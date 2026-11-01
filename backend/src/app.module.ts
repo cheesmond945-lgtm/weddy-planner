@@ -15,8 +15,10 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { CommissionsModule } from './modules/commissions/commissions.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { WeddingMembersModule } from './modules/wedding-members/wedding-members.module';
+import { AvailabilityModule } from './modules/availability/availability.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, NotificationsModule, RealtimeModule],
+  imports: [PrismaModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingMembersModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, NotificationsModule, RealtimeModule, AvailabilityModule],
 })
 export class AppModule {}

@@ -1,64 +1,98 @@
 import { HttpException, Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
+import { CAPACITY_CATEGORIES } from './budget.config';
+import { BudgetCalcService } from './budget-calc.service';
+import { fitsGuests, packageCost, type EnginePackage } from './budget-engine';
+import { versionOf } from './wedding-version';
 import { WeddingsService } from './weddings.service';
-
-/** Tỷ lệ ngân sách gợi ý theo hạng mục (docs/api/weddings.md mục 4). */
-const BUDGET_SHARE: Record<string, number> = { 'nha-hang': 0.22, decor: 0.14, 'co-cuoi': 0.14, 'chup-anh': 0.12, 'hoa-cuoi': 0.12, 'trang-phuc': 0.1, makeup: 0.08 };
 
 const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);
 };
 
-const millions = (n: number) => `${(n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} triệu`;
+const money = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
+
+/** Phép tính chi phí một gói để hiện cho khách: "25 bàn × 5.000.000đ = 125.000.000đ". */
+export function costCalculation(p: EnginePackage, tables: number) {
+  if (p.unit !== 'mâm') return `${p.name}: ${money(p.price)} trọn gói`;
+  const n = Math.max(tables, p.minTables ?? 0, 1);
+  const min = p.minTables && p.minTables > tables ? ` (tối thiểu ${p.minTables} bàn)` : '';
+  return `${p.name}: ${n} bàn × ${money(p.price)} = ${money(packageCost(p, tables))}${min}`;
+}
 
 /**
- * Gợi ý dịch vụ theo hạng mục. Đây là bộ lọc và xếp hạng theo luật (không gọi mô hình ngôn ngữ), chạy trên dữ liệu thật:
- * cùng khu vực, giá "từ" trong ngân sách hạng mục, nhà hàng đủ sức chứa; xếp theo số phong cách trùng, điểm, số đánh giá, giá.
- * Kết quả luôn là dịch vụ có thật trên hệ thống.
+ * Gợi ý dịch vụ theo hạng mục. Bộ lọc và xếp hạng theo luật (không gọi mô hình ngôn ngữ), chạy trên dữ liệu thật:
+ * - Lọc: cùng khu vực; nhà hàng phải có sảnh đủ chỗ cho số khách; gói rẻ nhất (đủ chỗ) nằm trong ngân sách hạng mục.
+ * - Xếp: điểm đánh giá, rồi số lượt đánh giá (cuối cùng chi phí thấp hơn, chỉ để thứ tự ổn định).
+ * Ngân sách hạng mục lấy như tab Ngân sách (budget-engine.ts). Không xét phong cách.
  */
 @Injectable()
 export class AiSuggestService {
-  constructor(private readonly services: ServicesService, private readonly weddings: WeddingsService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly services: ServicesService,
+    private readonly weddings: WeddingsService,
+    private readonly calc: BudgetCalcService,
+  ) {}
 
   async suggest(userId: string, categorySlug: string) {
-    const share = BUDGET_SHARE[categorySlug];
-    if (!share) return fail('VALIDATION_ERROR', 'Hạng mục không hợp lệ.', 400);
     const w = await this.weddings.requireWedding(userId);
-    const wedding = (await this.weddings.getMine(userId))!;
     const category = (await this.services.categories()).find((c) => c.slug === categorySlug);
     if (!category) return fail('VALIDATION_ERROR', 'Hạng mục không hợp lệ.', 400);
 
-    const budget = Math.round((wedding.budget * share) / 1e5) * 1e5;
-    const guestCount = categorySlug === 'nha-hang' ? w.guest_count : null;
-    const list = (await this.services.list({ category: categorySlug, pageSize: 100 })).items;
-    const all = await Promise.all(list.map((s) => this.services.detail(s.id)));
+    const { input, result } = await this.calc.compute(w.id, [category.id]);
+    const row = result.categories.find((c) => c.categoryId === category.id)!;
+    const budget = row.budget;
+    const tables = result.tables.count;
+    const isVenue = CAPACITY_CATEGORIES.includes(categorySlug);
+    const packages = input.categories.find((c) => c.id === category.id)?.packages ?? [];
 
-    const hitsOf = (s: (typeof all)[number]) => s.styles.filter((x) => wedding.styles.includes(x));
-    const fits = (s: (typeof all)[number]) => s.priceFrom <= budget && (!guestCount || (s.capacity ?? 0) >= guestCount);
-    const picked = all
-      .filter((s) => s.location === wedding.location && fits(s))
-      .sort((a, b) => hitsOf(b).length - hitsOf(a).length || b.rating - a.rating || b.reviewCount - a.reviewCount || a.priceFrom - b.priceFrom)
+    // Mỗi nhà cung cấp: gói rẻ nhất trong các gói đủ chỗ (nhà hàng không có sảnh nào đủ chỗ thì loại)
+    const vendorIds = [...new Set(packages.map((p) => p.vendorId))];
+    const summaries = new Map((await this.services.summaries(vendorIds)).map((s) => [s.id, s]));
+    const options = vendorIds
+      .map((id) => {
+        const pkgs = packages.filter((p) => p.vendorId === id);
+        const fit = pkgs.filter((p) => fitsGuests(p, categorySlug, input.guestCount)).map((p) => ({ p, cost: packageCost(p, tables) }));
+        fit.sort((a, b) => a.cost - b.cost);
+        const capacity = Math.max(0, ...pkgs.map((p) => p.capacity ?? 0));
+        return { id, summary: summaries.get(id), cheapest: fit[0] ?? null, capacity };
+      })
+      .filter((o) => o.summary && o.summary.location === w.city);
+
+    const fitting = options.filter((o) => o.cheapest);
+    const picked = fitting
+      .filter((o) => o.cheapest!.cost <= budget)
+      .sort((a, b) => b.summary!.rating - a.summary!.rating || b.summary!.reviewCount - a.summary!.reviewCount || a.cheapest!.cost - b.cheapest!.cost)
       .slice(0, 3);
-    const cheapest = (xs: typeof all) => [...xs].sort((a, b) => a.priceFrom - b.priceFrom)[0];
-    const cheap = cheapest(all.filter((s) => s.location === wedding.location)) ?? cheapest(all);
+    const cheapest = picked.length ? null : ([...fitting].sort((a, b) => a.cheapest!.cost - b.cheapest!.cost)[0] ?? null);
 
-    const sums = new Map((await this.services.summaries([...picked.map((s) => s.id), ...(cheap ? [cheap.id] : [])])).map((s) => [s.id, s]));
+    const pkgDto = (o: (typeof options)[number]) => ({ id: o.cheapest!.p.id, name: o.cheapest!.p.name, cost: o.cheapest!.cost, calculation: costCalculation(o.cheapest!.p, tables) });
     return {
       category,
       budget,
-      budgetSource: 'ESTIMATED',
-      location: wedding.location,
-      styles: wedding.styles,
-      guestCount,
-      suggestions: picked.map((s) => {
-        const hits = hitsOf(s);
-        const reasons = [`Giá từ ${millions(s.priceFrom)}, nằm trong ngân sách hạng mục.`];
-        if (hits.length) reasons.push(`Hợp phong cách ${hits.join(', ').toLowerCase()}.`);
-        if (s.rating > 0) reasons.push(`Điểm ${s.rating.toFixed(1)} trên Google Maps.`);
-        if (s.capacity && guestCount) reasons.push(`Chứa tối đa ${s.capacity} khách.`);
-        return { service: sums.get(s.id)!, reasons };
+      budgetSource: row.manual ? 'ALLOCATED' : 'ESTIMATED',
+      budgetReason: row.reason,
+      location: w.city,
+      guestCount: isVenue ? input.guestCount : null,
+      tables: isVenue ? tables : null,
+      suggestions: picked.map((o) => {
+        const s = o.summary!;
+        const reasons = [`${costCalculation(o.cheapest!.p, tables)}, trong ngân sách hạng mục ${money(budget)}.`];
+        if (s.rating > 0) reasons.push(`Điểm ${s.rating.toFixed(1)} trên Google Maps (${s.reviewCount.toLocaleString('vi-VN')} đánh giá).`);
+        if (isVenue && o.capacity) reasons.push(`Sảnh chứa tối đa ${o.capacity.toLocaleString('vi-VN')} khách, đủ cho ${input.guestCount.toLocaleString('vi-VN')} khách.`);
+        return { service: s, reasons, package: pkgDto(o) };
       }),
-      cheapest: picked.length || !cheap ? null : (sums.get(cheap.id) ?? null),
+      cheapest: cheapest ? cheapest.summary! : null,
+      cheapestPackage: cheapest ? pkgDto(cheapest) : null,
+      /** Không gợi ý nào: tăng ngân sách hạng mục lên đúng chi phí gói rẻ nhất đủ chỗ */
+      raiseBudgetTo: cheapest ? cheapest.cheapest!.cost : null,
+      /** Nhà hàng: không nhà hàng nào có sảnh đủ chỗ (gợi ý sửa số khách) */
+      noVenueFits: isVenue && options.length > 0 && !fitting.length,
+      categoryId: category.id,
+      isChosenCategory: w.wedding_categories.some((c) => c.category_id === category.id),
+      version: versionOf(await this.prisma.weddings.findUniqueOrThrow({ where: { id: w.id }, select: { updated_date: true } })),
     };
   }
 }

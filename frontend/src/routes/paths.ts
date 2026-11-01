@@ -5,12 +5,24 @@ export const paths = {
   // Phía cặp đôi (theo prototype)
   services: '/',
   serviceDetail: (id: string | number) => `/services/${id}`,
-  timeline: '/timeline',
+  /** Tab Timeline đã bỏ; link cũ chuyển về Kế hoạch của tôi (còn dùng ở module đơn hàng) */
+  timeline: '/plan/timeline',
   favorites: '/favorites',
   compare: '/favorites/compare',
+  /** Kế hoạch của tôi: vào /plan thì chuyển sang subtab Tổng quan */
   plan: '/plan',
+  planTab: {
+    overview: '/plan/tong-quan',
+    services: '/plan/dich-vu',
+    budget: '/plan/ngan-sach',
+    guests: '/plan/khach-moi',
+  },
   deal: (id: string | number) => `/plan/deal/${id}`,
   chat: '/chat',
+  /** Nhận lời mời cùng lập kế hoạch */
+  invite: (token: string) => `/moi/${token}`,
+  /** Xem kế hoạch qua link công khai */
+  publicPlanTab: (token: string, tab: string) => `/xem/${token}/${tab}`,
 
   // Xác thực
   login: '/login',

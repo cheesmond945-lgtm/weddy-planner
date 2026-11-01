@@ -135,7 +135,7 @@ function PayForm({ order, service, failed, overdue, onBackToChat }: { order: Ord
         </div>
       </fieldset>
       <p className="text-[13px] text-muted-foreground">
-        Sau khi thanh toán thành công, WebPlan ghi nhận cọc, đổi trạng thái dịch vụ thành đã chốt và tạo timeline chi tiết.
+        Sau khi thanh toán thành công, WebPlan ghi nhận cọc, đổi trạng thái dịch vụ thành đã chốt và tạo các việc cần làm.
       </p>
       <FormError message={create.error?.message} />
       <div className="mt-1 flex flex-wrap justify-end gap-2.5">
@@ -163,7 +163,7 @@ function PaidBody({ order, service, onBackToChat }: { order: Order; service: Ser
         Đã ghi nhận cọc <b className="font-semibold">{formatMoney(order.depositAmount)}</b> cho <b className="font-semibold">{service.name}</b>.
       </p>
       <p className="mt-2 text-muted-foreground">
-        {taskCount ? `Timeline chi tiết của hạng mục ${cat} đã được tạo với ${taskCount} việc cần làm.` : `Việc chi tiết của hạng mục ${cat} đã mở trong timeline.`}
+        {taskCount ? `Đã tạo ${taskCount} việc cần làm cho hạng mục ${cat}.` : `Việc chi tiết của hạng mục ${cat} đã được thêm vào kế hoạch.`}
       </p>
       <p className="mt-2 text-muted-foreground">
         Phần còn lại <b className="font-semibold text-ink">{formatMoney(order.totalAmount - order.depositAmount)}</b> thanh toán trực tiếp cho nhà cung cấp theo thỏa thuận.
@@ -172,7 +172,7 @@ function PaidBody({ order, service, onBackToChat }: { order: Order; service: Ser
         <Button variant="outline" onClick={onBackToChat}>
           Về tin nhắn
         </Button>
-        <Button onClick={() => navigate(`${paths.timeline}?category=${service.category.slug}`)}>Xem timeline chi tiết</Button>
+        <Button onClick={() => navigate(paths.plan)}>Xem kế hoạch</Button>
       </div>
     </>
   )

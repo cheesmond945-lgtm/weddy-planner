@@ -141,7 +141,6 @@ export function CompareTable({ services, recommendedId, isTie, ratings, budget, 
           cell: (s) =>
             !s.packages.length ? noPkg : s.priceFrom === s.priceTo ? `${millions(s.priceFrom)} triệu` : `${millions(s.priceFrom)} – ${millions(s.priceTo)} triệu`,
         },
-        { label: 'Phong cách', cell: (s) => (s.styles.length ? s.styles.join(', ') : noPkg) },
       ],
     },
     {
