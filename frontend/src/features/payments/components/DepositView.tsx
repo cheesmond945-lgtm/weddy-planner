@@ -93,7 +93,7 @@ function PayForm({ order, service, onBackToChat }: { order: Order; service: Serv
         <>
           <h2 className="text-base font-semibold">Chuyển khoản {formatMoney(order.depositAmount)} qua VietQR</h2>
           {create.data ? (
-            <VietqrPanel info={create.data} check={() => paymentsApi.checkDeposit(order.id)} onPaid={() => void refresh()} />
+            <VietqrPanel info={create.data} check={() => paymentsApi.checkDeposit(order.id)} onPaid={() => void refresh()} demoPay={create.data.demoMode ? () => paymentsApi.demoConfirm(order.id) : undefined} />
           ) : (
             <div className="h-[220px] animate-pulse rounded-md bg-muted" aria-busy="true" aria-label="Đang tạo mã QR" />
           )}

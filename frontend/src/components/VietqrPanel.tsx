@@ -29,16 +29,19 @@ interface VietqrPanelProps {
   /** Gọi backend để đối chiếu với SePay; PAID thì onPaid được gọi */
   check: () => Promise<PayCheckResult>
   onPaid: () => void
+  /** Chế độ thử: có thì hiện nút "Tôi đã thanh toán", bấm là ghi nhận đã nhận tiền */
+  demoPay?: () => Promise<PayCheckResult>
 }
 
 /**
  * Mã QR VietQR + thông tin chuyển khoản. Tự hỏi backend mỗi 5 giây cho tới khi nhận được tiền (không cần khách bấm gì).
  * Việc đã nhận tiền do backend xác nhận qua SePay.
  */
-export function VietqrPanel({ info, check, onPaid }: VietqrPanelProps) {
+export function VietqrPanel({ info, check, onPaid, demoPay }: VietqrPanelProps) {
   const [message, setMessage] = useState('')
   const [checking, setChecking] = useState(false)
   const [left, setLeft] = useState(() => Math.max(0, new Date(info.expiresAt).getTime() - Date.now()))
+  const [demoBusy, setDemoBusy] = useState(false)
   const busy = useRef(false)
   const done = useRef(false)
 
@@ -61,6 +64,24 @@ export function VietqrPanel({ info, check, onPaid }: VietqrPanelProps) {
       setChecking(false)
     }
   }, [check, onPaid])
+
+  const payDemo = async () => {
+    if (!demoPay || done.current) return
+    setDemoBusy(true)
+    try {
+      const r = await demoPay()
+      if (r.status === 'PAID') {
+        done.current = true
+        onPaid()
+      } else {
+        setMessage(r.message)
+      }
+    } catch (e) {
+      setMessage((e as Error).message)
+    } finally {
+      setDemoBusy(false)
+    }
+  }
 
   useEffect(() => {
     const t = setInterval(() => setLeft(Math.max(0, new Date(info.expiresAt).getTime() - Date.now())), 1000)
@@ -104,6 +125,17 @@ export function VietqrPanel({ info, check, onPaid }: VietqrPanelProps) {
           {expired ? 'Mã đã quá thời hạn hiển thị. Nếu bạn đã chuyển khoản, hệ thống vẫn tự ghi nhận khi nhận được tiền.' : `Đang chờ thanh toán · còn ${mm}:${ss}`}
         </p>
         {message && <p className="mt-1 text-[13px] text-muted-foreground">{message}</p>}
+        {demoPay && (
+          <button
+            type="button"
+            disabled={demoBusy}
+            onClick={() => void payDemo()}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-dashed border-gold px-3 py-2 text-sm font-medium text-gold hover:bg-muted disabled:opacity-60"
+          >
+            {demoBusy && <LoaderCircle className="size-3.5 animate-spin" />}
+            Tôi đã thanh toán (chế độ thử)
+          </button>
+        )}
       </div>
     </div>
   )

@@ -16,8 +16,9 @@ import { AiModule } from './integrations/ai/ai.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ConsultationRequestsModule } from './modules/consultation-requests/consultation-requests.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 
 @Module({
-  imports: [PrismaModule, AiModule, StorageModule, MailModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule],
+  imports: [PrismaModule, AiModule, StorageModule, MailModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, ReviewsModule],
 })
 export class AppModule {}

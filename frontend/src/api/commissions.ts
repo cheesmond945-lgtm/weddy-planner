@@ -17,6 +17,9 @@ export const commissionsApi = {
   /** Backend hỏi SePay đã nhận đủ hoa hồng chưa và ghi nhận nếu đã nhận */
   check: (id: string): Promise<CommissionPaymentResult> => http.post(`/vendors/me/commissions/${id}/check`),
 
+  /** Chỉ dùng khi thử (PAYMENT_DEMO_MODE=true): ghi nhận đã thanh toán hoa hồng ngay */
+  demoConfirm: (id: string): Promise<CommissionPaymentResult> => http.post(`/vendors/me/commissions/${id}/demo-confirm`),
+
   submitPayment: (id: string, body: SubmitCommissionPaymentBody): Promise<CommissionStatement> =>
     http.post(`/vendors/me/commissions/${id}/payments`, body),
 

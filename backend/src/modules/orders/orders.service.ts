@@ -1,5 +1,6 @@
 import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { buildPayInfo, depositContent, vietqrConfig } from '../../integrations/vietqr/vietqr';
+import { demoPaymentEnabled } from '../../integrations/vietqr/demo-mode';
 import { SepayService } from '../../integrations/vietqr/sepay.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
@@ -265,7 +266,21 @@ export class OrdersService {
     if (!(deposit > 0)) return fail('ORDER_NOT_PAYABLE', 'Đơn chưa có số tiền cọc.', 409);
     // Dòng thanh toán chưa trả (giữ nguyên nếu đã có)
     const payment = await this.prisma.payments.upsert({ where: { order_id: orderId }, create: { order_id: orderId, status: 'Unpaid' }, update: {} });
-    return { paymentId: payment.id, ...buildPayInfo(cfg, { amount: deposit, content: depositContent(o.order_code!) }) };
+    return { paymentId: payment.id, demoMode: demoPaymentEnabled(), ...buildPayInfo(cfg, { amount: deposit, content: depositContent(o.order_code!) }) };
+  }
+
+  /**
+   * Chế độ thử (PAYMENT_DEMO_MODE=true): khách bấm "Tôi đã thanh toán" thì ghi nhận cọc ngay, không cần SePay.
+   * Khi demo thật, bỏ biến PAYMENT_DEMO_MODE (hoặc đặt khác "true") là tắt; API này trả 404.
+   */
+  async confirmDemoDeposit(userId: string, orderId: string) {
+    if (!demoPaymentEnabled()) return fail('NOT_FOUND', 'Không tìm thấy.', 404);
+    const o = await this.ownedByCouple(userId, orderId);
+    if (o.status === 'Deposited' || o.status === 'Completed') return { status: 'PAID' as const, message: 'Đơn đã được đặt cọc.' };
+    if (o.status !== 'Pending') return fail('ORDER_NOT_PAYABLE', 'Đơn không ở trạng thái chờ đặt cọc.', 409);
+    const res = await this.markDepositPaid(o, `DEMO-${o.order_code}`, new Date());
+    if (res === 'NOT_PENDING') return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái, không ghi nhận được đặt cọc.' };
+    return { status: 'PAID' as const, message: 'Đặt cọc thành công (chế độ thử).' };
   }
 
   /** Hỏi SePay xem đã nhận đủ tiền cọc chưa; có thì ghi nhận đặt cọc (chỉ một lần). */

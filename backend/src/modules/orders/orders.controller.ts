@@ -39,6 +39,12 @@ export class PaymentsController {
     return this.orders.createDeposit(req.user.sub, String(body?.orderId ?? ''));
   }
 
+  /** Chế độ thử (PAYMENT_DEMO_MODE=true): ghi nhận đã cọc ngay. Tắt chế độ thì trả 404. */
+  @Post('demo-confirm')
+  demoConfirm(@Req() req: any, @Body() body: { orderId?: string }) {
+    return this.orders.confirmDemoDeposit(req.user.sub, String(body?.orderId ?? ''));
+  }
+
   /** Kiểm tra với SePay đã nhận đủ tiền cọc chưa và ghi nhận nếu đã nhận. */
   @Post('check')
   check(@Req() req: any, @Body() body: { orderId?: string }) {

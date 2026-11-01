@@ -1,5 +1,6 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { buildPayInfo, commissionContent, vietqrConfig } from '../../integrations/vietqr/vietqr';
+import { demoPaymentEnabled } from '../../integrations/vietqr/demo-mode';
 import { SepayService } from '../../integrations/vietqr/sepay.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
@@ -45,7 +46,18 @@ export class CommissionPaymentsService {
     const cfg = vietqrConfig() ?? fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VietQR.', 501);
     const { row, period } = await this.statementOf(userId, id);
     this.assertPayable(row, period);
-    return buildPayInfo(cfg, { amount: Number(row.total_amount), content: commissionContent(row.id) });
+    return { demoMode: demoPaymentEnabled(), ...buildPayInfo(cfg, { amount: Number(row.total_amount), content: commissionContent(row.id) }) };
+  }
+
+  /** Chế độ thử (PAYMENT_DEMO_MODE=true): ghi nhận đã thanh toán hoa hồng ngay. Tắt chế độ thì trả 404. */
+  async demoConfirm(userId: string, id: string): Promise<Outcome> {
+    if (!demoPaymentEnabled()) return fail('NOT_FOUND', 'Không tìm thấy.', 404);
+    const { row, period } = await this.statementOf(userId, id);
+    if (row.status === 'Paid') return this.paidOutcome(row.id, 'Bảng kê đã được ghi nhận thanh toán.');
+    this.assertPayable(row, period);
+    const full = (await this.load(row.id))!;
+    await this.markPaid(full, `DEMO-${row.id.slice(0, 8)}`, new Date());
+    return this.paidOutcome(row.id, 'Thanh toán thành công (chế độ thử).');
   }
 
   /** Hỏi SePay xem đã nhận đủ hoa hồng chưa; có thì ghi nhận Đã thanh toán (chỉ một lần). */

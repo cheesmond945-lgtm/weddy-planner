@@ -18,4 +18,6 @@ export const paymentsApi = {
   createDeposit: (orderId: string): Promise<PaymentCreated> => http.post('/payments', { orderId }),
   /** Backend hỏi SePay đã nhận đủ tiền cọc chưa và ghi nhận nếu đã nhận */
   checkDeposit: (orderId: string): Promise<PayCheckResult> => http.post('/payments/check', { orderId }),
+  /** Chỉ dùng khi thử (PAYMENT_DEMO_MODE=true): ghi nhận đã cọc ngay, không cần chuyển tiền */
+  demoConfirm: (orderId: string): Promise<PayCheckResult> => http.post('/payments/demo-confirm', { orderId }),
 }

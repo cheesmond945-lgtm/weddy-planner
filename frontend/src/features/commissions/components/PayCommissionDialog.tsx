@@ -31,7 +31,7 @@ export function PayCommissionDialog({ statementId, info, onClose }: { statementI
               <CircleCheck className="size-5" /> Đã ghi nhận thanh toán.
             </p>
           ) : (
-            <VietqrPanel info={info} check={() => commissionsApi.check(statementId)} onPaid={onPaid} />
+            <VietqrPanel info={info} check={() => commissionsApi.check(statementId)} onPaid={onPaid} demoPay={info.demoMode ? () => commissionsApi.demoConfirm(statementId) : undefined} />
           ))}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

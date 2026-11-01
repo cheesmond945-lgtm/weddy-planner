@@ -9,6 +9,8 @@ export interface PayInfo {
   accountNo: string
   accountName: string
   expiresAt: string
+  /** true khi backend bật PAYMENT_DEMO_MODE: hiện nút "Tôi đã thanh toán" để thử */
+  demoMode?: boolean
 }
 
 /** Kết quả kiểm tra với SePay: PENDING = chưa thấy tiền về. */

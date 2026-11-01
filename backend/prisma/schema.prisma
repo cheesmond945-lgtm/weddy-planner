@@ -154,16 +154,20 @@ model notifications {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model order_items {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  order_id   String?  @db.Uuid
-  item_name  String?  @db.VarChar(255)
-  unit       String?  @default("Gói") @db.VarChar(30)
-  quantity   Int?     @default(1)
-  unit_price Decimal? @db.Decimal(18, 2)
-  amount     Decimal? @db.Decimal(18, 2)
-  orders     orders?  @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id         String?           @db.Uuid
+  item_name        String?           @db.VarChar(255)
+  unit             String?           @default("Gói") @db.VarChar(30)
+  quantity         Int?              @default(1)
+  unit_price       Decimal?          @db.Decimal(18, 2)
+  amount           Decimal?          @db.Decimal(18, 2)
+  package_id       String?           @db.Uuid
+  orders           orders?           @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  service_packages service_packages? @relation(fields: [package_id], references: [id], onUpdate: NoAction)
+  reviews          reviews?
 
   @@index([order_id], map: "ix_order_items_order")
+  @@index([package_id], map: "ix_order_items_package")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -215,18 +219,23 @@ model orders {
   completed_date   DateTime?         @db.Timestamptz(6)
   cancelled_date   DateTime?         @db.Timestamptz(6)
   created_date     DateTime?         @default(now()) @db.Timestamptz(6)
+  cancel_reason    String?           @db.VarChar(20)
+  package_id       String?           @db.Uuid
   commissions      commissions?
   invoices         invoices[]
   messages         messages[]
   order_items      order_items[]
   order_revisions  order_revisions[]
+  service_packages service_packages? @relation(fields: [package_id], references: [id], onUpdate: NoAction)
   vendor_profiles  vendor_profiles?  @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   weddings         weddings?         @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   payments         payments?
   timeline_tasks   timeline_tasks[]
 
+  @@unique([package_id, event_date], map: "ux_orders_package_busy", where: raw("((package_id IS NOT NULL) AND ((status)::text = ANY ((ARRAY['Deposited'::character varying, 'Completed'::character varying])::text[])))"))
   @@index([vendor_id, status], map: "ix_orders_vendor_status")
   @@index([wedding_id, vendor_id], map: "ix_orders_wedding_vendor")
+  @@index([package_id, event_date], map: "ix_orders_package_date", where: raw("(package_id IS NOT NULL)"))
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -337,7 +346,10 @@ model service_packages {
   updated_date          DateTime?               @default(now()) @db.Timestamptz(6)
   /// Số mâm tối thiểu để được kèm sảnh (Trung tâm tổ chức sự kiện; giá gói là giá mỗi mâm 10 khách, đã gồm sảnh)
   min_tables            Int?
+  order_items           order_items[]
+  orders                orders[]
   package_albums        package_albums[]
+  package_busy_dates    package_busy_dates[]
   package_tags          package_tags[]
   package_verifications package_verifications[]
   vendor_profiles       vendor_profiles?        @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -376,7 +388,7 @@ model timeline_tasks {
 model users {
   id                                           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   username                                     String?            @db.VarChar(50)
-  email                                        String?            @unique @db.VarChar(255)
+  email                                        String             @unique @db.VarChar(255)
   full_name                                    String?            @db.VarChar(150)
   password_hash                                String?            @db.VarChar(255)
   phone_number                                 String?            @db.VarChar(20)
@@ -391,6 +403,7 @@ model users {
   notifications                                notifications[]
   search_histories                             search_histories[]
   vendor_profiles                              vendor_profiles?
+  wedding_members                              wedding_members?
   weddings                                     weddings?
 }
 
@@ -486,5 +499,51 @@ model weddings {
   plan_vendors       plan_vendors[]
   timeline_tasks     timeline_tasks[]
   wedding_categories wedding_categories[]
+  wedding_members    wedding_members?
   users              users?               @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model package_busy_dates {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  package_id       String           @db.Uuid
+  start_date       DateTime         @db.Date
+  end_date         DateTime         @db.Date
+  reason           String           @db.VarChar(255)
+  created_date     DateTime         @default(now()) @db.Timestamptz(6)
+  service_packages service_packages @relation(fields: [package_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([package_id, start_date, end_date], map: "ix_package_busy_dates_package")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model reviews {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_item_id String      @unique @db.Uuid
+  rating        Int         @db.SmallInt
+  content       String
+  created_date  DateTime?   @default(now()) @db.Timestamptz(6)
+  updated_date  DateTime?   @default(now()) @db.Timestamptz(6)
+  order_items   order_items @relation(fields: [order_item_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model wedding_members {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wedding_id   String   @unique(map: "uq_wedding_members_owner", where: raw("((role)::text = 'Owner'::text)")) @db.Uuid
+  user_id      String   @unique(map: "uq_wedding_members_user") @db.Uuid
+  role         String   @db.VarChar(20)
+  relation     String?  @db.VarChar(20)
+  display_name String?  @db.VarChar(40)
+  tabs         String[]
+  joined_date  DateTime @default(now()) @db.Timestamptz(6)
+  users        users    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  weddings     weddings @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([wedding_id, user_id], map: "uq_wedding_members_wedding_user")
 }

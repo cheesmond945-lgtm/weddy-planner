@@ -27,6 +27,12 @@ export class CommissionsController {
     return this.payments.pay(req.user.sub, id);
   }
 
+  /** Chế độ thử (PAYMENT_DEMO_MODE=true): ghi nhận đã thanh toán ngay. Tắt chế độ thì trả 404. */
+  @Post(':id/demo-confirm')
+  demoConfirm(@Req() req: any, @Param('id') id: string) {
+    return this.payments.demoConfirm(req.user.sub, id);
+  }
+
   /** Kiểm tra với SePay đã nhận đủ hoa hồng chưa và ghi nhận nếu đã nhận. */
   @Post(':id/check')
   check(@Req() req: any, @Param('id') id: string) {
