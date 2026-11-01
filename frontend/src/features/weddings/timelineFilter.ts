@@ -59,10 +59,22 @@ export function matchesQuery(i: TimelineItem, q: string): boolean {
   return terms.every((t) => words.some((w) => w.startsWith(t)))
 }
 
+/**
+ * "Việc của tôi" = việc khung + việc tự thêm + việc chi tiết của đơn đang Waiting (chờ khách). "Việc do NCC làm" = việc chi tiết còn lại
+ * (NCC đang làm hoặc đã xong). Việc chi tiết của đơn do NCC quản lý, khách chỉ xem, nên chỉ việc đang chờ khách mới tính là của khách.
+ */
 export function matchesOwner(i: TimelineItem, owner: OwnerFilter): boolean {
   if (owner === 'all') return true
-  const vendorOnly = i.kind === 'SERVICE_TASK' && i.owner === 'VENDOR'
-  return owner === 'vendor' ? vendorOnly : !vendorOnly
+  const vendorSide = i.kind === 'SERVICE_TASK' && i.status !== 'Waiting'
+  return owner === 'vendor' ? vendorSide : !vendorSide
+}
+
+/** Câu nhắn soạn sẵn gửi NCC cho một việc chi tiết: việc chờ khách thì gửi thông tin, việc cùng NCC thì hỏi lịch. */
+export function chatDraft(i: Pick<TimelineItem, 'title' | 'orderCode' | 'status'>): string {
+  const ref = `"${i.title.split(/:| \(/)[0].trim()}"${i.orderCode ? ` của đơn ${i.orderCode}` : ''}`
+  return i.status === 'Waiting'
+    ? `Chào shop, mình gửi bạn thông tin cho việc ${ref} nhé, bạn xem giúp mình ạ.`
+    : `Chào shop, mình muốn hẹn lịch cho việc ${ref}, bên mình tiện ngày nào ạ?`
 }
 
 export const isOverdue = (i: TimelineItem, today: string) => !i.isDone && !!i.dueDate && i.dueDate < today

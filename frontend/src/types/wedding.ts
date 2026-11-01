@@ -44,6 +44,8 @@ export interface TimelineItem {
   /** "YYYY-MM-DD"; null với LOCKED */
   dueDate: string | null
   isDone: boolean
+  /** Thời điểm hoàn thành (ISO) nếu đã xong */
+  completedDate?: string | null
   /** Việc do cặp đôi tự thêm (được xóa) */
   isCustom: boolean
   category: CategoryRef | null
@@ -55,26 +57,33 @@ export interface TimelineItem {
   serviceId: string | null
   /** Cờ "Cần làm gấp" (lịch bị ép vì thời gian chuẩn bị ngắn) */
   urgent: boolean
-  /** Ngày chỉ là tạm tính (việc theo lịch chụp album chưa chốt) */
-  tentative: boolean
-  /** Việc chi tiết cần gặp NCC: có nút "Hẹn với NCC" */
-  needsMeeting: boolean
-  /** Ngày hẹn với NCC "YYYY-MM-DD" (khác Hạn); null khi chưa hẹn */
-  appointmentDate: string | null
-  /** SERVICE_TASK: ai làm việc này. Khách chỉ tick được CUSTOMER và BOTH; VENDOR do NCC cập nhật */
+  /** Todo (NCC đang làm) | Waiting (chờ khách) | Done. Việc khung và việc tự thêm chỉ Todo | Done */
+  status: 'Todo' | 'Waiting' | 'Done'
+  /** SERVICE_TASK: việc lấy từ gói của NCC (khách chỉ xem) */
+  isPackageTask: boolean
+  /** SERVICE_TASK: ngày dự kiến (PLANNED) hay NCC đã chốt với khách (CONFIRMED) */
+  dateStatus: 'PLANNED' | 'CONFIRMED'
+  confirmedAt: string | null
+  /** SERVICE_TASK: ai làm việc này (chỉ để hiển thị; khách không tick được việc gắn đơn) */
   owner?: 'CUSTOMER' | 'VENDOR' | 'BOTH' | null
+  /** SERVICE_TASK: tên gói của NCC gắn với đơn (sảnh và gói của các dòng) */
+  packageName?: string | null
   /** SERVICE_TASK: mã đơn đang giữ việc */
   orderCode: string | null
   /** SERVICE_TASK: ngày thực hiện của đơn đang giữ việc */
   orderEventDate?: string | null
   /** SERVICE_TASK: ngày thực hiện của đơn sau ngày cưới (đơn cũ hoặc khách đã đổi ngày cưới) */
   dateConflict?: boolean
-  /** CATEGORY_DEADLINE chưa chốt: số việc chi tiết sẽ mở sau khi đặt cọc */
-  detailCount: number
+  /** CATEGORY_DEADLINE đã chốt mà đơn không có việc nào của gói: NCC chưa khai quy trình công việc */
+  vendorProcessMissing?: boolean
+  /** CATEGORY_DEADLINE đã chốt, gói của đơn có việc nhưng timeline chưa có dòng nào của gói: quy trình đang được cập nhật */
+  processSyncFailed?: boolean
   /** CATEGORY_DEADLINE đang Todo: đơn đã cọc rồi bị hủy gần nhất cùng hạng mục; mất khi cọc đơn mới */
   cancelledOrder: { orderCode: string; vendorName: string; date: string } | null
   /** Có nút "Gợi ý {dịch vụ} →": việc Chọn NCC đầu tiên của dịch vụ, hoặc Mốc chốt đang Todo có đơn đã hủy */
   suggest: boolean
+  /** Nhãn nút theo dịch vụ ("Gợi ý studio chụp ảnh & quay phim"); null khi không có nút */
+  suggestLabel: string | null
 }
 
 /** Mức độ gấp theo số ngày còn lại tới ngày cưới */

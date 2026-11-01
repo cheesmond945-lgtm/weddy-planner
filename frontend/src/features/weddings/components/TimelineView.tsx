@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { catalogApi } from '@/api/catalog'
 import { EmptyState } from '@/components/EmptyState'
 import { SegmentedTabs } from '@/components/SegmentedTabs'
 import { Button } from '@/components/ui/button'
@@ -9,16 +8,17 @@ import { toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import type { PrepLevel, TimelineItem, Wedding } from '@/types/wedding'
 import { useTimeline, useTimelineMutations } from '../hooks'
-import { usePlanActions } from '../planActions'
 import { countServices, groupByTime, type ViewMode } from '../timelineGroups'
-import { filterTimeline, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
+import { chatDraft, filterTimeline, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
 import { CompleteTaskDialog, ReopenTaskDialog } from './TimelineConfirmDialogs'
 import { AddTaskDialog, EditMilestoneDialog } from './TimelineDialogs'
 import { TimelineGroupCard, defaultOpen } from './TimelineGroupCard'
 import { TimelineCalendar } from './TimelineCalendar'
 import { TimelineFilters } from './TimelineFilters'
 import { TimelineHero } from './TimelineHero'
-import { SERVICE_LABEL, TimelineCard, meetingDraft } from './TimelineRow'
+import { SERVICE_LABEL, TimelineCard } from './TimelineRow'
+import { catalogApi } from '@/api/catalog'
+import { usePlanActions } from '../planActions'
 import { WeddingEditDialog } from './WeddingDialogs'
 
 type Show = 'todo' | 'done' | 'all'
@@ -64,6 +64,19 @@ const saveOpen = (v: Record<string, boolean>) => {
 }
 
 type Entry = { type: 'task'; key: string; due: string; item: TimelineItem } | { type: 'group'; key: string; due: string; book: TimelineItem; kids: TimelineItem[] }
+
+/** Banner khi có việc chi tiết nhà cung cấp đang chờ khách. Bấm "Xem" để lọc "Việc của tôi". */
+function WaitingBanner({ count, onPick }: { count: number; onPick: () => void }) {
+  if (!count) return null
+  return (
+    <div role="status" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-gold-500 bg-gold-100 px-4 py-3 text-sm text-gold-800">
+      <span className="font-semibold">Có {count} việc nhà cung cấp đang chờ bạn</span>
+      <button type="button" className="font-semibold underline underline-offset-2" onClick={onPick}>
+        Xem
+      </button>
+    </div>
+  )
+}
 
 /**
  * Dải tổng hợp việc cần chú ý: quá hạn và sắp đến hạn (còn 0 đến 2 ngày). Bấm để xem đúng nhóm đó ở cách xem THEO THỜI GIAN.
@@ -115,7 +128,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   const { update, remove } = useTimelineMutations()
   const { openChat } = usePlanActions()
   const [params, setParams] = useSearchParams()
-  const show = (SHOWS.find((s) => s.value === params.get('show'))?.value ?? 'todo') as Show
+  const show = (SHOWS.find((s) => s.value === params.get('show'))?.value ?? 'all') as Show
   const category = params.get('category') ?? ''
   // Tìm kiếm / lọc việc (cách xem THEO THỜI GIAN và LỊCH), giữ trên URL để tải lại hoặc gửi link vẫn còn: ?q= &month= &owner=
   const filters: Filters = {
@@ -190,7 +203,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
     setParams(
       (p) => {
         const next = new URLSearchParams(p)
-        if (value === 'todo') next.delete('show')
+        if (value === 'all') next.delete('show')
         else next.set('show', value)
         return next
       },
@@ -208,6 +221,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       },
       { replace: true, preventScrollReset: true },
     )
+  const waitingCount = items.filter((i) => i.kind === 'SERVICE_TASK' && i.status === 'Waiting').length
   const overdueCount = items.filter((i) => i.kind !== 'LOCKED' && isOverdue(i, nowISO)).length
   const soonCount = items.filter((i) => i.kind !== 'LOCKED' && isDueSoon(i, nowISO)).length
   const setFilters = (patch: Partial<Filters>) => setParam({ ...(patch.q !== undefined && { q: patch.q.trim() }), ...(patch.month !== undefined && { month: patch.month }), ...(patch.owner !== undefined && { owner: patch.owner === 'all' ? '' : (patch.owner as OwnerFilter) }) })
@@ -243,19 +257,19 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
     toast('Đã đưa về Chưa xong')
   }
 
-  /** Mở khung chat với NCC của dịch vụ (đơn hoặc kế hoạch), có thể kèm câu nhắn soạn sẵn. */
-  const chatWith = (serviceId: string, draft?: string) =>
+  /** Mở khung chat với NCC của dịch vụ (đơn), kèm câu nhắn soạn sẵn. */
+  const chatWith = (serviceId: string, draft: string) =>
     catalogApi.getService(serviceId).then(
-      (service) => openChat(service, draft ? { draft } : undefined),
+      (service) => openChat(service, { draft }),
       () => toast('Không mở được khung chat với nhà cung cấp'),
     )
 
   const handlers = {
+    onChat: (i: TimelineItem) => void chatWith(i.serviceId!, chatDraft(i)),
     onComplete: setCompleting,
     onReopen: setReopening,
     onEdit: setEditing,
     onRemove: (i: TimelineItem) => remove.mutate(i.id, { onSuccess: () => toast('Đã xóa việc') }),
-    onMeet: (i: TimelineItem) => void chatWith(i.serviceId!, meetingDraft(i)),
   }
 
   const chip = (active: boolean) =>
@@ -265,6 +279,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
     <>
       <TimelineHero wedding={wedding} items={items} onEdit={() => setEditingWedding(true)} onAddTask={() => setAdding(true)} />
       <UrgencyBanner level={level} daysLeft={daysLeft} />
+      <WaitingBanner count={waitingCount} onPick={() => { setView('time'); setParam({ month: '', q: '', owner: 'mine', category: '', show: 'todo' }) }} />
       <DeadlineBanner overdue={overdueCount} soon={soonCount} onPick={(m) => { setView('time'); setParam({ month: m, q: '', owner: '', category: '', show: '' }) }} />
 
       <div className="flex flex-wrap items-end justify-between gap-4">

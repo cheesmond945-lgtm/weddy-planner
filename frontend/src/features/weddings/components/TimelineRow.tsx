@@ -1,4 +1,4 @@
-import { Ban, CalendarDays, Check, Lock, Pencil, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
+import { Ban, CalendarDays, Check, Clock, Lock, Pencil, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
 import type { KeyboardEvent } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -29,13 +29,6 @@ export const dm = (s: string) => {
   return `${d.getDate()}/${d.getMonth() + 1}`
 }
 
-/** Câu nhắn soạn sẵn cho "Hẹn với NCC" (chưa tự gửi). Tên việc cắt tại dấu hai chấm hoặc ngoặc cho gọn. */
-export function meetingDraft(item: TimelineItem) {
-  const name = item.title.split(/:| \(/)[0].trim()
-  const lower = name.charAt(0).toLowerCase() + name.slice(1)
-  return `Chào shop, mình muốn hẹn lịch ${lower} trước ${dmy(item.dueDate!)}, bên mình tiện ngày nào ạ?`
-}
-
 const card =
   'group relative flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[22px] border border-line bg-surface px-5 py-[18px] shadow-card transition-all duration-150 ease-out max-[640px]:px-4'
 /** Thẻ bấm được (việc chưa xong, chưa khóa): nảy nhẹ, viền xanh nhạt, bóng mềm khi rê chuột. */
@@ -52,7 +45,8 @@ interface TimelineCardProps {
   onReopen: (item: TimelineItem) => void
   onEdit: (item: TimelineItem) => void
   onRemove: (item: TimelineItem) => void
-  onMeet: (item: TimelineItem) => void
+  /** "Nhắn NCC" cho việc chi tiết đang chờ khách / cùng NCC chưa chốt lịch */
+  onChat?: (item: TimelineItem) => void
   /** Việc con trong thẻ nhóm: nhỏ gọn hơn, thụt vào */
   nested?: boolean
   /** Cách xem THEO THỜI GIAN: việc con có thêm tên dịch vụ ở dòng hạn ("Hạn: d/m · Nhà hàng") */
@@ -64,7 +58,7 @@ interface TimelineCardProps {
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 /** Thẻ một việc: ô tick tròn, tên, dòng hạn, và nút chỉ khi nghiệp vụ cần. */
-export function TimelineCard({ item, leaving, nested, showService, compactDate, onComplete, onReopen, onEdit, onRemove, onMeet }: TimelineCardProps) {
+export function TimelineCard({ item, leaving, nested, showService, compactDate, onComplete, onReopen, onEdit, onRemove, onChat }: TimelineCardProps) {
   const due = parseDate(item.dueDate!)
   const done = item.isDone
   const overdue = !done && due < today()
@@ -72,9 +66,15 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
   const dueSoon = !done && !overdue && daysBetween(today(), due) <= DUE_SOON_DAYS
   // Mốc "Chốt" tự xong khi đặt cọc: không tick tay
   const autoDone = item.kind === 'CATEGORY_DEADLINE'
-  // Việc do NCC thực hiện (VENDOR): khách chỉ xem, NCC cập nhật ở "Tiến độ đơn"
-  const vendorOwned = item.kind === 'SERVICE_TASK' && item.owner === 'VENDOR'
+  // Việc chi tiết của đơn do NCC quản lý (mọi việc, kể cả việc của khách): khách chỉ xem, NCC cập nhật ở "Tiến độ đơn"
+  const vendorOwned = item.kind === 'SERVICE_TASK'
+  const waiting = vendorOwned && item.status === 'Waiting' && !done
+  // Việc làm cùng NCC mà ngày mới là dự kiến: NCC sẽ hẹn lịch với khách
+  const togetherUnconfirmed = vendorOwned && !done && !waiting && item.owner === 'BOTH' && item.dateStatus !== 'CONFIRMED'
   const canComplete = !done && !autoDone && !vendorOwned
+  // Việc chi tiết của đơn đã xong: vẫn hiện đúng chỗ theo ngày, nhưng cả thẻ sang tông xám (không gạch ngang)
+  const grayDone = done && vendorOwned
+  const doneDay = grayDone && item.completedDate ? dm(new Date(new Date(item.completedDate).getTime() + 7 * 3600_000).toISOString().slice(0, 10)) : null
   // Nút "Gợi ý {dịch vụ}" theo cờ `suggest` của backend (việc Chọn NCC đầu tiên của dịch vụ; Mốc chốt Todo có đơn đã hủy). Việc đã tick xong vẫn giữ nút.
   const suggests = item.suggest && !!item.category
   const label = serviceLabel(item)
@@ -97,10 +97,10 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
       data-state={done ? 'done' : 'todo'}
       onClick={canComplete ? () => onComplete(item) : undefined}
       onKeyDown={onKeyDown}
-      className={cn(card, nested && 'rounded-2xl px-4 py-3 shadow-sm max-[640px]:px-3', canComplete && clickable, leaving && !done && 'pointer-events-none -translate-x-6 scale-[0.98] opacity-0 duration-300')}
+      className={cn(card, nested && 'rounded-2xl px-4 py-3 shadow-sm max-[640px]:px-3', grayDone && 'border-line/70 bg-surface-2/60 opacity-60 shadow-none', canComplete && clickable, leaving && !done && 'pointer-events-none -translate-x-6 scale-[0.98] opacity-0 duration-300')}
     >
       {done ? (
-        <span aria-hidden className="grid size-[26px] shrink-0 place-items-center rounded-full bg-sage text-white">
+        <span aria-hidden className={cn('grid size-[26px] shrink-0 place-items-center rounded-full', grayDone ? 'bg-sage/25 text-sage' : 'bg-sage text-white')}>
           <Check className="size-4" strokeWidth={3} />
         </span>
       ) : (
@@ -108,20 +108,21 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
       )}
 
       <div className="min-w-0 flex-1 basis-[220px]">
-        <div className={cn(nested ? 'text-[15.5px]' : 'text-[17px]', 'leading-snug font-semibold', done && !autoDone && 'text-muted-foreground line-through', done && autoDone && 'text-sage')}>{item.title}</div>
+        <div className={cn(nested ? 'text-[15.5px]' : 'text-[17px]', 'leading-snug font-semibold', done && !autoDone && !grayDone && 'text-muted-foreground line-through', grayDone && 'text-muted-foreground', done && autoDone && 'text-sage')}>{item.title}</div>
         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[12.5px] font-medium text-muted-foreground">
           <CalendarDays className="size-3.5" aria-hidden />
           <span className={cn(overdue && 'text-warn')}>Hạn: {compactDate ? dm(item.dueDate!) : dmy(item.dueDate!)}</span>
           {showService && item.kind === 'SERVICE_TASK' && <span>· {capitalize(serviceLabel(item))}</span>}
-          {!done && item.appointmentDate && <span>· Đã hẹn {dm(item.appointmentDate)}</span>}
           {dueSoon && <span className="font-semibold text-gold-ink">· Sắp đến hạn</span>}
           {overdue && !vendorOwned && <span className="font-semibold text-warn">· Quá hạn</span>}
           {!done && item.urgent && <span className="font-semibold text-warn">· Gấp</span>}
-          {!done && item.tentative && <span>· Tạm tính</span>}
-          {vendorOwned && !done && <span className={cn(overdue && 'font-semibold text-warn')}>· {overdue ? 'NCC chưa cập nhật' : 'NCC thực hiện'}</span>}
-          {vendorOwned && done && <span>· NCC đã cập nhật</span>}
-          {item.kind === 'SERVICE_TASK' && item.owner === 'BOTH' && !done && <span>· Hai bên</span>}
+          {waiting && <span className={cn('font-semibold', overdue ? 'text-warn' : 'text-gold-ink')}>· Đang chờ bạn</span>}
+          {vendorOwned && !done && !waiting && <span className={cn(overdue && 'font-semibold text-warn')}>· {overdue ? 'NCC chưa cập nhật' : 'NCC thực hiện'}</span>}
+          {grayDone && <span>· Đã xong{doneDay ? ` · ${doneDay}` : ''}</span>}
+          {vendorOwned && !done && <span>· {item.dateStatus === 'CONFIRMED' ? 'Đã chốt lịch' : 'Dự kiến'}</span>}
         </div>
+        {waiting && <div className="mt-1 text-[12.5px] text-muted-foreground">Gửi cho NCC qua tin nhắn; NCC sẽ đánh dấu khi đã nhận</div>}
+        {togetherUnconfirmed && <div className="mt-1 text-[12.5px] text-muted-foreground">NCC sẽ hẹn lịch với bạn</div>}
         {autoDone && done && (
           <div className="mt-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-sage">
             <Check className="size-3.5" strokeWidth={3} aria-hidden />
@@ -135,27 +136,39 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
             Đơn {item.cancelledOrder.orderCode} với {item.cancelledOrder.vendorName} đã hủy ngày {dm(item.cancelledOrder.date)}
           </div>
         )}
-        {autoDone && !done && item.detailCount > 0 && (
+        {autoDone && !done && (
           <div className="mt-1 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
             <Lock className="size-3.5" aria-hidden />
-            {item.detailCount} việc chi tiết mở sau khi bạn đặt cọc
+            Các việc phục vụ của nhà cung cấp mở ra sau khi bạn đặt cọc
+          </div>
+        )}
+        {autoDone && done && item.vendorProcessMissing && (
+          <div className="mt-1 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+            <Ban className="size-3.5" aria-hidden />
+            Nhà cung cấp chưa khai quy trình công việc cho dịch vụ này
+          </div>
+        )}
+        {autoDone && done && item.processSyncFailed && (
+          <div className="mt-1 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+            <Clock className="size-3.5" aria-hidden />
+            Đang cập nhật quy trình công việc của nhà cung cấp
           </div>
         )}
       </div>
 
       {/* Bấm nút trong thẻ không mở hộp xác nhận */}
       <div className="flex flex-wrap items-center gap-2 max-[640px]:w-full max-[640px]:pl-[42px]" onClick={(e) => e.stopPropagation()}>
-        {suggests && item.category && (
-          <Button asChild variant="secondary" size="sm">
-            <Link to={`${paths.services}?category=${item.category.slug}`}>
-              <Sparkles className="size-[15px]" />
-              Gợi ý {label} →
-            </Link>
+        {(waiting || togetherUnconfirmed) && onChat && item.serviceId && (
+          <Button variant="outline" size="sm" onClick={() => onChat(item)}>
+            Nhắn NCC
           </Button>
         )}
-        {!done && item.kind === 'SERVICE_TASK' && item.needsMeeting && item.serviceId && (
-          <Button variant="outline" size="sm" onClick={() => onMeet(item)}>
-            Hẹn với NCC
+        {suggests && item.category && (
+          <Button asChild variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5">
+            <Link to={`${paths.services}?category=${item.category.slug}`}>
+              <Sparkles className="size-[15px] shrink-0" />
+              <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${label}`} →</span>
+            </Link>
           </Button>
         )}
         {!done && item.isCustom && (

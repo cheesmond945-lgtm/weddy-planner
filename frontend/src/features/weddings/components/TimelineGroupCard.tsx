@@ -10,7 +10,7 @@ interface Handlers {
   onReopen: (item: TimelineItem) => void
   onEdit: (item: TimelineItem) => void
   onRemove: (item: TimelineItem) => void
-  onMeet: (item: TimelineItem) => void
+  onChat?: (item: TimelineItem) => void
 }
 
 interface GroupProps extends Handlers {
@@ -50,6 +50,9 @@ export function TimelineGroupCard({ book, kids, visibleKids, open, onToggle, lea
   const owner = [...byOrder.values()].sort((x, y) => y.length - x.length)[0]
   const vendor = owner?.[0].serviceName ?? kids[0]?.serviceName ?? book.serviceName
   const orderCode = owner?.[0].orderCode
+  const packageName = owner?.[0].packageName
+  const processMissing = !!book.vendorProcessMissing
+  const processSyncing = !!book.processSyncFailed
   // Đơn giữ nhóm này có ngày thực hiện sau ngày cưới (đơn cũ hoặc khách đã đổi ngày cưới): các hạn bên dưới tính theo ngày đó
   const conflict = owner?.find((k) => k.dateConflict && k.orderEventDate)
   const panelId = `group-${book.id}`
@@ -81,7 +84,13 @@ export function TimelineGroupCard({ book, kids, visibleKids, open, onToggle, lea
             {shortTitle(book.title)}
             <span className="text-[12px] font-semibold tracking-[0.06em] uppercase">Đã chốt</span>
           </div>
-          {(vendor || orderCode) && <div className="mt-0.5 text-[13px] text-muted-foreground">{[vendor, orderCode].filter(Boolean).join(' · ')}</div>}
+          {(vendor || orderCode) && (
+            <div className="mt-0.5 text-[13px] text-muted-foreground">
+              {[vendor ? `Quy trình của ${vendor}` : null, packageName, orderCode, `Đã xong ${doneCount}/${total}`].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          {processMissing && <div className="mt-0.5 text-[12.5px] text-muted-foreground">Nhà cung cấp chưa cập nhật quy trình phục vụ</div>}
+          {processSyncing && <div className="mt-0.5 text-[12.5px] text-muted-foreground">Đang cập nhật quy trình công việc của nhà cung cấp</div>}
           {conflict && (
             <div role="note" className="mt-1 text-[12.5px] text-warn">
               Ngày thực hiện của đơn ({dmy(conflict.orderEventDate!)}) sau ngày cưới. Nhắn nhà cung cấp để cập nhật đơn.
