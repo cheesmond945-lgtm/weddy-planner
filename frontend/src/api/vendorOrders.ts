@@ -1,5 +1,5 @@
 import type { Paginated } from '@/types/api'
-import type { BoardTask, CalendarItem, CancelReason, Order, OrderContent, OrderListQuery, OrderProgress, OrderStatus, OrderTasks } from '@/types/vendorOrder'
+import type { BoardTask, CalendarItem, CancelReason, Order, OrderContent, OrderListQuery, OrderProgress, OrderStatus, OrderTasks, TaskStatus } from '@/types/vendorOrder'
 import { http, requestRaw } from './client'
 
 /** Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp). */
@@ -30,6 +30,18 @@ export const vendorOrdersApi = {
   /** NCC đánh dấu xong / mở lại việc của NCC (hoặc hai bên); khách nhận thông báo khi việc xong. */
   setTaskDone: (orderId: string, taskId: string, isDone: boolean): Promise<OrderTasks> =>
     http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}`, { isDone }),
+
+  /** Đổi trạng thái một việc của đơn (Todo | Waiting | Done), cho mọi việc kể cả việc của khách */
+  setTaskStatus: (orderId: string, taskId: string, status: TaskStatus): Promise<OrderTasks> =>
+    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}`, { status }),
+
+  /** "Chốt ngày này" (không gửi date) hoặc "Đổi ngày" (date: YYYY-MM-DD) */
+  confirmTaskDate: (orderId: string, taskId: string, date?: string): Promise<OrderTasks> =>
+    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}/schedule`, date ? { date } : {}),
+
+  /** "Bỏ chốt": xóa xác nhận ngày, giữ nguyên ngày */
+  unconfirmTaskDate: (orderId: string, taskId: string): Promise<OrderTasks> =>
+    http.delete(`/vendors/me/orders/${orderId}/tasks/${taskId}/schedule`),
 
   /** Lịch làm việc trong khoảng [from, to] (YYYY-MM-DD, tối đa 100 ngày): ngày thực hiện của đơn và việc chi tiết của đơn đã cọc. */
   calendar: async (from: string, to: string): Promise<CalendarItem[]> => {

@@ -23,6 +23,9 @@ export interface OrderItem {
   quantity: number
   unitPrice: number
   amount: number
+  /** Gói dịch vụ của dòng (quy trình của gói sinh việc chi tiết khi cọc); null: không gắn gói */
+  packageId?: string | null
+  packageName?: string | null
 }
 
 /** Thanh toán đặt cọc qua VietQR (Payments), mỗi đơn một dòng, tạo lúc gửi đơn. */
@@ -120,6 +123,8 @@ export interface OrderItemInput {
   unit: OrderUnit
   quantity: number
   unitPrice: number
+  /** Gói dịch vụ của dòng (phải là gói của NCC); bỏ trống thì không gắn gói */
+  packageId?: string | null
 }
 
 /** Nội dung đơn NCC nhập (body tạo, lưu nháp, gửi, sửa). Không có totalAmount, depositAmount. */
@@ -148,8 +153,11 @@ export interface OrderListQuery {
   pageSize?: number
 }
 
-/** Ai làm việc chi tiết của đơn (docs/TIMELINE.md mục 8): khách, NCC hoặc cả hai. */
+/** Ai làm việc chi tiết của đơn: khách, NCC hoặc cả hai (chỉ để hiển thị: NCC đổi được trạng thái mọi việc của đơn mình). */
 export type TaskOwner = 'CUSTOMER' | 'VENDOR' | 'BOTH'
+
+/** Todo: NCC đang làm; Waiting: chờ khách; Done: xong. */
+export type TaskStatus = 'Todo' | 'Waiting' | 'Done'
 
 /** Một việc trong "Tiến độ đơn" (GET /vendors/me/orders/:id/tasks). */
 export interface OrderTask {
@@ -160,9 +168,17 @@ export interface OrderTask {
   isDone: boolean
   completedDate: string | null
   owner: TaskOwner
-  /** NCC được tick việc này (VENDOR, BOTH) */
+  status: TaskStatus
+  /** NCC đổi được trạng thái việc này (luôn true với mọi việc của đơn mình) */
   canTick: boolean
   overdue: boolean
+  /** Việc lấy từ gói của NCC */
+  isPackageTask: boolean
+  /** Ngày dự kiến (PLANNED) hay đã chốt với khách (CONFIRMED) */
+  dateStatus: 'PLANNED' | 'CONFIRMED'
+  confirmedAt: string | null
+  /** Đã chốt trước ngày thực hiện nhưng ngày chốt nằm sau ngày thực hiện hiện tại: cần chốt lại với khách */
+  needsRecheck: boolean
 }
 
 /** Tóm tắt tiến độ một đơn. overdueVendor: việc của NCC (hoặc hai bên) chưa xong và quá hạn = "Trễ tiến độ". */
@@ -181,6 +197,8 @@ export interface OrderProgress {
 export interface OrderTasks {
   items: OrderTask[]
   progress: OrderProgress
+  /** Ngày thực hiện của đơn "YYYY-MM-DD" (giới hạn trên của ô đổi ngày = ngày này + 120) */
+  eventDate?: string
 }
 
 /** Một việc trên Bảng việc (GET /vendors/me/orders/tasks): việc của đơn đang thực hiện kèm thông tin đơn để gom theo khách / đơn. */
@@ -190,9 +208,11 @@ export interface BoardTask extends OrderTask {
   customerName: string
   /** "YYYY-MM-DD" ngày thực hiện của đơn */
   eventDate: string
+  /** Tên gói của NCC gắn với đơn (sảnh và gói của các dòng) */
+  packageNames: string[]
 }
 
 /** Một mục trên lịch làm việc của NCC (GET /vendors/me/orders/calendar). */
 export type CalendarItem =
   | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: OrderStatus; isDone: boolean }
-  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; isDone: boolean; owner: TaskOwner; canTick: boolean; overdue: boolean }
+  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isDone: boolean; status: TaskStatus; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean }

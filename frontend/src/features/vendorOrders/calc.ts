@@ -43,7 +43,7 @@ export function valuesOfOrder(o: Order): OrderFormValues {
     eventDate: o.eventDate,
     note: o.note,
     depositPercent: o.depositPercent,
-    items: withKeys(o.items.map(({ itemName, unit, quantity, unitPrice }) => ({ itemName, unit, quantity, unitPrice }))),
+    items: withKeys(o.items.map(({ itemName, unit, quantity, unitPrice, packageId }) => ({ itemName, unit, quantity, unitPrice, packageId: packageId ?? null }))),
     packageId: o.package?.id ?? null,
   }
 }
@@ -68,7 +68,7 @@ export function toContent(v: OrderFormValues): OrderContent {
     eventDate: v.eventDate,
     note: v.note?.trim() || null,
     depositPercent: v.depositPercent,
-    items: filledItems(v.items).map(({ itemName, unit, quantity, unitPrice }) => ({ itemName: itemName.trim(), unit, quantity, unitPrice })),
+    items: filledItems(v.items).map(({ itemName, unit, quantity, unitPrice, packageId }) => ({ itemName: itemName.trim(), unit, quantity, unitPrice, packageId: packageId ?? null })),
     packageId: v.packageId ?? null,
   }
 }

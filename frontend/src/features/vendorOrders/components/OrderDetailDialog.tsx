@@ -168,7 +168,10 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
               {o.items.map((i, k) => (
                 <tr key={i.id}>
                   <td className={cn(td, 'text-center text-muted-foreground tabular-nums')}>{k + 1}</td>
-                  <td className={cn(td, 'font-medium')}>{i.itemName}</td>
+                  <td className={cn(td, 'font-medium')}>
+                    {i.itemName}
+                    {i.packageName && <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Gói: {i.packageName}</span>}
+                  </td>
                   <td className={td}>{i.unit}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{i.quantity}</td>
                   <td className={cn(td, 'text-right whitespace-nowrap tabular-nums')}>{formatMoney(i.unitPrice)}</td>

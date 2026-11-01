@@ -181,6 +181,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   const [showRequest, setShowRequest] = useState(true)
   // Hộp xác nhận trước khi gửi đơn, gửi bản cập nhật hoặc lưu chỉnh sửa
   const [confirmSend, setConfirmSend] = useState(false)
+  const [confirmNoPackage, setConfirmNoPackage] = useState(false)
   // Sửa sau cọc: nội dung thay đổi, khách sẽ thấy (lưu vào OrderRevisions AfterDeposit)
   const [changeNote, setChangeNote] = useState('')
 
@@ -221,7 +222,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
 
   const quickFill: QuickFillPackage[] = (packages ?? [])
     .filter((p) => p.status === 'PUBLISHED')
-    .map((p) => ({ id: p.id, name: p.name, price: p.price, unit: isVenue(p.category) ? 'Bàn' : 'Gói' }))
+    .map((p) => ({ id: p.id, name: p.name, price: p.price, unit: isVenue(p.category) ? 'Bàn' : 'Gói', taskCount: p.taskCount ?? 0 }))
 
   const set = (patch: Partial<OrderFormValues>) => setValues((v) => ({ ...v, ...patch }))
 
@@ -268,6 +269,8 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
       setFormError(mode.kind === 'resend' ? 'Chưa có thay đổi nào so với đơn đang gửi.' : 'Chưa có thay đổi nào so với đơn hiện tại.')
       return
     }
+    // Không dòng nào (và không sảnh) gắn gói: sau khi khách cọc sẽ không có công việc của gói. Sửa đơn sau cọc không đổi được gói nên không hỏi.
+    if (mode.kind !== 'edit' && !values.packageId && !filledItems(values.items).some((i) => i.packageId)) return setConfirmNoPackage(true)
     setConfirmSend(true)
   }
 
@@ -504,6 +507,10 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
           </Section>
         </fieldset>
       </PanelDialog>
+
+      <ConfirmDialog open={confirmNoPackage} onOpenChange={setConfirmNoPackage} title="Đơn chưa gắn gói" confirmLabel="Vẫn gửi" cancelLabel="Quay lại chọn gói" onConfirm={() => setConfirmSend(true)}>
+        <p>Đơn chưa gắn gói — sau khi khách cọc sẽ không có công việc của gói. Vẫn gửi?</p>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={confirmSend}

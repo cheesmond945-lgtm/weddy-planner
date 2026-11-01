@@ -17,14 +17,15 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { Check, ChevronDown } from 'lucide-react'
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { createContext, useContext, useState, type CSSProperties, type ReactNode } from 'react'
 import { Badge, type BadgeTone } from '@/components/Badge'
 import { shortCouple } from '@/features/calendar/orderColors'
-import { daysBetween, formatDate, parseDate, today } from '@/lib/date'
+import { daysBetween, formatDate, parseDate, toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import type { BoardTask, TaskOwner } from '@/types/vendorOrder'
-import { useMoveBoardTask } from '../hooks'
-import { BOARD_COLUMNS, boardLanes, canMove, laneKeyOf, type BoardColumn, type BoardGroup, type BoardLane } from '../taskBoard'
+import { useMoveBoardTask, useRescheduleTask } from '../hooks'
+import { TaskDateDialog } from './TaskDateDialog'
+import { BOARD_COLUMNS, boardLanes, canMove, laneKeyOf, needsScheduleConfirm, statusOfColumn, type BoardColumn, type BoardGroup, type BoardLane } from '../taskBoard'
 
 const OWNER: Record<TaskOwner, { label: string; tone: BadgeTone }> = {
   CUSTOMER: { label: 'Khách làm', tone: 'neutral' },
@@ -48,8 +49,13 @@ const collision: CollisionDetection = (args) => {
   return hits.length ? hits : rectIntersection(args)
 }
 
-/** Nội dung thẻ việc (dùng cho thẻ trên bảng và thẻ đang kéo). */
-function CardBody({ task, showCustomer }: { task: BoardTask; showCustomer: boolean }) {
+/** "Đổi ngày…" của thẻ: bảng cung cấp, thẻ gọi. */
+const RescheduleContext = createContext<((t: BoardTask) => void) | undefined>(undefined)
+
+/** Nội dung thẻ việc (dùng cho thẻ trên bảng và thẻ đang kéo). interactive: thẻ trên bảng (có nút "Đổi ngày…"). */
+function CardBody({ task, showCustomer, interactive }: { task: BoardTask; showCustomer: boolean; interactive?: boolean }) {
+  const onReschedule = useContext(RescheduleContext)
+  const confirmSoon = needsScheduleConfirm(task, toISODate(today()))
   // Sắp đến hạn: còn 0 đến 2 ngày (cùng ngưỡng với thông báo của backend)
   const soon = !task.isDone && !task.overdue && !!task.dueDate && daysBetween(today(), parseDate(task.dueDate)) <= 2
   const owner = OWNER[task.owner]
@@ -65,10 +71,23 @@ function CardBody({ task, showCustomer }: { task: BoardTask; showCustomer: boole
         <span className={cn(task.overdue && 'font-semibold text-warn')}>Hạn {formatDate(task.dueDate)}</span>
         {task.overdue && <span className="font-semibold text-warn">· Quá hạn</span>}
         {soon && <span className="font-semibold text-gold-ink">· Sắp đến hạn</span>}
+        {confirmSoon && <span className="font-semibold text-warn">· Cần chốt lịch</span>}
+        {task.dateStatus === 'CONFIRMED' && !task.isDone && <span>· Đã chốt</span>}
         <Badge tone={owner.tone} className="ml-auto">
           {owner.label}
         </Badge>
       </p>
+      {task.needsRecheck && (
+        <p className="mt-1 flex items-start gap-1.5 text-[12px] font-medium text-warn">
+          <span aria-hidden className="mt-1 size-2 shrink-0 rounded-full bg-warn" />
+          Ngày thực hiện đã đổi — kiểm tra lại lịch đã chốt
+        </p>
+      )}
+      {interactive && onReschedule && !task.isDone && (
+        <button type="button" onClick={() => onReschedule(task)} className="mt-1 text-[12px] font-medium text-gold-ink underline underline-offset-2">
+          Đổi ngày…
+        </button>
+      )}
     </>
   )
 }
@@ -86,6 +105,7 @@ interface CardProps {
  * Ô tick nằm ngoài vùng kéo để Enter / Space trên ô tick không nhấc thẻ lên.
  */
 function BoardCard({ task, hue, showCustomer, busy, onToggle }: CardProps) {
+  const confirmSoon = needsScheduleConfirm(task, toISODate(today()))
   const { setNodeRef, setActivatorNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: task.id,
     data: { task },
@@ -96,7 +116,7 @@ function BoardCard({ task, hue, showCustomer, busy, onToggle }: CardProps) {
     <li
       ref={setNodeRef}
       style={hueStripe(hue)}
-      className={cn('flex items-start gap-2.5 rounded-md border bg-surface py-2.5 pr-3 pl-3.5 shadow-card', task.overdue ? 'border-warn/60' : 'border-line', isDragging && 'opacity-40')}
+      className={cn('flex items-start gap-2.5 rounded-md border bg-surface py-2.5 pr-3 pl-3.5 shadow-card', task.overdue ? 'border-warn/60' : confirmSoon ? 'border-orange-400' : 'border-line', isDragging && 'opacity-40')}
     >
       {task.canTick ? (
         <button
@@ -125,11 +145,11 @@ function BoardCard({ task, hue, showCustomer, busy, onToggle }: CardProps) {
           {...attributes}
           className="min-w-0 flex-1 cursor-grab touch-manipulation rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage active:cursor-grabbing"
         >
-          <CardBody task={task} showCustomer={showCustomer} />
+          <CardBody task={task} showCustomer={showCustomer} interactive />
         </div>
       ) : (
         <div className="min-w-0 flex-1">
-          <CardBody task={task} showCustomer={showCustomer} />
+          <CardBody task={task} showCustomer={showCustomer} interactive />
         </div>
       )}
     </li>
@@ -169,7 +189,8 @@ function LaneHeader({ lane, hue, open, onToggle }: { lane: BoardLane; hue: numbe
       <i aria-hidden className="size-3 shrink-0 rounded-full" style={{ backgroundColor: `hsl(${hue} 60% 48%)` }} />
       <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{o.customerName || 'Khách'}</span>
       <span className="text-[12.5px] text-muted-foreground">
-        {o.code} · thực hiện {formatDate(o.eventDate)} · {lane.done}/{lane.total} việc xong
+        {o.code} · thực hiện {formatDate(o.eventDate)}
+        {lane.packages && <> · Gói {lane.packages}</>} · {lane.done}/{lane.total} việc xong · {lane.confirmed}/{lane.total} việc đã chốt lịch
       </span>
       {lane.late > 0 && <Badge tone="warn">Trễ tiến độ · {lane.late}</Badge>}
     </button>
@@ -187,11 +208,13 @@ interface TaskBoardProps {
 
 /**
  * Bảng việc (kanban) của Lịch làm việc (docs/TIMELINE.md mục 9.2): cột Chờ khách làm / Cần làm / Đã xong, mỗi hàng một đơn (hoặc một hàng chung).
- * Kéo việc của NCC giữa Cần làm và Đã xong = đánh dấu xong / mở lại (PATCH việc của đơn); không kéo sang hàng khác, không kéo việc của khách.
+ * NCC kéo mọi việc của đơn mình giữa Cần làm, Chờ khách làm, Đã xong = đổi trạng thái Todo / Waiting / Done (PATCH việc của đơn); không kéo sang hàng khác.
  * Chuột: kéo ngay; cảm ứng: nhấn giữ rồi kéo (để vẫn cuộn được); bàn phím: Space / Enter nhấc, mũi tên di chuyển, Space / Enter thả, Esc hủy.
  */
 export function TaskBoard({ tasks, group, hueFor, hideCustomer }: TaskBoardProps) {
   const move = useMoveBoardTask()
+  const reschedule = useRescheduleTask()
+  const [rescheduling, setRescheduling] = useState<BoardTask | null>(null)
   const [dragging, setDragging] = useState<BoardTask | null>(null)
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set())
   const sensors = useSensors(
@@ -203,7 +226,8 @@ export function TaskBoard({ tasks, group, hueFor, hideCustomer }: TaskBoardProps
   const columns = BOARD_COLUMNS.filter((c) => !(hideCustomer && c.key === 'customer'))
   const lanes = boardLanes(tasks, group)
   const counts = Object.fromEntries(columns.map((c) => [c.key, lanes.reduce((n, l) => n + l.columns[c.key].length, 0)])) as Record<BoardColumn, number>
-  const toggle = (t: BoardTask) => move.mutate({ orderId: t.orderId, taskId: t.id, isDone: !t.isDone })
+  // Bỏ tick: việc của khách về Chờ khách, còn lại về Cần làm
+  const toggle = (t: BoardTask) => move.mutate({ orderId: t.orderId, taskId: t.id, status: t.isDone ? (t.owner === 'CUSTOMER' ? 'Waiting' : 'Todo') : 'Done' })
   const busyId = move.isPending ? move.variables?.taskId : undefined
 
   const titleOf = (data: unknown) => (data as { task?: BoardTask } | undefined)?.task?.title ?? 'việc'
@@ -221,7 +245,7 @@ export function TaskBoard({ tasks, group, hueFor, hideCustomer }: TaskBoardProps
     const task = active.data.current?.task as BoardTask | undefined
     const cell = over?.data.current as CellData | undefined
     if (!task || !cell || cell.lane !== laneKeyOf(task, group) || !canMove(task, cell.column)) return
-    move.mutate({ orderId: task.orderId, taskId: task.id, isDone: cell.column === 'done' })
+    move.mutate({ orderId: task.orderId, taskId: task.id, status: statusOfColumn(cell.column) })
   }
 
   if (!lanes.length) {
@@ -230,6 +254,7 @@ export function TaskBoard({ tasks, group, hueFor, hideCustomer }: TaskBoardProps
 
   const grid: CSSProperties = { gridTemplateColumns: `repeat(${columns.length}, minmax(230px, 1fr))` }
   return (
+    <RescheduleContext.Provider value={setRescheduling}>
     <DndContext
       sensors={sensors}
       collisionDetection={collision}
@@ -289,5 +314,12 @@ export function TaskBoard({ tasks, group, hueFor, hideCustomer }: TaskBoardProps
         )}
       </DragOverlay>
     </DndContext>
+    <TaskDateDialog
+      target={rescheduling && { title: rescheduling.title, dueDate: rescheduling.dueDate, eventDate: rescheduling.eventDate }}
+      busy={reschedule.isPending}
+      onClose={() => setRescheduling(null)}
+      onPick={(date) => rescheduling && reschedule.mutate({ orderId: rescheduling.orderId, taskId: rescheduling.id, date }, { onSuccess: () => setRescheduling(null) })}
+    />
+    </RescheduleContext.Provider>
   )
 }

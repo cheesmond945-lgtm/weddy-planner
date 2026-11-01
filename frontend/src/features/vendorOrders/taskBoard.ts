@@ -1,4 +1,4 @@
-import type { BoardTask } from '@/types/vendorOrder'
+import type { BoardTask, TaskStatus } from '@/types/vendorOrder'
 
 /*
  * Bảng việc (kanban) ở Lịch làm việc của NCC: chia việc vào cột, gom hàng theo đơn, luật kéo thả. Hàm thuần: không đụng giao diện, không đọc đồng hồ.
@@ -15,12 +15,27 @@ export const BOARD_COLUMNS: readonly { key: BoardColumn; title: string }[] = [
   { key: 'done', title: 'Đã xong' },
 ]
 
-type TaskState = Pick<BoardTask, 'isDone' | 'canTick'>
+type TaskState = Pick<BoardTask, 'isDone' | 'status'>
 
-export const columnOf = (t: TaskState): BoardColumn => (t.isDone ? 'done' : t.canTick ? 'todo' : 'customer')
+/** Cột theo trạng thái: Done là Đã xong, Waiting là Chờ khách làm, còn lại Cần làm. */
+export const columnOf = (t: TaskState): BoardColumn => (t.isDone ? 'done' : t.status === 'Waiting' ? 'customer' : 'todo')
+
+/** Trạng thái tương ứng với cột (kéo thả thẻ sang cột nào thì thành trạng thái đó). */
+export const statusOfColumn = (c: BoardColumn): TaskStatus => (c === 'done' ? 'Done' : c === 'customer' ? 'Waiting' : 'Todo')
+
+/** NCC chốt / đổi ngày tối đa sau ngày thực hiện bấy nhiêu ngày (khớp backend order-task-rules.ts). */
+export const SCHEDULE_MAX_AFTER_EVENT = 120
+/** Việc "Hai bên" chưa chốt lịch mà hạn còn từng này ngày (hoặc đã quá) thì nhắc "Cần chốt lịch". */
+export const CONFIRM_SOON_DAYS = 7
+const dayNum = (s: string) => Math.round(Date.parse(`${s}T00:00:00Z`) / 86_400_000)
+
+/** Việc owner BOTH chưa xong, ngày mới là dự kiến (chưa chốt với khách) và hạn còn ≤ 7 ngày: "Cần chốt lịch". */
+export const needsScheduleConfirm = (t: { owner: string; isDone: boolean; dateStatus: string; dueDate: string }, todayYmd: string) =>
+  t.owner === 'BOTH' && !t.isDone && t.dateStatus !== 'CONFIRMED' && !!t.dueDate && dayNum(t.dueDate) - dayNum(todayYmd) <= CONFIRM_SOON_DAYS
 
 /** Thả việc vào cột `to` được không: chỉ việc NCC được tick, chỉ giữa Cần làm và Đã xong, và phải đổi cột. */
-export const canMove = (t: TaskState, to: BoardColumn) => t.canTick && to !== 'customer' && to !== columnOf(t)
+/** NCC kéo được mọi việc của đơn mình sang cột khác. */
+export const canMove = (t: TaskState, to: BoardColumn) => to !== columnOf(t)
 
 /** order: mỗi đơn một hàng (mỗi hạng mục của đám cưới chỉ có một đơn đã cọc nên theo khách cũng là theo đơn); none: một hàng chung. */
 export type BoardGroup = 'order' | 'none'
@@ -38,6 +53,10 @@ export interface BoardLane {
   done: number
   /** Việc của NCC / hai bên chưa xong và quá hạn ("Trễ tiến độ") */
   late: number
+  /** Số việc đã chốt lịch với khách (dateStatus CONFIRMED) */
+  confirmed: number
+  /** Tên gói gắn với đơn, ngăn cách bằng dấu phẩy; rỗng khi không có */
+  packages: string
 }
 
 /** Hàng chứa việc `t` theo cách gom. */
@@ -61,6 +80,8 @@ function laneOf(key: string, tasks: readonly BoardTask[], withOrder: boolean): B
     total: tasks.length,
     done: columns.done.length,
     late: columns.todo.filter((t) => t.overdue).length,
+    confirmed: tasks.filter((t) => t.dateStatus === 'CONFIRMED').length,
+    packages: withOrder && first ? (first.packageNames ?? []).join(', ') : '',
   }
 }
 

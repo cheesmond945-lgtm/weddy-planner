@@ -14,7 +14,8 @@ import { BusyCalendar } from '@/features/halls/components/BusyCalendar'
 import { useVendorHalls } from '@/features/halls/hooks'
 import { TaskBoard } from '@/features/vendorOrders/components/TaskBoard'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
-import { useOrderProgress, useOrders, useSetOrderTask, useTaskBoard, useVendorCalendar } from '@/features/vendorOrders/hooks'
+import { TaskDateDialog } from '@/features/vendorOrders/components/TaskDateDialog'
+import { useConfirmTaskDate, useOrderProgress, useOrders, useRescheduleTask, useSetOrderTask, useTaskBoard, useVendorCalendar } from '@/features/vendorOrders/hooks'
 import type { BoardGroup } from '@/features/vendorOrders/taskBoard'
 import { daysBetween, formatDate, parseDate, toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
@@ -60,8 +61,27 @@ const toneOf = (i: CalendarItem): CalendarTone => (i.kind === 'ORDER' ? 'event' 
 /** Một việc trong lịch: tick được nếu là việc của NCC / hai bên; mỗi dòng gọi hook theo đơn của nó. */
 function CalendarTaskRow({ item }: { item: TaskItem }) {
   const set = useSetOrderTask(item.orderId)
-  const task: OrderTask = { id: item.id, title: item.title, dueDate: item.date, isDone: item.isDone, completedDate: null, owner: item.owner, canTick: item.canTick, overdue: item.overdue }
-  return <TaskRow t={task} busy={set.isPending} onToggle={(t) => set.mutate({ taskId: t.id, isDone: !t.isDone })} />
+  const confirm = useConfirmTaskDate(item.orderId)
+  const reschedule = useRescheduleTask()
+  const [picking, setPicking] = useState(false)
+  const task: OrderTask = { id: item.id, title: item.title, dueDate: item.date, isDone: item.isDone, completedDate: null, owner: item.owner, status: item.status, canTick: item.canTick, overdue: item.overdue, isPackageTask: false, dateStatus: item.dateStatus, confirmedAt: null, needsRecheck: false }
+  return (
+    <>
+      <TaskRow
+        t={task}
+        busy={set.isPending || confirm.isPending}
+        onToggle={(t) => set.mutate({ taskId: t.id, isDone: !t.isDone })}
+        onConfirm={(t) => confirm.mutate(t.dateStatus === 'CONFIRMED' ? { taskId: t.id, unconfirm: true } : { taskId: t.id })}
+        onReschedule={() => setPicking(true)}
+      />
+      <TaskDateDialog
+        target={picking ? { title: item.title, dueDate: item.date, eventDate: item.eventDate } : null}
+        busy={reschedule.isPending}
+        onClose={() => setPicking(false)}
+        onPick={(date) => reschedule.mutate({ orderId: item.orderId, taskId: item.id, date }, { onSuccess: () => setPicking(false) })}
+      />
+    </>
+  )
 }
 
 function CalendarOrderRow({ item }: { item: OrderItem }) {
@@ -124,7 +144,7 @@ export default function VendorCalendarPage() {
     })
 
   const items = useMemo(
-    () => (cal.data ?? []).filter((i) => (picked.size === 0 || picked.has(i.orderId)) && !(mineOnly && i.kind === 'TASK' && !i.canTick)),
+    () => (cal.data ?? []).filter((i) => (picked.size === 0 || picked.has(i.orderId)) && !(mineOnly && i.kind === 'TASK' && i.status === 'Waiting')),
     [cal.data, picked, mineOnly],
   )
   const events: CalendarEvent[] = useMemo(
@@ -145,11 +165,11 @@ export default function VendorCalendarPage() {
     const list = board.data ?? []
     // Bỏ các đơn đang chọn mà không có việc trên bảng (vd chọn đơn chờ cọc ở lịch tháng rồi chuyển sang): không thì bảng trống mà không thấy nút đang chọn
     const ids = new Set([...picked].filter((id) => list.some((t) => t.orderId === id)))
-    return list.filter((t) => (ids.size === 0 || ids.has(t.orderId)) && !(mineOnly && !t.canTick))
+    return list.filter((t) => (ids.size === 0 || ids.has(t.orderId)) && !(mineOnly && t.status === 'Waiting'))
   }, [board.data, picked, mineOnly])
-  const todoCount = (board.data ?? []).filter((t) => t.canTick && !t.isDone).length
+  const todoCount = (board.data ?? []).filter((t) => t.status !== 'Waiting' && !t.isDone).length
   const lateCount = items.filter((i) => i.kind === 'TASK' && i.overdue).length
-  const soonCount = items.filter((i) => i.kind === 'TASK' && !i.isDone && !i.overdue && i.canTick && daysBetween(today(), parseDate(i.date)) <= 2).length
+  const soonCount = items.filter((i) => i.kind === 'TASK' && !i.isDone && !i.overdue && i.status !== 'Waiting' && daysBetween(today(), parseDate(i.date)) <= 2).length
   const totalLate = Object.values(progress ?? {}).reduce((n, p) => n + p.overdueVendor, 0)
   const chip = (on: boolean) => cn('inline-flex items-center gap-1.5 rounded-pill border px-3 py-1 text-[13px] font-medium transition-colors', on ? 'border-ink bg-ink text-bg' : 'border-line bg-surface hover:border-ink')
 

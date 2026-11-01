@@ -72,6 +72,7 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
           </div>
           <span className="text-muted-foreground">
             {i.quantity} {i.unit} × {formatMoney(i.unitPrice)}
+            {i.packageName && <> · Gói: {i.packageName}</>}
           </span>
         </div>
       ))}
