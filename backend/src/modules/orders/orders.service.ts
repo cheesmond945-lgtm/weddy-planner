@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { randomInt } from 'node:crypto';
-import { buildPaymentUrl, frontendUrl, parseTxnRef, txnRefOf, verifyResult, vnpayLive, type IpnCode, type VnpayResult } from '../../integrations/vnpay/vnpay';
 import type { Prisma } from '../../generated/prisma/client';
+import { buildPayInfo, depositContent, vietqrConfig } from '../../integrations/vietqr/vietqr';
+import { demoPaymentEnabled } from '../../integrations/vietqr/demo-mode';
+import { SepayService } from '../../integrations/vietqr/sepay.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ServicesService } from '../catalog/services.service';
 import { Paginated } from '../../common/utils/pagination';
 import { notify, postMessage } from '../chat/chat-messages';
 import { hallBusyMessage } from '../halls/hall-busy';
@@ -35,7 +37,6 @@ import {
   money,
   orderedUuid,
   parseContent,
-  paymentMode,
   sameContent,
   wantsSend,
   startOfDayVn,
@@ -64,12 +65,14 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jobs: OrderJobsService,
+    private readonly sepay: SepayService,
+    private readonly services: ServicesService,
   ) {}
 
   // ================= Tiện ích =================
 
   private async vendorOf(userId: string) {
-    const v = await this.prisma.vendor_profiles.findUnique({ where: { user_id: userId }, select: { id: true, category_id: true, business_name: true } });
+    const v = await this.prisma.vendor_profiles.findUnique({ where: { user_id: userId }, select: { id: true, category_id: true, business_name: true, status: true } });
     return v ?? fail('VENDOR_PROFILE_NOT_FOUND', 'Tài khoản chưa có hồ sơ nhà cung cấp.', 404);
   }
 
@@ -195,6 +198,12 @@ export class OrdersService {
 
   // ================= Phía cặp đôi =================
 
+  /** Chi tiết dịch vụ của đơn, kể cả khi NCC đang bị ẩn (cặp đôi có đơn thì vẫn xem được để thanh toán / theo dõi). */
+  async serviceOfOrder(userId: string, id: string) {
+    const o = await this.ownedByCouple(userId, id);
+    return this.services.detail(o.vendor_profiles!.id, true);
+  }
+
   async getForCouple(userId: string, id: string) {
     const o = await this.ownedByCouple(userId, id);
     return toOrderDto(o, await this.conversationOf(o));
@@ -272,17 +281,11 @@ export class OrdersService {
   }
 
   /**
-   * Thanh toán cọc (docs/api/payments.md). Chế độ theo PAYMENT_MODE (xem paymentMode và vnpayLive):
-   * - VNPay thật (integrations/vnpay): trả URL VNPay đã ký; VNPay đưa khách về /plan/deal/:orderId kèm kết quả (FE gọi confirmDeposit)
-   *   và gọi IPN (ipnDeposit). Cả hai ghi nhận qua markDepositPaid, chỉ ghi một lần.
-   * - 'simulate': ghi nhận thành công ngay.
-   * - Còn lại (production chưa đặt PAYMENT_MODE): 501.
+   * Đặt cọc qua VietQR + SePay (docs/api/payments.md): trả mã QR với số tiền cọc lấy từ DB và nội dung "EVERLY" + mã đơn.
+   * Tiền chỉ được ghi nhận ở checkDeposit, sau khi SePay xác nhận đã nhận đúng nội dung và số tiền.
    */
-  async createDeposit(userId: string, orderId: string, method = '', ip = '') {
-    const live = vnpayLive();
-    if (!live && paymentMode() !== 'simulate') {
-      return fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VNPay. Đặt PAYMENT_MODE=simulate để dùng thanh toán thử.', 501);
-    }
+  async createDeposit(userId: string, orderId: string) {
+    const cfg = vietqrConfig() ?? fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VietQR.', 501);
     const o = await this.ownedByCouple(userId, orderId);
     if (o.status !== 'Pending') {
       const why: Record<string, string> = {
@@ -294,6 +297,7 @@ export class OrdersService {
       };
       return fail('ORDER_NOT_PAYABLE', why[o.status ?? ''] ?? 'Đơn không ở trạng thái chờ đặt cọc.', 409);
     }
+    if (o.vendor_profiles?.status === 'Hidden') return fail('VENDOR_HIDDEN', 'Nhà cung cấp tạm ngừng nhận đơn mới nên chưa đặt cọc được.', 409);
 
     // Quá hạn cọc mà chưa kịp quét (quét riêng giãn cách 15 giây): chuyển Expired ngay, không nhận cọc
     if (o.deposit_due_date && o.deposit_due_date <= new Date()) {
@@ -318,29 +322,11 @@ export class OrdersService {
     const hallBusy = await this.hallBusyForCouple(o);
     if (hallBusy) return fail('HALL_BUSY', hallBusy, 409);
 
-    if (live) {
-      // Dòng thanh toán chưa trả (giữ nguyên nếu đã có), để IPN và trang quay về cùng ghi vào
-      const payment = await this.prisma.payments.upsert({ where: { order_id: orderId }, create: { order_id: orderId, status: 'Unpaid' }, update: {} });
-      const paymentUrl = buildPaymentUrl({
-        txnRef: txnRefOf('DEPOSIT', orderId),
-        amount: Number(o.deposit_amount),
-        orderInfo: `Dat coc don ${o.order_code}`,
-        ip,
-        method,
-        returnUrl: `${frontendUrl()}/plan/deal/${orderId}`,
-      });
-      return { paymentId: payment.id, paymentUrl };
-    }
-
-    const res = await this.markDepositPaid(o, String(randomInt(10_000_000, 99_999_999)), new Date());
-    if (res === 'CATEGORY_TAKEN') {
-      const other = await this.depositedElsewhere(o.wedding_id, o.vendor_profiles?.service_categories?.id ?? null, o.id);
-      return fail('CATEGORY_ALREADY_DEPOSITED', other ? categoryTakenMessage('COUPLE', other) : 'Hạng mục này đã có đơn khác đang đặt cọc.', 409);
-    }
-    if (res === 'NOT_PENDING') return fail('ORDER_NOT_PAYABLE', 'Đơn không còn ở trạng thái chờ đặt cọc.', 409);
-    if (res === 'HALL_BUSY') return fail('HALL_BUSY', (await this.hallBusyForCouple(o)) ?? 'Sảnh đã bận ngày thực hiện của đơn.', 409);
-    const payment = await this.prisma.payments.findUniqueOrThrow({ where: { order_id: orderId } });
-    return { paymentId: payment.id, paymentUrl: `/plan/deal/${orderId}?vnp_ResponseCode=00` };
+    const deposit = Number(o.deposit_amount);
+    if (!(deposit > 0)) return fail('ORDER_NOT_PAYABLE', 'Đơn chưa có số tiền cọc.', 409);
+    // Dòng thanh toán chưa trả (giữ nguyên nếu đã có)
+    const payment = await this.prisma.payments.upsert({ where: { order_id: orderId }, create: { order_id: orderId, status: 'Unpaid' }, update: {} });
+    return { paymentId: payment.id, demoMode: demoPaymentEnabled(), ...buildPayInfo(cfg, { amount: deposit, content: depositContent(o.order_code!) }) };
   }
 
   /** Lời báo cho khách nếu sảnh của đơn đã bận ngày thực hiện (khách khác đã cọc, hoặc NCC đánh dấu bận); null nếu còn trống / đơn không theo sảnh. */
@@ -350,39 +336,41 @@ export class OrdersService {
     return busy ? hallBusyMessage('COUPLE', o.service_packages?.name ?? '', ymd(o.event_date), busy) : null;
   }
 
-  /** VNPay đưa khách quay về trang đơn: kiểm tra chữ ký, số tiền rồi ghi nhận đặt cọc (nếu IPN chưa ghi). */
-  async confirmDeposit(userId: string, q: Record<string, string>) {
-    if (!vnpayLive()) return fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VNPay.', 501);
-    const r = verifyResult(q);
-    if (!r.valid) return fail('PAYMENT_SIGNATURE_INVALID', 'Kết quả thanh toán không hợp lệ (sai chữ ký).', 400);
-    const t = parseTxnRef(r.txnRef);
-    if (t?.kind !== 'DEPOSIT') return fail('PAYMENT_INTENT_NOT_FOUND', 'Mã giao dịch không hợp lệ.', 400);
-    const o = await this.ownedByCouple(userId, t.id);
-    if (!r.success) return { status: 'FAILED' as const, message: r.message };
-    if (Math.round(Number(o.deposit_amount)) !== Math.round(r.amount)) return fail('PAYMENT_AMOUNT_MISMATCH', 'Số tiền thanh toán không khớp tiền cọc.', 409);
-    const res = await this.markDepositPaid(o, r.transactionNo, r.paidAt);
-    if (res === 'CATEGORY_TAKEN') {
-      return { status: 'FAILED' as const, message: 'Hạng mục này đã có đơn khác đang đặt cọc nên đơn chưa được ghi nhận. Vui lòng liên hệ WebPlan để được hỗ trợ hoàn tiền.' };
-    }
-    if (res === 'NOT_PENDING') {
-      return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái trong lúc thanh toán. Vui lòng liên hệ WebPlan để được hỗ trợ hoàn tiền.' };
-    }
-    if (res === 'HALL_BUSY') {
-      return { status: 'FAILED' as const, message: 'Sảnh đã có khách khác đặt cọc ngày này trong lúc bạn thanh toán nên đơn chưa được ghi nhận. Vui lòng liên hệ WebPlan để được hỗ trợ hoàn tiền.' };
-    }
-    return { status: 'PAID' as const, message: 'Đặt cọc thành công.' };
+  /**
+   * Chế độ thử (PAYMENT_DEMO_MODE=true): khách bấm "Tôi đã thanh toán" thì ghi nhận cọc ngay, không cần SePay.
+   * Khi demo thật, bỏ biến PAYMENT_DEMO_MODE (hoặc đặt khác "true") là tắt; API này trả 404.
+   */
+  async confirmDemoDeposit(userId: string, orderId: string) {
+    if (!demoPaymentEnabled()) return fail('NOT_FOUND', 'Không tìm thấy.', 404);
+    const o = await this.ownedByCouple(userId, orderId);
+    if (o.status === 'Deposited' || o.status === 'Completed') return { status: 'PAID' as const, message: 'Đơn đã được đặt cọc.' };
+    if (o.status !== 'Pending') return fail('ORDER_NOT_PAYABLE', 'Đơn không ở trạng thái chờ đặt cọc.', 409);
+    const res = await this.markDepositPaid(o, `DEMO-${o.order_code}`, new Date());
+    if (res === 'CATEGORY_TAKEN') return { status: 'FAILED' as const, message: 'Hạng mục này đã có đơn khác đang đặt cọc nên đơn chưa được ghi nhận.' };
+    if (res === 'HALL_BUSY') return { status: 'FAILED' as const, message: 'Sảnh đã có khách khác đặt cọc ngày này nên đơn chưa được ghi nhận.' };
+    if (res === 'NOT_PENDING') return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái, không ghi nhận được đặt cọc.' };
+    return { status: 'PAID' as const, message: 'Đặt cọc thành công (chế độ thử).' };
   }
 
-  /** IPN của VNPay cho giao dịch đặt cọc (chữ ký đã kiểm ở PaymentsGatewayController). */
-  async ipnDeposit(orderId: string, r: VnpayResult): Promise<IpnCode> {
-    const o = await this.prisma.orders.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
-    if (!o) return '01';
-    if (Math.round(Number(o.deposit_amount)) !== Math.round(r.amount)) return '04';
-    if (o.status === 'Deposited' || o.status === 'Completed') return '02';
-    // Giao dịch thất bại: không ghi gì, chỉ xác nhận đã nhận thông báo
-    if (!r.success) return '00';
-    const res = await this.markDepositPaid(o, r.transactionNo, r.paidAt);
-    return res === 'PAID' ? '00' : '02';
+  /** Hỏi SePay xem đã nhận đủ tiền cọc chưa; có thì ghi nhận đặt cọc (chỉ một lần). */
+  async checkDeposit(userId: string, orderId: string) {
+    if (!vietqrConfig()) return fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VietQR.', 501);
+    const o = await this.ownedByCouple(userId, orderId);
+    if (o.status === 'Deposited' || o.status === 'Completed') return { status: 'PAID' as const, message: 'Đơn đã được đặt cọc.' };
+    if (o.status !== 'Pending') return fail('ORDER_NOT_PAYABLE', 'Đơn không ở trạng thái chờ đặt cọc.', 409);
+    const txn = await this.sepay.findPayment(depositContent(o.order_code!), Number(o.deposit_amount));
+    if (!txn) return { status: 'PENDING' as const, message: 'Chưa nhận được tiền. Nếu bạn vừa chuyển khoản, vui lòng đợi ít giây.' };
+    const res = await this.markDepositPaid(o, txn.id, txn.paidAt);
+    if (res === 'CATEGORY_TAKEN') {
+      return { status: 'FAILED' as const, message: 'Hạng mục này đã có đơn khác đang đặt cọc nên đơn chưa được ghi nhận. Vui lòng liên hệ Forever để được hỗ trợ hoàn tiền.' };
+    }
+    if (res === 'NOT_PENDING') {
+      return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái trong lúc thanh toán. Vui lòng liên hệ Forever để được hỗ trợ hoàn tiền.' };
+    }
+    if (res === 'HALL_BUSY') {
+      return { status: 'FAILED' as const, message: 'Sảnh đã có khách khác đặt cọc ngày này trong lúc bạn thanh toán nên đơn chưa được ghi nhận. Vui lòng liên hệ Forever để được hỗ trợ hoàn tiền.' };
+    }
+    return { status: 'PAID' as const, message: 'Đặt cọc thành công.' };
   }
 
   /**
@@ -572,6 +560,7 @@ export class OrdersService {
   /** Gửi đơn Draft lần đầu, hoặc "Cập nhật đơn" khi Pending / NeedRevision (hạn cọc đặt lại 24 giờ, thẻ mới trong chat). */
   async send(userId: string, id: string, body: { content?: ContentInput }) {
     const { vendor, order } = await this.ownedByVendor(userId, id);
+    if (vendor.status === 'Hidden') return fail('VENDOR_HIDDEN', 'Hồ sơ đang bị ẩn nên chưa gửi đơn mới được. Vui lòng liên hệ Forever.', 409);
     if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status ?? '')) {
       return fail('ORDER_NOT_SENDABLE', 'Chỉ gửi được đơn nháp, hoặc cập nhật đơn đang chờ đặt cọc / chờ chỉnh sửa.', 409);
     }

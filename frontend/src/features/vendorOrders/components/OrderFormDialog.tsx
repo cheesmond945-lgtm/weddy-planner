@@ -132,7 +132,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
               </span>
             </td>
             <td className={td}>{paidDate ? `Đã cọc ${formatDay(paidDate)}` : '1 ngày sau khi gửi đơn'}</td>
-            <td className={td}>VNPay (trực tuyến)</td>
+            <td className={td}>VietQR (trực tuyến)</td>
           </tr>
           <tr>
             <td className={td}>
@@ -151,7 +151,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
         </p>
       )}
       <p className="border-t border-line bg-surface-2 px-3 py-2 text-[12.5px] text-muted-foreground">
-        Cọc tối thiểu {DEPOSIT_PERCENT_MIN}% tổng đơn. Hệ thống chỉ ghi nhận khoản cọc qua VNPay; khách quá 24 giờ chưa cọc thì đơn tự hủy (hết hạn).
+        Cọc tối thiểu {DEPOSIT_PERCENT_MIN}% tổng đơn. Hệ thống chỉ ghi nhận khoản cọc qua VietQR; khách quá 24 giờ chưa cọc thì đơn tự hủy (hết hạn).
       </p>
     </div>
   )
@@ -488,7 +488,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
             <OrderItemsEditor items={values.items} packages={quickFill} errors={errors} onChange={(next) => set({ items: next })} />
           </Section>
 
-          <Section title="Đặt cọc và thanh toán" hint="Chỉ khoản cọc đi qua hệ thống (VNPay). Phần còn lại khách trả tiền mặt trực tiếp cho bạn.">
+          <Section title="Đặt cọc và thanh toán" hint="Chỉ khoản cọc đi qua hệ thống (VietQR). Phần còn lại khách trả tiền mặt trực tiếp cho bạn.">
             <ScheduleTable
               percent={values.depositPercent}
               onPercent={(depositPercent) => set({ depositPercent })}

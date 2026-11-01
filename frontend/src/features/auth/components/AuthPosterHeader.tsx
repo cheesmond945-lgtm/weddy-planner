@@ -3,7 +3,7 @@ import coupleImg from '@/assets/auth-bg.jpg'
 import { paths } from '@/routes/paths'
 
 /**
- * Phần đầu thẻ đăng nhập / đăng ký kiểu poster: ảnh cô dâu chú rể trong khung, tên WebPlan nhỏ ở góc trên ảnh,
+ * Phần đầu thẻ đăng nhập / đăng ký kiểu poster: ảnh cô dâu chú rể trong khung, tên Forever nhỏ ở góc trên ảnh,
  * dòng "Lập kế hoạch" và chữ viết tay đè lên mép ảnh, ngày/tháng hôm nay bằng chữ serif trên ảnh.
  * compact: trang đăng ký nhiều ô hơn nên ảnh thấp lại để cả form vừa một màn hình.
  */
@@ -22,7 +22,7 @@ export function AuthPosterHeader({ compact = false }: { compact?: boolean }) {
           to={paths.services}
           className="absolute top-3 right-4 font-serif text-[13px] tracking-[0.4em] text-white/90 uppercase [text-shadow:0_1px_8px_rgb(0_0_0/0.6)] hover:text-white"
         >
-          WebPlan
+          Forever
         </Link>
         <p className="absolute right-4 bottom-3 font-serif text-[22px] leading-tight text-white [text-shadow:0_1px_8px_rgb(0_0_0/0.6)]">
           {now.getDate()} · {now.getMonth() + 1}

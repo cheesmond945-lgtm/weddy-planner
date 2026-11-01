@@ -39,7 +39,7 @@ export function ForgotPasswordForm({ defaultEmail = '', onSuccess, onStepChange 
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      <p className="text-sm text-ink-2">Nhập email bạn đã dùng để đăng ký. WebPlan sẽ gửi mã OTP về email đó để bạn đặt mật khẩu mới.</p>
+      <p className="text-sm text-ink-2">Nhập email bạn đã dùng để đăng ký. Forever sẽ gửi mã OTP về email đó để bạn đặt mật khẩu mới.</p>
       <AuthField
         label="Email"
         type="email"

@@ -13,14 +13,15 @@ import { WeddingsModule } from './modules/weddings/weddings.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { CommissionsModule } from './modules/commissions/commissions.module';
+import { AiModule } from './integrations/ai/ai.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ConsultationRequestsModule } from './modules/consultation-requests/consultation-requests.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
-import { PaymentsGatewayModule } from './modules/payments-gateway/payments-gateway.module';
 import { HallsModule } from './modules/halls/halls.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, PaymentsGatewayModule, RealtimeModule, HallsModule],
+  imports: [PrismaModule, AiModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, RealtimeModule, HallsModule, ReviewsModule],
 })
 export class AppModule {}

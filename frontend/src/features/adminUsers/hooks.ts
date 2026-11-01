@@ -12,7 +12,7 @@ export function useAdminUsers(query: AdminUserQuery) {
   return useQuery({ queryKey: keys.list(query), queryFn: () => adminApi.listUsers(query), enabled, placeholderData: keepPreviousData, refetchOnMount: 'always' })
 }
 
-/** Sau khi đổi tài khoản: tải lại danh sách, số liệu tổng quan và yêu cầu tư vấn (có thể đã tạo tài khoản từ yêu cầu). */
+/** Sau khi đổi tài khoản: tải lại danh sách, số liệu tổng quan và yêu cầu hợp tác (có thể đã tạo tài khoản từ yêu cầu). */
 function useSync() {
   const qc = useQueryClient()
   const refresh = useRefreshAdminSummary()

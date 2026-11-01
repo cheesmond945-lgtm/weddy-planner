@@ -30,7 +30,7 @@ const Info = ({ icon: Icon, children }: { icon: typeof User; children: string })
   </span>
 )
 
-/** Một yêu cầu tư vấn: thông tin liên hệ, đã liên hệ, đánh giá nhà cung cấp (chỉ sau khi đã liên hệ), ghi chú và tạo tài khoản. */
+/** Một yêu cầu hợp tác: thông tin liên hệ, đã liên hệ, đánh giá nhà cung cấp (chỉ sau khi đã liên hệ), ghi chú và tạo tài khoản. */
 export function ConsultationCard({ item: c, busy, onContacted, onRate, onNote, onCreateAccount, onDelete }: ConsultationCardProps) {
   const q = QUALIFICATION[c.qualification]
   const rated = c.qualification !== 'UNRATED'

@@ -5,7 +5,7 @@ export default function VendorAccountPage() {
   return (
     <AccountSettings
       nameLabel="Người liên hệ"
-      infoNote="Tự đổi email đăng nhập bằng mật khẩu và mã xác minh gửi tới email mới. Cần đổi số điện thoại, hoặc mất cả email lẫn mật khẩu, vui lòng liên hệ quản trị viên WebPlan."
+      infoNote="Tự đổi email đăng nhập bằng mật khẩu và mã xác minh gửi tới email mới. Cần đổi số điện thoại, hoặc mất cả email lẫn mật khẩu, vui lòng liên hệ quản trị viên Forever."
       passwordNote="Nên đổi mật khẩu được gửi qua email ngay lần đăng nhập đầu tiên. Không dùng lại mật khẩu của tài khoản khác."
     />
   )

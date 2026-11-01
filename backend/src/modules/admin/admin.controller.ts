@@ -112,6 +112,17 @@ export class AdminController {
     return this.reviews.reviewVendor(id);
   }
 
+  /** Ẩn hồ sơ đã duyệt, kéo theo mọi gói dịch vụ của NCC. */
+  @Post('vendors/:id/hide')
+  hideVendor(@Param('id') id: string) {
+    return this.reviews.hideVendor(id);
+  }
+
+  @Post('vendors/:id/unhide')
+  unhideVendor(@Param('id') id: string) {
+    return this.reviews.unhideVendor(id);
+  }
+
   @Post('vendors/:id/request-revision')
   vendorRevision(@Param('id') id: string, @Body() body: { note?: string }) {
     return this.reviews.reviewVendor(id, body?.note ?? '');
@@ -149,7 +160,7 @@ export class AdminController {
     return this.payments.detail(id);
   }
 
-  /** Ghi nhận đã thanh toán khi NCC chuyển khoản ngoài VNPay (tuỳ chọn mở khóa tài khoản NCC) */
+  /** Ghi nhận đã thanh toán khi NCC chuyển khoản ngoài VietQR (tuỳ chọn mở khóa tài khoản NCC) */
   @Post('commissions/:id/record-payment')
   recordPayment(@Param('id') id: string, @Body() body: RecordPaymentDto) {
     return this.payments.recordPayment(id, body ?? {});

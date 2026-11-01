@@ -82,7 +82,7 @@ export function weddingDateIssue(
 
 export const DEPOSIT_ROUNDING = 100_000;
 export const DEPOSIT_MIN = 100_000;
-/** Tỷ lệ cọc tối thiểu khi gửi đơn (%). Đợt 1 (cọc) khách chuyển khoản qua VNPay, đợt 2 (còn lại) trả tiền mặt cho NCC. */
+/** Tỷ lệ cọc tối thiểu khi gửi đơn (%). Đợt 1 (cọc) khách chuyển khoản qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC. */
 export const DEPOSIT_PERCENT_MIN = 10;
 
 /** Tổng × tỷ lệ / 100, làm tròn gần nhất đến 100.000đ, tối thiểu 100.000đ (cọc 0đ thì khách không thanh toán được). */
@@ -258,16 +258,4 @@ export function sameContent(a: ParsedContent, b: ParsedContent): boolean {
     a.items.length === b.items.length &&
     a.items.every((x, i) => x.itemName === b.items[i].itemName && x.unit === b.items[i].unit && x.quantity === b.items[i].quantity && x.unitPrice === b.items[i].unitPrice)
   );
-}
-
-// ---------- Thanh toán đặt cọc ----------
-
-/**
- * Chế độ thanh toán cọc (biến PAYMENT_MODE): 'simulate' ghi nhận thanh toán thành công ngay; 'vnpay' (chưa tích hợp).
- * Chưa đặt biến: giả lập khi chạy dev; nếu NODE_ENV=production thì KHÔNG giả lập, phải đặt rõ PAYMENT_MODE=simulate.
- */
-export function paymentMode(): 'simulate' | 'vnpay' | 'off' {
-  const mode = process.env.PAYMENT_MODE?.trim().toLowerCase();
-  if (mode === 'simulate' || mode === 'vnpay') return mode;
-  return process.env.NODE_ENV === 'production' ? 'off' : 'simulate';
 }

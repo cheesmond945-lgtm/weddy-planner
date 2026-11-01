@@ -113,7 +113,7 @@ export class ChatService {
     const vendors = await this.prisma.vendor_profiles.findMany({ where: { user_id: { in: convs.flatMap((c) => (c.vendor_id ? [c.vendor_id] : [])) } }, select: { id: true, user_id: true } });
     const vendorByUser = new Map(vendors.map((v) => [v.user_id, v]));
     const [summaries, statuses, unread, orders] = await Promise.all([
-      this.services.summaries(vendors.map((v) => v.id)),
+      this.services.summaries(vendors.map((v) => v.id), userId),
       this.weddings.planStatusMap(userId, vendors),
       this.unreadByConversation(convs, 'Couple'),
       // Đơn đã gửi mới nhất với từng NCC (bỏ bản nháp), cho nhãn trạng thái đơn trong danh sách hội thoại
@@ -130,7 +130,7 @@ export class ChatService {
     return convs.flatMap((c) => {
       const v = vendorByUser.get(c.vendor_id!);
       const service = v && sumById.get(v.id);
-      if (!v || !service) return []; // NCC đã bị ẩn
+      if (!v || !service) return []; // NCC không còn hiển thị và không có đơn nào với cặp đôi này
       const last = c.messages[0];
       return [
         {

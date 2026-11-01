@@ -34,7 +34,7 @@ export function ProfileCard({ profile, fallbackName }: { profile: VendorProfile;
         {profile.status === 'VERIFIED'
           ? `Bạn được gửi duyệt gói thuộc lĩnh vực ${profile.verifiedCategory?.name ?? field?.name ?? ''}.`
           : profile.status === 'PENDING'
-            ? 'Hồ sơ đang chờ WebPlan xét duyệt, bạn vẫn tạo được gói nháp.'
+            ? 'Hồ sơ đang chờ Forever xét duyệt, bạn vẫn tạo được gói nháp.'
             : 'Hồ sơ chưa được xác minh, bạn vẫn tạo được gói nháp. Gửi duyệt gói mở sau khi hồ sơ được xác minh.'}
       </p>
       <Button asChild variant="outline" className="w-full border-line-strong">

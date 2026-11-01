@@ -23,7 +23,7 @@ export default function PlanPage() {
     <>
       <PageTitle
         title="Kế hoạch của tôi"
-        description="Thông tin đám cưới, dịch vụ bạn đã chọn và đơn dịch vụ nhà cung cấp gửi cho từng hạng mục. Cọc qua VNPay trong 24 giờ, phần còn lại trả tiền mặt cho nhà cung cấp."
+        description="Thông tin đám cưới, dịch vụ bạn đã chọn và đơn dịch vụ nhà cung cấp gửi cho từng hạng mục. Cọc qua VietQR trong 24 giờ, phần còn lại trả tiền mặt cho nhà cung cấp."
       />
       {wedding.isPending || plan.isPending ? (
         <div className="h-[360px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải" />

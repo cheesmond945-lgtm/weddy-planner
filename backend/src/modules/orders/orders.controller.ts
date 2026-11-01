@@ -23,6 +23,12 @@ export class CoupleOrdersController {
     return this.orders.getForCouple(req.user.sub, id);
   }
 
+  /** Dịch vụ của đơn (kể cả khi NCC đang bị ẩn). */
+  @Get(':id/service')
+  service(@Req() req: any, @Param('id') id: string) {
+    return this.orders.serviceOfOrder(req.user.sub, id);
+  }
+
   /** Yêu cầu chỉnh sửa (Pending; hoặc Deposited trước ngày thực hiện, tiền cọc giữ nguyên): { changes?: ['Item'|'Quantity'|'EventDate'|'Other'], note } */
   @HttpCode(200)
   @Post(':id/revision-requests')
@@ -31,7 +37,7 @@ export class CoupleOrdersController {
   }
 }
 
-/** Đặt cọc (docs/api/payments.md). VNPay thật hoặc giả lập theo PAYMENT_MODE: xem OrdersService.createDeposit và paymentMode() trong order-rules.ts. */
+/** Đặt cọc qua VietQR + SePay (docs/api/payments.md): xem OrdersService.createDeposit. */
 @UseGuards(JwtAuthGuard)
 @Roles('Couple')
 @Controller('payments')
@@ -40,15 +46,20 @@ export class PaymentsController {
 
   @HttpCode(200)
   @Post()
-  create(@Req() req: any, @Body() body: { orderId?: string; method?: string }) {
-    return this.orders.createDeposit(req.user.sub, String(body?.orderId ?? ''), String(body?.method ?? ''), req.ip);
+  create(@Req() req: any, @Body() body: { orderId?: string }) {
+    return this.orders.createDeposit(req.user.sub, String(body?.orderId ?? ''));
   }
 
-  /** Kết quả VNPay quay về trang đơn (body = các tham số vnp_* trên URL quay về). */
-  @HttpCode(200)
-  @Post('vnpay/confirm')
-  confirm(@Req() req: any, @Body() body: Record<string, string>) {
-    return this.orders.confirmDeposit(req.user.sub, body ?? {});
+  /** Chế độ thử (PAYMENT_DEMO_MODE=true): ghi nhận đã cọc ngay. Tắt chế độ thì trả 404. */
+  @Post('demo-confirm')
+  demoConfirm(@Req() req: any, @Body() body: { orderId?: string }) {
+    return this.orders.confirmDemoDeposit(req.user.sub, String(body?.orderId ?? ''));
+  }
+
+  /** Kiểm tra với SePay đã nhận đủ tiền cọc chưa và ghi nhận nếu đã nhận. */
+  @Post('check')
+  check(@Req() req: any, @Body() body: { orderId?: string }) {
+    return this.orders.checkDeposit(req.user.sub, String(body?.orderId ?? ''));
   }
 }
 

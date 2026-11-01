@@ -24,7 +24,7 @@ const Row = ({ label, children }: { label: string; children: string | undefined 
 )
 
 /**
- * Form "Đăng ký thông tin" để nhà cung cấp xin tư vấn hợp tác. Yêu cầu gửi lên sẽ hiện ở trang Yêu cầu tư vấn của Admin.
+ * Form "Đăng ký thông tin" để nhà cung cấp xin tư vấn hợp tác. Yêu cầu gửi lên sẽ hiện ở trang Yêu cầu hợp tác của Admin.
  * Số điện thoại đã gửi thì không gửi lại được; muốn đổi thông tin thì báo Admin khi được liên hệ (ngoài hệ thống).
  * Đang gắn ở header Admin để thử; sau này đặt ở header giao diện khách hàng.
  */
@@ -146,7 +146,7 @@ export function PartnerRegistrationDialog({ open, onOpenChange }: { open: boolea
           <>
             <DialogTitle className="text-[30px] leading-tight tracking-wide uppercase">Đăng ký thông tin</DialogTitle>
             <span aria-hidden className="mt-2 block h-[3px] w-10 rounded-full bg-gold" />
-            <DialogDescription className="mt-3 text-[11px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">Trở thành đối tác chiến lược cùng WebPlan</DialogDescription>
+            <DialogDescription className="mt-3 text-[11px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">Trở thành đối tác chiến lược cùng Forever</DialogDescription>
 
             <form
               noValidate

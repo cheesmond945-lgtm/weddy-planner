@@ -44,18 +44,15 @@ export function useSubmitCommissionPayment(id: string) {
     mutationFn: (body: SubmitCommissionPaymentBody) => commissionsApi.submitPayment(id, body),
     onSuccess: (s, body) => {
       sync(s)
-      toast(`Đã gửi minh chứng ${formatMoney(body.amount)} cho kỳ ${s.code}. Chờ WebPlan xác nhận.`)
+      toast(`Đã gửi minh chứng ${formatMoney(body.amount)} cho kỳ ${s.code}. Chờ Forever xác nhận.`)
     },
   })
 }
 
-/** Bấm "Thanh toán": lấy URL VNPay rồi chuyển trình duyệt sang đó. */
+/** Bấm "Thanh toán": lấy mã QR VietQR để hiện trong hộp thoại. */
 export function usePayCommission() {
   return useMutation({
     mutationFn: (id: string) => commissionsApi.pay(id),
-    onSuccess: ({ paymentUrl }) => {
-      window.location.href = paymentUrl
-    },
     onError: (e) => toast(e.message),
   })
 }

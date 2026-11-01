@@ -21,7 +21,7 @@ import { QUALIFICATIONS, type ConsultationRequest, type Qualification } from '@/
 
 const PAGE_SIZE = 10
 
-/** Yêu cầu tư vấn từ nhà cung cấp: liên hệ, đánh giá, ghi chú và tạo tài khoản NCC cho yêu cầu đạt tiêu chuẩn. */
+/** Yêu cầu hợp tác từ nhà cung cấp: liên hệ, đánh giá, ghi chú và tạo tài khoản NCC cho yêu cầu đạt tiêu chuẩn. */
 export default function AdminConsultationRequestsPage() {
   const [params, setParams] = useSearchParams()
   const categorySlug = params.get('linhvuc') ?? ''
@@ -76,7 +76,7 @@ export default function AdminConsultationRequestsPage() {
 
   return (
     <>
-      <PageTitle title="Yêu cầu tư vấn" />
+      <PageTitle title="Yêu cầu hợp tác" />
 
       <div className="mb-6 flex flex-wrap items-center gap-3 rounded-[18px] border border-line bg-surface px-4 py-3 shadow-portal">
         <SearchBox value={search} onChange={(v) => { setSearch(v); set({}) }} placeholder="Tìm theo thương hiệu, người liên hệ, SĐT, email" className="min-w-[260px]" />
@@ -105,13 +105,13 @@ export default function AdminConsultationRequestsPage() {
       </div>
 
       {isPending ? (
-        <TableSkeleton label="Đang tải yêu cầu tư vấn" height={300} />
+        <TableSkeleton label="Đang tải yêu cầu hợp tác" height={300} />
       ) : isError ? (
         <EmptyState title="Chưa tải được yêu cầu" description={error.message} action={<Button onClick={() => refetch()}>Thử lại</Button>} />
       ) : !data.items.length ? (
         <EmptyState
           title="Không có yêu cầu nào phù hợp"
-          description={filtering ? 'Thử đổi tiêu chí tìm kiếm hoặc xóa bộ lọc để xem lại danh sách.' : 'Chưa có yêu cầu tư vấn nào.'}
+          description={filtering ? 'Thử đổi tiêu chí tìm kiếm hoặc xóa bộ lọc để xem lại danh sách.' : 'Chưa có yêu cầu hợp tác nào.'}
           action={filtering && <Button variant="outline" onClick={clear}>Xóa bộ lọc</Button>}
         />
       ) : (
@@ -148,7 +148,7 @@ export default function AdminConsultationRequestsPage() {
         open={!!deleteTarget}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
         icon={Trash2}
-        title="Xóa yêu cầu tư vấn?"
+        title="Xóa yêu cầu hợp tác?"
         confirmLabel="Xóa yêu cầu"
         danger
         pending={del.isPending}

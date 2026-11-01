@@ -33,7 +33,7 @@ export const adminApi = {
   counts: (): Promise<AdminCounts> => http.get('/admin/counts'),
   dashboard: (): Promise<AdminDashboard> => http.get('/admin/dashboard'),
 
-  // Yêu cầu tư vấn
+  // Yêu cầu hợp tác
   listConsultations: (query: ConsultationQuery): Promise<ConsultationList> =>
     http.get('/admin/consultation-requests', { query: { ...query } }),
   updateConsultation: (id: string, body: UpdateConsultationBody): Promise<ConsultationRequest> =>
@@ -54,6 +54,9 @@ export const adminApi = {
   approveVendor: (id: string): Promise<AdminVendor> => http.post(`/admin/vendors/${id}/approve`),
   requestVendorRevision: (id: string, note: string): Promise<AdminVendor> =>
     http.post(`/admin/vendors/${id}/request-revision`, { note }),
+  /** Ẩn hồ sơ đã duyệt (kéo theo mọi gói dịch vụ của NCC) */
+  hideVendor: (id: string): Promise<AdminVendor> => http.post(`/admin/vendors/${id}/hide`),
+  unhideVendor: (id: string): Promise<AdminVendor> => http.post(`/admin/vendors/${id}/unhide`),
 
   // Duyệt gói dịch vụ
   listPackages: (query: AdminPackageQuery): Promise<AdminPackageList> => http.get('/admin/packages', { query: { ...query } }),
@@ -64,7 +67,7 @@ export const adminApi = {
 
   // Thanh toán hoa hồng
   getStatement: (id: string): Promise<AdminStatementDetail> => http.get(`/admin/commissions/${id}`),
-  /** Ghi nhận NCC đã chuyển khoản ngoài VNPay; unlock = mở khóa tài khoản NCC luôn */
+  /** Ghi nhận NCC đã chuyển khoản ngoài VietQR; unlock = mở khóa tài khoản NCC luôn */
   recordStatementPayment: (id: string, body: { transactionCode: string; paidAt: string; unlock: boolean }): Promise<AdminStatementDetail> =>
     http.post(`/admin/commissions/${id}/record-payment`, body),
   listStatements: (query: AdminStatementQuery): Promise<AdminStatementList> =>

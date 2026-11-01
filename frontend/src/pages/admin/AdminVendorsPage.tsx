@@ -63,6 +63,7 @@ export default function AdminVendorsPage() {
     { value: 'PENDING', label: PROFILE_STATUS.PENDING.label, count: counts?.PENDING ?? 0, tone: 'info' },
     { value: 'NEEDS_REVISION', label: PROFILE_STATUS.NEEDS_REVISION.label, count: counts?.NEEDS_REVISION ?? 0, tone: 'warn' },
     { value: 'VERIFIED', label: PROFILE_STATUS.VERIFIED.label, count: counts?.VERIFIED ?? 0, tone: 'done' },
+    { value: 'HIDDEN', label: PROFILE_STATUS.HIDDEN.label, count: counts?.HIDDEN ?? 0, tone: 'neutral' },
   ]
   const filtering = !!(search || categorySlug || days)
   const clear = () => {

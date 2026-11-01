@@ -43,11 +43,11 @@ function useVendorPortalTheme() {
   }, [])
 }
 
-/** Tiêu đề tab: "(2) Tin nhắn · WebPlan" khi có tin chưa đọc. Trả lại tiêu đề cũ khi rời cổng NCC. */
+/** Tiêu đề tab: "(2) Tin nhắn · Forever" khi có tin chưa đọc. Trả lại tiêu đề cũ khi rời cổng NCC. */
 function useUnreadTabTitle(pageLabel: string, unread: number) {
   useEffect(() => {
     const before = document.title
-    document.title = `${unread > 0 ? `(${unread}) ` : ''}${pageLabel} · WebPlan`
+    document.title = `${unread > 0 ? `(${unread}) ` : ''}${pageLabel} · Forever`
     return () => {
       document.title = before
     }
@@ -123,13 +123,13 @@ function AccountMenu({ onLogout }: { onLogout: () => void }) {
   )
 }
 
-/** Chữ WebPlan. trên sidebar, "Plan." ánh vàng (.wordmark trong prototype). */
+/** Chữ Forever. trên sidebar, "ever." ánh vàng (.wordmark trong prototype). */
 function Wordmark() {
   const gold = 'bg-(image:--gold-grad) bg-clip-text text-transparent'
   return (
-    <Link to={paths.vendor.dashboard} aria-label="WebPlan, về trang tổng quan" className="block px-[26px] pt-7 pb-[22px]">
+    <Link to={paths.vendor.dashboard} aria-label="Forever, về trang tổng quan" className="block px-[26px] pt-7 pb-[22px]">
       <span className="block font-serif text-[32px] leading-none font-semibold tracking-[-0.01em] text-side-ink">
-        Web<em className={cn('font-medium', gold)}>Plan</em>
+        For<em className={cn('font-medium', gold)}>ever</em>
         <span className={gold}>.</span>
       </span>
       <span className="mt-2.5 block text-[10.5px] tracking-[0.24em] text-side-muted uppercase">Cổng nhà cung cấp</span>

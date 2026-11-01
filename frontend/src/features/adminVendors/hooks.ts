@@ -32,3 +32,18 @@ export function useReviewVendor() {
     },
   })
 }
+
+/** Admin ẩn hồ sơ đã duyệt (kéo theo mọi gói) hoặc hiện lại. */
+export function useToggleVendorHidden() {
+  const qc = useQueryClient()
+  const refresh = useRefreshAdminSummary()
+  return useMutation({
+    mutationFn: ({ id, hide }: { id: string; hide: boolean }): Promise<AdminVendor> => (hide ? adminApi.hideVendor(id) : adminApi.unhideVendor(id)),
+    onSuccess: (v, { hide }) => {
+      void qc.invalidateQueries({ queryKey: keys.all })
+      void qc.invalidateQueries({ queryKey: ['admin', 'vendor', v.id] })
+      refresh()
+      toast(hide ? `Đã ẩn hồ sơ ${v.businessName} và các gói dịch vụ.` : `Đã hiện lại hồ sơ ${v.businessName}.`)
+    },
+  })
+}

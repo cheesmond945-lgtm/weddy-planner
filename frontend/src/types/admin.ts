@@ -1,6 +1,6 @@
 /*
  * Kiểu dữ liệu cổng Admin. Hợp đồng: docs/api/admin.md (bản nháp).
- * Admin KHÔNG tạo hồ sơ hay gói: chỉ duyệt, yêu cầu bổ sung/chỉnh sửa, quản lý tài khoản và ghi nhận thanh toán hoa hồng.
+ * Admin KHÔNG tạo hồ sơ hay gói: chỉ duyệt, yêu cầu chỉnh sửa, quản lý tài khoản và ghi nhận thanh toán hoa hồng.
  */
 import type { Role } from './auth'
 import type { CategoryRef } from './catalog'
@@ -55,7 +55,7 @@ export interface AdminNotification {
   /** ConsultationRequest | VendorProfile | ServicePackage */
   refType: string | null
   refId: string | null
-  /** Với thông báo yêu cầu tư vấn: trạng thái hiện tại của yêu cầu (null nếu yêu cầu đã bị xóa) */
+  /** Với thông báo yêu cầu hợp tác: trạng thái hiện tại của yêu cầu (null nếu yêu cầu đã bị xóa) */
   consultation?: { isContacted: boolean; qualification: Qualification; categorySlug: string } | null
 }
 
@@ -72,7 +72,7 @@ export interface AdminCounts {
   packages: number
 }
 
-// ---- Yêu cầu tư vấn ----
+// ---- Yêu cầu hợp tác ----
 
 export const QUALIFICATIONS = ['UNRATED', 'QUALIFIED', 'UNQUALIFIED'] as const
 export type Qualification = (typeof QUALIFICATIONS)[number]
@@ -192,7 +192,7 @@ export interface SaveUserBody {
   role: Role
   /** Bắt buộc khi role = VENDOR: lĩnh vực cung cấp (Admin gán, NCC không tự đổi) */
   categoryId?: string
-  /** Tạo từ yêu cầu tư vấn nào (nếu có) */
+  /** Tạo từ yêu cầu hợp tác nào (nếu có) */
   consultationId?: string
   /** Sửa NCC có đổi email: Admin xác nhận đã xác minh danh tính qua SĐT */
   identityVerified?: boolean
@@ -243,7 +243,7 @@ export interface AdminVendorList {
   /** Số hồ sơ khớp bộ lọc (để phân trang) */
   total: number
   /** Số hồ sơ theo trạng thái trong phạm vi tìm kiếm và lĩnh vực hiện tại, hiện trên các nhãn trạng thái */
-  counts: { ALL: number; PENDING: number; NEEDS_REVISION: number; VERIFIED: number }
+  counts: { ALL: number; PENDING: number; NEEDS_REVISION: number; VERIFIED: number; HIDDEN: number }
 }
 
 // ---- Duyệt gói dịch vụ ----

@@ -161,7 +161,7 @@ export class AdminPaymentsService {
   }
 
   /**
-   * Admin ghi nhận đã thanh toán khi NCC chuyển khoản ngoài hệ thống (vd tài khoản bị khóa nên không thanh toán qua VNPay được):
+   * Admin ghi nhận đã thanh toán khi NCC chuyển khoản ngoài hệ thống (vd tài khoản bị khóa nên không thanh toán qua VietQR được):
    * nhập mã và ngày giao dịch; `unlock` thì mở khóa tài khoản NCC. Báo NCC kết quả.
    */
   async recordPayment(id: string, body: RecordPaymentDto) {
@@ -201,7 +201,7 @@ export class AdminPaymentsService {
         userId,
         type: 'CommissionPaid',
         title: 'Đã ghi nhận thanh toán hoa hồng',
-        content: `WebPlan đã ghi nhận hoa hồng ${Number(row.total_amount).toLocaleString('vi-VN')}đ của kỳ ${period.slice(5)}/${period.slice(0, 4)} (mã giao dịch ${code}).${unlock ? ' Tài khoản của bạn đã được mở khóa.' : ''}`,
+        content: `Forever đã ghi nhận hoa hồng ${Number(row.total_amount).toLocaleString('vi-VN')}đ của kỳ ${period.slice(5)}/${period.slice(0, 4)} (mã giao dịch ${code}).${unlock ? ' Tài khoản của bạn đã được mở khóa.' : ''}`,
         referenceType: 'CommissionStatement',
         referenceId: id,
       });

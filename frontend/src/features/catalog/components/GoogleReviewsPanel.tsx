@@ -111,7 +111,7 @@ function GoogleReviewsContent({ vendorId, mapsUrl }: { vendorId: string; mapsUrl
         <p className="mt-4 rounded-xl border border-dashed border-line p-5 text-center text-muted-foreground">Chưa có đánh giá có nội dung trên Google Maps.</p>
       )}
 
-      <p className="mt-5 text-[13px] text-muted-foreground">Sắp xếp theo mức liên quan. Đánh giá lấy từ Google Maps, không phải từ khách hàng WebPlan.</p>
+      <p className="mt-5 text-[13px] text-muted-foreground">Sắp xếp theo mức liên quan. Đánh giá lấy từ Google Maps, không phải từ khách hàng Forever.</p>
       <div className="mt-2">{allLink}</div>
     </>
   )

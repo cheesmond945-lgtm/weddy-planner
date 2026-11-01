@@ -25,7 +25,7 @@ export interface OrderItem {
   amount: number
 }
 
-/** Thanh toán đặt cọc qua VNPay (Payments), mỗi đơn một dòng, tạo lúc gửi đơn. */
+/** Thanh toán đặt cọc qua VietQR (Payments), mỗi đơn một dòng, tạo lúc gửi đơn. */
 export interface OrderPayment {
   status: 'Unpaid' | 'Paid'
   paidDate: string | null

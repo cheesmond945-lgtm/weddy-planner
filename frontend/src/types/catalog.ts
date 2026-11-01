@@ -35,6 +35,8 @@ export interface ServiceSummary {
   coverImageUrl: string
   /** Link Google Maps của NCC (vendor_profiles.google_maps_url); hiện thay điểm khi chưa lấy được điểm Google */
   googleMapsUrl?: string | null
+  /** NCC đang bị Admin ẩn nhưng bạn đã có đơn với họ: tạm ngừng nhận đơn mới */
+  paused?: boolean
 }
 
 export interface ServicePackage {

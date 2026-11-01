@@ -1,4 +1,7 @@
 import { EyeOff, Send, Sparkles, Trash2 } from 'lucide-react'
+import { AiWriteDialog } from '@/components/AiWriteDialog'
+import { formatMoney } from '@/lib/format'
+import { vendorPackagesApi } from '@/api/vendorPackages'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { FormField } from '@/components/FormField'
@@ -15,7 +18,8 @@ import type { CategoryRef } from '@/types/catalog'
 import type { VendorFile, VendorProfile } from '@/types/vendor'
 import type { VendorPackage } from '@/types/vendorPackage'
 import { canSubmitPackage, isVenue, workingCopy } from '../constants'
-import { usePackageAction, useSavePackage, useSuggestPackageDescription } from '../hooks'
+import { usePackageAction, useSavePackage } from '../hooks'
+import { PACKAGE_AI_STYLES } from '../constants'
 import { EMPTY_PACKAGE, GUESTS_PER_TABLE, suggestMinTables, toFormValues, toRequest, validatePackage, type PackageFormValues } from '../packageForm'
 import { useListHref } from './PackageHeader'
 import { TagsInput } from './TagsInput'
@@ -72,12 +76,12 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
   const listHref = useListHref()
   const save = useSavePackage()
   const action = usePackageAction()
-  const suggest = useSuggestPackageDescription()
   // Gói đã đăng: form là bản cập nhật (nếu đã có), bản đang đăng giữ nguyên tới khi Admin duyệt
   const baseline = useMemo(() => (pkg ? toFormValues(workingCopy(pkg)) : EMPTY_PACKAGE), [pkg])
   const [values, setValues] = useState(baseline)
   const [checkMode, setCheckMode] = useState<'draft' | 'submit' | null>(null)
-  const [confirm, setConfirm] = useState<'submit' | 'remove' | 'hide' | 'ai' | null>(null)
+  const [confirm, setConfirm] = useState<'submit' | 'remove' | 'hide' | null>(null)
+  const [aiOpen, setAiOpen] = useState(false)
   const isUpdate = pkg?.status === 'PUBLISHED'
   const hasUpdate = isUpdate && !!pkg.pendingUpdate
   const resubmit = pkg?.status === 'NEEDS_REVISION' || pkg?.pendingUpdate?.status === 'NEEDS_REVISION'
@@ -121,13 +125,6 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
         // Gói mới: sang trang của gói vừa tạo
         onSuccess: ({ pkg: saved }) => !pkg && navigate(paths.vendor.package(saved.id), { replace: true }),
       },
-    )
-  }
-
-  function generate() {
-    suggest.mutate(
-      { name: values.name.trim() || null, tags: values.tags, price: values.price || null, capacity: venue && values.capacity.trim() ? Number(values.capacity) : null },
-      { onSuccess: ({ description }) => set({ description }) },
     )
   }
 
@@ -240,11 +237,11 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
                     type="button"
                     variant="outline"
                     className="h-9 rounded-pill border-line-strong px-4"
-                    disabled={off || suggest.isPending}
-                    onClick={() => (values.description.trim() ? setConfirm('ai') : generate())}
+                    disabled={off}
+                    onClick={() => setAiOpen(true)}
                   >
                     <Sparkles className="text-[#7c3aed]" />
-                    {suggest.isPending ? 'Đang tạo…' : 'Tạo với AI'}
+                    Tạo với AI
                   </Button>
                 )}
               </div>
@@ -361,9 +358,28 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
       <ConfirmDialog open={confirm === 'hide'} onOpenChange={(o) => !o && setConfirm(null)} title="Ẩn dịch vụ?" confirmLabel="Ẩn dịch vụ" onConfirm={() => pkg && action.mutate({ action: 'hide', pkg })}>
         <p>Khách sẽ không còn thấy dịch vụ này. Bản cập nhật đang sửa được giữ lại, bạn sửa tiếp được sau khi khôi phục.</p>
       </ConfirmDialog>
-      <ConfirmDialog open={confirm === 'ai'} onOpenChange={(o) => !o && setConfirm(null)} title="Thay phần mô tả hiện tại?" confirmLabel="Tạo mới" onConfirm={generate}>
-        <p>Nội dung bạn đã nhập trong ô Mô tả sẽ được thay bằng đoạn do AI gợi ý.</p>
-      </ConfirmDialog>
+      <AiWriteDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        fieldName="Mô tả"
+        facts={[
+          values.name.trim() ? `Tên gói: ${values.name.trim()}` : '',
+          category?.name ? `Lĩnh vực: ${category.name}` : '',
+          Number(values.price) > 0 ? `Giá chỉ từ: ${formatMoney(Number(values.price))}${venue ? ' / mâm' : ''}` : '',
+          venue && values.capacity.trim() ? `Sức chứa: ${values.capacity.trim()} khách` : '',
+          values.tags.length ? `Phong cách: ${values.tags.join(', ')}` : '',
+        ].filter(Boolean)}
+        blocked={
+          values.name.trim() && (Number(values.price) > 0 || values.tags.length || (venue && values.capacity.trim()))
+            ? null
+            : 'Hãy nhập Tên gói và ít nhất một trong: Giá, Sức chứa, Phong cách (tags) để AI có thông tin thật mà viết.'
+        }
+        styles={PACKAGE_AI_STYLES}
+        write={(style) =>
+          vendorPackagesApi.suggestDescription({ style, name: values.name.trim() || null, tags: values.tags, price: values.price || null, capacity: venue && values.capacity.trim() ? Number(values.capacity) : null })
+        }
+        onUse={(description) => set({ description })}
+      />
       <UnsavedChangesGuard when={dirty && !readOnly && !busy} />
     </form>
   )

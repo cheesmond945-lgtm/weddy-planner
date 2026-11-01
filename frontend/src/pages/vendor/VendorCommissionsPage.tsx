@@ -9,7 +9,7 @@ import { StatementTable } from '@/features/commissions/components/StatementTable
 import { useCommissionStatement, useCommissionStatements } from '@/features/commissions/hooks'
 
 /**
- * Tài chính & đối soát: kỳ đang xem (hoa hồng cần thanh toán, hạn, nút thanh toán VNPay), các đơn hoàn thành của kỳ,
+ * Tài chính & đối soát: kỳ đang xem (hoa hồng cần thanh toán, hạn, nút thanh toán VietQR), các đơn hoàn thành của kỳ,
  * và lịch sử các kỳ.
  */
 export default function VendorCommissionsPage() {

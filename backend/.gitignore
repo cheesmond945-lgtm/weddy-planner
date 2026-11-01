@@ -5,3 +5,4 @@ src/generated
 
 # Bản sao lưu timeline do scripts/rebuild-timelines.ts xuất trước khi xóa (không commit)
 scripts/backup/
+.data

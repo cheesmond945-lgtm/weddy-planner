@@ -18,7 +18,7 @@ export function useAdminStatement(id: string) {
   return useQuery({ queryKey: ['admin', 'statement', id] as const, queryFn: () => adminApi.getStatement(id), enabled, staleTime: 0 })
 }
 
-/** Ghi nhận đã thanh toán (NCC chuyển khoản ngoài VNPay), có thể mở khóa tài khoản NCC luôn. */
+/** Ghi nhận đã thanh toán (NCC chuyển khoản ngoài VietQR), có thể mở khóa tài khoản NCC luôn. */
 export function useRecordStatementPayment() {
   const qc = useQueryClient()
   const refresh = useRefreshAdminSummary()

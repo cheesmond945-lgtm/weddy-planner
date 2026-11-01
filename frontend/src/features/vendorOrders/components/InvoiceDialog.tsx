@@ -73,7 +73,7 @@ export function InvoiceDialog({ order: o, type, onClose, vendorName: vendorNameP
       <div className="mt-4 rounded-md bg-surface-2 px-4 py-3">
         {info('Tổng giá trị đơn', formatMoney(o.totalAmount))}
         {info(
-          type === 'DepositReceipt' ? 'Đã nhận cọc (VNPay)' : 'Đã cọc (VNPay)',
+          type === 'DepositReceipt' ? 'Đã nhận cọc (VietQR)' : 'Đã cọc (VietQR)',
           `${formatMoney(o.depositAmount)}${o.payment?.paidDate ? ` · ${formatDay(o.payment.paidDate)}` : ''}`,
         )}
         {o.payment?.transactionCode && info('Mã giao dịch', o.payment.transactionCode)}
@@ -81,7 +81,7 @@ export function InvoiceDialog({ order: o, type, onClose, vendorName: vendorNameP
       </div>
       <p className="mt-3 text-[12.5px] text-muted-foreground">
         {type === 'DepositReceipt'
-          ? 'Hệ thống chỉ ghi nhận khoản cọc qua VNPay; phần còn lại thanh toán trực tiếp ngoài hệ thống.'
+          ? 'Hệ thống chỉ ghi nhận khoản cọc qua VietQR; phần còn lại thanh toán trực tiếp ngoài hệ thống.'
           : 'Số tiền còn lại được trả bằng tiền mặt ngoài hệ thống, không có giao dịch trên hệ thống.'}{' '}
         Chứng từ này không phải hóa đơn điện tử theo quy định thuế.
       </p>

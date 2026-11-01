@@ -21,7 +21,7 @@ interface AdminNavItem {
 
 const NAV: AdminNavItem[] = [
   { to: paths.admin.dashboard, label: 'Tổng quan', icon: LayoutDashboard, end: true },
-  { to: paths.admin.consultationRequests, label: 'Yêu cầu tư vấn', icon: Inbox },
+  { to: paths.admin.consultationRequests, label: 'Yêu cầu hợp tác', icon: Inbox },
   { to: paths.admin.vendors, label: 'Quản lý hồ sơ', icon: ClipboardCheck, detail: 'Chi tiết hồ sơ' },
   { to: paths.admin.catalog, label: 'Quản lý gói dịch vụ', icon: Package, detail: 'Chi tiết gói dịch vụ' },
   { to: paths.admin.users, label: 'Quản lý người dùng', icon: Users },
@@ -96,9 +96,9 @@ function Avatar({ name, onSidebar }: { name: string; onSidebar?: boolean }) {
 function Wordmark() {
   const gold = 'bg-(image:--gold-grad) bg-clip-text text-transparent'
   return (
-    <Link to={paths.admin.dashboard} aria-label="WebPlan, về trang tổng quan" className="block px-[26px] pt-7 pb-[22px]">
+    <Link to={paths.admin.dashboard} aria-label="Forever, về trang tổng quan" className="block px-[26px] pt-7 pb-[22px]">
       <span className="block font-serif text-[32px] leading-none font-semibold tracking-[-0.01em] text-side-ink">
-        Web<em className={cn('font-medium', gold)}>Plan</em>
+        For<em className={cn('font-medium', gold)}>ever</em>
         <span className={gold}>.</span>
       </span>
       <span className="mt-2.5 block text-[10.5px] tracking-[0.24em] text-side-muted uppercase">Admin panel</span>

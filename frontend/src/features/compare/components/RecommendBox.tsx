@@ -35,7 +35,7 @@ export function RecommendBox({ recommendation, recommendedName, hasWedding }: Re
           </>
         ) : (
           <>
-            <b className="font-semibold">WebPlan đề xuất {recommendedName}</b>
+            <b className="font-semibold">Forever đề xuất {recommendedName}</b>
             <div className="mt-0.5 text-sm text-ink">
               {sentence(recommendation.reasons)}
               {!hasWedding && (

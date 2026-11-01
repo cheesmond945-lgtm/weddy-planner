@@ -63,7 +63,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
         {service.isGuaranteed && (
           <span className="inline-flex items-center gap-1.5 rounded-pill bg-sage-soft px-3 py-[5px] text-xs font-semibold text-sage">
             <Lock className="size-3.5" strokeWidth={2} aria-hidden />
-            WebPlan đảm bảo
+            Forever đảm bảo
           </span>
         )}
       </div>

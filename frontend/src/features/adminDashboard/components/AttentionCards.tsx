@@ -37,7 +37,7 @@ function Item({ c }: { c: Card }) {
   )
 }
 
-/** Ba thẻ "Cần xử lý ngay": hồ sơ chờ duyệt, gói chờ duyệt, yêu cầu tư vấn chưa liên hệ. */
+/** Ba thẻ "Cần xử lý ngay": hồ sơ chờ duyệt, gói chờ duyệt, yêu cầu hợp tác chưa liên hệ. */
 export function AttentionCards({ data }: { data: AdminDashboard }) {
   const cards: Card[] = [
     {
@@ -67,9 +67,9 @@ export function AttentionCards({ data }: { data: AdminDashboard }) {
       to: `${paths.admin.consultationRequests}?lh=NO`,
       icon: MessageSquare,
       count: data.pendingConsultations,
-      title: 'Yêu cầu tư vấn chưa liên hệ',
-      desc: 'Nhà cung cấp dịch vụ cần liên hệ tư vấn',
-      cta: 'Đến Yêu cầu tư vấn',
+      title: 'Yêu cầu hợp tác chưa liên hệ',
+      desc: 'Nhà cung cấp dịch vụ cần liên hệ hợp tác',
+      cta: 'Đến Yêu cầu hợp tác',
       tone: 'border-info/40',
       iconTone: 'bg-info-soft text-info',
       linkTone: 'text-info',

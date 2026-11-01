@@ -1,3 +1,5 @@
+import { Heart, ListChecks, Zap } from 'lucide-react'
+import type { AiStyleOption } from '@/components/AiWriteDialog'
 import type { BadgeTone } from '@/components/Badge'
 import { RESTAURANT_SLUG } from '@/features/vendors/constants'
 import type { CategoryRef } from '@/types/catalog'
@@ -40,3 +42,10 @@ export const packageCategoryOf = (profile: VendorProfile) => (profile.status ===
 /** Được gửi duyệt khi hồ sơ đã xác minh đúng lĩnh vực của gói. */
 export const canSubmitPackage = (profile: VendorProfile | undefined, category: CategoryRef | null | undefined) =>
   !!profile && !!category && profile.status === 'VERIFIED' && profile.verifiedCategory?.id === category.id
+
+/** Giọng văn cho phần Mô tả gói (mô tả hàng bán). Id khớp PACKAGE_STYLES ở backend. */
+export const PACKAGE_AI_STYLES: AiStyleOption[] = [
+  { id: 'clear', label: 'Rõ ràng', hint: 'Gọn, thực tế, dễ so sánh với gói khác', icon: ListChecks },
+  { id: 'romantic', label: 'Lãng mạn', hint: 'Giàu cảm xúc, nhắc tới ngày trọng đại', icon: Heart },
+  { id: 'youthful', label: 'Trẻ trung', hint: 'Năng động, thoải mái, gần gũi với cặp đôi trẻ', icon: Zap },
+]

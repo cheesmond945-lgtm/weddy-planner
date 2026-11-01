@@ -35,7 +35,7 @@ Danh sách có phân trang (xem mục 6):
 Không có nội dung trả về: `{ "data": null }`, mã 200.
 
 BE: controller trả giá trị thuần, `TransformResponseInterceptor` bọc `{ data }`. Service trả `Paginated.of(items, total, query)` thì thành `{ data, meta }`.
-Ngoại lệ: endpoint do bên ngoài quy định định dạng (callback VNPay) dùng `@RawResponse()`.
+Ngoại lệ: endpoint do bên ngoài quy định định dạng (ví dụ health check) dùng `@RawResponse()`.
 
 ## 3. Lỗi
 

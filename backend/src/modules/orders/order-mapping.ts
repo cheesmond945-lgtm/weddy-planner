@@ -15,7 +15,7 @@ export const ORDER_INCLUDE = {
   order_revisions: { orderBy: { created_date: 'desc' as const }, include: { order_revision_changes: true } },
   invoices: { orderBy: { created_date: 'asc' as const } },
   weddings: { select: { user_id: true, wedding_date: true } },
-  vendor_profiles: { select: { id: true, user_id: true, business_name: true, service_categories: { select: { id: true, name: true } } } },
+  vendor_profiles: { select: { id: true, user_id: true, status: true, business_name: true, service_categories: { select: { id: true, name: true } } } },
   service_packages: { select: { id: true, name: true } },
 } satisfies Prisma.ordersInclude;
 

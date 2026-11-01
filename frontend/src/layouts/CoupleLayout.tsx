@@ -236,7 +236,7 @@ function QuickActions({ hideClassName }: { hideClassName?: string }) {
 function Footer() {
   return (
     <footer className="mx-auto flex w-full max-w-content flex-wrap items-center justify-between gap-4 px-[clamp(16px,4vw,32px)] pb-8 text-[13px] text-ink-2">
-      <span>© {new Date().getFullYear()} WebPlan. Nền tảng lập kế hoạch đám cưới.</span>
+      <span>© {new Date().getFullYear()} Forever. Nền tảng lập kế hoạch đám cưới.</span>
     </footer>
   )
 }

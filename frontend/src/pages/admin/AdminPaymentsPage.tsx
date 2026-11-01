@@ -22,7 +22,7 @@ const PAGE_SIZE = 10
 /** Ô trong tệp CSV: bọc nháy kép, nhân đôi nháy kép bên trong. */
 const csv = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
 
-/** Quản lý thanh toán: bảng kê hoa hồng nhà cung cấp trả WebPlan theo kỳ tháng, ghi nhận đã thanh toán. */
+/** Quản lý thanh toán: bảng kê hoa hồng nhà cung cấp trả Forever theo kỳ tháng, ghi nhận đã thanh toán. */
 export default function AdminPaymentsPage() {
   const [params, setParams] = useSearchParams()
   const status = (params.get('tt') ?? '') as AdminStatementStatus | ''
