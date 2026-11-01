@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { OrderTasksService } from './order-tasks.service';
@@ -109,10 +109,22 @@ export class VendorOrdersController {
     return this.tasks.list(req.user.sub, id);
   }
 
-  /** NCC đánh dấu xong / mở lại việc của NCC (hoặc hai bên): { isDone }. */
+  /** NCC đổi trạng thái một việc chi tiết của đơn (mọi việc, kể cả việc của khách): { status: 'Todo' | 'Waiting' | 'Done' }; vẫn nhận { isDone } của FE cũ. */
   @Patch(':id/tasks/:taskId')
-  taskDone(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: { isDone?: unknown }) {
-    return this.tasks.setDone(req.user.sub, id, taskId, body?.isDone);
+  taskStatus(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: { status?: unknown; isDone?: unknown }) {
+    return this.tasks.setStatus(req.user.sub, id, taskId, body ?? {});
+  }
+
+  /** "Chốt ngày này" (không gửi date) hoặc "Đổi ngày" ({ date: 'YYYY-MM-DD' }) của một việc. */
+  @Patch(':id/tasks/:taskId/schedule')
+  taskSchedule(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: { date?: unknown }) {
+    return this.tasks.confirmSchedule(req.user.sub, id, taskId, body?.date);
+  }
+
+  /** "Bỏ chốt": xóa xác nhận ngày, giữ nguyên ngày. */
+  @Delete(':id/tasks/:taskId/schedule')
+  taskUnconfirm(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string) {
+    return this.tasks.unconfirmSchedule(req.user.sub, id, taskId);
   }
 
   @Post()

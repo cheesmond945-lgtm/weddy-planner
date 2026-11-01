@@ -1,212 +1,255 @@
 /*
- * Test việc chi tiết khi đặt cọc (src/modules/weddings/timeline-rows.ts), chạy bằng: npm test
- * Tái hiện lỗi: khách đã có đơn Trang trí đang giữ các việc chi tiết (mỗi mã chỉ một dòng trong một đám cưới), cọc thêm đơn
- * Trang trí mới thì đơn mới KHÔNG có việc chi tiết nào vì mọi mã đã tồn tại.
+ * Việc chi tiết của đơn lấy từ package_tasks của gói (src/modules/weddings/timeline-rows.ts, order-package-sync.ts), chạy bằng: npm test
+ * Dùng hàm thuần và CSDL giả trong bộ nhớ, không ghi CSDL thật.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cancelPlan, depositDetailPlan, detailRows, type ExistingDetail } from '../src/modules/weddings/timeline-rows.ts';
-import { TIMELINE_TEMPLATES, type ServiceKey } from '../src/modules/weddings/timeline-templates.ts';
+import { syncOrderPackageTasks, type SyncDb } from '../src/modules/weddings/order-package-sync.ts';
+import { packagesOfOrder } from '../src/modules/weddings/package-task-meta.ts';
+import { cancelPlan, frameRows, initialStatus, orderTaskRows, payDate, payCode, pkgCode, pkgTaskIdOf, replanOrderTasks, taskTitle, type OrderTaskState, type PackageTaskRef, type TaskRow } from '../src/modules/weddings/timeline-rows.ts';
+import { TIMELINE_TEMPLATES } from '../src/modules/weddings/timeline-templates.ts';
 
-const T = TIMELINE_TEMPLATES;
-const WEDDING = 'w1';
-const W = '2027-04-18';
-const OLD = 'order-old';
-const NEW = 'order-new';
-const decor = { key: 'decor' as ServiceKey, categoryId: 'cat-decor' };
-const detailCodes = (key: ServiceKey) => T.filter((t) => t.service === key && !['SELF', 'CHOOSE', 'BOOK'].includes(t.kind)).map((t) => t.code);
+const ymd = (d: Date) => d.toISOString().slice(0, 10);
+const ORDER = 'order-1';
+const E = '2027-03-20';
+const task = (id: string, offsetDays: number, extra: Partial<PackageTaskRef> = {}): PackageTaskRef => ({ id, title: `Việc ${id}`, note: null, owner: 'VENDOR', offsetDays, ...extra });
+const rowsOf = (tasks: PackageTaskRef[], ctx = { today: '2026-12-01', event: E, deposit: '2026-12-01' }, existingCodes?: Set<string>) =>
+  orderTaskRows({ weddingId: 'w1', orderId: ORDER, categoryId: 'cat', vendorName: 'Studio A', ctx, tasks, existingCodes });
 
-/** Timeline của chi.bui12 trước khi cọc đơn mới: khung Decor, việc chi tiết của đơn cũ (một việc đã xong), việc của dịch vụ khác. */
-function before(): ExistingDetail[] {
-  const rows: ExistingDetail[] = [];
-  let n = 0;
-  const add = (code: string, status: string, orderId: string | null) => rows.push({ id: `t${n++}`, code, status, orderId });
-  for (const c of ['DECOR_SHORTLIST', 'DECOR_VISIT', 'DECOR_BOOK']) add(c, c === 'DECOR_BOOK' ? 'Done' : 'Todo', null);
-  for (const c of detailCodes('decor')) add(c, c === 'DECOR_BRIEF' ? 'Done' : 'Todo', OLD);
-  for (const c of detailCodes('trang-phuc')) add(c, 'Todo', 'order-attire');
-  return rows;
+describe('frameRows', () => {
+  it('31 dòng khung, task_type Frame, không gắn đơn, status Todo', () => {
+    const rows = frameRows(TIMELINE_TEMPLATES, { weddingId: 'w1', wedding: E, today: '2026-12-19', services: [{ key: 'decor', categoryId: 'c-decor' }] });
+    assert.ok(rows.length > 0 && rows.length <= 31);
+    assert.ok(rows.every((r) => r.task_type === 'Frame' && r.order_id === null && r.status === 'Todo'));
+  });
+});
+
+describe('orderTaskRows: việc chi tiết của đơn từ gói', () => {
+  it('trạng thái ban đầu: việc của khách Waiting, NCC / hai bên Todo; việc thanh toán Waiting', () => {
+    const { rows } = rowsOf([task('a', -7, { owner: 'CUSTOMER' }), task('b', -3, { owner: 'VENDOR' }), task('c', 0, { owner: 'BOTH' })]);
+    const st = new Map(rows.map((r) => [r.task_code, r.status]));
+    assert.equal(st.get(pkgCode('a', ORDER)), 'Waiting');
+    assert.equal(st.get(pkgCode('b', ORDER)), 'Todo');
+    assert.equal(st.get(pkgCode('c', ORDER)), 'Todo');
+    assert.equal(st.get(payCode(ORDER)), 'Waiting');
+    assert.equal(initialStatus('CUSTOMER'), 'Waiting');
+  });
+
+  it('1 gói: mỗi việc một dòng PKG:<id>, thêm đúng một dòng PAY:<orderId>; gắn đơn, loại Detail, display_order theo thứ tự', () => {
+    const { rows, vendorProcessMissing } = rowsOf([task('a', -14), task('b', 0)]);
+    assert.equal(vendorProcessMissing, false);
+    assert.deepEqual(rows.map((r) => r.task_code), [pkgCode('a', ORDER), pkgCode('b', ORDER), payCode(ORDER)]);
+    assert.ok(rows.every((r) => r.order_id === ORDER && r.category_id === 'cat' && r.task_type === 'Detail' && r.wedding_id === 'w1'));
+    assert.ok(rows[0].display_order < rows[1].display_order && rows[1].display_order < rows[2].display_order);
+  });
+
+  it('2 gói: việc của cả hai gói gộp, giữ thứ tự đưa vào, mã không trùng', () => {
+    const { rows } = rowsOf([task('p1-a', -10), task('p1-b', -5), task('p2-a', -10), task('p2-b', 2)]);
+    assert.deepEqual(rows.filter((r) => r.task_code.startsWith('PKG:')).map((r) => r.task_code), [pkgCode('p1-a', ORDER), pkgCode('p1-b', ORDER), pkgCode('p2-a', ORDER), pkgCode('p2-b', ORDER)]);
+    assert.equal(new Set(rows.map((r) => r.task_code)).size, rows.length);
+    assert.equal(rows.filter((r) => r.task_code.startsWith('PAY:')).length, 1);
+  });
+
+  it('gói không có việc / đơn không gắn gói: chỉ sinh việc thanh toán, vendorProcessMissing = true', () => {
+    const { rows, vendorProcessMissing } = rowsOf([]);
+    assert.equal(vendorProcessMissing, true);
+    assert.deepEqual(rows.map((r) => r.task_code), [payCode(ORDER)]);
+    assert.equal(ymd(rows[0].scheduled_date), '2027-03-27'); // E + 7
+    assert.equal(rows[0].title, 'Thanh toán phần còn lại cho Studio A');
+  });
+
+  it('hạn thanh toán = max(E+7, hạn lớn nhất của việc gói)', () => {
+    assert.equal(ymd(rowsOf([task('a', -5)]).rows.at(-1)!.scheduled_date), '2027-03-27');
+    assert.equal(ymd(rowsOf([task('a', 20)]).rows.at(-1)!.scheduled_date), '2027-04-09'); // E + 20 > E + 7
+    assert.equal(payDate(E, '2027-03-01'), '2027-03-27');
+    assert.equal(payDate(E, '2027-05-01'), '2027-05-01');
+  });
+
+  it('cọc muộn: không việc gói nào trước D+2, thứ tự giữ nguyên', () => {
+    const ctx = { today: '2027-03-10', event: E, deposit: '2027-03-10' };
+    const { rows } = rowsOf([task('a', -30), task('b', -14), task('c', -3), task('d', 0)], ctx);
+    const gói = rows.filter((r) => r.task_code.startsWith('PKG:')).map((r) => ymd(r.scheduled_date));
+    for (const d of gói) assert.ok(d >= '2027-03-12', d);
+    assert.deepEqual([...gói].sort(), gói);
+  });
+
+  it('title ghép ghi chú và cắt ≤ 255 ký tự', () => {
+    assert.equal(taskTitle('Gửi ảnh', 'JPG hoặc PNG'), 'Gửi ảnh — JPG hoặc PNG');
+    assert.equal(taskTitle('Gửi ảnh', null), 'Gửi ảnh');
+    assert.equal(taskTitle('Gửi ảnh', '  '), 'Gửi ảnh');
+    const long = taskTitle('x'.repeat(250), 'y'.repeat(200));
+    assert.equal(long.length, 255);
+    assert.ok(long.endsWith('…'));
+  });
+
+  it('bỏ qua mã đã có: chạy lại không sinh trùng', () => {
+    const first = rowsOf([task('a', -7), task('b', 0)]).rows;
+    const again = rowsOf([task('a', -7), task('b', 0)], undefined, new Set(first.map((r) => r.task_code)));
+    assert.equal(again.rows.length, 0);
+    const partial = rowsOf([task('a', -7), task('b', 0)], undefined, new Set([pkgCode('a', ORDER)]));
+    assert.deepEqual(partial.rows.map((r) => r.task_code), [pkgCode('b', ORDER), payCode(ORDER)]);
+  });
+});
+
+describe('packagesOfOrder', () => {
+  it('sảnh của đơn hợp gói của các dòng, bỏ null, bỏ trùng', () => {
+    assert.deepEqual(packagesOfOrder({ package_id: 'h1', order_items: [{ package_id: 'p1' }, { package_id: null }, { package_id: 'h1' }, { package_id: 'p2' }] }), ['h1', 'p1', 'p2']);
+    assert.deepEqual(packagesOfOrder({ package_id: null, order_items: [{ package_id: null }] }), []);
+    assert.deepEqual(packagesOfOrder({}), []);
+  });
+});
+
+/** CSDL giả cho syncOrderPackageTasks: ghi lại các dòng đã tạo, không có CSDL thật. */
+function fakeDb(opts: { order?: Partial<Awaited<ReturnType<SyncDb['orders']['findUnique']>>> | null; pkgTasks?: { id: string; package_id: string; title: string; note: string | null; owner: string; offset_days: number }[]; existing?: string[] }) {
+  const created: TaskRow[] = [];
+  const order = opts.order === null ? null : { id: ORDER, wedding_id: 'w1', event_date: new Date(`${E}T00:00:00Z`), package_id: null, order_items: [], vendor_profiles: { category_id: 'cat', business_name: 'Studio A' }, payments: { paid_date: new Date('2026-12-01T03:00:00Z') }, ...opts.order };
+  const db: SyncDb = {
+    orders: { findUnique: async () => order as never },
+    package_tasks: { findMany: async (args) => (opts.pkgTasks ?? []).filter((t) => ((args as { where: { package_id: { in: string[] } } }).where.package_id.in).includes(t.package_id)) },
+    timeline_tasks: {
+      findMany: async () => (opts.existing ?? []).map((task_code) => ({ task_code })),
+      createMany: async ({ data }) => void created.push(...(data as TaskRow[])),
+    },
+  };
+  return { db, created };
 }
-const ctx = { today: '2026-10-29', wedding: W, event: '2026-12-11', deposit: '2026-10-29' };
-const plan = (existing: ExistingDetail[], orderId = NEW) => depositDetailPlan(T, { weddingId: WEDDING, orderId, service: decor, ctx, existing });
+const pt = (id: string, package_id: string, offset_days: number, owner = 'VENDOR') => ({ id, package_id, title: `Việc ${id}`, note: null, owner, offset_days });
 
-describe('đặt cọc đơn thứ hai của cùng hạng mục (lỗi: đơn mới không có việc chi tiết)', () => {
-  it('cách cũ (chỉ chèn mã chưa có) không sinh được việc nào cho đơn mới: đúng lỗi đã gặp', () => {
-    const codes = new Set(before().map((t) => t.code));
-    assert.equal(detailRows(T, { weddingId: WEDDING, orderId: NEW, service: decor, ctx, existing: codes }).length, 0);
+describe('syncOrderPackageTasks (CSDL giả)', () => {
+  const NOW = new Date('2026-12-01T05:00:00Z');
+
+  it('1 gói: sinh việc của gói + PAY, status theo owner', async () => {
+    const { db, created } = fakeDb({ order: { order_items: [{ package_id: 'P1' }] }, pkgTasks: [pt('a', 'P1', -14, 'CUSTOMER'), pt('b', 'P1', -3), pt('x', 'OTHER', -3)] });
+    const r = await syncOrderPackageTasks(db, ORDER, NOW);
+    assert.deepEqual(r, { created: 3, vendorProcessMissing: false });
+    assert.deepEqual(created.map((c) => [c.task_code, c.status]), [[pkgCode('a', ORDER), 'Waiting'], [pkgCode('b', ORDER), 'Todo'], [payCode(ORDER), 'Waiting']]);
   });
 
-  it('đơn mới nhận việc chi tiết: thay việc chưa xong của đơn cũ, giữ việc đã xong', () => {
-    const existing = before();
-    const p = plan(existing);
-    const codes = detailCodes('decor').filter((c) => c !== 'DECOR_BRIEF'); // DECOR_BRIEF đã xong: giữ, không sinh lại
-    assert.deepEqual(p.rows.map((r) => r.task_code).sort(), [...codes].sort());
-    assert.ok(p.rows.every((r) => r.order_id === NEW && r.category_id === 'cat-decor' && r.status === 'Todo' && r.task_type === 'Detail'));
-    // xóa đúng các việc Decor chưa xong của đơn cũ, không đụng việc đã xong, việc khung, việc của dịch vụ khác
-    const deleted = new Map(existing.map((t) => [t.id, t]));
-    assert.deepEqual(p.deleteIds.map((id) => deleted.get(id)!.code).sort(), [...codes].sort());
-    assert.ok(p.deleteIds.every((id) => deleted.get(id)!.orderId === OLD && deleted.get(id)!.status === 'Todo'));
+  it('2 gói (một là sảnh của đơn, một ở dòng hạng mục): gộp việc của cả hai', async () => {
+    const { db, created } = fakeDb({ order: { package_id: 'HALL', order_items: [{ package_id: 'P2' }] }, pkgTasks: [pt('h1', 'HALL', -10), pt('p1', 'P2', -5)] });
+    const r = await syncOrderPackageTasks(db, ORDER, NOW);
+    assert.equal(r.created, 3);
+    assert.deepEqual(created.map((c) => c.task_code), [pkgCode('h1', ORDER), pkgCode('p1', ORDER), payCode(ORDER)]);
   });
 
-  it('hạn của việc mới tính từ D, E của đơn mới', () => {
-    const rows = new Map(plan(before()).rows.map((r) => [r.task_code, r]));
-    assert.equal(rows.get('DECOR_EVENT')!.scheduled_date.toISOString().slice(0, 10), '2026-12-11'); // E của đơn mới
-    assert.equal(rows.get('DECOR_PAY')!.scheduled_date.toISOString().slice(0, 10), '2026-12-18'); // E + 7
-    assert.ok(rows.get('DECOR_REVIEW_MOCKUP')!.scheduled_date.toISOString().slice(0, 10) <= '2026-12-10');
+  it('gói không có việc: chỉ PAY, vendorProcessMissing', async () => {
+    const { db, created } = fakeDb({ order: { order_items: [{ package_id: 'P1' }] }, pkgTasks: [] });
+    assert.deepEqual(await syncOrderPackageTasks(db, ORDER, NOW), { created: 1, vendorProcessMissing: true });
+    assert.deepEqual(created.map((c) => c.task_code), [payCode(ORDER)]);
   });
 
-  it('chạy lại cho cùng đơn: không còn gì để xóa hay tạo', () => {
-    const existing = before();
-    const first = plan(existing);
-    const gone = new Set(first.deleteIds);
-    const after: ExistingDetail[] = [...existing.filter((t) => !gone.has(t.id)), ...first.rows.map((r, i) => ({ id: `n${i}`, code: r.task_code, status: r.status, orderId: r.order_id }))];
-    const again = plan(after);
-    assert.deepEqual(again, { deleteIds: [], rows: [] });
+  it('đơn không gắn gói: chỉ PAY, vendorProcessMissing', async () => {
+    const { db, created } = fakeDb({ pkgTasks: [pt('a', 'P1', -3)] });
+    assert.deepEqual(await syncOrderPackageTasks(db, ORDER, NOW), { created: 1, vendorProcessMissing: true });
+    assert.equal(created[0].task_code, payCode(ORDER));
   });
 
-  it('đơn đầu tiên của hạng mục: chỉ chèn, không xóa gì', () => {
-    const none = before().filter((t) => t.orderId !== OLD);
-    const p = plan(none, NEW);
-    assert.equal(p.deleteIds.length, 0);
-    assert.equal(p.rows.length, detailCodes('decor').length);
+  it('chạy lại: không sinh trùng', async () => {
+    const { db, created } = fakeDb({ order: { order_items: [{ package_id: 'P1' }] }, pkgTasks: [pt('a', 'P1', -3)], existing: [pkgCode('a', ORDER), payCode(ORDER)] });
+    assert.equal((await syncOrderPackageTasks(db, ORDER, NOW)).created, 0);
+    assert.equal(created.length, 0);
   });
 
-  it('không đụng việc chi tiết của hạng mục khác', () => {
-    const p = plan(before());
-    const attire = new Set(detailCodes('trang-phuc'));
-    assert.ok(p.rows.every((r) => !attire.has(r.task_code)));
-    assert.ok(p.deleteIds.every((id) => !before().find((t) => t.id === id && attire.has(t.code))));
+  it('D theo ngày cọc giờ VN: cọc 01/12 lúc 03:00 UTC là 01/12 (10:00 VN)', async () => {
+    const { db, created } = fakeDb({ order: { order_items: [{ package_id: 'P1' }] }, pkgTasks: [pt('a', 'P1', -100)] });
+    await syncOrderPackageTasks(db, ORDER, NOW);
+    assert.ok(ymd(created[0].scheduled_date) >= '2026-12-03'); // ≥ D + 2
+  });
+
+  it('đơn không tồn tại hoặc thiếu ngày thực hiện: không sinh gì', async () => {
+    assert.deepEqual(await syncOrderPackageTasks(fakeDb({ order: null }).db, ORDER, NOW), { created: 0, vendorProcessMissing: false });
+    assert.deepEqual(await syncOrderPackageTasks(fakeDb({ order: { event_date: null } }).db, ORDER, NOW), { created: 0, vendorProcessMissing: false });
   });
 });
 
-describe('hủy đơn đã cọc', () => {
-  const attire = { key: 'trang-phuc' as ServiceKey, categoryId: 'cat-attire' };
-  const D1 = '2026-10-29';
-  /** Khung + việc chi tiết của hai dịch vụ đã cọc: Trang trí (đơn D-1, có một việc đã xong) và Trang phục (đơn A-1). */
-  function deposited() {
-    const rows: ExistingDetail[] = [];
-    let n = 0;
-    const add = (code: string, status: string, orderId: string | null) => rows.push({ id: `t${n++}`, code, status, orderId });
-    for (const c of ['DECOR_SHORTLIST', 'DECOR_VISIT']) add(c, 'Todo', null);
-    add('DECOR_BOOK', 'Done', null);
-    const d1 = depositDetailPlan(T, { weddingId: WEDDING, orderId: 'D-1', service: decor, ctx: { today: D1, wedding: W, event: '2027-01-10', deposit: D1 }, existing: rows });
-    for (const r of d1.rows) add(r.task_code, r.task_code === 'DECOR_BRIEF' ? 'Done' : 'Todo', 'D-1'); // một việc đã xong
-    const a1 = depositDetailPlan(T, { weddingId: WEDDING, orderId: 'A-1', service: attire, ctx: { today: D1, wedding: W, event: '2027-01-10', deposit: D1, albumDate: '2026-11-21' }, existing: rows });
-    for (const r of a1.rows) add(r.task_code, 'Todo', 'A-1');
-    return rows;
-  }
+describe('replanOrderTasks: NCC sửa ngày thực hiện', () => {
+  const offsets = new Map([['a', -30], ['b', -7], ['c', 0], ['d', 3]]);
+  const state = (id: string, code: string, date: string, extra: Partial<OrderTaskState> = {}): OrderTaskState => ({ id, code, status: 'Todo', confirmed: false, date, ...extra });
+  const base = [state('ta', pkgCode('a', ORDER), '2027-02-18'), state('tb', pkgCode('b', ORDER), '2027-03-13'), state('tc', pkgCode('c', ORDER), '2027-03-20'), state('td', pkgCode('d', ORDER), '2027-03-23'), state('tp', payCode(ORDER), '2027-03-27')];
+  const ctx = { today: '2026-12-01', event: '2027-04-20', deposit: '2026-12-01' };
 
-  it('hủy đơn: gỡ mọi việc chi tiết của đơn (kể cả việc đã xong), Mốc chốt về Todo, dịch vụ khác không đổi', () => {
-    const rows = deposited();
-    const mine = rows.filter((t) => t.orderId === 'D-1');
-    assert.ok(mine.some((t) => t.status === 'Done') && mine.length === detailCodes('decor').length);
-    const plan = cancelPlan({ orderId: 'D-1', details: mine, others: [] });
-    assert.deepEqual([...plan.deleteIds].sort(), mine.map((t) => t.id).sort());
-    assert.equal(plan.reopenBook, true);
-    assert.equal(plan.handOverTo, null);
-    const left = rows.filter((t) => !plan.deleteIds.includes(t.id));
-    assert.equal(left.filter((t) => detailCodes('decor').includes(t.code)).length, 0);
-    assert.equal(left.filter((t) => t.orderId === 'A-1').length, detailCodes('trang-phuc').length); // dịch vụ khác nguyên vẹn
+  it('dời E: tính lại việc chưa xong, chưa chốt (kể cả việc đã xóa mềm khỏi gói nhờ offsets) và PAY', () => {
+    const r = replanOrderTasks({ ctx, tasks: base, offsets });
+    const m = new Map(r.updates.map((u) => [u.id, u.date]));
+    assert.equal(m.get('ta'), '2027-03-21'); // E − 30
+    assert.equal(m.get('tb'), '2027-04-13');
+    assert.equal(m.get('tc'), '2027-04-20');
+    assert.equal(m.get('td'), '2027-04-23');
+    assert.equal(m.get('tp'), '2027-04-27'); // max(E + 7, hạn cuối)
+    assert.deepEqual(r.needsRecheck, []);
   });
 
-  it('còn đơn Deposited khác cùng hạng mục: Mốc chốt vẫn xong, đơn cọc mới nhất nhận lại việc; chỉ còn đơn Completed thì không sinh lại', () => {
-    const mine = deposited().filter((t) => t.orderId === 'D-1');
-    const two = cancelPlan({ orderId: 'D-1', details: mine, others: [{ id: 'D-2', status: 'Deposited', paidAt: 5 }, { id: 'D-3', status: 'Deposited', paidAt: 9 }, { id: 'D-0', status: 'Completed', paidAt: 99 }] });
-    assert.equal(two.reopenBook, false);
-    assert.equal(two.handOverTo, 'D-3');
-    const completed = cancelPlan({ orderId: 'D-1', details: mine, others: [{ id: 'D-0', status: 'Completed', paidAt: 1 }] });
-    assert.deepEqual({ reopen: completed.reopenBook, to: completed.handOverTo }, { reopen: false, to: null });
+  it('việc đã chốt và việc đã Done giữ ngày', () => {
+    const tasks = [state('ta', pkgCode('a', ORDER), '2027-02-18', { confirmed: true }), state('tb', pkgCode('b', ORDER), '2027-03-13', { status: 'Done' }), ...base.slice(2)];
+    const r = replanOrderTasks({ ctx, tasks, offsets });
+    const ids = new Set(r.updates.map((u) => u.id));
+    assert.equal(ids.has('ta'), false);
+    assert.equal(ids.has('tb'), false);
+    assert.equal(ids.has('tc'), true);
   });
 
-  it('cọc lại đơn mới sau khi hủy: việc chi tiết sinh mới theo D, E mới', () => {
-    const rows = deposited();
-    const mine = rows.filter((t) => t.orderId === 'D-1');
-    const gone = new Set(cancelPlan({ orderId: 'D-1', details: mine, others: [] }).deleteIds);
-    const after = rows.filter((t) => !gone.has(t.id));
-    const fresh = depositDetailPlan(T, { weddingId: WEDDING, orderId: 'D-2', service: decor, ctx: { today: '2026-11-05', wedding: W, event: '2027-02-20', deposit: '2026-11-05' }, existing: after });
-    assert.equal(fresh.deleteIds.length, 0);
-    assert.deepEqual(fresh.rows.map((r) => r.task_code).sort(), [...detailCodes('decor')].sort()); // sinh lại đủ, kể cả mã từng xong của đơn cũ
-    assert.ok(fresh.rows.every((r) => r.order_id === 'D-2'));
-    const byCode = new Map(fresh.rows.map((r) => [r.task_code, r.scheduled_date.toISOString().slice(0, 10)]));
-    assert.equal(byCode.get('DECOR_EVENT'), '2027-02-20'); // E mới
-    assert.equal(byCode.get('DECOR_PAY'), '2027-02-27'); // E + 7
-    assert.equal(byCode.get('DECOR_BRIEF'), '2026-12-07'); // E mới − 75 (còn ≥ D mới + 2)
+  it('việc chốt trước E mà ngày chốt sau E mới: needsRecheck; việc sau E thì không', () => {
+    const tasks = [state('tb', pkgCode('b', ORDER), '2027-03-13', { confirmed: true }), state('td', pkgCode('d', ORDER), '2027-03-23', { confirmed: true })];
+    const r = replanOrderTasks({ ctx: { ...ctx, event: '2027-03-01' }, tasks, offsets });
+    assert.deepEqual(r.needsRecheck, ['tb']);
+    assert.deepEqual(r.updates, []);
+  });
+
+  it('không đụng việc chi tiết cũ (mã mẫu) và việc gói không còn trong offsets', () => {
+    const tasks = [state('x', 'ATTIRE_FIT_FIRST', '2027-02-07'), state('y', pkgCode('zzz', ORDER), '2027-02-07')];
+    assert.deepEqual(replanOrderTasks({ ctx, tasks, offsets }), { updates: [], needsRecheck: [] });
+  });
+
+  it('E không đổi: không có gì cần cập nhật', () => {
+    const r = replanOrderTasks({ ctx: { today: '2026-12-01', event: E, deposit: '2026-12-01' }, tasks: base, offsets });
+    assert.deepEqual(r.updates, []);
   });
 });
 
-describe('cọc đủ 6 dịch vụ ở 6 thời điểm khác nhau', () => {
-  const WEDDING_DAY = '2027-04-18';
-  const SERVICES_IN_ORDER: [ServiceKey, string][] = [
-    ['nha-hang', '2026-11-02'],
-    ['trang-phuc', '2026-11-20'],
-    ['decor', '2026-12-05'],
-    ['chup-anh', '2026-12-18'],
-    ['makeup', '2027-01-10'],
-    ['hoa-cuoi', '2027-02-01'],
-  ];
-
-  /** Mô phỏng đúng hook: mỗi lần cọc lấy việc đã có làm `existing`, albumDate = ngày chụp album nếu đã có. */
-  function simulate() {
-    type Row = { id: string; code: string; status: string; orderId: string; date: string; service: ServiceKey };
-    const rows: Row[] = [];
-    const steps: { service: ServiceKey; created: Row[]; deleted: number; datesBefore: Map<string, string> }[] = [];
-    for (const [service, deposit] of SERVICES_IN_ORDER) {
-      const datesBefore = new Map(rows.map((r) => [r.id, r.date]));
-      const album = rows.find((r) => r.code === 'PHOTO_ALBUM_SHOOT')?.date;
-      const plan = depositDetailPlan(T, {
-        weddingId: WEDDING,
-        orderId: `order-${service}`,
-        service: { key: service, categoryId: `cat-${service}` },
-        ctx: { today: deposit, wedding: WEDDING_DAY, event: WEDDING_DAY, deposit, albumDate: album },
-        existing: rows.map((r) => ({ id: r.id, code: r.code, status: r.status, orderId: r.orderId })),
-      });
-      assert.equal(plan.deleteIds.length, 0, `${service}: cọc dịch vụ mới không được xóa / thay việc của dịch vụ khác`);
-      const created = plan.rows.map((r, i) => ({ id: `${service}-${i}`, code: r.task_code, status: 'Todo', orderId: `order-${service}`, date: r.scheduled_date.toISOString().slice(0, 10), service }));
-      rows.push(...created);
-      steps.push({ service, created, deleted: plan.deleteIds.length, datesBefore });
-      // sau mỗi lần cọc, mọi việc đã sinh trước đó vẫn đúng ngày cũ
-      for (const r of rows) if (datesBefore.has(r.id)) assert.equal(r.date, datesBefore.get(r.id), `${r.code} đổi ngày sau khi cọc ${service}`);
-    }
-    return { rows, steps };
-  }
-
-  it('mỗi lần cọc chỉ thêm việc của dịch vụ đó; ngày mọi việc đã sinh trước đó không đổi', () => {
-    const { rows, steps } = simulate();
-    assert.equal(steps.length, 6);
-    for (const st of steps) {
-      assert.ok(st.created.length > 0, st.service);
-      assert.ok(st.created.every((r) => T.find((t) => t.code === r.code)!.service === st.service));
-    }
-    assert.equal(new Set(rows.map((r) => r.code)).size, rows.length); // không trùng mã
-    assert.equal(rows.length, T.filter((t) => !['SELF', 'CHOOSE', 'BOOK'].includes(t.kind) && t.service).length);
+describe('cancelPlan: NCC hủy đơn', () => {
+  it('xóa việc chưa xong (Todo, Waiting), GIỮ việc đã xong', () => {
+    const p = cancelPlan({ details: [{ id: '1', status: 'Todo' }, { id: '2', status: 'Waiting' }, { id: '3', status: 'Done' }], others: [] });
+    assert.deepEqual(p.deleteIds, ['1', '2']);
   });
 
-  it('ngày việc của một dịch vụ không phụ thuộc thứ tự cọc các dịch vụ khác (trừ việc theo ngày chụp album)', () => {
-    const { rows } = simulate();
-    for (const [service, deposit] of SERVICES_IN_ORDER) {
-      const album = service === 'chup-anh' ? undefined : rows.find((r) => r.code === 'PHOTO_ALBUM_SHOOT')?.date;
-      const alone = depositDetailPlan(T, {
-        weddingId: WEDDING,
-        orderId: 'x',
-        service: { key: service, categoryId: 'c' },
-        ctx: { today: deposit, wedding: WEDDING_DAY, event: WEDDING_DAY, deposit, albumDate: service === 'trang-phuc' ? undefined : album },
-        existing: [],
-      }).rows;
-      for (const r of alone) {
-        if (r.task_code === 'ATTIRE_ALBUM_PICKUP') continue; // neo S−1: tính theo thời điểm cọc trang phục, không dời khi chụp ảnh cọc sau
-        assert.equal(rows.find((x) => x.code === r.task_code)!.date, r.scheduled_date.toISOString().slice(0, 10), r.task_code);
-      }
-    }
+  it('Mốc chốt mở lại khi không còn đơn Deposited / Completed cùng hạng mục; còn thì giữ', () => {
+    assert.equal(cancelPlan({ details: [], others: [] }).reopenBook, true);
+    assert.equal(cancelPlan({ details: [], others: [{ id: 'o2', status: 'Deposited' }] }).reopenBook, false);
+    assert.equal(cancelPlan({ details: [], others: [{ id: 'o2', status: 'Completed' }] }).reopenBook, false);
   });
 
-  it('danh sách theo thời gian có việc của nhiều dịch vụ đan xen, và các dịch vụ được trùng ngày (không tự dàn lại)', () => {
-    const { rows } = simulate();
-    const merged = [...rows].sort((a, b) => a.date.localeCompare(b.date));
-    let switches = 0;
-    for (let i = 1; i < merged.length; i++) if (merged[i].service !== merged[i - 1].service) switches++;
-    assert.ok(switches >= 15, `chỉ ${switches} lần đổi dịch vụ giữa các việc liền kề`);
-    const byDate = new Map<string, Set<ServiceKey>>();
-    for (const r of rows) byDate.set(r.date, (byDate.get(r.date) ?? new Set()).add(r.service));
-    assert.ok([...byDate.values()].some((s) => s.size >= 3), 'phải có ngày chung của ≥ 3 dịch vụ (ngày thực hiện)');
-    assert.deepEqual([...byDate.get(WEDDING_DAY)!].sort(), ['chup-anh', 'decor', 'hoa-cuoi', 'makeup', 'nha-hang']); // 5 dịch vụ có ngày thực hiện trùng ngày cưới (trang phục không có việc ngày thực hiện)
+  it('không còn luồng nhường việc cho đơn khác theo mã mẫu', () => {
+    assert.equal('handOverTo' in cancelPlan({ details: [], others: [{ id: 'o2', status: 'Deposited' }] }), false);
+  });
+});
+
+describe('mã việc gói không trùng giữa các đơn', () => {
+  const UUID = '123e4567-e89b-12d3-a456-426614174000';
+  const ORDER2 = 'abcdef12-0000-4000-8000-000000000002';
+
+  it("'PKG:<id>:<8 ký tự đầu của order_id>' ≤ 50 ký tự; tách lại đúng id việc của gói (và dạng cũ 'PKG:<id>')", () => {
+    const code = pkgCode(UUID, ORDER2);
+    assert.equal(code, `PKG:${UUID}:abcdef12`);
+    assert.ok(code.length <= 50, String(code.length));
+    assert.equal(pkgTaskIdOf(code), UUID);
+    assert.equal(pkgTaskIdOf(`PKG:${UUID}`), UUID);
+    assert.equal(pkgTaskIdOf('PAY:x'), null);
+    assert.equal(pkgTaskIdOf(null), null);
+  });
+
+  it('cùng việc của gói ở hai đơn: hai mã khác nhau', () => {
+    assert.notEqual(pkgCode(UUID, ORDER), pkgCode(UUID, ORDER2));
+  });
+
+  it('hủy đơn có việc Done rồi đặt lại cùng gói ở đơn mới: đơn mới nhận đủ việc (không bị mã cũ của đơn cũ chặn)', async () => {
+    const tasks = [pt('a', 'P1', -14), pt('b', 'P1', -3)];
+    // đơn cũ đã hủy: việc Done còn giữ mã của nó trong cùng đám cưới
+    const oldCodes = [pkgCode('a', ORDER), pkgCode('b', ORDER), payCode(ORDER)];
+    const fresh = fakeDb({ order: { id: ORDER2, order_items: [{ package_id: 'P1' }] }, pkgTasks: tasks, existing: [] });
+    const r = await syncOrderPackageTasks(fresh.db, ORDER2, new Date('2026-12-01T05:00:00Z'));
+    assert.equal(r.created, 3);
+    const newCodes = fresh.created.map((c) => c.task_code);
+    assert.equal(newCodes.filter((c) => oldCodes.includes(c)).length, 0, 'không trùng mã đơn cũ');
+    assert.equal(new Set([...oldCodes, ...newCodes]).size, 6);
   });
 });

@@ -1,12 +1,14 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { categorySlug } from '../catalog/services.service';
-import { publish } from '../realtime/realtime.bus';
+import { customerReadonlyIssue, dateStatusOf } from '../orders/order-task-rules';
+import { loadPackageMeta, ownersFrom, packagesOfOrder } from './package-task-meta';
+import { PAY_PREFIX, PKG_PREFIX } from './timeline-rows';
 import { planWeddingDateChange, todayVNDate, toYmd, vnYmd } from './timeline-hooks';
-import { dayOf, levelOf, planDetails, planFrame } from './timeline-schedule';
+import { dayOf, levelOf, planFrame } from './timeline-schedule';
 import { dueBounds, dueRangeIssue, sequenceIssue } from './timeline-rules';
-import { canTick, ownerOf } from './task-owner';
-import { SERVICE_BY_CATEGORY_NAME, TIMELINE_TEMPLATES, suggestOf, templateOf, type ServiceKey } from './timeline-templates';
+import { ownerOf } from './task-owner';
+import { SERVICE_BY_CATEGORY_NAME, SUGGEST_LABEL, TIMELINE_TEMPLATES, suggestOf, templateOf, type ServiceKey } from './timeline-templates';
 import { WeddingsService } from './weddings.service';
 
 const fail = (code: string, message: string, status: number): never => {
@@ -19,13 +21,10 @@ const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{
 /**
  * Timeline theo CSDL (timeline_tasks) và mẫu (timeline-templates.ts); loại việc suy ra từ task_code qua mẫu (task_code rỗng = khách tự thêm):
  * - SELF -> TASK; CHOOSE -> CHOOSE (nút "Gợi ý {dịch vụ}"); BOOK (mã *_BOOK) -> CATEGORY_DEADLINE ("Chốt <hạng mục>", xong khi đã cọc)
- * - DETAIL / EVENT / PAYMENT gắn đơn -> SERVICE_TASK (needsMeeting = có nút "Hẹn với NCC")
- * - Việc chi tiết (SERVICE_TASK) nằm trong nhóm của Mốc chốt cùng hạng mục; Mốc chốt chưa chốt mang detailCount (số việc sẽ mở)
- * `urgent` (Cần làm gấp) tính lại khi đọc bằng đúng đầu vào lúc sinh; không lưu.
+ * - việc gắn đơn (task_code 'PKG:<id>' từ gói của NCC, 'PAY:<orderId>' thanh toán, hoặc mã chi tiết cũ) -> SERVICE_TASK: khách chỉ xem
+ * - Việc chi tiết (SERVICE_TASK) nằm trong nhóm của Mốc chốt cùng hạng mục; Mốc chốt đã chốt mà đơn không có việc nào của gói mang vendorProcessMissing
+ * `urgent` (Cần làm gấp) của việc khung tính lại khi đọc bằng đúng đầu vào lúc sinh; không lưu.
  */
-/** Số việc chi tiết (Chi tiết, Ngày thực hiện, Thanh toán) của một hạng mục trong mẫu. */
-const detailCountOf = (key: ServiceKey | undefined) => (key ? TIMELINE_TEMPLATES.filter((t) => t.service === key && t.kind !== 'SELF' && t.kind !== 'CHOOSE' && t.kind !== 'BOOK').length : 0);
-
 const frameUrgent = (w: { wedding_date: Date | null; created_date: Date | null }, keys: ServiceKey[]) => {
   const out = new Set<string>();
   if (!w.wedding_date) return out;
@@ -44,12 +43,23 @@ export class TimelineService {
   async get(userId: string) {
     const w = await this.weddings.requireWedding(userId);
     const [tasks, cats, plan, orders] = await Promise.all([
-      this.prisma.timeline_tasks.findMany({ where: { wedding_id: w.id }, orderBy: [{ scheduled_date: 'asc' }, { display_order: 'asc' }, { created_date: 'asc' }] }),
+      this.prisma.timeline_tasks.findMany({ where: { wedding_id: w.id }, orderBy: [{ scheduled_date: 'asc' }, { display_order: 'asc' }, { created_date: 'asc' }], include: { task_confirmations: true } }),
       this.prisma.service_categories.findMany(),
       this.weddings.planSnapshot(userId, w.id),
       this.prisma.orders.findMany({
         where: { wedding_id: w.id },
-        select: { id: true, order_code: true, status: true, event_date: true, cancelled_date: true, payments: { select: { paid_date: true } }, vendor_profiles: { select: { id: true, business_name: true, category_id: true } } },
+        select: {
+          id: true,
+          order_code: true,
+          status: true,
+          event_date: true,
+          cancelled_date: true,
+          payments: { select: { paid_date: true } },
+          vendor_profiles: { select: { id: true, business_name: true, category_id: true } },
+          package_id: true,
+          service_packages: { select: { name: true } },
+          order_items: { select: { package_id: true, service_packages: { select: { name: true } } } },
+        },
       }),
     ]);
     const catById = new Map(cats.map((c) => [c.id, { id: c.id, slug: categorySlug(c.name), name: c.name ?? '' }]));
@@ -66,18 +76,30 @@ export class TimelineService {
     };
     const today = vnYmd(new Date());
 
-    // Cờ gấp: khung tính lại với I = ngày tạo; chi tiết tính lại với D, E của đơn như lúc sinh
+    // Cờ gấp: khung tính lại với I = ngày tạo
     const keys = [...new Set(tasks.map((t) => keyOfCat(t.category_id)).filter((k): k is ServiceKey => !!k))];
     const urgent = frameUrgent(w, keys);
-    const albumTask = tasks.find((t) => t.task_code === 'PHOTO_ALBUM_SHOOT');
-    for (const orderId of new Set(tasks.map((t) => t.order_id).filter((x): x is string => !!x))) {
-      const o = orderById.get(orderId);
-      const key = keyOfCat(tasks.find((t) => t.order_id === orderId)?.category_id ?? null);
-      if (!o || !key || !w.wedding_date) continue;
-      const deposit = o.payments?.paid_date ? vnYmd(o.payments.paid_date) : today;
-      const ctx = { today: deposit, wedding: toYmd(w.wedding_date), event: toYmd(o.event_date ?? w.wedding_date), deposit, albumDate: albumTask?.scheduled_date ? toYmd(albumTask.scheduled_date) : undefined };
-      for (const t of planDetails(TIMELINE_TEMPLATES, key, ctx).tasks) if (t.urgent) urgent.add(t.code);
-    }
+    const owners = ownersFrom(await loadPackageMeta(this.prisma, tasks.map((t) => t.task_code)));
+    // Đơn đã có việc chi tiết (của gói hoặc mã cũ, không tính việc thanh toán) thì NCC đã có quy trình
+    const hasProcess = new Set(tasks.filter((t) => t.order_id && t.task_code && !t.task_code.startsWith(PAY_PREFIX)).map((t) => t.order_id!));
+    // Gói của các đơn đã cọc nhưng chưa có việc nào: gói CÓ việc (package_tasks chưa xóa) thì NCC đã khai, timeline chỉ chưa sinh kịp / sinh lỗi
+    const lacking = orders.filter((o) => (o.status === 'Deposited' || o.status === 'Completed') && !hasProcess.has(o.id));
+    const lackingPackageIds = [...new Set(lacking.flatMap((o) => packagesOfOrder(o)))];
+    const packagesWithTasks = new Set(
+      lackingPackageIds.length ? (await this.prisma.package_tasks.findMany({ where: { package_id: { in: lackingPackageIds }, deleted_at: null }, select: { package_id: true }, distinct: ['package_id'] })).map((x) => x.package_id) : [],
+    );
+    const hasPackageTasks = (o: (typeof orders)[number]) => packagesOfOrder(o).some((id) => packagesWithTasks.has(id));
+    const lackingIn = (categoryId: string | null) => {
+      const live = orders.filter((o) => (o.status === 'Deposited' || o.status === 'Completed') && o.vendor_profiles?.category_id === categoryId);
+      return live.length > 0 && live.every((o) => !hasProcess.has(o.id)) ? live : [];
+    };
+    /** Đơn không có việc của gói và gói thật sự không khai việc (hoặc đơn không gắn gói): NCC chưa khai quy trình */
+    const processMissing = (categoryId: string | null) => {
+      const live = lackingIn(categoryId);
+      return live.length > 0 && !live.some(hasPackageTasks);
+    };
+    /** Đơn có gói đã khai việc mà timeline chưa có dòng PKG: việc đang được cập nhật (sinh lỗi hoặc chưa chạy), không phải NCC chưa khai */
+    const processSyncFailed = (categoryId: string | null) => lackingIn(categoryId).some(hasPackageTasks);
 
     const items = tasks.map((t) => {
       const category = t.category_id ? (catById.get(t.category_id) ?? null) : null;
@@ -102,6 +124,8 @@ export class TimelineService {
         title: t.title,
         dueDate: toYmd(t.scheduled_date),
         isDone: done,
+        /** Thời điểm hoàn thành (ISO) nếu đã xong; để hiện "Đã xong · dd/mm" */
+        completedDate: done && t.completed_date ? t.completed_date.toISOString() : null,
         isCustom: t.task_code === null,
         category,
         serviceName: kind === 'SERVICE_TASK' ? (order?.vendor_profiles?.business_name ?? null) : (planned?.serviceName ?? null),
@@ -109,23 +133,32 @@ export class TimelineService {
         // SERVICE_TASK: dịch vụ của đơn (để "Hẹn với NCC"); CHOOSE / CATEGORY_DEADLINE: dịch vụ đang trong kế hoạch của hạng mục
         serviceId: kind === 'SERVICE_TASK' ? (order?.vendor_profiles?.id ?? null) : (planned?.serviceId ?? null),
         urgent: !done && !!t.task_code && urgent.has(t.task_code),
-        // Việc neo theo ngày chụp album S mà khách chưa chốt ngày hẹn: ngày chỉ là tạm tính
-        tentative: !done && tpl?.anchor === 'S',
-        needsMeeting: !!tpl?.needsMeeting && !!t.order_id,
-        appointmentDate: null as string | null, // cột appointment_date chờ chạy SQL (prisma/sql/2026-10-29-timeline-appointment-date.sql)
-        /** SERVICE_TASK: ai làm việc này (CUSTOMER / VENDOR / BOTH); khách chỉ tick được CUSTOMER và BOTH */
-        owner: kind === 'SERVICE_TASK' ? ownerOf(t.task_code) : null,
+        /** Todo (NCC đang làm) | Waiting (chờ khách) | Done. Việc khung và việc tự thêm chỉ Todo | Done */
+        status: (t.status ?? 'Todo') as 'Todo' | 'Waiting' | 'Done',
+        /** SERVICE_TASK: việc lấy từ gói của NCC ('PKG:<id>') */
+        isPackageTask: !!t.task_code?.startsWith(PKG_PREFIX),
+        ...dateStatusOf(t.task_confirmations?.confirmed_date, t.task_confirmations?.confirmed_at, { due: toYmd(t.scheduled_date), event: '', isPackageBefore: false }),
+        /** SERVICE_TASK: ai làm việc này (CUSTOMER / VENDOR / BOTH); chỉ để hiển thị, khách không tick được việc gắn đơn */
+        owner: kind === 'SERVICE_TASK' ? ownerOf(t.task_code, owners) : null,
+        /** SERVICE_TASK: tên gói của NCC gắn với đơn (sảnh và gói của các dòng), để đặt tiêu đề nhóm "Quy trình của <NCC> · <gói>" */
+        packageName: kind === 'SERVICE_TASK' && order ? ([...new Set([order.service_packages?.name, ...order.order_items.map((i) => i.service_packages?.name)].flatMap((n) => (n ? [n] : [])))].join(', ') || null) : null,
         /** SERVICE_TASK: mã đơn đang giữ việc */
         orderCode: kind === 'SERVICE_TASK' ? (order?.order_code ?? null) : null,
         /** SERVICE_TASK: ngày thực hiện của đơn đang giữ việc, và cờ lệch (sau ngày cưới: đơn cũ trước khi có luật, hoặc khách đổi ngày cưới) */
         orderEventDate: kind === 'SERVICE_TASK' && order?.event_date ? toYmd(order.event_date) : null,
         dateConflict: kind === 'SERVICE_TASK' && !!order?.event_date && !!w.wedding_date && toYmd(order.event_date) > toYmd(w.wedding_date),
-        /** CATEGORY_DEADLINE chưa chốt: số việc chi tiết sẽ mở sau khi đặt cọc ("N việc chi tiết mở sau khi bạn đặt cọc") */
-        detailCount: kind === 'CATEGORY_DEADLINE' && !done ? detailCountOf(keyOfCat(t.category_id)) : 0,
+        /** CATEGORY_DEADLINE đã chốt mà đơn không có việc nào của gói: NCC chưa khai quy trình */
+        vendorProcessMissing: kind === 'CATEGORY_DEADLINE' && done && processMissing(t.category_id),
+        /** CATEGORY_DEADLINE đã chốt, gói của đơn có việc nhưng timeline chưa có dòng PKG: FE hiện "Đang cập nhật quy trình" */
+        processSyncFailed: kind === 'CATEGORY_DEADLINE' && done && processSyncFailed(t.category_id),
         /** CATEGORY_DEADLINE đang Todo: đơn ĐÃ CỌC rồi bị hủy gần nhất cùng hạng mục ("Đơn … với … đã hủy ngày …"); cọc đơn mới thì Mốc chốt xong và dòng này mất */
         cancelledOrder: kind === 'CATEGORY_DEADLINE' && !done ? cancelledOrderOf(t.category_id) : null,
       };
-    }).map((i, idx) => ({ ...i, suggest: suggestOf(templateOf(tasks[idx].task_code), { done: i.isDone, hasCancelledOrder: !!i.cancelledOrder }) }));
+    }).map((i, idx) => {
+      const tpl = templateOf(tasks[idx].task_code);
+      const suggest = suggestOf(tpl, { done: i.isDone, hasCancelledOrder: !!i.cancelledOrder });
+      return { ...i, suggest, suggestLabel: suggest && tpl?.service ? SUGGEST_LABEL[tpl.service] : null };
+    });
 
     const daysLeft = w.wedding_date ? dayOf(toYmd(w.wedding_date)) - dayOf(today) : null;
     return { items, level: daysLeft !== null && daysLeft > 0 ? levelOf(daysLeft) : null, daysLeft };
@@ -156,8 +189,7 @@ export class TimelineService {
   private async checkDue(dueDate: unknown, weddingDate: Date | null, task?: { id: string; task_code: string | null; order_id: string | null; category_id: string | null; wedding_id: string | null }) {
     if (!isDate(dueDate)) return fail('VALIDATION_ERROR', 'Chọn hạn hợp lệ.', 400);
     if (!weddingDate) return fail('DUE_DATE_OUT_OF_RANGE', 'Hãy thiết lập ngày cưới trước.', 400);
-    const order = task?.order_id ? await this.prisma.orders.findUnique({ where: { id: task.order_id }, select: { event_date: true } }) : null;
-    const bounds = dueBounds(task?.task_code ?? null, { today: toYmd(todayVNDate()), wedding: toYmd(weddingDate), event: order?.event_date ? toYmd(order.event_date) : null });
+    const bounds = dueBounds(task?.task_code ?? null, { today: toYmd(todayVNDate()), wedding: toYmd(weddingDate) });
     const issue = dueRangeIssue(dueDate, bounds);
     if (issue) return fail(bounds.fixed ? 'TIMELINE_ITEM_READONLY' : 'DUE_DATE_OUT_OF_RANGE', issue, 400);
     if (task?.category_id) {
@@ -185,8 +217,10 @@ export class TimelineService {
     const deadline = task.task_type === 'Frame' && !!task.task_code?.endsWith('_BOOK');
     const data: { title?: string; scheduled_date?: Date; status?: string; completed_date?: Date | null } = {};
 
-    if (task.task_type === 'Detail' && !task.order_id) return fail('TIMELINE_ITEM_READONLY', 'Việc này mở ra sau khi đặt cọc dịch vụ.', 400);
-    if (task.order_id && !canTick('COUPLE', ownerOf(task.task_code))) return fail('TIMELINE_ITEM_READONLY', 'Việc này do nhà cung cấp thực hiện và cập nhật. Bạn chỉ xem được tiến độ.', 403);
+    // Việc chi tiết gắn đơn do NCC quản lý: khách không tick, đổi hạn, đổi tên, xóa (403 TIMELINE_ITEM_READONLY)
+    const readonly = customerReadonlyIssue(task);
+    if (readonly) return fail(readonly.code, readonly.message, readonly.status);
+    if (task.task_type === 'Detail') return fail('TIMELINE_ITEM_READONLY', 'Việc này mở ra sau khi đặt cọc dịch vụ.', 400);
     if (body.title !== undefined) {
       if (task.task_code !== null) return fail('TIMELINE_ITEM_READONLY', 'Không đổi được tên việc mặc định.', 400);
       const title = body.title.trim();
@@ -200,22 +234,13 @@ export class TimelineService {
       data.completed_date = body.isDone ? new Date() : null;
     }
     if (Object.keys(data).length) await this.prisma.timeline_tasks.update({ where: { id }, data });
-    if (task.order_id && (data.status !== undefined || data.scheduled_date !== undefined)) await this.publishTaskChange(userId, task.order_id, id);
     return this.get(userId);
-  }
-
-  /**
-   * Việc gắn đơn vừa đổi trạng thái / hạn: báo NCC của đơn (và các phiên khác của khách) qua realtime để Lịch làm việc, Tiến độ đơn tải lại ngay.
-   * Không tạo thông báo; lỗi tra cứu không làm hỏng việc đã lưu.
-   */
-  private async publishTaskChange(userId: string, orderId: string, taskId: string) {
-    const o = await this.prisma.orders.findUnique({ where: { id: orderId }, select: { vendor_profiles: { select: { user_id: true } } } }).catch(() => null);
-    const vendorUser = o?.vendor_profiles?.user_id;
-    publish({ users: vendorUser ? [vendorUser, userId] : [userId], event: 'task', data: { orderId, taskId } });
   }
 
   async remove(userId: string, id: string) {
     const { task } = await this.task(userId, id);
+    const readonly = customerReadonlyIssue(task);
+    if (readonly) return fail(readonly.code, readonly.message, readonly.status);
     if (task.task_code !== null) return fail('TASK_NOT_CUSTOM', 'Chỉ xóa được việc do bạn thêm.', 409);
     await this.prisma.timeline_tasks.delete({ where: { id } });
     return this.get(userId);

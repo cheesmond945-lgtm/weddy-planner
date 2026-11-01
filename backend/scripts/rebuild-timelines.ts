@@ -1,15 +1,16 @@
 /*
- * Dựng lại timeline của MỌI đám cưới theo mẫu mới (src/modules/weddings/timeline-templates.ts), thay timeline cũ.
+ * Dựng lại timeline KHUNG của MỌI đám cưới theo mẫu mới (src/modules/weddings/timeline-templates.ts), thay việc khung cũ.
+ * Việc chi tiết của đơn (lấy từ gói của NCC, gắn đơn) KHÔNG bị đụng. KHÔNG chạy trong đợt này.
  *
  *   npm run timelines:rebuild             DRY-RUN (mặc định): chỉ đọc CSDL, in bảng, không ghi gì
  *   npm run timelines:rebuild -- --apply  ghi thật; mỗi đám cưới một transaction
  *
  * Mỗi đám cưới:
  *   - GIỮ việc khách tự thêm (task_code rỗng).
- *   - XÓA các việc sinh từ mẫu cũ (task_code khác rỗng).
+ *   - GIỮ việc chi tiết gắn đơn (order_id khác rỗng).
+ *   - XÓA các việc khung sinh từ mẫu cũ (task_type Frame, task_code khác rỗng, không gắn đơn).
  *   - Sinh lại việc khung với I = ngày tạo đám cưới (giờ VN), W = ngày cưới hiện tại.
- *   - Mỗi đơn Deposited / Completed: sinh việc chi tiết với D = ngày cọc thật, E = ngày thực hiện của đơn; Mốc chốt của dịch vụ đó xong.
- *     Mỗi dịch vụ chỉ một đơn giữ timeline: đơn Deposited (cọc mới nhất) trước, rồi Completed. Việc của đơn Completed vẫn để Todo.
+ *   - Mỗi dịch vụ có đơn Deposited / Completed: Mốc chốt của dịch vụ đó xong (đơn Deposited cọc mới nhất trước, rồi Completed).
  *   - Bỏ qua đám cưới chưa có ngày cưới, hoặc ngày cưới không sau ngày tạo.
  * Chỉ đọc weddings, orders, payments, service_categories, users; chỉ ghi timeline_tasks.
  */
@@ -18,8 +19,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
-import { detailRows, frameRows, type ServiceRef, type TaskRow } from '../src/modules/weddings/timeline-rows';
-import { dayOf, defaultAlbumDate } from '../src/modules/weddings/timeline-schedule';
+import { frameRows, type ServiceRef, type TaskRow } from '../src/modules/weddings/timeline-rows';
+import { dayOf } from '../src/modules/weddings/timeline-schedule';
 import { SERVICE_BY_CATEGORY_NAME, TIMELINE_TEMPLATES } from '../src/modules/weddings/timeline-templates';
 
 const apply = process.argv.includes('--apply');
@@ -59,8 +60,8 @@ async function main() {
       }
       const W = ymd(w.wedding_date);
       const I = vnYmd(w.created_date ?? new Date());
-      const existing = await prisma.timeline_tasks.findMany({ where: { wedding_id: w.id }, select: { task_code: true } });
-      const coded = existing.filter((t) => t.task_code !== null).length;
+      const existing = await prisma.timeline_tasks.findMany({ where: { wedding_id: w.id }, select: { task_code: true, task_type: true, order_id: true } });
+      const coded = existing.filter((t) => t.task_code !== null && t.task_type === 'Frame' && t.order_id === null).length;
       const custom = existing.length - coded;
       if (dayOf(W) <= dayOf(I)) {
         table.push({ ...base, 'ngày tạo (I)': I, L: dayOf(W) - dayOf(I), 'đơn cọc': w.orders.length, xóa: 0, tạo: 0, 'giữ (tự thêm)': existing.length, 'ghi chú': 'bỏ qua: ngày cưới không sau ngày tạo, không đụng timeline' });
@@ -82,22 +83,7 @@ async function main() {
       const services = [...wanted].flatMap((id) => (refOf.has(id) ? [refOf.get(id)!] : []));
 
       const rows = frameRows(TIMELINE_TEMPLATES, { weddingId: w.id, wedding: W, today: I, services });
-      const taken = new Set(rows.map((r) => r.task_code));
-      const chup = owner.get('chup-anh');
-      const albumDate = chup ? defaultAlbumDate(vnYmd(paidAt(chup)), W) : undefined;
-
       for (const [key, o] of owner) {
-        const service = services.find((s) => s.key === key)!;
-        const deposit = vnYmd(paidAt(o));
-        const add = detailRows(TIMELINE_TEMPLATES, {
-          weddingId: w.id,
-          orderId: o.id,
-          service,
-          ctx: { today: deposit, wedding: W, event: o.event_date ? ymd(o.event_date) : W, deposit, albumDate },
-          existing: taken,
-        });
-        for (const r of add) taken.add(r.task_code);
-        rows.push(...add);
         const book = rows.find((r) => r.task_code === bookCode(key));
         if (book) {
           book.status = 'Done';
@@ -106,7 +92,7 @@ async function main() {
       }
       plans.push({ id: w.id, del: coded, rows });
       const dup = w.orders.length - owner.size;
-      table.push({ ...base, 'ngày tạo (I)': I, L: dayOf(W) - dayOf(I), 'đơn cọc': owner.size, xóa: coded, tạo: rows.length, 'giữ (tự thêm)': custom, 'ghi chú': dup > 0 ? `${dup} đơn cọc trùng dịch vụ, không sinh việc` : '' });
+      table.push({ ...base, 'ngày tạo (I)': I, L: dayOf(W) - dayOf(I), 'đơn cọc': owner.size, xóa: coded, tạo: rows.length, 'giữ (tự thêm)': custom, 'ghi chú': dup > 0 ? `${dup} đơn cọc trùng dịch vụ` : '' });
     }
 
     console.log(apply ? '== CHẠY THẬT (--apply) ==' : '== DRY-RUN: không ghi gì vào CSDL ==');
@@ -121,7 +107,7 @@ async function main() {
     // Sao lưu TOÀN BỘ dòng sắp xóa (đủ mọi cột) trước khi động vào CSDL; không ghi đè bản sao lưu cũ
     const backupFile = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'backup', `timeline_tasks_${vnYmd(new Date())}.json`);
     if (fs.existsSync(backupFile)) throw new Error(`Đã có bản sao lưu ${backupFile}, xóa hoặc đổi tên rồi chạy lại.`);
-    const doomed = await prisma.timeline_tasks.findMany({ where: { wedding_id: { in: plans.map((p) => p.id) }, task_code: { not: null } }, orderBy: [{ wedding_id: 'asc' }, { scheduled_date: 'asc' }, { id: 'asc' }] });
+    const doomed = await prisma.timeline_tasks.findMany({ where: { wedding_id: { in: plans.map((p) => p.id) }, task_code: { not: null }, task_type: 'Frame', order_id: null }, orderBy: [{ wedding_id: 'asc' }, { scheduled_date: 'asc' }, { id: 'asc' }] });
     const expected = plans.reduce((a, p) => a + p.del, 0);
     if (doomed.length !== expected) throw new Error(`Số dòng sao lưu (${doomed.length}) khác số dòng sẽ xóa (${expected}), dừng.`);
     fs.mkdirSync(path.dirname(backupFile), { recursive: true });
@@ -130,7 +116,7 @@ async function main() {
 
     for (const p of plans) {
       const done = await prisma.$transaction(async (tx) => {
-        const deleted = await tx.timeline_tasks.deleteMany({ where: { wedding_id: p.id, task_code: { not: null } } });
+        const deleted = await tx.timeline_tasks.deleteMany({ where: { wedding_id: p.id, task_code: { not: null }, task_type: 'Frame', order_id: null } });
         const created = await tx.timeline_tasks.createMany({ data: p.rows });
         if (deleted.count !== p.del || created.count !== p.rows.length) throw new Error(`Lệch số dòng ở ${p.id}: xóa ${deleted.count}/${p.del}, tạo ${created.count}/${p.rows.length}`);
         return { deleted: deleted.count, created: created.count };

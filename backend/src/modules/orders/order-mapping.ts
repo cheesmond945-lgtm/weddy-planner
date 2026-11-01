@@ -10,7 +10,7 @@ import type { Prisma } from '../../generated/prisma/client';
 import { categorySlug } from '../catalog/services.service';
 
 export const ORDER_INCLUDE = {
-  order_items: { orderBy: { id: 'asc' as const } },
+  order_items: { orderBy: { id: 'asc' as const }, include: { service_packages: { select: { id: true, name: true } } } },
   payments: true,
   order_revisions: { orderBy: { created_date: 'desc' as const }, include: { order_revision_changes: true } },
   invoices: { orderBy: { created_date: 'asc' as const } },
@@ -57,7 +57,17 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
     eventDate: ymd(o.event_date),
     /** Ngày cưới của khách (null nếu chưa có), để form đơn điền sẵn và thẻ đơn báo khi ngày thực hiện lệch */
     weddingDate: ymd(o.weddings?.wedding_date ?? null) || null,
-    items: o.order_items.map((i) => ({ id: i.id, itemName: i.item_name, unit: i.unit, quantity: i.quantity, unitPrice: Number(i.unit_price), amount: Number(i.amount) })),
+    items: o.order_items.map((i) => ({
+      id: i.id,
+      itemName: i.item_name,
+      unit: i.unit,
+      quantity: i.quantity,
+      unitPrice: Number(i.unit_price),
+      amount: Number(i.amount),
+      /** Gói dịch vụ của dòng (quy trình của gói sinh việc chi tiết khi cọc); null: dòng không gắn gói */
+      packageId: i.package_id ?? null,
+      packageName: i.service_packages?.name ?? null,
+    })),
     totalAmount: Number(o.total_amount),
     depositPercent: Number(o.deposit_percent),
     depositAmount: Number(o.deposit_amount),

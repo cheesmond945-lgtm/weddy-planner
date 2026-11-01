@@ -2,8 +2,7 @@
  * Lịch làm việc của NCC (docs/TIMELINE.md mục 9): gom ngày thực hiện của đơn và việc chi tiết của đơn đang thực hiện thành một danh sách
  * theo ngày. Hàm thuần: không đụng CSDL, không đọc đồng hồ. Ngày là chuỗi "YYYY-MM-DD".
  */
-import { canTick, ownerOf, type TaskOwner } from './task-owner.ts';
-import { templateOf } from './timeline-templates.ts';
+import { ownerOf, type TaskOwner } from './task-owner.ts';
 
 /** Số ngày tối đa một lần hỏi lịch (đủ một lưới tháng 6 tuần). */
 export const CALENDAR_MAX_DAYS = 100;
@@ -23,6 +22,12 @@ export interface CalendarTask {
   title: string;
   due: string;
   done: boolean;
+  /** Todo | Waiting | Done */
+  status?: string | null;
+  /** NCC đã chốt ngày (có dòng task_confirmations) */
+  confirmed?: boolean;
+  /** Chủ việc đã tra theo package_tasks (việc 'PKG:<id>'); thiếu thì suy từ mã */
+  owner?: TaskOwner;
   /** Đơn đang giữ việc */
   order: CalendarOrder;
 }
@@ -31,7 +36,7 @@ export type CalendarItem =
   /** Ngày thực hiện của một đơn (chờ cọc, chờ chỉnh sửa, đã cọc, hoàn thành) */
   | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: string; isDone: boolean }
   /** Việc chi tiết của đơn đã cọc */
-  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; isDone: boolean; owner: TaskOwner; canTick: boolean; overdue: boolean };
+  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isDone: boolean; status: 'Todo' | 'Waiting' | 'Done'; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean };
 
 const ORDER_STATUSES = ['Pending', 'NeedRevision', 'Deposited', 'Completed'];
 
@@ -44,8 +49,7 @@ const ORDER_TITLE: Record<string, (code: string) => string> = {
 
 /**
  * - Mỗi đơn có ngày thực hiện trong [from, to] thành một mốc ORDER.
- * - Việc chi tiết của đơn Deposited trong [from, to] thành TASK; việc "Ngày thực hiện" (EVENT) trùng đúng ngày thực hiện của đơn bị bỏ
- *   vì đã có mốc ORDER của ngày đó (tránh hai dòng cho một việc).
+ * - Việc chi tiết của đơn Deposited trong [from, to] thành TASK (kể cả việc đúng ngày thực hiện: NCC khai nó như một việc của gói).
  * Sắp theo ngày; cùng ngày mốc ORDER đứng trước, rồi việc chưa xong trước việc đã xong.
  */
 export function calendarItems(input: { orders: readonly CalendarOrder[]; tasks: readonly CalendarTask[]; from: string; to: string; today: string }): CalendarItem[] {
@@ -60,8 +64,7 @@ export function calendarItems(input: { orders: readonly CalendarOrder[]; tasks: 
 
   for (const t of input.tasks) {
     if (t.order.status !== 'Deposited' || !inRange(t.due)) continue;
-    if (templateOf(t.code)?.kind === 'EVENT' && t.due === t.order.eventDate) continue;
-    const owner = ownerOf(t.code);
+    const owner = t.owner ?? ownerOf(t.code);
     out.push({
       kind: 'TASK',
       id: t.id,
@@ -70,9 +73,13 @@ export function calendarItems(input: { orders: readonly CalendarOrder[]; tasks: 
       customerName: t.order.customerName,
       title: t.title,
       date: t.due,
+      eventDate: t.order.eventDate,
       isDone: t.done,
+      status: t.done ? 'Done' : t.status === 'Waiting' ? 'Waiting' : 'Todo',
+      dateStatus: t.confirmed ? 'CONFIRMED' : 'PLANNED',
       owner,
-      canTick: canTick('VENDOR', owner),
+      /** NCC đổi được trạng thái mọi việc chi tiết của đơn mình */
+      canTick: true,
       overdue: !t.done && t.due < today,
     });
   }

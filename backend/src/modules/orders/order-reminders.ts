@@ -1,7 +1,8 @@
 import type { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
-import { DUE_SOON_DAYS, OVERDUE_MAX_DAYS, dmyOf, ownerOf, reminderStage, remindersFor, taskDigest } from '../weddings/task-owner';
+import { loadPackageMeta, ownersFrom } from '../weddings/package-task-meta';
+import { DUE_SOON_DAYS, OVERDUE_MAX_DAYS, UNCONFIRMED_DAYS, dmyOf, ownerOf, reminderStage, remindersFor, taskDigest } from '../weddings/task-owner';
 import { addDaysYmd, startOfDayVn, todayVn, ymdOf } from './order-rules';
 
 /*
@@ -11,16 +12,17 @@ import { addDaysYmd, startOfDayVn, todayVn, ymdOf } from './order-rules';
 
 const MAX_TASKS = 300;
 
-/** Quét việc Todo của đơn Deposited trong `scope` (đơn của một NCC / một khách / toàn hệ thống), tạo thông báo còn thiếu. Trả số thông báo mới. */
+/** Quét việc chưa Done (Todo và Waiting) của đơn Deposited trong `scope` (đơn của một NCC / một khách / toàn hệ thống), tạo thông báo còn thiếu. Trả số thông báo mới. */
 export async function remindTaskDeadlines(prisma: PrismaService, scope: Prisma.ordersWhereInput = {}, today = todayVn()): Promise<number> {
   const from = new Date(`${addDaysYmd(today, -OVERDUE_MAX_DAYS)}T00:00:00Z`);
   const to = new Date(`${addDaysYmd(today, DUE_SOON_DAYS)}T00:00:00Z`);
   const tasks = await prisma.timeline_tasks.findMany({
-    where: { status: 'Todo', task_type: 'Detail', order_id: { not: null }, scheduled_date: { gte: from, lte: to }, orders: { is: { ...scope, status: 'Deposited' } } },
+    where: { status: { not: 'Done' }, task_type: 'Detail', order_id: { not: null }, scheduled_date: { gte: from, lte: to }, orders: { is: { ...scope, status: 'Deposited' } } },
     select: {
       id: true,
       title: true,
       task_code: true,
+      status: true,
       scheduled_date: true,
       orders: { select: { order_code: true, weddings: { select: { user_id: true } }, vendor_profiles: { select: { user_id: true, business_name: true } } } },
     },
@@ -28,6 +30,7 @@ export async function remindTaskDeadlines(prisma: PrismaService, scope: Prisma.o
     take: MAX_TASKS,
   });
 
+  const owners = ownersFrom(await loadPackageMeta(prisma, tasks.map((t) => t.task_code)));
   let created = 0;
   for (const t of tasks) {
     const o = t.orders;
@@ -35,7 +38,7 @@ export async function remindTaskDeadlines(prisma: PrismaService, scope: Prisma.o
     const due = ymdOf(t.scheduled_date);
     const stage = reminderStage(due, today);
     if (!stage) continue;
-    const reminders = remindersFor({ title: t.title ?? '', orderCode: o.order_code ?? '', vendorName: o.vendor_profiles?.business_name ?? '', due, owner: ownerOf(t.task_code) }, stage);
+    const reminders = remindersFor({ title: t.title ?? '', orderCode: o.order_code ?? '', vendorName: o.vendor_profiles?.business_name ?? '', due, owner: ownerOf(t.task_code, owners), status: t.status === 'Waiting' ? 'Waiting' : 'Todo' }, stage);
     for (const r of reminders) {
       const userId = r.to === 'COUPLE' ? o.weddings?.user_id : o.vendor_profiles?.user_id;
       if (!userId) continue;
@@ -47,6 +50,48 @@ export async function remindTaskDeadlines(prisma: PrismaService, scope: Prisma.o
       } catch {
         /* thông báo chỉ là phụ: lỗi một việc không làm hỏng các việc còn lại */
       }
+    }
+  }
+  return created + (await remindUnconfirmed(prisma, scope, today));
+}
+
+/**
+ * Nhắc NCC: việc owner BOTH (làm cùng khách) chưa Done, chưa chốt ngày với khách và hạn trong UNCONFIRMED_DAYS ngày tới.
+ * Mỗi NCC một thông báo "N việc chưa chốt lịch với khách" mỗi ngày (giờ VN). Trả số thông báo mới.
+ */
+export async function remindUnconfirmed(prisma: PrismaService, scope: Prisma.ordersWhereInput = {}, today = todayVn()): Promise<number> {
+  const from = new Date(`${today}T00:00:00Z`);
+  const to = new Date(`${addDaysYmd(today, UNCONFIRMED_DAYS)}T00:00:00Z`);
+  const tasks = await prisma.timeline_tasks.findMany({
+    where: {
+      status: { not: 'Done' },
+      task_type: 'Detail',
+      order_id: { not: null },
+      scheduled_date: { gte: from, lte: to },
+      task_confirmations: { is: null },
+      orders: { is: { ...scope, status: 'Deposited' } },
+    },
+    select: { id: true, task_code: true, orders: { select: { id: true, vendor_profiles: { select: { user_id: true } } } } },
+    take: MAX_TASKS,
+  });
+  const owners = ownersFrom(await loadPackageMeta(prisma, tasks.map((t) => t.task_code)));
+  const byVendor = new Map<string, { orderId: string; count: number }>();
+  for (const t of tasks) {
+    const userId = t.orders?.vendor_profiles?.user_id;
+    if (!userId || ownerOf(t.task_code, owners) !== 'BOTH') continue;
+    const e = byVendor.get(userId) ?? { orderId: t.orders!.id, count: 0 };
+    e.count++;
+    byVendor.set(userId, e);
+  }
+  let created = 0;
+  const since = startOfDayVn(today);
+  for (const [userId, { orderId, count }] of byVendor) {
+    try {
+      if (await prisma.notifications.count({ where: { user_id: userId, type: 'TaskUnconfirmed', created_date: { gte: since } } })) continue;
+      await notify(prisma, { userId, type: 'TaskUnconfirmed', title: 'Việc chưa chốt lịch', content: `${count} việc chưa chốt lịch với khách (hạn trong ${UNCONFIRMED_DAYS} ngày tới). Vào Lịch làm việc để chốt ngày.`, referenceType: 'Order', referenceId: orderId });
+      created++;
+    } catch {
+      /* thông báo chỉ là phụ */
     }
   }
   return created;
@@ -61,7 +106,7 @@ export async function remindFrameTasks(prisma: PrismaService, coupleId?: string,
   const to = new Date(`${addDaysYmd(today, DUE_SOON_DAYS)}T00:00:00Z`);
   const rows = await prisma.timeline_tasks.findMany({
     where: {
-      status: 'Todo',
+      status: { not: 'Done' },
       order_id: null,
       OR: [{ task_type: 'Frame' }, { task_code: null }],
       scheduled_date: { gte: from, lte: to },

@@ -1,13 +1,13 @@
-import { Logger } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
-import { cancelPlan, depositDetailPlan, frameRows, type ServiceRef } from './timeline-rows';
+import { syncOrderPackageTasks as syncOrderPackageTasksOf, type SyncDb } from './order-package-sync';
+import { loadPackageMeta } from './package-task-meta';
+import { cancelPlan, frameRows, isOrderTaskCode, replanOrderTasks, type ServiceRef } from './timeline-rows';
 import { replanOnWeddingDateChange } from './timeline-schedule';
 import { customerDateWarning, dateChangeIssue, vendorDateNotice } from './timeline-rules';
 import { SERVICE_BY_CATEGORY_NAME, TIMELINE_TEMPLATES, templateOf, type ServiceKey } from './timeline-templates';
 
-const logger = new Logger('Timeline');
 const ymdOf = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
 /** Ngày theo giờ Việt Nam của một thời điểm, dạng "YYYY-MM-DD". */
 export const vnYmd = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
@@ -15,12 +15,6 @@ export const vnYmd = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOStri
 export const todayVNDate = () => new Date(`${vnYmd(new Date())}T00:00:00Z`);
 
 export const toYmd = ymdOf;
-
-async function serviceOfCategory(prisma: PrismaService, categoryId: string): Promise<ServiceRef | null> {
-  const cat = await prisma.service_categories.findUnique({ where: { id: categoryId }, select: { name: true } });
-  const key = cat?.name ? SERVICE_BY_CATEGORY_NAME[cat.name] : undefined;
-  return key ? { key, categoryId } : null;
-}
 
 /**
  * Khi lưu thông tin đám cưới: sinh timeline khung từ mẫu (timeline-templates.ts), hạn tính từ ngày cưới và hôm nay.
@@ -37,86 +31,68 @@ export async function onWeddingCategories(prisma: PrismaService, weddingId: stri
 }
 
 /**
- * Sinh việc chi tiết của một đơn đã cọc (depositDetailPlan): thay việc chưa xong của đơn khác cùng hạng mục, chèn việc còn thiếu.
- * Chạy lại cho cùng một đơn thì không đổi gì. Trả số dòng đã xóa / đã tạo.
+ * Sinh việc chi tiết của một đơn đã cọc từ package_tasks của các gói gắn với đơn (xem order-package-sync.ts).
+ * Trả vendorProcessMissing = true khi đơn không có việc nào của gói (NCC chưa khai quy trình).
  */
-export async function syncOrderDetails(prisma: PrismaService, orderId: string): Promise<{ deleted: number; created: number }> {
-  const order = await prisma.orders.findUnique({
-    where: { id: orderId },
-    select: { id: true, wedding_id: true, event_date: true, vendor_profiles: { select: { category_id: true } }, payments: { select: { paid_date: true } } },
-  });
-  if (!order?.wedding_id || !order.event_date || !order.vendor_profiles?.category_id) return { deleted: 0, created: 0 };
-  const service = await serviceOfCategory(prisma, order.vendor_profiles.category_id);
-  const wedding = await prisma.weddings.findUnique({ where: { id: order.wedding_id }, select: { wedding_date: true } });
-  if (!service || !wedding?.wedding_date) return { deleted: 0, created: 0 };
-  // Ngày thực hiện sau ngày cưới (đơn cũ trước khi có luật, hoặc khách đổi ngày cưới sau khi cọc): không sinh việc, kẻo cả bộ việc chi tiết bị kéo tới ngày đó
-  if (ymdOf(order.event_date) > ymdOf(wedding.wedding_date)) {
-    logger.warn(`Đơn ${orderId}: ngày thực hiện ${ymdOf(order.event_date)} sau ngày cưới ${ymdOf(wedding.wedding_date)}, không sinh việc chi tiết`);
-    return { deleted: 0, created: 0 };
-  }
+export const syncOrderPackageTasks = (prisma: PrismaService, orderId: string) => syncOrderPackageTasksOf(prisma as unknown as SyncDb, orderId);
 
-  const tasks = await prisma.timeline_tasks.findMany({ where: { wedding_id: order.wedding_id, task_code: { not: null } }, select: { id: true, task_code: true, status: true, order_id: true, scheduled_date: true } });
-  // Ngày chụp album S: đã có (dịch vụ chụp ảnh cọc trước) thì dùng đúng ngày đó; chưa có thì tính tạm
-  const album = tasks.find((t) => t.task_code === 'PHOTO_ALBUM_SHOOT')?.scheduled_date;
+/**
+ * Khi NCC sửa ngày thực hiện của đơn đã cọc: hạn các việc gói (PKG) và thanh toán (PAY) chưa xong và CHƯA chốt ngày được tính lại theo E mới
+ * (theo package_tasks của từng việc, kể cả việc đã xóa mềm). Việc đã xong, việc đã chốt giữ ngày; việc chốt trước E mà ngày chốt nằm sau E mới
+ * thì trả vào needsRecheck. Việc chi tiết cũ (mã mẫu) không đụng tới.
+ */
+export async function onOrderEventDateChanged(prisma: PrismaService, orderId: string): Promise<{ updated: number; needsRecheck: string[] }> {
+  const order = await prisma.orders.findUnique({ where: { id: orderId }, select: { event_date: true, payments: { select: { paid_date: true } } } });
+  if (!order?.event_date) return { updated: 0, needsRecheck: [] };
+  const mine = await prisma.timeline_tasks.findMany({
+    where: { order_id: orderId, task_type: 'Detail', task_code: { not: null } },
+    select: { id: true, task_code: true, status: true, scheduled_date: true, task_confirmations: { select: { task_id: true } } },
+  });
+  const tasks = mine.filter((t) => isOrderTaskCode(t.task_code) && t.scheduled_date);
+  if (!tasks.length) return { updated: 0, needsRecheck: [] };
+  const meta = await loadPackageMeta(prisma, tasks.map((t) => t.task_code));
   const today = vnYmd(new Date());
-  const deposit = order.payments?.paid_date ? vnYmd(order.payments.paid_date) : today;
-  const plan = depositDetailPlan(TIMELINE_TEMPLATES, {
-    weddingId: order.wedding_id,
-    orderId: order.id,
-    service,
-    ctx: { today, wedding: ymdOf(wedding.wedding_date), event: ymdOf(order.event_date), deposit, albumDate: album ? ymdOf(album) : undefined },
-    existing: tasks.map((t) => ({ id: t.id, code: t.task_code!, status: t.status, orderId: t.order_id })),
+  const plan = replanOrderTasks({
+    ctx: { today, event: ymdOf(order.event_date), deposit: order.payments?.paid_date ? vnYmd(order.payments.paid_date) : today },
+    tasks: tasks.map((t) => ({ id: t.id, code: t.task_code!, status: t.status, confirmed: !!t.task_confirmations, date: ymdOf(t.scheduled_date) })),
+    offsets: new Map([...meta].map(([id, m]) => [id, m.offsetDays])),
   });
-  if (!plan.deleteIds.length && !plan.rows.length) return { deleted: 0, created: 0 };
-  await prisma.$transaction(async (tx) => {
-    if (plan.deleteIds.length) await tx.timeline_tasks.deleteMany({ where: { id: { in: plan.deleteIds } } });
-    if (plan.rows.length) await tx.timeline_tasks.createMany({ data: plan.rows });
-  });
-  return { deleted: plan.deleteIds.length, created: plan.rows.length };
+  if (plan.updates.length) {
+    await prisma.$transaction(plan.updates.map((u) => prisma.timeline_tasks.update({ where: { id: u.id }, data: { scheduled_date: new Date(`${u.date}T00:00:00Z`) } })));
+  }
+  return { updated: plan.updates.length, needsRecheck: plan.needsRecheck };
 }
 
 /**
- * Khi NCC sửa ngày thực hiện của đơn đã cọc: các việc chi tiết neo theo E (E − n, ngày thực hiện, thanh toán, trả đồ) còn Todo bị xóa rồi sinh lại theo E mới.
- * Việc đã xong, việc neo D / S / W (ngày chụp album, nhận ảnh...) và việc khách tự đổi hạn mà không neo theo E giữ nguyên.
- */
-export async function onOrderEventDateChanged(prisma: PrismaService, orderId: string) {
-  const mine = await prisma.timeline_tasks.findMany({ where: { order_id: orderId, task_type: 'Detail', status: 'Todo' }, select: { id: true, task_code: true } });
-  const stale = mine.filter((t) => templateOf(t.task_code)?.anchor === 'E').map((t) => t.id);
-  if (stale.length) await prisma.timeline_tasks.deleteMany({ where: { id: { in: stale } } });
-  await syncOrderDetails(prisma, orderId);
-}
-
-/**
- * Khi đơn được đặt cọc: Mốc chốt của dịch vụ xong, mở các việc chi tiết của dịch vụ đó gắn với đơn (syncOrderDetails), hạn tính từ D
- * (ngày cọc thật) và E (ngày thực hiện của đơn). Dịch vụ cọc trước giữ nguyên ngày, dịch vụ cọc sau chỉ sinh thêm việc của nó.
+ * Khi đơn được đặt cọc: Mốc chốt của dịch vụ xong, rồi sinh việc chi tiết của đơn từ gói (syncOrderPackageTasks).
+ * Trả vendorProcessMissing = true khi đơn không có việc nào của gói (NCC chưa khai quy trình).
  */
 export async function onOrderDeposited(prisma: PrismaService, order: { id: string; wedding_id: string; vendor_id: string; event_date: Date }) {
   const vendor = await prisma.vendor_profiles.findUnique({ where: { id: order.vendor_id }, select: { category_id: true } });
-  if (!vendor?.category_id) return;
+  if (!vendor?.category_id) return { created: 0, vendorProcessMissing: false };
   await prisma.timeline_tasks.updateMany({
-    where: { wedding_id: order.wedding_id, category_id: vendor.category_id, task_type: 'Frame', task_code: { endsWith: '_BOOK' }, status: 'Todo' },
+    where: { wedding_id: order.wedding_id, category_id: vendor.category_id, task_type: 'Frame', task_code: { endsWith: '_BOOK' }, status: { not: 'Done' } },
     data: { status: 'Done', completed_date: new Date() },
   });
-  await syncOrderDetails(prisma, order.id);
+  return syncOrderPackageTasks(prisma, order.id);
 }
 
 /**
- * Khi NCC hủy đơn đã cọc: xóa các việc chi tiết gắn với đơn khỏi timeline của khách. Còn đơn khác cùng hạng mục đã cọc thì đơn đó
- * (cọc mới nhất) nhận lại việc chi tiết; không còn thì mở lại việc "Chốt ..." (đã xong lúc cọc) để khách tìm và chốt NCC khác.
+ * Khi NCC hủy đơn đã cọc: gỡ các việc chi tiết CHƯA xong của đơn khỏi timeline của khách (việc đã xong giữ lại). Còn đơn khác cùng hạng mục
+ * đã cọc / hoàn thành thì Mốc chốt vẫn xong; không còn thì mở lại việc "Chốt ..." (đã xong lúc cọc) để khách tìm và chốt NCC khác.
  */
 export async function onOrderCancelled(prisma: PrismaService, order: { id: string; wedding_id: string; vendor_id: string }) {
   const vendor = await prisma.vendor_profiles.findUnique({ where: { id: order.vendor_id }, select: { category_id: true } });
-  const details = await prisma.timeline_tasks.findMany({ where: { order_id: order.id, task_type: 'Detail' }, select: { id: true } });
+  const details = await prisma.timeline_tasks.findMany({ where: { order_id: order.id, task_type: 'Detail' }, select: { id: true, status: true } });
   const others = vendor
     ? await prisma.orders.findMany({
         where: { wedding_id: order.wedding_id, id: { not: order.id }, status: { in: ['Deposited', 'Completed'] }, vendor_profiles: { category_id: vendor.category_id } },
-        select: { id: true, status: true, payments: { select: { paid_date: true } } },
+        select: { id: true, status: true },
       })
     : [];
-  const plan = cancelPlan({ orderId: order.id, details, others: others.map((o) => ({ id: o.id, status: o.status ?? '', paidAt: o.payments?.paid_date?.getTime() ?? 0 })) });
+  const plan = cancelPlan({ details, others: others.map((o) => ({ id: o.id, status: o.status ?? '' })) });
   if (plan.deleteIds.length) await prisma.timeline_tasks.deleteMany({ where: { id: { in: plan.deleteIds } } });
   if (!vendor) return;
-  if (plan.handOverTo) await syncOrderDetails(prisma, plan.handOverTo);
   if (plan.reopenBook) {
     await prisma.timeline_tasks.updateMany({
       where: { wedding_id: order.wedding_id, category_id: vendor.category_id, task_type: 'Frame', task_code: { endsWith: '_BOOK' }, status: 'Done' },
@@ -155,15 +131,9 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
   };
   const today = vnYmd(new Date());
   const services = [...new Set(tasks.map((t) => keyOf(t.category_id)).filter((k): k is ServiceKey => !!k))];
-  const owners = new Set(tasks.map((t) => t.order_id).filter((x): x is string => !!x));
-  const deposited = orders.flatMap((o) => {
-    const service = keyOf(o.vendor_profiles?.category_id ?? null);
-    if (!service || !owners.has(o.id) || !o.event_date) return [];
-    return [{ service, deposit: o.payments?.paid_date ? vnYmd(o.payments.paid_date) : today, event: ymdOf(o.event_date) }];
-  });
   const existing = tasks.filter((t) => t.task_code && templateOf(t.task_code)).map((t) => ({ code: t.task_code!, date: ymdOf(t.scheduled_date), done: t.status === 'Done' }));
 
-  const changes = replanOnWeddingDateChange(TIMELINE_TEMPLATES, { wedding: newWedding, today, tasks: existing, services, orders: deposited });
+  const changes = replanOnWeddingDateChange(TIMELINE_TEMPLATES, { wedding: newWedding, today, tasks: existing, services });
   const byCode = new Map(tasks.map((t) => [t.task_code, t]));
   const warnings = orders.flatMap((o) => {
     const eventDate = ymdOf(o.event_date);

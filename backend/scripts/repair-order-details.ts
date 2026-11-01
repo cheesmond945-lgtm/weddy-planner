@@ -1,25 +1,36 @@
 /*
- * Sinh bù việc chi tiết cho các đơn đã cọc đang thiếu việc (xem depositDetailPlan trong src/modules/weddings/timeline-rows.ts).
+ * Sinh bù việc chi tiết cho các đơn đã cọc đang thiếu việc: việc lấy từ package_tasks của gói gắn với đơn (xem orderTaskRows trong
+ * src/modules/weddings/timeline-rows.ts), hạn tính từ D = ngày cọc, E = ngày thực hiện của đơn. KHÔNG chạy trong đợt này.
  *
- *   npm run timelines:repair             DRY-RUN (mặc định): chỉ đọc CSDL, in từng đơn sẽ xóa / tạo gì
- *   npm run timelines:repair -- --apply  ghi thật (sao lưu dòng sẽ xóa trước); mỗi đám cưới một transaction
+ *   npm run timelines:repair                                  DRY-RUN toàn bộ đơn Deposited (mặc định): chỉ đọc CSDL, in từng đơn sẽ tạo gì
+ *   npm run timelines:repair -- --orders=DH26110002           DRY-RUN chỉ các đơn liệt kê (cách nhau bằng dấu phẩy)
+ *   npm run timelines:repair -- --orders=MÃ1,MÃ2 --apply      ghi thật cho đúng các đơn đó; chỉ INSERT vào timeline_tasks
  *
- * Mỗi hạng mục của một đám cưới chỉ MỘT đơn Deposited giữ việc chi tiết: đơn có ngày cọc MỚI NHẤT. Với đơn đó:
- *   - XÓA việc chi tiết CHƯA xong gắn với đơn khác cùng hạng mục (thay bằng việc của đơn này);
- *   - CHÈN việc còn thiếu (mã chưa có), hạn tính từ D = ngày cọc, E = ngày thực hiện của đơn;
- *   - việc đã xong, việc khung, việc khách tự thêm và việc của hạng mục khác KHÔNG bị đụng.
- * Đơn đã đúng rồi thì không có gì để làm (chạy lại được nhiều lần). Chỉ ghi timeline_tasks.
+ * --apply BẮT BUỘC đi kèm --orders (không có thì từ chối chạy): không ghi hàng loạt lên mọi đơn.
+ * Với mỗi đơn Deposited: thêm các việc 'PKG:<id>' và 'PAY:<orderId>' CHƯA có (theo task_code). Không xóa, không sửa dòng nào.
+ * Đơn đã đủ việc thì không có gì để làm (chạy lại được nhiều lần).
+ * Đơn đã có việc chi tiết mẫu cũ (task_code không phải 'PKG:' / 'PAY:', ví dụ ATTIRE_*, VENUE_*, *_PAY) bị BỎ QUA, kể cả khi có gói:
+ * thêm 'PAY:' sẽ trùng việc thanh toán cũ. Bảng "bỏ qua" ở cuối liệt kê các đơn đó.
  */
 import 'dotenv/config';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
-import { depositDetailPlan, type TaskRow } from '../src/modules/weddings/timeline-rows';
-import { defaultAlbumDate } from '../src/modules/weddings/timeline-schedule';
-import { SERVICE_BY_CATEGORY_NAME, TIMELINE_TEMPLATES, type ServiceKey } from '../src/modules/weddings/timeline-templates';
+import { packagesOfOrder } from '../src/modules/weddings/package-task-meta';
+import { orderTaskRows, PAY_PREFIX, PKG_PREFIX, type PackageTaskRef, type TaskRow } from '../src/modules/weddings/timeline-rows';
 
 const apply = process.argv.includes('--apply');
+const ordersArg = process.argv.find((a) => a === '--orders' || a.startsWith('--orders='));
+const only = ordersArg === undefined ? null : [...new Set((ordersArg.split('=')[1] ?? '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean))];
+if (only && !only.length) {
+  console.error('--orders cần ít nhất một mã đơn, ví dụ --orders=DH26110002,DH26100037');
+  process.exit(1);
+}
+if (apply && !only) {
+  console.error('Từ chối chạy: --apply phải đi kèm --orders=MÃ1,MÃ2 (chỉ ghi cho đúng các đơn được liệt kê). Chạy không có --apply để xem dry-run.');
+  process.exit(1);
+}
+/** Việc chi tiết của đơn sinh từ mẫu cũ (mọi task_code gắn đơn không phải của gói / thanh toán mới) */
+const isLegacyCode = (code: string) => !code.startsWith(PKG_PREFIX) && !code.startsWith(PAY_PREFIX);
 const vnYmd = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -28,85 +39,67 @@ async function main() {
   if (!connectionString) throw new Error('Thiếu DATABASE_URL trong backend/.env');
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 2 }) });
   try {
-    const cats = await prisma.service_categories.findMany({ select: { id: true, name: true } });
-    const keyOf = new Map(cats.flatMap((c) => (c.name && SERVICE_BY_CATEGORY_NAME[c.name] ? [[c.id, SERVICE_BY_CATEGORY_NAME[c.name]] as const] : [])));
-    const weddings = await prisma.weddings.findMany({
-      orderBy: { created_date: 'asc' },
-      where: { wedding_date: { not: null } },
-      include: {
-        users: { select: { full_name: true, username: true } },
-        orders: { where: { status: 'Deposited' }, include: { payments: true, vendor_profiles: { select: { category_id: true } } } },
+    const orders = await prisma.orders.findMany({
+      where: { status: 'Deposited', wedding_id: { not: null }, event_date: { not: null }, ...(only ? { order_code: { in: only } } : {}) },
+      select: {
+        id: true,
+        order_code: true,
+        wedding_id: true,
+        event_date: true,
+        package_id: true,
+        order_items: { select: { package_id: true } },
+        payments: { select: { paid_date: true } },
+        vendor_profiles: { select: { business_name: true, category_id: true } },
       },
     });
 
     const table: Record<string, unknown>[] = [];
-    const plans: { weddingId: string; orderId: string; deleteIds: string[]; rows: TaskRow[] }[] = [];
-
-    for (const w of weddings) {
-      if (!w.orders.length) continue;
-      const tasks = await prisma.timeline_tasks.findMany({ where: { wedding_id: w.id, task_code: { not: null } }, select: { id: true, task_code: true, status: true, order_id: true, scheduled_date: true } });
-      const paidAt = (o: (typeof w.orders)[number]) => o.payments?.paid_date ?? o.created_date ?? new Date(0);
-      const owner = new Map<ServiceKey, (typeof w.orders)[number]>();
-      for (const o of [...w.orders].sort((a, b) => paidAt(b).getTime() - paidAt(a).getTime())) {
-        const key = o.vendor_profiles?.category_id ? keyOf.get(o.vendor_profiles.category_id) : undefined;
-        if (key && !owner.has(key)) owner.set(key, o);
+    const skipped: Record<string, unknown>[] = [];
+    const plans: { orderId: string; rows: TaskRow[] }[] = [];
+    const today = vnYmd(new Date());
+    if (only) {
+      const found = new Set(orders.map((o) => (o.order_code ?? '').toUpperCase()));
+      const missing = only.filter((c) => !found.has(c));
+      if (missing.length) console.log(`Không có đơn Deposited (đủ ngày cưới, ngày thực hiện) với mã: ${missing.join(', ')}`);
+    }
+    for (const o of orders) {
+      const packageIds = packagesOfOrder(o);
+      const found = packageIds.length ? await prisma.package_tasks.findMany({ where: { package_id: { in: packageIds }, deleted_at: null }, orderBy: [{ sort_order: 'asc' }, { id: 'asc' }] }) : [];
+      const tasks: PackageTaskRef[] = packageIds
+        .flatMap((pid) => found.filter((t) => t.package_id === pid))
+        .map((t) => ({ id: t.id, title: t.title, note: t.note, owner: t.owner as PackageTaskRef['owner'], offsetDays: t.offset_days }));
+      const existing = new Set((await prisma.timeline_tasks.findMany({ where: { order_id: o.id, task_code: { not: null } }, select: { task_code: true } })).map((t) => t.task_code!));
+      const legacy = [...existing].filter(isLegacyCode);
+      if (legacy.length) {
+        skipped.push({ 'đơn': o.order_code, 'lý do': 'đã có việc chi tiết mẫu cũ', 'số việc cũ': legacy.length, 'ví dụ': legacy.slice(0, 3).join(', ') });
+        continue;
       }
-      const W = ymd(w.wedding_date!);
-      const shoot = tasks.find((t) => t.task_code === 'PHOTO_ALBUM_SHOOT')?.scheduled_date;
-      const chup = owner.get('chup-anh');
-      const albumDate = shoot ? ymd(shoot) : chup ? defaultAlbumDate(vnYmd(paidAt(chup)), W) : undefined;
-      let current = tasks.map((t) => ({ id: t.id, code: t.task_code!, status: t.status, orderId: t.order_id }));
-
-      for (const [key, o] of owner) {
-        const categoryId = o.vendor_profiles!.category_id!;
-        const deposit = vnYmd(paidAt(o));
-        const plan = depositDetailPlan(TIMELINE_TEMPLATES, {
-          weddingId: w.id,
-          orderId: o.id,
-          service: { key, categoryId },
-          ctx: { today: deposit, wedding: W, event: o.event_date ? ymd(o.event_date) : W, deposit, albumDate },
-          existing: current,
-        });
-        if (!plan.deleteIds.length && !plan.rows.length) continue;
-        plans.push({ weddingId: w.id, orderId: o.id, ...plan });
-        const gone = new Set(plan.deleteIds);
-        current = [...current.filter((t) => !gone.has(t.id)), ...plan.rows.map((r, i) => ({ id: `new${i}`, code: r.task_code, status: r.status, orderId: r.order_id }))];
-        table.push({
-          khách: w.users?.full_name || w.users?.username || '',
-          'đơn': o.order_code,
-          'hạng mục': key,
-          'ngày cọc (D)': deposit,
-          'thực hiện (E)': o.event_date ? ymd(o.event_date) : '',
-          'xóa (chưa xong, đơn khác)': plan.deleteIds.length,
-          'tạo': plan.rows.length,
-          'mã sẽ tạo': plan.rows.map((r) => `${r.task_code}@${ymd(r.scheduled_date)}`).join(' '),
-        });
-      }
+      const { rows, vendorProcessMissing } = orderTaskRows({
+        weddingId: o.wedding_id!,
+        orderId: o.id,
+        categoryId: o.vendor_profiles?.category_id ?? null,
+        vendorName: o.vendor_profiles?.business_name ?? '',
+        ctx: { today, event: ymd(o.event_date!), deposit: o.payments?.paid_date ? vnYmd(o.payments.paid_date) : today },
+        tasks,
+        existingCodes: existing,
+      });
+      if (!rows.length) continue;
+      plans.push({ orderId: o.id, rows });
+      table.push({ 'đơn': o.order_code, 'gói': packageIds.length, 'việc gói': tasks.length, 'sẽ tạo': rows.length, 'thiếu quy trình NCC': vendorProcessMissing ? 'có' : '' });
     }
 
     console.log(apply ? '== CHẠY THẬT (--apply) ==' : '== DRY-RUN: không ghi gì vào CSDL ==');
     if (!table.length) console.log('Không có đơn nào thiếu việc chi tiết.');
     else console.table(table);
+    if (skipped.length) {
+      console.log(`Bỏ qua ${skipped.length} đơn đã có việc chi tiết mẫu cũ (không thêm việc PAY trùng):`);
+      console.table(skipped);
+    }
     if (!apply || !plans.length) return;
 
-    const ids = plans.flatMap((p) => p.deleteIds);
-    const backupFile = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'backup', `timeline_tasks_repair_${vnYmd(new Date())}.json`);
-    if (fs.existsSync(backupFile)) throw new Error(`Đã có bản sao lưu ${backupFile}, xóa hoặc đổi tên rồi chạy lại.`);
-    const doomed = ids.length ? await prisma.timeline_tasks.findMany({ where: { id: { in: ids } } }) : [];
-    if (doomed.length !== ids.length) throw new Error(`Số dòng sao lưu (${doomed.length}) khác số dòng sẽ xóa (${ids.length}), dừng.`);
-    fs.mkdirSync(path.dirname(backupFile), { recursive: true });
-    fs.writeFileSync(backupFile, JSON.stringify(doomed, null, 2), 'utf8');
-    console.log(`Đã sao lưu ${doomed.length} dòng vào ${backupFile}`);
-
     for (const p of plans) {
-      const done = await prisma.$transaction(async (tx) => {
-        const deleted = p.deleteIds.length ? await tx.timeline_tasks.deleteMany({ where: { id: { in: p.deleteIds } } }) : { count: 0 };
-        const created = p.rows.length ? await tx.timeline_tasks.createManyAndReturn({ data: p.rows, select: { id: true, task_code: true } }) : [];
-        if (deleted.count !== p.deleteIds.length) throw new Error(`Lệch số dòng xóa ở đơn ${p.orderId}`);
-        return { deleted: deleted.count, created };
-      });
-      console.log(`đơn ${p.orderId}: xóa ${done.deleted}, tạo ${done.created.length}`);
-      for (const c of done.created) console.log(`   + ${c.id} ${c.task_code}`);
+      const created = await prisma.timeline_tasks.createMany({ data: p.rows, skipDuplicates: true });
+      console.log(`đã tạo ${created.count}/${p.rows.length} việc cho đơn ${p.orderId}`);
     }
   } finally {
     await prisma.$disconnect();

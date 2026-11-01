@@ -129,7 +129,7 @@ export interface ContentInput {
   eventDate?: string;
   note?: string | null;
   depositPercent?: number | string | null;
-  items?: { itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string }[];
+  items?: { itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string; packageId?: string | null }[];
   /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tổ chức sự kiện gửi / sửa đơn (docs/LICH_BAN_SANH.md); dịch vụ khác bỏ qua */
   packageId?: string | null;
 }
@@ -139,6 +139,8 @@ export interface ParsedItem {
   unit: string;
   quantity: number;
   unitPrice: number;
+  /** Gói dịch vụ của dòng (order_items.package_id), để sinh việc chi tiết từ quy trình của gói khi cọc. Chỉ kiểm định dạng ở đây; thuộc NCC nào: OrdersService */
+  packageId?: string | null;
 }
 
 export interface ParsedContent {
@@ -184,8 +186,11 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
       if (!(unitPrice >= 0)) errors[`items.${idx}.unitPrice`] = 'Đơn giá không âm.';
       if (!(UNITS as readonly string[]).includes(unit)) errors[`items.${idx}.unit`] = 'Đơn vị tính là Gói hoặc Bàn.';
     }
+    const itemPackage = i.packageId === undefined || i.packageId === null || String(i.packageId).trim() === '' ? null : String(i.packageId).trim();
+    if (itemPackage && !UUID.test(itemPackage)) errors[`items.${idx}.packageId`] = 'Gói không hợp lệ.';
     // Lưu nháp: ràng buộc của CSDL (số lượng > 0, đơn giá ≥ 0) vẫn phải đúng nên chuẩn hóa lại
     return {
+      packageId: itemPackage,
       itemName: i.itemName?.trim() ?? '',
       unit: (UNITS as readonly string[]).includes(unit) ? unit : 'Gói',
       quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 1,
@@ -231,8 +236,9 @@ export function changeTypesBetween(
   const out = new Set<ChangeType>();
   const key = (i: ParsedItem) => i.itemName.trim().toLowerCase();
   const names = (x: ParsedItem[]) => x.map(key).sort().join('|');
-  // Đổi sảnh tính là đổi hạng mục
-  if (names(prev.items) !== names(next.items) || (prev.packageId ?? null) !== (next.packageId ?? null)) out.add('Item');
+  // Đổi sảnh, đổi gói của dòng hạng mục tính là đổi hạng mục
+  const pkgs = (x: ParsedItem[]) => x.map((i) => i.packageId ?? '').sort().join('|');
+  if (names(prev.items) !== names(next.items) || (prev.packageId ?? null) !== (next.packageId ?? null) || pkgs(prev.items) !== pkgs(next.items)) out.add('Item');
   for (const n of next.items) {
     const p = prev.items.find((i) => key(i) === key(n));
     if (p && (p.quantity !== n.quantity || p.unit !== n.unit)) out.add('Quantity');
@@ -256,6 +262,6 @@ export function sameContent(a: ParsedContent, b: ParsedContent): boolean {
     (a.note ?? '') === (b.note ?? '') &&
     a.depositPercent === b.depositPercent &&
     a.items.length === b.items.length &&
-    a.items.every((x, i) => x.itemName === b.items[i].itemName && x.unit === b.items[i].unit && x.quantity === b.items[i].quantity && x.unitPrice === b.items[i].unitPrice)
+    a.items.every((x, i) => x.itemName === b.items[i].itemName && x.unit === b.items[i].unit && x.quantity === b.items[i].quantity && x.unitPrice === b.items[i].unitPrice && (x.packageId ?? null) === (b.items[i].packageId ?? null))
   );
 }

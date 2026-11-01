@@ -1,11 +1,11 @@
 /*
  * Luật kiểm tra khi khách tự đổi hạn việc timeline (docs/TIMELINE.md mục 7). Hàm thuần: không đụng CSDL, không đọc đồng hồ.
- * Ngày là chuỗi "YYYY-MM-DD"; W ngày cưới, E ngày thực hiện của đơn dịch vụ, "hôm nay" do nơi gọi truyền vào.
+ * Ngày là chuỗi "YYYY-MM-DD"; W ngày cưới, "hôm nay" do nơi gọi truyền vào.
  */
 import { dayOf, ymd } from './timeline-schedule.ts';
 import { TIMELINE_TEMPLATES, templateOf, type TimelineTemplate } from './timeline-templates.ts';
 
-/** Việc sau ngày cưới (cảm ơn, nhận ảnh, thanh toán, trả đồ) được dời tối đa bao nhiêu ngày sau mốc của nó. */
+/** Việc sau ngày cưới (cảm ơn) được dời tối đa bao nhiêu ngày sau mốc của nó. */
 export const POST_EVENT_MAX_DAYS = 365;
 
 const addDays = (s: string, n: number) => ymd(dayOf(s) + n);
@@ -16,33 +16,19 @@ export interface DueBounds {
   min: string;
   /** Hạn muộn nhất */
   max: string;
-  /** true: ngày do đơn quyết định (Ngày thực hiện), khách không đổi hạn tay */
+  /** true: ngày cố định, khách không đổi hạn tay */
   fixed: boolean;
 }
 
 /**
- * Khoảng hạn hợp lệ của một việc, theo mẫu của nó:
- * - việc khách tự thêm, việc khung và việc chi tiết trước sự kiện (mốc W−n, D+n, S±n): từ hôm nay đến ngày cưới;
- * - việc chi tiết neo ngày thực hiện trước sự kiện (E−n): từ hôm nay đến E;
- * - "Ngày thực hiện" (kind EVENT mốc E hoặc W): cố định đúng E (W), không đổi tay. Đổi ngày thực hiện là việc của đơn (NCC "Sửa đơn");
- * - việc sau sự kiện (mốc W+n hoặc E+n, n > 0: cảm ơn, nhận ảnh, thanh toán, trả đồ): từ mốc của nó đến mốc + POST_EVENT_MAX_DAYS.
- * `event` là ngày thực hiện của đơn đang giữ việc; không có (việc khung, việc tự thêm) thì lấy ngày cưới.
+ * Khoảng hạn hợp lệ của một việc khung hoặc việc khách tự thêm, theo mẫu của nó (việc chi tiết gắn đơn do NCC quản lý, khách không đổi hạn):
+ * - việc tự thêm và việc khung trước ngày cưới (mốc W−n): từ hôm nay đến ngày cưới;
+ * - việc sau ngày cưới (mốc W+n, n > 0: cảm ơn): từ ngày cưới đến ngày cưới + POST_EVENT_MAX_DAYS.
  */
-export function dueBounds(code: string | null | undefined, ctx: { today: string; wedding: string; event?: string | null }): DueBounds {
+export function dueBounds(code: string | null | undefined, ctx: { today: string; wedding: string }): DueBounds {
   const tpl = templateOf(code);
-  const event = ctx.event || ctx.wedding;
   const beforeWedding: DueBounds = { min: ctx.today, max: ctx.wedding, fixed: false };
-  if (!tpl) return beforeWedding;
-
-  if (tpl.kind === 'EVENT' && (tpl.anchor === 'E' || tpl.anchor === 'W')) {
-    const day = tpl.anchor === 'E' ? event : ctx.wedding;
-    return { min: day, max: day, fixed: true };
-  }
-  if (tpl.offset > 0 && (tpl.anchor === 'E' || tpl.anchor === 'W')) {
-    const base = tpl.anchor === 'E' ? event : ctx.wedding;
-    return { min: maxYmd(ctx.today, base), max: addDays(base, POST_EVENT_MAX_DAYS), fixed: false };
-  }
-  if (tpl.anchor === 'E') return { min: ctx.today, max: event, fixed: false };
+  if (tpl && tpl.offset > 0) return { min: maxYmd(ctx.today, ctx.wedding), max: addDays(ctx.wedding, POST_EVENT_MAX_DAYS), fixed: false };
   return beforeWedding;
 }
 
@@ -147,7 +133,7 @@ export type AuditIssue =
   | { kind: 'EVENT_AFTER_WEDDING'; orderCode: string; eventDate: string }
   /** Việc chi tiết còn gắn với đơn đã hủy, hết hạn hoặc nháp (đáng ra đã bị gỡ) */
   | { kind: 'DETAIL_OF_INACTIVE_ORDER'; orderCode: string; taskIds: string[] }
-  /** Đơn Hoàn thành mà việc chi tiết vẫn Todo (đáng ra đã đóng) */
+  /** Đơn Hoàn thành mà việc chi tiết chưa Done (Todo hoặc Waiting; đáng ra đã đóng) */
   | { kind: 'COMPLETED_ORDER_OPEN_TASKS'; orderCode: string; taskIds: string[] };
 
 /** Các bất biến của timeline một đám cưới; trả danh sách vi phạm (rỗng là ổn). Hàm thuần. */
@@ -157,7 +143,7 @@ export function auditTimeline(input: AuditInput): AuditIssue[] {
     const details = input.tasks.filter((t) => t.orderId === o.id && t.type === 'Detail');
     if (['Pending', 'NeedRevision', 'Deposited'].includes(o.status ?? '') && o.eventDate > input.weddingDate) out.push({ kind: 'EVENT_AFTER_WEDDING', orderCode: o.code, eventDate: o.eventDate });
     if (['Cancelled', 'Expired', 'Draft'].includes(o.status ?? '') && details.length) out.push({ kind: 'DETAIL_OF_INACTIVE_ORDER', orderCode: o.code, taskIds: details.map((t) => t.id) });
-    const open = details.filter((t) => t.status === 'Todo');
+    const open = details.filter((t) => t.status !== 'Done');
     if (o.status === 'Completed' && open.length) out.push({ kind: 'COMPLETED_ORDER_OPEN_TASKS', orderCode: o.code, taskIds: open.map((t) => t.id) });
   }
   return out;

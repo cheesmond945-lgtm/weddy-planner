@@ -146,7 +146,7 @@ export class OrdersService {
       eventDate: ymd(o.event_date),
       note: o.note,
       depositPercent: Number(o.deposit_percent),
-      items: o.order_items.map((i) => ({ itemName: i.item_name ?? '', unit: i.unit ?? '', quantity: i.quantity ?? 0, unitPrice: Number(i.unit_price) })),
+      items: o.order_items.map((i) => ({ itemName: i.item_name ?? '', unit: i.unit ?? '', quantity: i.quantity ?? 0, unitPrice: Number(i.unit_price), packageId: i.package_id ?? null })),
       total: Number(o.total_amount),
       packageId: o.package_id ?? null,
     };
@@ -192,8 +192,36 @@ export class OrdersService {
     };
   }
 
+  /**
+   * Hook timeline chạy SAU khi giao dịch chính đã commit (tiền đã ghi, đơn đã đổi trạng thái). Hook lỗi thì ghi log kèm mã đơn rồi bỏ qua:
+   * không để API trả 500 và không bỏ các bước sau (tin nhắn, thông báo). Timeline sinh bù được bằng `npm run timelines:repair`.
+   */
+  private async timelineHook<T>(what: string, orderCode: string | null, run: () => Promise<T>): Promise<T | undefined> {
+    try {
+      return await run();
+    } catch (e) {
+      this.logger.error(`Hook timeline (${what}) của đơn ${orderCode} lỗi sau khi đã ghi nhận: timeline cần sinh bù (npm run timelines:repair). ${e instanceof Error ? e.message : String(e)}`, e instanceof Error ? e.stack : undefined);
+      return undefined;
+    }
+  }
+
   private itemRows(orderId: string, p: ParsedContent) {
-    return p.items.map((l, i) => ({ id: orderedUuid(i), order_id: orderId, item_name: l.itemName, unit: l.unit, quantity: l.quantity, unit_price: l.unitPrice, amount: l.quantity * l.unitPrice }));
+    return p.items.map((l, i) => ({ id: orderedUuid(i), order_id: orderId, item_name: l.itemName, unit: l.unit, quantity: l.quantity, unit_price: l.unitPrice, amount: l.quantity * l.unitPrice, package_id: l.packageId ?? null }));
+  }
+
+  /**
+   * Gói của từng dòng hạng mục (order_items.package_id) phải là gói của chính NCC của đơn (400, lỗi theo dòng `items.<i>.packageId`).
+   * Việc chi tiết của đơn lấy từ package_tasks của các gói này (cộng sảnh của đơn) khi khách cọc.
+   */
+  private async checkItemPackages(vendorId: string, p: ParsedContent) {
+    const ids = [...new Set(p.items.flatMap((i) => (i.packageId ? [i.packageId] : [])))];
+    if (!ids.length) return;
+    const own = new Set((await this.prisma.service_packages.findMany({ where: { id: { in: ids }, vendor_id: vendorId }, select: { id: true } })).map((x) => x.id));
+    const details: Record<string, string> = {};
+    p.items.forEach((i, idx) => {
+      if (i.packageId && !own.has(i.packageId)) details[`items.${idx}.packageId`] = 'Gói không thuộc nhà cung cấp này.';
+    });
+    if (Object.keys(details).length) fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, details);
   }
 
   // ================= Phía cặp đôi =================
@@ -423,7 +451,7 @@ export class OrdersService {
     }
     const deposit = Number(o.deposit_amount);
 
-    await onOrderDeposited(this.prisma, { id: o.id, wedding_id: o.wedding_id!, vendor_id: o.vendor_id!, event_date: o.event_date! });
+    await this.timelineHook('đặt cọc', o.order_code, () => onOrderDeposited(this.prisma, { id: o.id, wedding_id: o.wedding_id!, vendor_id: o.vendor_id!, event_date: o.event_date! }));
     const conversationId = await this.conversationOf(o);
     if (conversationId) {
       await postMessage(this.prisma, {
@@ -534,6 +562,7 @@ export class OrdersService {
     }
     const hall = await this.checkHall(v, p, { strict: send });
     p.packageId = hall?.id ?? null;
+    await this.checkItemPackages(v.id, p);
     const code = await this.nextCode('DH');
     const created = await this.prisma.$transaction(async (tx) => {
       const o = await tx.orders.create({ data: { ...this.orderData(p), vendor_id: v.id, wedding_id: wedding.id, order_code: code, status: 'Draft' } });
@@ -549,6 +578,7 @@ export class OrdersService {
     if (order.status !== 'Draft') return fail('ORDER_NOT_DRAFT', 'Chỉ lưu nháp được đơn chưa gửi. Đơn đã gửi chỉ cập nhật và gửi lại.', 409);
     const p = parseContent(content ?? {}, 'draft');
     p.packageId = (await this.checkHall(vendor, p, { strict: false }))?.id ?? null;
+    await this.checkItemPackages(vendor.id, p);
     await this.prisma.$transaction([
       this.prisma.orders.update({ where: { id }, data: this.orderData(p) }),
       this.prisma.order_items.deleteMany({ where: { order_id: id } }),
@@ -570,6 +600,7 @@ export class OrdersService {
     // Đơn chưa cọc chưa giữ sảnh nên luôn kiểm lại sảnh có bận ngày thực hiện không
     const hall = await this.checkHall(vendor, p, { strict: true, exceptOrderId: order.id });
     p.packageId = hall?.id ?? null;
+    await this.checkItemPackages(vendor.id, p);
     if (order.status !== 'Draft' && sameContent(p, this.currentOf(order))) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn đang gửi.', 400);
     await this.applySend(userId, order, p, hall?.name);
     return this.dtoOf(id);
@@ -639,6 +670,8 @@ export class OrdersService {
     // Đổi sảnh hoặc ngày thì sảnh mới phải trống ngày đó; giữ nguyên thì không kiểm lại (đơn cũ chưa có sảnh: phải chọn)
     const hall = await this.checkHall(vendor, p, { strict: true, exceptOrderId: id, keep: { packageId: order.package_id, eventDate: current.eventDate } });
     p.packageId = hall?.id ?? null;
+    // Việc chi tiết đã sinh theo gói lúc cọc: sửa sau cọc không đổi gói của dòng (dòng cùng tên giữ gói cũ, dòng mới không gắn gói)
+    for (const i of p.items) i.packageId = current.items.find((c) => c.itemName.trim().toLowerCase() === i.itemName.trim().toLowerCase())?.packageId ?? null;
     const deposit = Number(order.deposit_amount);
     if (p.total < deposit) return fail('ORDER_TOTAL_BELOW_DEPOSIT', `Tổng mới không được nhỏ hơn tiền đã cọc (${money(deposit)}).`, 400);
     if (sameContent(p, current)) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn hiện tại.', 400);
@@ -675,7 +708,7 @@ export class OrdersService {
     });
 
     // Đổi ngày thực hiện: việc chi tiết neo theo ngày đó trên timeline của khách phải tính lại
-    if (changes.includes('EventDate')) await onOrderEventDateChanged(this.prisma, id);
+    if (changes.includes('EventDate')) await this.timelineHook('đổi ngày thực hiện', order.order_code, () => onOrderEventDateChanged(this.prisma, id));
 
     const conversationId = await this.conversationOf(order);
     if (conversationId) {
@@ -771,7 +804,7 @@ export class OrdersService {
       data: { status: 'Cancelled', cancelled_date: new Date(), cancel_reason: reason },
     });
     if (!r.count) return fail('ORDER_NOT_CANCELLABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 422);
-    await onOrderCancelled(this.prisma, { id, wedding_id: order.wedding_id!, vendor_id: order.vendor_id! });
+    await this.timelineHook('hủy đơn', order.order_code, () => onOrderCancelled(this.prisma, { id, wedding_id: order.wedding_id!, vendor_id: order.vendor_id! }));
 
     const label = CANCEL_LABEL[reason as CancelReason];
     const conversationId = await this.conversationOf(order);

@@ -3,10 +3,10 @@
  * Ngày là chuỗi "YYYY-MM-DD" (cùng quy ước cột @db.Date), bên trong tính theo số ngày kể từ 1970-01-01 UTC để khỏi lệch múi giờ.
  *
  * Ký hiệu: W ngày cưới, I hôm nay (ngày nhập), L = W − I, L1 = L − 1, d số ngày trước W theo mẫu,
- *          D ngày đặt cọc, E ngày thực hiện của đơn, S ngày chụp album, k = MIN_AFTER_DEPOSIT của hạng mục.
+ *          D ngày đặt cọc, E ngày thực hiện của đơn.
  */
 import type { ServiceKey, TaskKind, TimelineTemplate } from './timeline-templates.ts';
-import { FRAME_MAX_OFFSET, MIN_AFTER_DEPOSIT } from './timeline-templates.ts';
+import { FRAME_MAX_OFFSET } from './timeline-templates.ts';
 
 const MS_DAY = 86_400_000;
 export const dayOf = (s: string) => Math.round(Date.parse(`${s}T00:00:00Z`) / MS_DAY);
@@ -141,114 +141,52 @@ export function planFrame(templates: readonly TimelineTemplate[], input: { weddi
   return { L, level, K, tasks };
 }
 
-/**
- * S mặc định = D(chụp) + 23, không muộn hơn W − 35; nhưng không sớm hơn D + 2 (cọc muộn thì W − 35 đã qua, S không thể ở quá khứ).
- * Khách nhập Ngày hẹn thì dùng ngày đó thay cho giá trị này.
- */
-export function defaultAlbumDate(depositDay: string, wedding: string): string {
-  const D = dayOf(depositDay);
-  return ymd(Math.max(Math.min(D + 23, dayOf(wedding) - 35), D + MIN_AFTER_DEPOSIT['chup-anh']));
+/** Số ngày tối thiểu từ ngày đặt cọc tới việc đầu tiên của gói: việc không sớm hơn D + 2. */
+export const MIN_AFTER_DEPOSIT = 2;
+
+export interface PackageTaskInput {
+  id: string;
+  /** So với ngày thực hiện E: âm = trước, 0 = đúng ngày, dương = sau */
+  offsetDays: number;
 }
 
-export interface DetailContext {
-  /** Hôm nay (ngày sinh việc) */
-  today: string;
-  wedding: string;
-  /** Ngày thực hiện của đơn (Orders.EventDate) */
-  event: string;
-  /** Ngày đặt cọc (Payments.PaidDate, giờ VN) */
-  deposit: string;
-  /** Ngày chụp album S; bỏ trống thì suy ra mặc định */
-  albumDate?: string;
-}
-
-export interface DetailPlan {
-  /** E − (D + k) */
+export interface PackageTaskPlan {
+  /** E − (D + 2) */
   space: number;
-  /** Hệ số co của các việc E−x (1 = không co) */
+  /** Hệ số co của các việc trước E (1 = không co) */
   scale: number;
-  tasks: ScheduledTask[];
+  tasks: { id: string; date: string; urgent: boolean; shortened: boolean }[];
 }
 
 /**
- * Việc chi tiết của một dịch vụ khi đơn chuyển Deposited, tính từ D và E thật.
- * Chỉ trả việc của chính dịch vụ này; không biết và không đụng tới việc của dịch vụ khác.
+ * Hạn của các việc NCC khai theo gói, tính từ D (ngày cọc), E (ngày thực hiện của đơn) và I (hôm nay). Giữ công thức co giãn của bộ mẫu cũ:
+ * lo = D + 2; xmax = số ngày trước E xa nhất; scale = min(1, (E − lo) / xmax); việc trước E: n = min(E − round(x · scale), E − 1), n < lo thì n = lo;
+ * E − lo ≤ 0: dồn mọi việc trước E về max(I + 1, D + 1) (cờ gấp); việc từ E trở đi: E + offset. Giữ nguyên thứ tự đầu vào.
  */
-export function planDetails(templates: readonly TimelineTemplate[], service: ServiceKey, ctx: DetailContext, opts: { onlyAnchor?: 'S' } = {}): DetailPlan {
-  const W = dayOf(ctx.wedding);
-  const E = dayOf(ctx.event);
-  const D = dayOf(ctx.deposit);
-  const I = dayOf(ctx.today);
-  const k = MIN_AFTER_DEPOSIT[service];
-  const lo = D + k;
-  const S = dayOf(ctx.albumDate ?? defaultAlbumDate(service === 'chup-anh' ? ctx.deposit : ctx.today, ctx.wedding));
-
-  const mine = templates.filter((t) => t.service === service && !isFrame(t.kind)).sort((a, b) => a.order - b.order);
-  const xmax = Math.max(0, ...mine.filter((t) => t.kind === 'DETAIL' && t.anchor === 'E' && t.offset < 0).map((t) => -t.offset));
+export function planPackageTasks(input: { D: string; E: string; I: string; tasks: readonly PackageTaskInput[] }): PackageTaskPlan {
+  const D = dayOf(input.D);
+  const E = dayOf(input.E);
+  const I = dayOf(input.I);
+  const lo = D + MIN_AFTER_DEPOSIT;
+  const xmax = Math.max(0, ...input.tasks.filter((t) => t.offsetDays < 0).map((t) => -t.offsetDays));
   const space = E - lo;
   const scale = xmax > 0 && space > 0 ? Math.min(1, space / xmax) : 1;
   const squeezed = space <= 0;
 
-  const tasks: ScheduledTask[] = [];
-  let prev = -Infinity;
-  for (const t of mine) {
-    const rules: string[] = [];
-    let n: number;
-    let urgent = false;
-    const fixed = t.kind === 'EVENT' || t.kind === 'PAYMENT' || (t.anchor === 'E' && t.offset > 0) || (t.anchor === 'W' && t.offset > 0);
-    if (t.kind === 'EVENT') n = t.anchor === 'S' ? S : t.anchor === 'W' ? W : E;
-    else if (t.kind === 'PAYMENT') n = E + t.offset; // Hạn = E + 7
-    else if (t.anchor === 'E' && t.offset > 0) n = E + t.offset;
-    else if (t.anchor === 'W' && t.offset > 0) n = W + t.offset;
-    else if (squeezed) {
-      // Không còn chỗ giữa D + k và E: dồn mọi việc trước sự kiện vào ngay sau hôm nay / ngày cọc
-      n = Math.max(I + 1, D + 1);
-      urgent = true;
-      rules.push('rút ngắn');
-    } else {
-      if (t.anchor === 'D') n = D + t.offset;
-      else if (t.anchor === 'S') n = S + t.offset;
-      else if (t.anchor === 'W') n = W + t.offset;
-      else {
-        const x = -t.offset;
-        const x2 = roundHalfUp(x * scale);
-        if (x2 !== x) rules.push('rút ngắn');
-        n = Math.min(E - x2, E - 1); // còn chỗ thì không để việc chuẩn bị rơi vào đúng ngày thực hiện
-      }
-      if (n < lo) {
-        n = lo;
-        if (!rules.includes('rút ngắn')) rules.push('rút ngắn');
-      } else if (t.weekendPreferred) {
-        const back = backToWeekend(n);
-        if (back !== n && back >= lo && back > prev) {
-          n = back;
-          rules.push('dời cuối tuần');
-        }
-      }
+  const tasks = input.tasks.map((t) => {
+    if (t.offsetDays >= 0) return { id: t.id, date: ymd(E + t.offsetDays), urgent: false, shortened: false };
+    if (squeezed) return { id: t.id, date: ymd(Math.max(I + 1, D + 1)), urgent: true, shortened: true };
+    const x = -t.offsetDays;
+    const x2 = roundHalfUp(x * scale);
+    let n = Math.min(E - x2, E - 1); // còn chỗ thì không để việc chuẩn bị rơi vào đúng ngày thực hiện
+    let shortened = x2 !== x;
+    if (n < lo) {
+      n = lo;
+      shortened = true;
     }
-    // Việc neo theo S (sau buổi chụp) mà rơi vào hoặc sau ngày thực hiện thì không kịp chuẩn bị
-    if (!squeezed && t.kind === 'DETAIL' && t.anchor === 'S' && n >= E) urgent = true;
-    if (!fixed) prev = Math.max(prev, n);
-    if (opts.onlyAnchor && t.anchor !== opts.onlyAnchor) continue;
-    tasks.push({ code: t.code, date: ymd(n), urgent, shortened: rules.includes('rút ngắn'), rules });
-  }
+    return { id: t.id, date: ymd(n), urgent: false, shortened };
+  });
   return { space, scale, tasks };
-}
-
-/**
- * Khi một dịch vụ vừa đặt cọc: chỉ trả việc CHƯA có trong timeline (theo task_code). Dịch vụ cọc trước giữ nguyên ngày,
- * việc đã có không bị tính lại hay dời.
- */
-export function newDetailTasks(templates: readonly TimelineTemplate[], service: ServiceKey, ctx: DetailContext, existingCodes: ReadonlySet<string>): ScheduledTask[] {
-  return planDetails(templates, service, ctx).tasks.filter((t) => !existingCodes.has(t.code));
-}
-
-/**
- * Khách nhập Ngày hẹn cho việc chụp album / chốt concept: S = ngày đó. Chỉ tính lại các việc neo theo S của chính dịch vụ chụp ảnh
- * mà còn Todo (todoCodes); việc đã xong và việc của dịch vụ khác không đổi.
- */
-export function replanAlbumTasks(templates: readonly TimelineTemplate[], ctx: DetailContext & { albumDate: string }, todoCodes: ReadonlySet<string>): ScheduledTask[] {
-  return planDetails(templates, 'chup-anh', ctx, { onlyAnchor: 'S' }).tasks.filter((t) => todoCodes.has(t.code));
 }
 
 export interface ExistingTask {
@@ -258,12 +196,6 @@ export interface ExistingTask {
   done: boolean;
 }
 
-export interface DepositedOrder {
-  service: ServiceKey;
-  deposit: string;
-  event: string;
-}
-
 export interface DateChange {
   code: string;
   from: string;
@@ -271,34 +203,21 @@ export interface DateChange {
 }
 
 /**
- * Khi khách đổi ngày cưới (W mới, I = hôm nay): chỉ tính lại việc khung đang Todo chưa gắn đơn (bằng planFrame đầy đủ luật),
- * và việc neo theo S còn Todo (S tính lại theo W mới; S đã chụp xong thì giữ). Việc đã Done, việc chi tiết của dịch vụ đã cọc
- * (neo theo E của đơn) và việc khách tự thêm (không có mã mẫu) giữ nguyên. Trả các việc có hạn đổi.
+ * Khi khách đổi ngày cưới (W mới, I = hôm nay): chỉ tính lại việc khung chưa xong chưa gắn đơn (bằng planFrame đầy đủ luật).
+ * Việc đã xong, việc chi tiết của đơn (neo theo ngày thực hiện E của đơn) và việc khách tự thêm (không có mã mẫu) giữ nguyên. Trả các việc có hạn đổi.
  */
 export function replanOnWeddingDateChange(
   templates: readonly TimelineTemplate[],
-  input: { wedding: string; today: string; tasks: readonly ExistingTask[]; services: readonly ServiceKey[]; orders: readonly DepositedOrder[] },
+  input: { wedding: string; today: string; tasks: readonly ExistingTask[]; services: readonly ServiceKey[] },
 ): DateChange[] {
   const byCode = new Map(templates.map((t) => [t.code, t]));
   const have = new Map(input.tasks.map((t) => [t.code, t]));
-  const changes = new Map<string, DateChange>();
-  const push = (code: string, to: string) => {
-    const t = have.get(code);
-    if (t && !t.done && t.date !== to) changes.set(code, { code, from: t.date, to });
-  };
-
+  const changes: DateChange[] = [];
   const plan = planFrame(templates, { wedding: input.wedding, today: input.today, services: input.services });
   for (const p of plan.tasks) {
     const tpl = byCode.get(p.code);
-    if (tpl && isFrame(tpl.kind)) push(p.code, p.date);
+    const t = have.get(p.code);
+    if (tpl && isFrame(tpl.kind) && t && !t.done && t.date !== p.date) changes.push({ code: p.code, from: t.date, to: p.date });
   }
-
-  const shoot = have.get('PHOTO_ALBUM_SHOOT');
-  const photo = input.orders.find((o) => o.service === 'chup-anh');
-  const albumDate = shoot?.done ? shoot.date : defaultAlbumDate(photo ? photo.deposit : input.today, input.wedding);
-  for (const o of input.orders) {
-    const ctx = { today: o.deposit, wedding: input.wedding, event: o.event, deposit: o.deposit, albumDate };
-    for (const p of planDetails(templates, o.service, ctx, { onlyAnchor: 'S' }).tasks) push(p.code, p.date);
-  }
-  return [...changes.values()].sort((a, b) => a.to.localeCompare(b.to));
+  return changes.sort((a, b) => a.to.localeCompare(b.to));
 }
