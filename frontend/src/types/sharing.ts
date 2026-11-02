@@ -1,41 +1,6 @@
 /* Hợp đồng: docs/api/sharing.md */
 import type { CategoryRef, ServiceSummary } from './catalog'
-import type { Budget, GuestList, MemberRole, Overview, PlanItemStatus, PlanTab, TimelineItem } from './wedding'
-
-export type InviteRelation = 'BRIDE' | 'GROOM' | 'RELATIVE'
-
-/** Link mời đang chờ (owner xem) */
-export interface Invite {
-  id: string
-  /** Mã trong link; FE ghép thành \`\${location.origin}\${path}\` */
-  token: string
-  path: string
-  relation: InviteRelation
-  displayName: string | null
-  role: Exclude<MemberRole, 'OWNER'>
-  tabs: PlanTab[]
-  expiresDate: string
-  createdDate: string
-}
-
-export interface NewInvite {
-  relation: InviteRelation
-  displayName?: string
-  role?: Exclude<MemberRole, 'OWNER'>
-  tabs?: PlanTab[]
-}
-
-/** Lời mời người nhận xem trước (không cần đăng nhập) */
-export interface InvitePreview {
-  status: 'VALID' | 'USED' | 'REVOKED' | 'EXPIRED'
-  wedding: { groomName: string; brideName: string; date: string }
-  inviterName: string
-  relation: InviteRelation
-  displayName: string | null
-  role: Exclude<MemberRole, 'OWNER'>
-  tabs: PlanTab[]
-  expiresDate: string
-}
+import type { Budget, GuestList, Overview, PlanItemStatus, PlanTab, TimelineItem } from './wedding'
 
 export interface ShareLink {
   enabled: boolean
@@ -48,8 +13,6 @@ export interface ShareLink {
 export interface PublicPlan {
   wedding: { groomName: string; brideName: string; date: string }
   tabs: PlanTab[]
-  /** Chỉ tên, không email */
-  members: { name: string; role: MemberRole }[]
 }
 
 export interface PublicServices {

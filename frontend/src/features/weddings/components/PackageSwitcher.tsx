@@ -10,7 +10,7 @@ import { useChoosePackage } from '../hooks'
  * Gói đang tính của một nhà cung cấp trong kế hoạch: "Gói dự kiến, bấm để đổi" hoặc tên gói đã chọn, kèm danh sách đổi gói.
  * Đã có đơn thì khóa, giá theo đơn. Gói không đủ chỗ ghi "Không đủ cho N khách".
  */
-export function PackageSwitcher({ item, guestCount, readOnly }: { item: PlanItem; guestCount: number; readOnly: boolean }) {
+export function PackageSwitcher({ item, guestCount }: { item: PlanItem; guestCount: number }) {
   const choose = useChoosePackage()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -38,7 +38,7 @@ export function PackageSwitcher({ item, guestCount, readOnly }: { item: PlanItem
   const label = packageLabel(pkg)
   const text = (
     <span>
-      {readOnly || locked ? label.replace(', bấm để đổi', '') : label}: <b className="font-semibold text-ink">{formatMoney(item.price)}</b>
+      {locked ? label.replace(', bấm để đổi', '') : label}: <b className="font-semibold text-ink">{formatMoney(item.price)}</b>
     </span>
   )
 
@@ -49,7 +49,7 @@ export function PackageSwitcher({ item, guestCount, readOnly }: { item: PlanItem
           <Lock className="size-3.5" aria-hidden />
           {text}. Giá theo đơn nhà cung cấp gửi.
         </span>
-      ) : readOnly || !item.packages.length ? (
+      ) : !item.packages.length ? (
         text
       ) : (
         <button type="button" aria-haspopup="listbox" aria-expanded={open} disabled={choose.isPending} onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 text-left hover:text-ink">

@@ -2888,30 +2888,13 @@ Dữ liệu mẫu ví dụ minh họa cho mẫu timeline (chưa phải danh sác
 
 Các bảng thêm khi làm tính năng mới, chưa có trong file Word của nhóm. Mỗi bảng ghi file SQL tạo ra nó; lịch sử chạy SQL xem [LICH_SU_THAY_DOI_DB.md](LICH_SU_THAY_DOI_DB.md).
 
-**WeddingMembers (Người cùng lập kế hoạch)**: `backend/prisma/sql/2026-10-29-01-wedding-members.sql`
+**WeddingMembers**: bảng `wedding_members` (`backend/prisma/sql/2026-10-29-01-wedding-members.sql`) còn trong DB nhưng **không dùng** từ 02/11/2026 (bỏ tính năng cùng lập kế hoạch). Mỗi tài khoản cặp đôi có đúng một đám cưới qua `Weddings.UserId`.
+
+**Cột thêm vào TimelineTasks**: `backend/prisma/sql/2026-10-29-02-timeline-notes.sql`
 
 | Thuộc tính | Ý nghĩa |
 |---|---|
-| Id | Mã thành viên |
-| WeddingId | Đám cưới (FK Weddings) |
-| UserId | Tài khoản (FK Users), **duy nhất**: mỗi tài khoản thuộc tối đa một đám cưới |
-| Role | `Owner` (toàn quyền, mỗi đám cưới đúng một), `Editor` (sửa timeline, ngân sách, khách, kế hoạch, chat, đặt cọc; không quản lý thành viên và chia sẻ), `Viewer` (chỉ xem, không xem chat) |
-| Relation | Quan hệ khi được mời: `Bride`, `Groom`, `Relative`; owner để trống |
-| DisplayName | Tên do owner đặt khi mời, tối đa 40 ký tự |
-| Tabs | Subtab của Kế hoạch được xem (`overview`, `timeline`, `services`, `budget`, `guests`), ít nhất 1; NULL là tất cả (owner luôn NULL) |
-| JoinedDate | Ngày tham gia |
-
-Quan hệ: Weddings 1 - n WeddingMembers; Users 1 - 0..1 WeddingMembers. `Weddings.UserId` giữ nguyên và luôn là owner; hội thoại (`Conversations.CoupleId`) và đơn hàng phía khách gắn với owner.
-
-**Cột thêm vào TimelineTasks**: `backend/prisma/sql/2026-10-29-02-timeline-assign.sql`
-
-| Thuộc tính | Ý nghĩa |
-|---|---|
-| Assignee | Người phụ trách: `Bride`, `Groom`, `Both`, `Member`; NULL là chưa giao |
-| AssigneeUserId | Thành viên được giao khi Assignee = `Member` (FK Users); bắt buộc khi `Member`, NULL với giá trị khác |
-| Note | Ghi chú, tối đa 200 ký tự |
-| NoteBy, NoteDate | Người viết (FK Users) và lúc sửa ghi chú gần nhất |
-| CompletedBy | Người đánh dấu xong (FK Users) |
+| Note | Ghi chú, tối đa 200 ký tự. Không lưu người viết, người đánh dấu xong |
 
 **Cột thêm vào Weddings**: `backend/prisma/manual/2026-10-30-01-budget-tiers.sql`
 
@@ -2920,6 +2903,12 @@ Quan hệ: Weddings 1 - n WeddingMembers; Users 1 - 0..1 WeddingMembers. `Weddin
 | SpendingTier | Mức chi tiêu: `AUTO` (mặc định), `SAVING`, `BALANCED`, `PREMIUM` (CHECK) |
 | TableCountOverride | Số bàn khách tự nhập (≥ 1). NULL: tự tính ⌈GuestCount / 10⌉ |
 | Style | **Không dùng nữa** (bỏ phong cách 30/10/2026), giữ để không mất dữ liệu cũ |
+
+**Cột thêm vào Weddings**: `backend/prisma/manual/2026-11-01-01-wedding-ward.sql`
+
+| Thuộc tính | Ý nghĩa |
+|---|---|
+| Ward | Phường/xã nơi tổ chức (Hà Nội, 126 đơn vị từ 01/07/2025), có tiền tố "Phường …"/"Xã …"; CHECK theo danh sách. NULL: chưa chọn |
 
 **Cột thêm vào ServicePackages**: cùng file SQL
 
@@ -2972,24 +2961,7 @@ Ghi đồng thời: mọi thao tác ghi ngân sách đổi `Weddings.UpdatedDate
 
 Quan hệ: Weddings 1 - n WeddingGuests.
 
-**WeddingInvites (Link mời cùng lập kế hoạch)**: `backend/prisma/manual/2026-10-30-02-invites-share.sql`
-
-| Thuộc tính | Ý nghĩa |
-|---|---|
-| Id | Mã lời mời |
-| WeddingId | Đám cưới (FK Weddings) |
-| TokenHash | SHA-256 (hex) của mã trong link, duy nhất. Mã không lưu trong DB |
-| Role | Quyền khi nhận: `Editor`, `Viewer` |
-| Relation | `Bride`, `Groom`, `Relative` |
-| DisplayName | Tên hiển thị owner đặt, tối đa 40 ký tự |
-| Tabs | Subtab được xem, ít nhất 1 |
-| CreatedBy | Owner tạo link (FK Users) |
-| ExpiresDate | Hết hạn (14 ngày sau khi tạo) |
-| UsedBy, UsedDate | Người nhận (FK Users) và lúc nhận; cùng có hoặc cùng trống |
-| RevokedDate | Lúc thu hồi |
-| CreatedDate | Ngày tạo |
-
-**WeddingShareLinks (Link xem công khai)**: cùng file SQL. Mỗi đám cưới tối đa một link.
+**WeddingShareLinks (Link xem công khai)**: `backend/prisma/manual/2026-10-30-02-share-links.sql`. Mỗi đám cưới tối đa một link.
 
 | Thuộc tính | Ý nghĩa |
 |---|---|
@@ -3000,4 +2972,4 @@ Quan hệ: Weddings 1 - n WeddingGuests.
 | Tabs | Subtab người xem công khai được xem, ít nhất 1 |
 | CreatedDate, UpdatedDate | Ngày tạo, ngày sửa |
 
-Quan hệ: Weddings 1 - n WeddingInvites; Weddings 1 - 0..1 WeddingShareLinks; Users 1 - n WeddingInvites (người tạo, người nhận).
+Quan hệ: Weddings 1 - 0..1 WeddingShareLinks.

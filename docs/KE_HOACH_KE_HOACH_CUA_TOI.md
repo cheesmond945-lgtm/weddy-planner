@@ -1,10 +1,12 @@
-# Kế hoạch: "Kế hoạch của tôi", thành viên, chia sẻ (bước 0, chờ duyệt)
+# Kế hoạch: "Kế hoạch của tôi", link xem chia sẻ (bước 0, chờ duyệt)
 
-Tiến độ: **GĐ 1, 2, 3, 5 xong phần code; ngân sách theo giá gói (thay GĐ 4) xong phần code** (30/10/2026, chưa commit). Còn chờ chạy 4 file SQL (xem docs/LICH_SU_THAY_DOI_DB.md) rồi chạy test tích hợp. Còn của GĐ 4: cảnh báo "Danh sách khách cần n bàn".
+02/11: **bỏ cùng lập kế hoạch.** Không còn thành viên, vai trò owner/editor/viewer, quyền theo tab, link mời (toàn bộ GĐ 2 và phần lời mời của GĐ 5). Mỗi tài khoản cặp đôi có đúng một kế hoạch (`weddings.user_id`), mọi endpoint làm trên kế hoạch của chính mình. Chỉ giữ **link xem công khai** (P7, [docs/api/sharing.md](api/sharing.md)). Bảng `wedding_members` còn trong DB nhưng không dùng; `wedding_invites` chưa từng tạo. Timeline là trang riêng `/timeline`; subtab Kế hoạch còn Tổng quan, Dịch vụ, Ngân sách, Khách mời. Các mục bên dưới đã sửa theo quyết định này.
 
-29/10: đã **trả lại** mọi thay đổi ở phần chat với nhà cung cấp (backend `modules/chat`, frontend `features/chat`, `ChatPage`, nút chat nổi) vì đó là phần của Chanh. Việc áp quyền thành viên cho chat (viewer không xem chat, editor gửi tin bằng tài khoản mình, thông báo cho cả nhóm) để Chanh làm.
+Tiến độ: **GĐ 1, 3, 5 (chỉ link xem) xong phần code; GĐ 2 bỏ (02/11); ngân sách theo giá gói (thay GĐ 4) xong phần code** (30/10/2026, chưa commit). Còn chờ chạy 4 file SQL (xem docs/LICH_SU_THAY_DOI_DB.md) rồi chạy test tích hợp. Còn của GĐ 4: cảnh báo "Danh sách khách cần n bàn".
 
-29/10: **viewer chỉ xem được Kế hoạch của tôi** và các subtab được cho phép. Menu chỉ còn "Kế hoạch của tôi"; ẩn nút nổi Yêu thích/Tin nhắn và mục Tin nhắn trong menu tài khoản; mở trang khác (Dịch vụ cưới, chi tiết dịch vụ, Yêu thích, So sánh, Tin nhắn) thì chuyển về `/plan`; trong kế hoạch ẩn các nút "Xem dịch vụ", "Khám phá dịch vụ", "Gợi ý bằng AI". Editor không bị giới hạn này. Hiện chỉ chặn ở frontend.
+29/10: đã **trả lại** mọi thay đổi ở phần chat với nhà cung cấp (backend `modules/chat`, frontend `features/chat`, `ChatPage`, nút chat nổi) vì đó là phần của Chanh. (Việc áp quyền thành viên cho chat không còn cần vì đã bỏ thành viên, 02/11.)
+
+29/10: giới hạn trang cho viewer (chỉ xem Kế hoạch của tôi). **Bỏ 02/11/2026** cùng với thành viên.
 
 30/10: làm theo đặc tả **ngân sách theo giá gói và mức chi** (thay phần ngân sách của GĐ 3 và phần giá theo bàn của GĐ 4): bỏ phong cách, thêm Mức chi tiêu, ngân sách hạng mục theo phân vị giá gói, ô sửa tay, cân đối, gói dự kiến và chọn gói, số bàn sửa tay, chi phí khác, ghi đồng thời theo `updated_date`, So sánh dùng ngân sách hạng mục. SQL mới ở `backend/prisma/manual/2026-10-30-01-budget-tiers.sql` (chưa chạy). Chi tiết: `docs/api/weddings.md` mục 7. Còn của GĐ 4: cảnh báo "Danh sách khách cần n bàn" ở tab Khách mời.
 
@@ -38,7 +40,7 @@ Trạng thái kế hoạch: bản lần 3. Prototype m gửi ngày 29/10 (`proto
 
 Chỉ lấy hành vi và chữ hiển thị. Không lấy dữ liệu mẫu và các phần ngoài Kế hoạch của tôi. Chữ "mâm" trong prototype đều đổi thành "bàn".
 
-**P1. Đầu trang Kế hoạch.** Tiêu đề `<Chú rể> & <Cô dâu>`, dòng `<dd/mm/yyyy>, còn n ngày`, avatar (chữ cái đầu, owner tô màu vàng, link mời đang chờ viền nét đứt). Nút "Chia sẻ kế hoạch" cho owner, "Người tham gia" cho người khác. Nút "Chỉnh sửa thông tin" bị khóa với viewer. Có 5 subtab kèm icon, tab Dịch vụ hiện số lượng.
+**P1. Đầu trang Kế hoạch.** Tiêu đề `<Chú rể> & <Cô dâu>`, dòng `<dd/mm/yyyy>, còn n ngày`, nút "Chia sẻ kế hoạch" và "Chỉnh sửa thông tin". Không có avatar thành viên (bỏ 02/11). Có 4 subtab kèm icon (Tổng quan, Dịch vụ, Ngân sách, Khách mời), tab Dịch vụ hiện số lượng. Timeline là trang riêng `/timeline`.
 
 **P2. Tổng quan.**
 - Hàng 3 thẻ:
@@ -48,12 +50,10 @@ Chỉ lấy hành vi và chữ hiển thị. Không lấy dữ liệu mẫu và 
 - Cột trái:
   - Việc sắp đến hạn: 5 việc, chữ "Còn n ngày" khi ≤ 7 ngày, "Quá hạn n ngày", "Hạn hôm nay".
   - Tiến độ theo hạng mục, có thêm nhóm "Việc chung".
-  - Phân công: chỉ hiện khi đã có việc được giao. Bấm vào thì mở Timeline lọc theo người đó.
 - Cột phải:
   - Phong cách và dịch vụ: chỉ có Phong cách và Dịch vụ muốn dùng.
   - Chi phí theo hạng mục: biểu đồ tròn, chú thích ghi "vượt", có lát "Chi phí khác".
-  - Người cùng lập kế hoạch.
-- Lời nhắc "Hiện chỉ mình bạn xem được kế hoạch này" khi owner chưa mời ai.
+- Không có thẻ "Người cùng lập kế hoạch", "Phân công" hay lời nhắc "Hiện chỉ mình bạn xem…" (bỏ 02/11).
 
 **P3. Ngân sách.** Tỷ lệ mặc định tạm thời (m sẽ sửa sau), đặt thành một hằng số duy nhất ở backend để dễ đổi. Gắn vào 6 hạng mục: nhà hàng 40%, decor 12%, chụp ảnh 10%, trang phục 8%, hoa cưới 8%, makeup 6% (tổng 84%).
 - Ngân sách hạng mục = giá trị đã lưu, nếu chưa có thì lấy tổng × tỷ lệ, làm tròn 100.000đ. Prototype không chuẩn hóa về 100%, t giữ nguyên như vậy.
@@ -65,14 +65,11 @@ Chỉ lấy hành vi và chữ hiển thị. Không lấy dữ liệu mẫu và 
 
 **P4. Timeline.**
 - Có thanh tiến độ, các nút Tải về, Nhập từ Excel, Thêm việc.
-- Lọc theo hạng mục. Lọc theo phụ trách chỉ hiện khi có việc được giao, gồm Tất cả, Cô dâu, Chú rể, Cả hai, từng người thân, Chưa giao, mỗi mục kèm số việc.
-- Các dòng việc bị khóa gộp thành một dòng "Việc chi tiết của a, b, c". Lọc theo người thì không hiện dòng này.
-- Bấm chip phụ trách hoặc "Giao việc" để mở menu nhỏ. Bấm hạn để mở ô chọn ngày, chọn là lưu luôn. Sau mỗi thao tác hiện thông báo kèm nút "Hoàn tác".
-- Giao việc cho người chỉ xem thì báo "… đang chỉ xem nên chưa tích xong được", owner có thêm nút "Cho phép chỉnh sửa".
-- Thành viên là Cô dâu hoặc Chú rể thì được tính là `Bride`/`Groom`, không phải `Member`.
-- Có "Xong bởi <tên>".
-- **Mỗi việc có một ghi chú** (tối đa 200 ký tự), kèm người viết và ngày. Người cùng lập kế hoạch đều thấy, link công khai thì không.
-- Hộp sửa việc gồm tên (chỉ việc tự thêm), hạn, phụ trách, ghi chú.
+- Lọc theo hạng mục.
+- Các dòng việc bị khóa gộp thành một dòng "Việc chi tiết của a, b, c".
+- **Không có giao việc** (bỏ 01/11/2026): không có người phụ trách, không lọc theo người. Cũng không có "Xong bởi <tên>" và không lưu người viết, ngày viết ghi chú (bỏ 02/11/2026): không theo dõi ai làm gì.
+- **Mỗi việc có một ghi chú** (tối đa 200 ký tự, chỉ là chữ). Link công khai không hiện ghi chú.
+- Hộp sửa việc gồm tên (chỉ việc tự thêm), hạn, ghi chú.
 
 **P5. Khách mời.**
 - Thẻ số: Tổng/dự kiến, Đã mời, Sẽ đến, Từ chối, Chưa phản hồi.
@@ -88,7 +85,6 @@ Chỉ lấy hành vi và chữ hiển thị. Không lấy dữ liệu mẫu và 
 - Khách mời và Chi phí khác có lựa chọn "Thêm vào" hoặc "Thay toàn bộ". Công việc chỉ thêm vào.
 - Kiểm tra trùng khách theo tên + bên, cả trong file lẫn với danh sách hiện có.
 - Ngày tháng/ngày/năm chỉ được chọn khi trong cột có ngày mà số thứ hai lớn hơn 12, và không có ngày nào số đầu lớn hơn 12.
-- Phụ trách: CD là cô dâu, CR là chú rể, "Tất cả" hoặc "Cả hai" là cả hai, tên thành viên là người đó. Cụm lạ thì bỏ qua, không đoán.
 - Số tiền nhận được dạng "5tr" hay "5 triệu".
 - Tải về `khach-moi.csv`, `cong-viec.csv`, `ngan-sach.csv` (UTF-8 có BOM) và ba file mẫu.
 
@@ -99,16 +95,9 @@ Chỉ lấy hành vi và chữ hiển thị. Không lấy dữ liệu mẫu và 
   - Có banner "Bạn đang xem kế hoạch này qua liên kết chia sẻ".
   - Tổng quan ẩn thẻ của các tab bị tắt.
   - Tab Dịch vụ chỉ hiện giá khi tab Ngân sách được bật.
-  - Thành viên chỉ hiện tên.
-- Link mời gồm: quan hệ (Cô dâu, Chú rể, Người thân), tên hiển thị không bắt buộc (tối đa 40 ký tự), quyền (chọn Cô dâu hoặc Chú rể thì mặc định Chỉnh sửa, Người thân thì mặc định Chỉ xem). Tối đa 10 link chờ, có thông báo lỗi riêng. Danh sách link chờ có nút sao chép và thu hồi.
-- **Chọn subtab cho từng người được mời** (chốt 29/10), giống chọn tab của link công khai:
-  - Tab nào cũng tắt được, kể cả Tổng quan, miễn còn **ít nhất 1 tab** (áp dụng cho cả lời mời lẫn link công khai; khác prototype, nơi Tổng quan luôn bật). Vào `/plan` hoặc `/xem/:token` thì mở tab đầu tiên được xem.
-  - Mặc định: Cô dâu và Chú rể được xem cả 5 tab; Người thân được xem Tổng quan, Timeline, Dịch vụ (Ngân sách và Khách mời tắt).
-  - Owner chọn khi tạo link mời, đổi lại được bất cứ lúc nào trong danh sách thành viên. Owner luôn xem tất cả.
-  - Áp dụng cho cả editor và viewer. Editor chỉ sửa được trong các tab mình được xem.
-  - Backend chặn API của tab không được xem (403), Tổng quan không trả số liệu của tab đó. Frontend ẩn tab.
-- **Chat** (chốt 29/10): viewer **không** xem được chat. Owner và editor có tab Dịch vụ thì chat và đặt cọc được, editor gửi tin bằng tài khoản của mình. Hội thoại vẫn gắn với owner. Thông báo tin nhắn và đơn chỉ gửi cho owner và editor.
-- Owner đổi quyền thành viên (Chỉnh sửa hoặc Chỉ xem) và xóa thành viên. Xóa thành viên thì bỏ luôn phân công của người đó.
+- Cặp đôi bật/tắt, chọn tab và tạo lại link (link cũ hết hiệu lực ngay). Vào `/xem/:token` thì mở tab đầu tiên được xem.
+- Backend chặn tab không được chia sẻ (404), Tổng quan trả `null` cho phần của tab đó.
+- **Đã bỏ (02/11/2026):** link mời cùng lập kế hoạch, danh sách thành viên, quyền Chỉnh sửa/Chỉ xem, chọn subtab cho từng người, quyền chat theo thành viên.
 
 **P8. Gợi ý AI và bàn.**
 - Ngân sách hạng mục lấy giá trị đã lưu, nếu chưa có thì lấy theo tỷ lệ.
@@ -138,31 +127,28 @@ Chỉ lấy hành vi và chữ hiển thị. Không lấy dữ liệu mẫu và 
 - Biểu đồ: tự vẽ SVG như prototype.
 - Giới hạn tần suất: tự viết, không thêm thư viện.
 
-**Q5 (đã chốt 30/10, làm theo đề xuất) Người nhận lời mời đã có đám cưới riêng.**
+**Q5 (bỏ 02/11, không còn lời mời) Người nhận lời mời đã có đám cưới riêng.**
 - Nếu đám cưới riêng chưa có hội thoại, đơn hay thanh toán: hỏi "Bỏ kế hoạch riêng để tham gia?", đồng ý thì xóa đám cưới đó rồi nhận lời mời.
 - Nếu đã có: từ chối với `ALREADY_IN_WEDDING`.
 - Đang là thành viên đám cưới khác thì phải rời trước.
 - Tài khoản NCC hoặc Admin thì từ chối.
 
-**Q6 ⛔ (trước GĐ 2) Chat, đơn và thông báo khi có nhiều thành viên.** Prototype không chặn viewer mở chat, chỉ chặn thêm hay bỏ dịch vụ và đặt cọc. *Đề xuất:*
+**Q6 (bỏ 02/11, không còn thành viên) Chat, đơn và thông báo khi có nhiều thành viên.** Prototype không chặn viewer mở chat, chỉ chặn thêm hay bỏ dịch vụ và đặt cọc. *Đề xuất:*
 - Hội thoại vẫn gắn với owner (`couple_id = weddings.user_id`).
 - Owner và editor gửi tin bằng tài khoản của mình. Viewer **xem được, không gửi được**.
 - Thông báo và realtime gửi tới mọi thành viên.
 - Yêu thích và So sánh vẫn là của riêng từng tài khoản (prototype không chia sẻ hai phần này).
 
 **Q7 Tên giá trị enum.** *Đề xuất* theo kiểu PascalCase đang dùng trong DB:
-- role: `Owner|Editor|Viewer`
-- quan hệ: `Bride|Groom|Relative`
 - bên: `Bride|Groom`
 - phản hồi: `Pending|Attending|Declined`
-- phụ trách: `Bride|Groom|Both|Member`
 - đơn vị tính: `Table|Package`
 
 Mọi cột có ràng buộc `CHECK`.
 
 **Q9 Ngân sách cho hạng mục không nằm trong "Dịch vụ muốn dùng".** Prototype vẫn hiện hạng mục có dịch vụ trong kế hoạch dù không được tích. *Đề xuất:* khi sửa ngân sách của hạng mục đó thì tự thêm vào `wedding_categories` (tức là tự tích luôn "muốn dùng"). Cách khác là thêm một bảng ngân sách riêng.
 
-**Q10 Tên route.** *Đề xuất:* `/plan` chuyển sang `/plan/tong-quan`, các tab còn lại là `/plan/timeline`, `/plan/dich-vu`, `/plan/ngan-sach`, `/plan/khach-moi`. `/timeline` chuyển sang `/plan/timeline`. Giữ nguyên `/plan/deal/:dealId`. Link mời là `/moi/:token`, link xem là `/xem/:token/<tab>`.
+**Q10 Tên route.** *Đề xuất:* `/plan` chuyển sang `/plan/tong-quan`, các tab còn lại là `/plan/timeline`, `/plan/dich-vu`, `/plan/ngan-sach`, `/plan/khach-moi`. Giữ nguyên `/plan/deal/:dealId`. Link xem là `/xem/:token/<tab>`. **Cập nhật 02/11:** Timeline là trang riêng `/timeline`, không phải subtab; không còn link mời `/moi/:token`.
 
 **Q12 Cách chia nhánh.** Mỗi giai đoạn một nhánh `feature/fe-be-plan-<gđ>` tách từ `Chie`. Làm và duyệt lần lượt từng giai đoạn.
 
@@ -172,12 +158,12 @@ Mọi cột có ràng buộc `CHECK`.
 
 | File SQL | Nội dung | Giữ dữ liệu cũ |
 |---|---|---|
-| `…-01-wedding-members.sql` (GĐ 2) | `wedding_members (id, wedding_id, user_id UNIQUE, role, relation, display_name, tabs text[], joined_date)`, unique `(wedding_id, user_id)`. Thêm owner từ `weddings.user_id` (`ON CONFLICT DO NOTHING`). Giữ `weddings.user_id` làm owner. | Mỗi đám cưới cũ có owner |
-| `…-02-timeline-assign.sql` (GĐ 3) | `timeline_tasks`: `assignee`, `assignee_user_id`, `note varchar(200)`, `note_by`, `note_date`, `completed_by` | Cột mới cho phép rỗng |
+| `…-01-wedding-members.sql` (GĐ 2) | **Bỏ 02/11.** Bảng `wedding_members` đã tạo, còn trong DB nhưng không dùng, đã xóa khỏi `schema.prisma` | Không ảnh hưởng |
+| `…-02-timeline-notes.sql` (GĐ 3) | `timeline_tasks`: `note varchar(200)` (không có `note_by`, `note_date`, `completed_by`) | Cột mới cho phép rỗng |
 | `…-03-budget.sql` (GĐ 3) | `wedding_categories.budget_amount numeric(18,2)` cho phép rỗng. `wedding_expenses (id, wedding_id, title varchar(100), amount numeric(18,2) > 0, created_by, created_date, updated_date)` | Có |
 | `…-04-guests.sql` (GĐ 3) | `wedding_guests (id, wedding_id, full_name varchar(100), side, group_name varchar(30), party_size ≥ 1, is_invited, rsvp_status, created_date, updated_date)`. Ràng buộc: `rsvp_status = 'Pending'` khi chưa mời | Bảng mới |
 | `…-05-table-pricing.sql` (GĐ 4) | `service_packages.pricing_unit` mặc định `'Package'`. Gói của hạng mục nhà hàng có `capacity` thì gán `'Table'`. `weddings.table_count_override int` cho phép rỗng. `plan_vendors.package_id uuid` cho phép rỗng, khóa ngoại tới `service_packages` | Có |
-| `…-06-invites-share.sql` (GĐ 5) | `wedding_invites (id, wedding_id, token_hash char(64) UNIQUE, role, relation, display_name varchar(40), tabs text[], created_by, expires_date, used_by, used_date, revoked_date, created_date)`. `wedding_share_links (id, wedding_id UNIQUE, token_hash UNIQUE, is_enabled, tabs text[], created_date, updated_date)` | Bảng mới |
+| `2026-10-30-02-share-links.sql` (GĐ 5, `prisma/manual/`) | `wedding_share_links (id, wedding_id UNIQUE, token_hash UNIQUE, is_enabled, tabs text[], created_date, updated_date)`. Không có `wedding_invites` (bỏ 02/11) | Bảng mới |
 
 Mọi bảng mới: khóa chính uuid, tên snake_case, ngày theo kiểu `timestamptz`, có `COMMENT ON`, bật RLS và không có policy. Sau mỗi file: `db:pull`, `db:generate`, cập nhật `docs/database.md`.
 
@@ -189,20 +175,17 @@ Mọi bảng mới: khóa chính uuid, tên snake_case, ngày theo kiểu `times
 - FE:
   - [CoupleLayout.tsx](../frontend/src/layouts/CoupleLayout.tsx) bỏ tab "Lập Timeline". Tab "Kế hoạch của tôi" hiện số dịch vụ.
   - [paths.ts](../frontend/src/routes/paths.ts) và [router.tsx](../frontend/src/routes/router.tsx): route con, chuyển hướng `/timeline`.
-  - Trang mới `pages/couple/PlanLayoutPage.tsx` gồm đầu trang (P1), thanh subtab và `<Outlet/>`. Nội dung `TimelinePage` và `PlanPage` chuyển vào hai tab Timeline và Dịch vụ. Tổng quan, Ngân sách, Khách mời tạm để khung trống.
+  - Trang mới `pages/couple/PlanLayoutPage.tsx` gồm đầu trang (P1), thanh subtab và `<Outlet/>`. Nội dung `PlanPage` chuyển vào tab Dịch vụ (Timeline sau này tách lại thành trang riêng `/timeline`). Tổng quan, Ngân sách, Khách mời tạm để khung trống.
   - [WeddingForm.tsx](../frontend/src/features/weddings/components/WeddingForm.tsx) theo đúng thứ tự trường và câu báo lỗi của prototype, form tạo và form sửa dùng chung.
 - BE: [weddings.service.ts](../backend/src/modules/weddings/weddings.service.ts) bắt buộc tên cô dâu và chú rể, bỏ nhận `location`.
 - Tài liệu: `docs/api/weddings.md`.
 
-### GĐ 2: Thành viên và phân quyền
-- `common/decorators/wedding-access.decorator.ts` và `common/guards/wedding-access.guard.ts`. Guard gắn `req.wedding = { id, ownerId, role }` và trả 403 `WEDDING_FORBIDDEN` nếu không đủ quyền.
-- Module `modules/wedding-members/`: `GET /weddings/me/members`, `PATCH /weddings/me/members/:userId` (owner), `DELETE /weddings/me/members/:userId` (owner xóa người khác, hoặc thành viên tự rời).
-- Thay cách tìm đám cưới theo `user_id` bằng membership ở: weddings, timeline, ai-suggest, `compare.controller.ts:40`, `orders.service.ts:90,147,359`, `chat.service.ts:117-155`, payments. Thông báo và realtime gửi tới mọi thành viên.
-- FE: `useWeddingRole`, khóa nút theo quyền (giống `ro()` trong prototype), avatar và thẻ thành viên.
+### GĐ 2: Thành viên và phân quyền (bỏ 02/11/2026)
+- Không làm. Code thành viên, guard phân quyền, `useWeddingRole` đã gỡ; mọi chỗ tìm đám cưới theo `weddings.user_id` như cũ.
 
 ### GĐ 3: Các subtab
 - `GET /weddings/me/overview`: một endpoint cho toàn bộ P2.
-- Timeline: `PATCH timeline/items/:id` nhận thêm `assignee`, `assigneeUserId`, `note`. Đánh dấu xong thì lưu `completed_by`. Giao diện theo P4.
+- Timeline: `PATCH timeline/items/:id` nhận thêm `note` (chuỗi hoặc `null`). Giao diện theo P4.
 - Ngân sách: `GET /weddings/me/budget`, `PATCH /weddings/me/budget/categories/:slug`, `POST /weddings/me/budget/reset`. Chi phí khác có `GET/POST/DELETE /weddings/me/expenses`. AI đọc chung số liệu này.
 - Khách mời: `GET/POST/PATCH/DELETE /weddings/me/guests`, `POST /weddings/me/guests/bulk`.
 - Nhập: `POST /weddings/me/import/{guests|tasks|expenses}` nhận `{ rows, mode, dryRun }`, backend kiểm tra lại từng dòng theo P6. Xuất: `GET /weddings/me/export/{guests|tasks|budget}.csv` và `GET /weddings/me/import/{type}/template.csv`. Phần chuẩn hóa dữ liệu viết thành hàm thuần dùng chung cho FE và BE, có unit test.
@@ -213,24 +196,19 @@ Mọi bảng mới: khóa chính uuid, tên snake_case, ngày theo kiểu `times
 - [ai-suggest.service.ts](../backend/src/modules/weddings/ai-suggest.service.ts) làm theo P8. Catalog đọc `pricing_unit`, bỏ regex. Trang tạo gói phía NCC thêm trường đơn vị tính.
 - FE theo P8. Kết quả AI hiện ở đầu trang Dịch vụ và tự cuộn tới. Nút quay lại về đúng nơi đã bấm.
 
-### GĐ 5: Chia sẻ và lời mời
-- `modules/wedding-sharing/` theo P7:
-  - Owner: `GET/POST /weddings/me/invites`, `DELETE /weddings/me/invites/:id`.
-  - `GET /invites/:token` có giới hạn tần suất. `POST /invites/:token/accept` cho tài khoản cặp đôi.
-  - Owner: `GET/PUT /weddings/me/share-link`, `POST /weddings/me/share-link/regenerate`.
-  - Công khai: `GET /public/plans/:token[/<tab>]`, dữ liệu lọc ở backend.
+### GĐ 5: Link xem công khai
+- `modules/wedding-sharing/` theo P7 (phần lời mời bỏ 02/11):
+  - Cặp đôi: `GET/PUT /weddings/me/share-link`, `POST /weddings/me/share-link/regenerate`.
+  - Công khai: `GET /public/plans/:token[/<tab>]`, dữ liệu lọc ở backend, có giới hạn tần suất.
   - Mã link 32 byte, DB chỉ lưu SHA-256.
 - Dựng link bằng `FRONTEND_URL`. Biến này đã có trong `backend/.env.example`, chỉ cần cập nhật README.
-- FE: `/moi/:token` (đăng nhập hoặc đăng ký xong thì tự nhận lời mời và bỏ qua form thiết lập), `/xem/:token/*`, hộp "Chia sẻ kế hoạch".
+- FE: `/xem/:token/*`, hộp "Chia sẻ kế hoạch".
 
 ---
 
 ## E. Kiểm thử
 - Unit (`node --test`): số bàn, ước tính sảnh (có số bàn tối thiểu theo P8), phân loại AI, chuẩn hóa dữ liệu nhập (CD/CR, ngày tháng/ngày/năm, "5tr"), CSV có BOM.
 - Tích hợp trên DB test (Q3):
-  - viewer gọi mọi endpoint ghi đều nhận 403. Danh sách endpoint lấy từ metadata của route để không bỏ sót;
-  - editor không mời được, không đổi được quyền;
-  - link mời hết hạn, đã dùng hoặc đã thu hồi đều bị từ chối;
   - link công khai không trả tab bị tắt, tắt link hoặc tạo lại thì link cũ trả 404;
   - người ngoài đám cưới không đọc được.
 - Mỗi giai đoạn chạy typecheck, build và test ở cả hai phía.

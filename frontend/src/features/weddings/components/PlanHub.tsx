@@ -6,14 +6,12 @@ import { daysBetween, formatDate, parseDate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { PlanTab, Wedding } from '@/types/wedding'
-import type { PlanAccess } from '../access'
 import { usePlan } from '../hooks'
 import { ShareDialog } from './ShareDialog'
 
 /** Dữ liệu trang Kế hoạch truyền xuống các subtab qua <Outlet context>. */
 export interface PlanOutletContext {
   wedding: Wedding
-  access: PlanAccess
   openEdit: () => void
 }
 
@@ -21,7 +19,7 @@ export interface PlanOutletContext {
 export const usePlanContext = () => useOutletContext<PlanOutletContext>()
 
 /** Đầu trang Kế hoạch: "Chú rể & Cô dâu", ngày cưới, số ngày còn lại, các nút (hubHead trong prototype). */
-export function PlanHubHeader({ wedding, access, onEdit }: { wedding: Wedding; access: PlanAccess; onEdit: () => void }) {
+export function PlanHubHeader({ wedding, onEdit }: { wedding: Wedding; onEdit: () => void }) {
   const left = Math.max(0, daysBetween(today(), parseDate(wedding.date)))
   const [sharing, setSharing] = useState(false)
   // Đám cưới tạo từ bản cũ có thể chưa có tên: hiện vai trò mờ thay cho tên
@@ -40,16 +38,16 @@ export function PlanHubHeader({ wedding, access, onEdit }: { wedding: Wedding; a
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2.5">
-        <Button variant={access.isOwner ? 'default' : 'outline'} size="sm" className="rounded-pill" onClick={() => setSharing(true)}>
-          {access.isOwner ? <Share2 /> : <UsersRound />}
-          {access.isOwner ? 'Chia sẻ kế hoạch' : 'Được chia sẻ'}
+        <Button size="sm" className="rounded-pill" onClick={() => setSharing(true)}>
+          <Share2 />
+          Chia sẻ kế hoạch
         </Button>
-        <Button variant="outline" size="sm" className="rounded-pill" disabled={!access.canEdit} onClick={onEdit}>
+        <Button variant="outline" size="sm" className="rounded-pill" onClick={onEdit}>
           <Pencil />
           Chỉnh sửa thông tin
         </Button>
       </div>
-      <ShareDialog open={sharing} onOpenChange={setSharing} access={access} />
+      <ShareDialog open={sharing} onOpenChange={setSharing} />
     </div>
   )
 }
@@ -61,8 +59,8 @@ export const PLAN_TAB_LINKS: { tab: PlanTab; to: string; label: string; icon: Lu
   { tab: 'guests', to: paths.planTab.guests, label: 'Khách mời', icon: UsersRound },
 ]
 
-/** Thanh subtab của Kế hoạch (ptabs trong prototype): chỉ các tab được xem. Đổi tab không cuộn lại đầu trang. */
-export function PlanTabs({ access }: { access: PlanAccess }) {
+/** Thanh subtab của Kế hoạch (ptabs trong prototype). Đổi tab không cuộn lại đầu trang. */
+export function PlanTabs() {
   const { data: plan } = usePlan()
   const counts: Partial<Record<PlanTab, number>> = { services: plan?.items.length ?? 0 }
 
@@ -71,7 +69,7 @@ export function PlanTabs({ access }: { access: PlanAccess }) {
       aria-label="Các phần của kế hoạch"
       className="mb-6 flex gap-1 overflow-x-auto rounded-[22px] border border-line bg-accent-soft/60 p-[5px] [scrollbar-width:none]"
     >
-      {PLAN_TAB_LINKS.filter((t) => access.canSee(t.tab)).map(({ tab, to, label, icon: Icon }) => (
+      {PLAN_TAB_LINKS.map(({ tab, to, label, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}

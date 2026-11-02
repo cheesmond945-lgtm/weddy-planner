@@ -28,8 +28,7 @@ export function useAfterAuth() {
     else if (onAuthPage) navigate(paths.services, { replace: true })
 
     const wedding = await weddingsApi.getMine().catch(() => undefined)
-    // Đến từ link mời (/moi/:token): bỏ qua hộp thiết lập, trang lời mời tự nhận lời mời
-    if (wedding === null && !redirectTo?.startsWith('/moi/')) {
+    if (wedding === null) {
       // Không có việc dở và không có trang định vào: thiết lập xong thì sang Timeline
       openWeddingSetup(then ?? (redirectTo ? () => {} : null))
       return

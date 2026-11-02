@@ -4,34 +4,9 @@
 > Quy ước chung: [README.md](README.md). `ServiceSummary`, `CategoryRef`: xem [catalog.md](catalog.md). `Order`: xem [orders.md](orders.md).
 > **Chờ đối chiếu `docs/database.md` và `docs/state-diagrams.md`:** tên thực thể, trường, enum `PlanItemStatus` đang suy từ prototype (mục 4.1–4.4, 5.1).
 
-Role cho mọi endpoint: **COUPLE**. Mỗi tài khoản thuộc tối đa **một** đám cưới, với vai trò owner, editor hoặc viewer (bảng `wedding_members`, mục 5). Mọi endpoint làm việc trên đám cưới người gọi đang tham gia (`/weddings/me`), không chỉ đám cưới do họ tạo.
+Role cho mọi endpoint: **COUPLE**. Mỗi tài khoản cặp đôi có đúng **một** đám cưới (`weddings.user_id`); mọi endpoint làm việc trên đám cưới của chính người gọi (`/weddings/me`). Không có thành viên cùng lập kế hoạch, vai trò hay phân quyền theo tab (bỏ 02/11/2026). Muốn cho người khác xem thì dùng link xem công khai: [sharing.md](sharing.md).
 
-**Quyền** (kiểm tra ở backend, mục 5):
-
-| Endpoint | Quyền tối thiểu | Phải được xem subtab |
-|---|---|---|
-| `GET /weddings/me` | thành viên bất kỳ (chưa có đám cưới: `null`) | không |
-| `PUT /weddings/me` | editor (chưa có đám cưới: ai cũng tạo được, thành owner) | không |
-| `GET /weddings/me/timeline` | viewer | `timeline` |
-| `POST/PATCH/DELETE …/timeline/…` | editor | `timeline` |
-| `GET /weddings/me/plan-items` | viewer | `services` |
-| `POST/DELETE …/plan-items…` | editor | `services` |
-| `POST /weddings/me/ai-suggestions` (chỉ đọc) | viewer | `timeline` hoặc `services` |
-| `GET /weddings/me/overview` | viewer | `overview` (phần của tab không được xem trả `null`) |
-| `GET /weddings/me/budget`, `GET …/export/budget.csv`, `GET …/import/expenses/template.csv` | viewer | `budget` |
-| `PUT/DELETE …/budget/categories/:categoryId`, `POST …/budget/reset`, `POST …/budget/rebalance`, `POST/PATCH/DELETE …/extra-costs…`, `POST …/import/expenses` | editor | `budget` |
-| `PATCH /weddings/me` (tổng ngân sách, số khách, mức chi, số bàn) | editor | không |
-| `PATCH …/plan-vendors/:vendorId` (chọn gói) | editor | `services` |
-| `GET /weddings/me/guests`, `GET …/export/guests.csv`, `GET …/import/guests/template.csv` | viewer | `guests` |
-| `POST/PATCH/DELETE …/guests…`, `POST …/import/guests` | editor | `guests` |
-| `GET …/export/tasks.csv`, `GET …/import/tasks/template.csv` | viewer | `timeline` |
-| `POST …/import/tasks` | editor | `timeline` |
-| `GET /weddings/me/members` | viewer | không |
-| `PATCH /weddings/me/members/:userId` | owner | không |
-| `DELETE /weddings/me/members/:userId` | owner (xóa người khác) hoặc chính thành viên (tự rời) | không |
-
-Lỗi quyền chung: 409 `WEDDING_NOT_SET` (chưa tham gia đám cưới nào), 403 `WEDDING_READ_ONLY` (viewer gọi endpoint ghi), 403 `WEDDING_FORBIDDEN` (editor gọi việc chỉ owner làm), 403 `TAB_FORBIDDEN` (không được xem subtab đó).
-Đơn hàng phía khách cũng theo quyền này: xem [orders.md](orders.md). Chat với nhà cung cấp ([chat.md](chat.md)) **chưa** áp quyền thành viên (phần của Chanh, chờ Chanh làm).
+Chưa thiết lập đám cưới: các endpoint (trừ `GET`/`PUT /weddings/me`) trả 409 `WEDDING_NOT_SET`.
 
 ---
 
@@ -46,6 +21,7 @@ Lỗi quyền chung: 409 `WEDDING_NOT_SET` (chưa tham gia đám cưới nào), 
   "brideName": "Trần Thị Bình",
   "date": "2027-02-15",
   "location": "Hà Nội",
+  "ward": "Phường Cầu Giấy",
   "guestCount": 300,
   "budget": 600000000,
   "spendingTier": "AUTO",
@@ -60,6 +36,7 @@ Lỗi quyền chung: 409 `WEDDING_NOT_SET` (chưa tham gia đám cưới nào), 
 | `date` | Ngày, bắt buộc, sau hôm nay |
 | `groomName`, `brideName` | Bắt buộc, tối đa 100 ký tự. Lỗi: "Vui lòng nhập tên chú rể." / "Vui lòng nhập tên cô dâu." |
 | `location` | **Chỉ có ở response**, BE luôn lưu `"Hà Nội"` (NCC chỉ có ở Hà Nội nên form không hỏi). Body có gửi thì bị bỏ qua. Vẫn trả về để gợi ý AI lọc theo khu vực |
+| `ward` | "Nơi tổ chức": một phường/xã của Hà Nội từ 01/07/2025 (Nghị quyết 1656/NQ-UBTVQH15: 51 phường, 75 xã), **có tiền tố**: `"Phường Cầu Giấy"`, `"Xã Đông Anh"`. Danh sách: `backend/src/modules/weddings/wards.ts`. Form bắt buộc chọn; API nhận `null`/không gửi (không gửi thì giữ nguyên khi sửa). Giá trị khác danh sách: lỗi "Nơi tổ chức phải là một phường/xã của Hà Nội." `null` ở response là đám cưới cũ chưa chọn. Chưa chạy `prisma/manual/2026-11-01-01-wedding-ward.sql` thì trường bị bỏ qua khi lưu |
 | `guestCount` | "Số khách dự kiến", bắt buộc, số nguyên ≥ 1 |
 | `budget` | Đồng, bắt buộc, > 0 |
 | `spendingTier` | Mức chi tiêu: `AUTO` (mặc định, tự chọn mức cao nhất vừa ngân sách), `SAVING`, `BALANCED`, `PREMIUM`. Không bắt buộc; sửa đám cưới mà không gửi thì giữ nguyên |
@@ -72,19 +49,13 @@ Phong cách đã **bỏ** (30/10/2026): body có `styles` thì bị bỏ qua, re
 ### GET /weddings/me
 Response 200: `{ "data": Wedding }`, hoặc `{ "data": null }` khi chưa thiết lập (FE dựa vào đây để mở hộp thiết lập sau lần đăng nhập đầu).
 
-Response của `GET` và `PUT` có thêm `access`: quyền của người gọi, để FE ẩn subtab và khóa nút.
-
-```json
-"access": { "role": "EDITOR", "tabs": ["overview", "timeline", "services"] }
-```
-
 ### PUT /weddings/me
 Tạo hoặc cập nhật. Body: `Wedding` không có `id` và `location`. Response 200: `{ "data": Wedding }`. Form tạo mới và form chỉnh sửa dùng chung thứ tự trường và quy tắc trên; `spendingTier` là trường duy nhất không bắt buộc. Gửi kèm `version` thì kiểm tra ghi đồng thời (không gửi thì không kiểm tra, để form cũ vẫn chạy).
 
 - **Lần đầu tạo**: lưu ngày tạo làm mốc bắt đầu, tạo 4 việc mặc định (việc đầu đã xong): Xác định ngân sách và quy mô tiệc; Lập danh sách khách mời sơ bộ; Thiết kế và gửi thiệp mời; Xác nhận lần cuối với các nhà cung cấp.
 - **Đổi `date`**: các hạn trên timeline **tự tính lại theo tỷ lệ** thời gian giữa mốc bắt đầu và ngày cưới (prototype lưu mỗi mốc dạng tỷ lệ 0..1).
 
-Lỗi: 400 `VALIDATION_ERROR`, `details` theo từng trường (`groomName`, `brideName`, `date`, `guestCount`, `budget`, `spendingTier`, `categorySlugs`)
+Lỗi: 400 `VALIDATION_ERROR`, `details` theo từng trường (`groomName`, `brideName`, `date`, `ward`, `guestCount`, `budget`, `spendingTier`, `categorySlugs`)
 
 ### PATCH /weddings/me
 Đổi nhanh ở tab Ngân sách. Body: một hoặc nhiều trường `{ "budget"?, "guestCount"?, "spendingTier"?, "tableCountOverride"? (null: về số tự tính, 1–500) }` kèm `"version"` (bắt buộc). Ô ngân sách sửa tay giữ nguyên. Response 200: `{ "data": Wedding }`.
@@ -109,15 +80,11 @@ Lỗi: 400 `VALIDATION_ERROR`, 400 `VERSION_REQUIRED`, 409 `STALE_DATA`
   "serviceName": "Sen Vàng Convention",
   "planStatus": "PLANNED",
   "serviceId": "sv-2",
-  "assignee": { "kind": "MEMBER", "userId": "u-3", "name": "Mẹ cô dâu" },
-  "note": { "text": "Gọi trước 2 ngày", "by": { "userId": "u-1", "name": "Nguyễn Văn An" }, "date": "2026-10-29T08:00:00.000Z" },
-  "completedBy": null
+  "note": "Gọi trước 2 ngày"
 }
 ```
 
-- `assignee`: người phụ trách, `null` là chưa giao. `kind`: `BRIDE` (cô dâu), `GROOM` (chú rể), `BOTH` (cả hai), `MEMBER` (một người thân, kèm `userId`, `name`). Giao cho thành viên có quan hệ Cô dâu/Chú rể thì lưu thành `BRIDE`/`GROOM`. Xóa thành viên thì bỏ luôn các việc đang giao cho người đó.
-- `note`: ghi chú tối đa 200 ký tự kèm người viết và thời điểm sửa gần nhất. Thành viên đều thấy; link công khai (GĐ 5) thì không.
-- `completedBy`: người đánh dấu xong ("Xong bởi …"); `null` khi chưa xong, việc "Chốt …" tự xong, hoặc việc xong trước khi có cột này.
+- `note`: ghi chú, chuỗi tối đa 200 ký tự hoặc `null`. Không lưu người viết, thời điểm sửa, hay người đánh dấu xong (bỏ 02/11/2026). Link xem công khai không trả ghi chú.
 
 | `kind` | Ý nghĩa | Sửa được |
 |---|---|---|
@@ -139,12 +106,12 @@ Response 200: `{ "data": { "items": TimelineItem[] } }`
 Lỗi: 409 `WEDDING_NOT_SET`
 
 ### POST /weddings/me/timeline/tasks
-Thêm việc. Body `{ "title": "Đặt xe hoa", "dueDate": "2027-01-10", "assignee"?: "BRIDE", "assigneeUserId"?: null, "note"?: "…" }`. Response 200: timeline mới (như GET).
+Thêm việc. Body `{ "title": "Đặt xe hoa", "dueDate": "2027-01-10", "note"?: "…" }`. Response 200: timeline mới (như GET).
 
 ### PATCH /weddings/me/timeline/items/:itemId
-Body: một hoặc nhiều trường `{ "title"?, "dueDate"?, "isDone"?, "assignee"?, "assigneeUserId"?, "note"? }`. `title`, `dueDate`, `isDone` theo cột "Sửa được" ở bảng trên; `assignee` và `note` sửa được ở mọi việc trừ `LOCKED`, `SERVICE_DATE`. `assignee: null` là bỏ giao; `note: null` hoặc `""` là xóa ghi chú. Đánh dấu `isDone: true` thì lưu người gọi vào `completedBy`. Response 200: timeline mới.
+Body: một hoặc nhiều trường `{ "title"?, "dueDate"?, "isDone"?, "note"? }`. `title`, `dueDate`, `isDone` theo cột "Sửa được" ở bảng trên; `note` sửa được ở mọi việc trừ `LOCKED`, `SERVICE_DATE`. `note: null` hoặc `""` là xóa ghi chú. Response 200: timeline mới.
 
-Lỗi thêm: 404 `MEMBER_NOT_FOUND` (giao cho người không phải thành viên, hoặc cho owner), 400 `VALIDATION_ERROR` (ghi chú quá 200 ký tự, `assignee` không hợp lệ).
+Lỗi thêm: 400 `VALIDATION_ERROR` (ghi chú quá 200 ký tự).
 
 ### DELETE /weddings/me/timeline/tasks/:itemId
 Chỉ việc `isCustom`. Response 200: timeline mới.
@@ -254,57 +221,23 @@ Lỗi: 400 `VALIDATION_ERROR`, 409 `WEDDING_NOT_SET`
 
 ---
 
-## 5. Thành viên (người cùng lập kế hoạch)
+## 5. Thành viên (đã bỏ 02/11/2026)
 
-`WeddingMember`
-
-```json
-{
-  "userId": "uuid",
-  "fullName": "Trần Thị Bình",
-  "email": "binh@example.com",
-  "displayName": "Mẹ cô dâu",
-  "role": "VIEWER",
-  "relation": "RELATIVE",
-  "tabs": ["overview", "timeline", "services"],
-  "joinedDate": "2026-10-29T08:00:00.000Z",
-  "isMe": false
-}
-```
-
-| Trường | Ý nghĩa |
-|---|---|
-| `role` | `OWNER` (toàn quyền, đúng một người), `EDITOR` (sửa timeline, kế hoạch, chat, đặt cọc; không quản lý thành viên hay chia sẻ), `VIEWER` (chỉ xem, không xem chat) |
-| `relation` | `BRIDE`, `GROOM`, `RELATIVE`; owner là `null` |
-| `tabs` | Subtab được xem: `overview`, `timeline`, `services`, `budget`, `guests`, ít nhất 1. Owner luôn đủ 5 |
-
-### GET /weddings/me/members
-Response 200: `{ "data": WeddingMember[] }`, owner đứng đầu.
-
-### PATCH /weddings/me/members/:userId
-Chỉ owner. Body: `{ "role"?: "EDITOR" | "VIEWER", "tabs"?: PlanTab[] }`. Response 200: danh sách thành viên mới.
-Lỗi: 400 `VALIDATION_ERROR` (`tabs` rỗng hoặc sai), 404 `MEMBER_NOT_FOUND`, 409 `MEMBER_IS_OWNER`.
-
-### DELETE /weddings/me/members/:userId
-Owner xóa người khác, hoặc thành viên tự rời (`userId` là chính mình). Owner không rời được. Response 200: `{ "data": null }`.
-Lỗi: 403 `WEDDING_FORBIDDEN`, 404 `MEMBER_NOT_FOUND`, 409 `MEMBER_IS_OWNER`.
-
-Mời thành viên bằng link: làm ở GĐ 5 (`docs/KE_HOACH_KE_HOACH_CUA_TOI.md`).
+Không còn `GET/PATCH/DELETE /weddings/me/members…`. Giữ số mục để không lệch các liên kết "mục 6–9".
 
 ---
 
 ## 6. Tổng quan
 
 ### GET /weddings/me/overview
-Một endpoint cho toàn bộ subtab Tổng quan. Phần của tab mà người gọi không được xem trả `null`.
+Một endpoint cho toàn bộ subtab Tổng quan. Cặp đôi luôn nhận đủ mọi phần; phần là `null` chỉ khi xem qua link công khai mà tab đó không được chia sẻ ([sharing.md](sharing.md)).
 
 ```json
 {
   "tasks": {
     "done": 5, "total": 18, "overdue": 1,
-    "upcoming": [{ "id": "…", "title": "Chốt nhà hàng", "dueDate": "2026-11-05", "daysLeft": 7, "category": { "slug": "nha-hang", "…": "CategoryRef" }, "assignee": null }],
-    "byCategory": [{ "slug": "nha-hang", "name": "Trung tâm tổ chức sự kiện", "done": 1, "total": 3 }, { "slug": null, "name": "Việc chung", "done": 2, "total": 4 }],
-    "assignees": [{ "kind": "BRIDE", "userId": null, "name": null, "done": 1, "total": 2 }]
+    "upcoming": [{ "id": "…", "title": "Chốt nhà hàng", "dueDate": "2026-11-05", "daysLeft": 7, "category": { "slug": "nha-hang", "…": "CategoryRef" } }],
+    "byCategory": [{ "slug": "nha-hang", "name": "Trung tâm tổ chức sự kiện", "done": 1, "total": 3 }, { "slug": null, "name": "Việc chung", "done": 2, "total": 4 }]
   },
   "budget": {
     "total": 500000000, "planned": 260000000, "deposited": 30000000, "remaining": 240000000,
@@ -314,7 +247,7 @@ Một endpoint cho toàn bộ subtab Tổng quan. Phần của tab mà người 
 }
 ```
 
-- `tasks` không tính việc `LOCKED`. `upcoming`: 5 việc chưa xong có hạn sớm nhất (gồm cả việc quá hạn, `daysLeft` âm). `assignees` rỗng khi chưa giao việc nào (FE ẩn thẻ Phân công).
+- `tasks` không tính việc `LOCKED`. `upcoming`: 5 việc chưa xong có hạn sớm nhất (gồm cả việc quá hạn, `daysLeft` âm).
 - `budget.slices`: các hạng mục có giá > 0, cộng lát "Chi phí khác" (`slug: "other"`) nếu có.
 
 ---
@@ -451,7 +384,7 @@ FE đọc file (.xlsx, .xls, .csv; tối đa 500 dòng, 2 MB) bằng SheetJS, t�
 | Loại | Trường của mỗi dòng | Ghi chú |
 |---|---|---|
 | `guests` | `name`*, `side`*, `group`, `partySize`, `invited`, `rsvp` | Bên nhận "Nhà trai/Nhà gái", "Trai/Gái", "CR/CD". Đã mời nhận "x", "có", "rồi"… Có phản hồi thì tính là đã mời (cảnh báo). Trùng tên + bên trong file hoặc với danh sách hiện có là lỗi |
-| `tasks` | `title`*, `dueDate`*, `assignee`, `note` | Chỉ thêm vào. Hạn: `YYYY-MM-DD`, `ngày/tháng/năm`, số ngày của Excel; `dateOrder: "MDY"` chỉ được khi cột có ngày mà số thứ hai > 12 và không ngày nào số đầu > 12. Phụ trách: CD, CR, "Cả hai"/"Tất cả", tên thành viên; cụm lạ thì bỏ trống kèm cảnh báo, không đoán |
+| `tasks` | `title`*, `dueDate`*, `note` | Chỉ thêm vào. Hạn: `YYYY-MM-DD`, `ngày/tháng/năm`, số ngày của Excel; `dateOrder: "MDY"` chỉ được khi cột có ngày mà số thứ hai > 12 và không ngày nào số đầu > 12. |
 | `expenses` | `title`*, `amount`* | Chi phí khác ngoài WebPlan (bảng `wedding_extra_costs`, cột `name`). Số tiền nhận "5tr", "5 triệu", "1,5tr", "500k", "5.000.000đ". Khi ghi (không `dryRun`) phải gửi `version` như mục 7 |
 
 - `mode`: `APPEND` (mặc định) hoặc `REPLACE` (xóa hết rồi thêm; chỉ `guests`, `expenses`).
@@ -471,7 +404,7 @@ File CSV UTF-8 có BOM (Excel mở đúng tiếng Việt), không bọc `{ data 
 | Endpoint | File | Cột |
 |---|---|---|
 | `GET /weddings/me/export/guests.csv` | `khach-moi.csv` | Tên khách, Bên, Nhóm, Số người, Đã mời, Phản hồi |
-| `GET /weddings/me/export/tasks.csv` | `cong-viec.csv` | Việc, Hạn, Phụ trách, Ghi chú, Hạng mục, Trạng thái, Xong bởi (không gồm việc `LOCKED`) |
+| `GET /weddings/me/export/tasks.csv` | `cong-viec.csv` | Việc, Hạn, Ghi chú, Hạng mục, Trạng thái (không gồm việc `LOCKED`) |
 | `GET /weddings/me/export/budget.csv` | `ngan-sach.csv` | Loại, Tên, Ngân sách, Dịch vụ đã chọn, Trạng thái, Giá, Giá cao nhất, Chênh lệch |
 | `GET /weddings/me/import/{guests\|tasks\|expenses}/template.csv` | `mau-….csv` | Tiêu đề + 2 dòng ví dụ, nhập lại được ngay |
 

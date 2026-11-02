@@ -3,8 +3,8 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { GooglePlacesService } from '../../integrations/google-places/google-places.service';
 import { ServicesService } from '../catalog/services.service';
-import { WeddingMembersService } from '../wedding-members/wedding-members.service';
 import { BudgetCalcService } from '../weddings/budget-calc.service';
+import { WeddingsService } from '../weddings/weddings.service';
 import { fitsGuests, packageCost, tableCount } from '../weddings/budget-engine';
 import { recommend } from './recommend';
 
@@ -20,7 +20,7 @@ export class CompareController {
   constructor(
     private readonly services: ServicesService,
     private readonly places: GooglePlacesService,
-    private readonly members: WeddingMembersService,
+    private readonly weddings: WeddingsService,
     private readonly calc: BudgetCalcService,
   ) {}
 
@@ -34,9 +34,9 @@ export class CompareController {
     const slug = items[0].category.slug;
     if (items.some((s) => s.category.slug !== slug)) return fail('COMPARE_MIXED_CATEGORIES', 'Chỉ so sánh được các nhà cung cấp cùng hạng mục.', 400);
 
-    // Đám cưới người gọi đang tham gia (có thể chưa thiết lập): ngân sách hạng mục như tab Ngân sách, số bàn
-    const access = await this.members.resolve(req.user.sub);
-    const calc = access ? await this.calc.compute(access.weddingId) : null;
+    // Đám cưới của người gọi (có thể chưa thiết lập): ngân sách hạng mục như tab Ngân sách, số bàn
+    const wedding = await this.weddings.findWedding(req.user.sub);
+    const calc = wedding ? await this.calc.compute(wedding.id) : null;
     const guestCount = calc?.input.guestCount ?? null;
     const tables = calc ? calc.result.tables.count : tableCount(0, null);
     const categoryBudget = calc?.result.categories.find((c) => c.slug === slug)?.budget ?? null;

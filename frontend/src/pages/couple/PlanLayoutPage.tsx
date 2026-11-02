@@ -4,7 +4,6 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
-import { accessOf } from '@/features/weddings/access'
 import { PLAN_TAB_LINKS, PlanHubHeader, PlanTabs, type PlanOutletContext } from '@/features/weddings/components/PlanHub'
 import { WeddingEditDialog } from '@/features/weddings/components/WeddingDialogs'
 import { WeddingForm } from '@/features/weddings/components/WeddingForm'
@@ -52,18 +51,14 @@ export default function PlanLayoutPage() {
     )
   }
 
-  // Vào /plan hoặc một tab không được xem: chuyển sang tab đầu tiên được xem (giữ query, ví dụ ?category=)
-  const access = accessOf(wedding.data.access)
-  const allowed = PLAN_TAB_LINKS.filter((t) => access.canSee(t.tab))
-  // Lời mời cũ chỉ cho xem Timeline (tab đã bỏ): không còn phần nào để hiện
-  if (!allowed.length) return <EmptyState title="Chưa có phần nào để xem" description="Chủ kế hoạch chưa chia sẻ phần nào của kế hoạch cho bạn." />
-  if (!allowed.some((t) => pathname === t.to)) return <Navigate to={{ pathname: allowed[0].to, search }} replace />
+  // Vào /plan: chuyển sang tab đầu tiên (giữ query, ví dụ ?category=)
+  if (!PLAN_TAB_LINKS.some((t) => pathname === t.to)) return <Navigate to={{ pathname: PLAN_TAB_LINKS[0].to, search }} replace />
 
-  const context: PlanOutletContext = { wedding: wedding.data, access, openEdit: () => setEditing(true) }
+  const context: PlanOutletContext = { wedding: wedding.data, openEdit: () => setEditing(true) }
   return (
     <>
-      <PlanHubHeader wedding={wedding.data} access={access} onEdit={context.openEdit} />
-      <PlanTabs access={access} />
+      <PlanHubHeader wedding={wedding.data} onEdit={context.openEdit} />
+      <PlanTabs />
       <Outlet context={context} />
       <WeddingEditDialog open={editing} onOpenChange={setEditing} />
     </>

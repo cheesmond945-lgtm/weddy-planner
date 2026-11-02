@@ -71,7 +71,7 @@ Nếu `npm run start:dev` tự thoát hoặc báo lỗi ngay khi khởi động 
 
 ### Biến môi trường mới
 
-- `SHARE_TOKEN_SECRET` (backend, không bắt buộc): khóa sinh mã link mời và link xem kế hoạch công khai. Để trống thì dùng `JWT_SECRET`. Đổi khóa thì mọi link cũ hết hiệu lực. Xem [docs/api/sharing.md](docs/api/sharing.md).
+- `SHARE_TOKEN_SECRET` (backend, không bắt buộc): khóa sinh mã link xem kế hoạch công khai. Để trống thì dùng `JWT_SECRET`. Đổi khóa thì mọi link cũ hết hiệu lực. Xem [docs/api/sharing.md](docs/api/sharing.md).
 
 ### SQL thủ công chưa chạy
 

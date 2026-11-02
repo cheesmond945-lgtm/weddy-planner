@@ -1,12 +1,14 @@
-import { CalendarDays, List, UserRound, UsersRound, Wallet } from 'lucide-react'
+import { CalendarDays, List, MapPin, UserRound, UsersRound, Wallet } from 'lucide-react'
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { FormError, FormField } from '@/components/FormField'
 import { MoneyInput } from '@/components/MoneyInput'
 import { MultiSelect } from '@/components/MultiSelect'
+import { SearchSelect, type SearchSelectGroup } from '@/components/SearchSelect'
 import { Button } from '@/components/ui/button'
 import { useCategories } from '@/features/catalog/hooks'
 import { addDays, toISODate, today } from '@/lib/date'
 import type { SpendingTier, Wedding, WeddingInput } from '@/types/wedding'
+import { HANOI_PHUONG, HANOI_XA } from '../wards'
 import { SpendingTierPicker } from './SpendingTierPicker'
 
 interface WeddingFormProps {
@@ -19,7 +21,7 @@ interface WeddingFormProps {
   secondaryAction?: ReactNode
 }
 
-type Errors = Partial<Record<'brideName' | 'groomName' | 'date' | 'guestCount' | 'budget' | 'services', string>>
+type Errors = Partial<Record<'brideName' | 'groomName' | 'date' | 'ward' | 'guestCount' | 'budget' | 'services', string>>
 
 /** Form thông tin đám cưới (4.1), như wedForm trong prototype. Dùng chung cho tạo mới và chỉnh sửa: cùng thứ tự trường, cùng validate. */
 export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, secondaryAction }: WeddingFormProps) {
@@ -29,6 +31,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
   const [groomName, setGroomName] = useState(initial?.groomName ?? '')
   const [brideName, setBrideName] = useState(initial?.brideName ?? '')
   const [date, setDate] = useState(initial?.date ?? '')
+  const [ward, setWard] = useState(initial?.ward ?? '')
   const [guestCount, setGuestCount] = useState(initial?.guestCount ? String(initial.guestCount) : '')
   const [budget, setBudget] = useState(initial?.budget ?? 0)
   const [spendingTier, setSpendingTier] = useState<SpendingTier>(initial?.spendingTier ?? 'AUTO')
@@ -45,12 +48,13 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
     if (!groomName.trim()) errs.groomName = 'Vui lòng nhập tên chú rể.'
     if (!date) errs.date = 'Vui lòng chọn ngày tổ chức.'
     else if (date <= toISODate(today())) errs.date = 'Ngày tổ chức phải sau hôm nay.'
+    if (!ward) errs.ward = 'Vui lòng chọn nơi tổ chức.'
     if (!guestCount || !(guests! >= 1)) errs.guestCount = 'Vui lòng nhập số khách dự kiến (từ 1).'
     if (!(budget > 0)) errs.budget = 'Vui lòng nhập tổng ngân sách lớn hơn 0.'
     if (!serviceValue.length) errs.services = 'Vui lòng chọn ít nhất 1 dịch vụ.'
     setErrors(errs)
     if (Object.keys(errs).length) return
-    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, guestCount: guests, budget, spendingTier, categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
+    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, ward, guestCount: guests, budget, spendingTier, categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
   }
 
   return (
@@ -116,6 +120,15 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
           className={FIELD}
         />
       </div>
+
+      <WardField
+        value={ward}
+        onChange={(v) => {
+          setWard(v)
+          setErrors((x) => ({ ...x, ward: undefined }))
+        }}
+        error={errors.ward}
+      />
 
       <BudgetField
         value={budget}
@@ -192,6 +205,40 @@ function BudgetField({ value, onChange, error }: { value: number; onChange: (v: 
         <MoneyInput id={id} placeholder="Ví dụ: 300.000.000" value={value} onChange={onChange} aria-invalid={error ? true : undefined} className={`${FIELD} pl-11`} />
       </div>
       {error && <p className="mt-1.5 text-[13px] text-destructive">{error}</p>}
+    </div>
+  )
+}
+
+/** Nơi tổ chức: một phường/xã của Hà Nội (NCC hiện chỉ có ở Hà Nội). Giá trị lưu có tiền tố "Phường …"/"Xã …". */
+const WARD_GROUPS: SearchSelectGroup[] = [
+  { label: 'Phường', options: HANOI_PHUONG.map((n) => ({ value: `Phường ${n}`, label: n })) },
+  { label: 'Xã', options: HANOI_XA.map((n) => ({ value: `Xã ${n}`, label: n })) },
+]
+
+function WardField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
+  const id = useId()
+  return (
+    <div>
+      <span id={`${id}-label`} className="mb-1.5 block text-[13px] font-medium">
+        <Required>Nơi tổ chức (Hà Nội)</Required>
+      </span>
+      <SearchSelect
+        aria-labelledby={`${id}-label`}
+        aria-describedby={error ? `${id}-err` : undefined}
+        icon={<MapPin />}
+        groups={WARD_GROUPS}
+        value={value}
+        onChange={onChange}
+        placeholder="Chọn phường/xã"
+        searchPlaceholder="Tìm phường/xã, vd: cau giay"
+        display={(v) => `${v}, Hà Nội`}
+        invalid={!!error}
+      />
+      {error && (
+        <p id={`${id}-err`} className="mt-1.5 text-[13px] text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

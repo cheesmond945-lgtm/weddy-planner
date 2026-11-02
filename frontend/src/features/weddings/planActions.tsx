@@ -13,7 +13,7 @@ import { CHAT_MODE, CHAT_PARAM, chatPanel } from '@/features/chat/chatPanel'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 import type { ServiceDetail, ServiceSummary } from '@/types/catalog'
-import { usePlan, useRefreshPlanning, useWeddingAccess } from './hooks'
+import { usePlan, useRefreshPlanning } from './hooks'
 
 // ---- Hộp hỏi thay dịch vụ (addPlan trong prototype) ----
 
@@ -201,14 +201,13 @@ export function ChatPanelResume() {
 
 /**
  * Nút "Chọn gói này cho kế hoạch" ở trang chi tiết nhà cung cấp. Đã có đơn với nhà cung cấp thì khóa (giá theo đơn).
- * Không hiện cho tài khoản không phải cặp đôi và người chỉ xem.
+ * Không hiện cho tài khoản không phải cặp đôi.
  */
 export function ChoosePackageButton({ service, packageId, packageName }: { service: ServiceSummary; packageId: string; packageName: string }) {
   const { user } = useAuth()
   const { choosePackage } = usePlanActions()
-  const access = useWeddingAccess()
   const item = usePlanItemOf(service.id)
-  if (user && (user.role !== 'COUPLE' || !access.canEdit)) return null
+  if (user && user.role !== 'COUPLE') return null
   const chosen = item?.package?.source === 'SELECTED' && item.package.id === packageId
   const locked = item?.package?.source === 'ORDER'
   return (

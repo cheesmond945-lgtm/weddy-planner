@@ -3,12 +3,10 @@ import { fullLink } from '@/api/sharing'
 import { FormError } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { PLAN_TABS, type PlanTab } from '@/types/wedding'
-import { PLAN_TAB_LABEL, VISIBLE_PLAN_TABS, withTaskAccess, type PlanAccess } from '../access'
-import { useMembers } from '../hooks'
-import { copyLink, useRemoveMember, useSharingMutations, useShareLink } from '../sharingHooks'
+import { PLAN_TAB_LABEL, VISIBLE_PLAN_TABS, withTaskAccess } from '../access'
+import { copyLink, useSharingMutations, useShareLink } from '../sharingHooks'
 
 /** Chọn subtab được xem: tắt được mọi tab, miễn còn ít nhất 1. Quyền 'timeline' (thẻ Công việc) đi kèm Tổng quan. */
 export function TabPicker({ value, onChange, disabled, label = 'Phần được xem' }: { value: PlanTab[]; onChange: (tabs: PlanTab[]) => void; disabled?: boolean; label?: string }) {
@@ -75,32 +73,16 @@ function PublicLinkSection() {
   )
 }
 
-/**
- * Hộp "Chia sẻ kế hoạch" (owner): một link xem công khai, ai có link cũng xem được, không cần đăng nhập.
- * Thành viên được mời từ trước (không phải owner) chỉ còn nút rời kế hoạch.
- */
-export function ShareDialog({ open, onOpenChange, access }: { open: boolean; onOpenChange: (o: boolean) => void; access: PlanAccess }) {
-  const { data: members = [] } = useMembers(open && !access.isOwner)
-  const remove = useRemoveMember()
-  const me = members.find((m) => m.isMe)
+/** Hộp "Chia sẻ kế hoạch": một link xem công khai, ai có link cũng xem được, không cần đăng nhập. */
+export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[640px]">
         <DialogHeader>
-          <DialogTitle>{access.isOwner ? 'Chia sẻ kế hoạch' : 'Kế hoạch được chia sẻ'}</DialogTitle>
-          <DialogDescription>{access.isOwner ? 'Ai có link đều xem được kế hoạch (chỉ xem, không chỉnh sửa, không cần đăng nhập).' : 'Bạn đang xem kế hoạch này với quyền được chủ kế hoạch chia sẻ.'}</DialogDescription>
+          <DialogTitle>Chia sẻ kế hoạch</DialogTitle>
+          <DialogDescription>Ai có link đều xem được kế hoạch (chỉ xem, không chỉnh sửa, không cần đăng nhập).</DialogDescription>
         </DialogHeader>
-        {access.isOwner ? (
-          <PublicLinkSection />
-        ) : (
-          me && (
-            <div>
-              <Button variant="outline" disabled={remove.isPending} onClick={() => remove.mutate(me.userId, { onSuccess: () => (onOpenChange(false), toast('Bạn đã rời kế hoạch')) })}>
-                Rời kế hoạch
-              </Button>
-            </div>
-          )
-        )}
+        {open && <PublicLinkSection />}
       </DialogContent>
     </Dialog>
   )

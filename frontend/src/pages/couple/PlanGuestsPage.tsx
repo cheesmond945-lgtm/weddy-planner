@@ -7,7 +7,6 @@ import { toast } from '@/components/ui/toast'
 import { weddingsApi } from '@/api/weddings'
 import { Donut } from '@/features/weddings/components/Donut'
 import { BulkGuestsDialog, GuestFormDialog, SIDE_LABEL } from '@/features/weddings/components/GuestDialogs'
-import { usePlanContext } from '@/features/weddings/components/PlanHub'
 import { StatCard, StatGrid } from '@/features/weddings/components/StatCard'
 import { useGuestMutations, useGuests } from '@/features/weddings/hooks'
 import { ImportDialog } from '@/features/weddings/import/ImportDialog'
@@ -30,7 +29,6 @@ const chip = (active: boolean) =>
 
 /** Subtab Khách mời (P5): thẻ số, phản hồi, nhà trai/nhà gái, danh sách có lọc. Lọc lưu trên URL ?loc=. */
 export default function PlanGuestsPage() {
-  const { access } = usePlanContext()
   const guests = useGuests()
   const { add, update, remove } = useGuestMutations()
   const [params, setParams] = useSearchParams()
@@ -38,7 +36,6 @@ export default function PlanGuestsPage() {
   const [editing, setEditing] = useState<Guest | 'new' | null>(null)
   const [bulk, setBulk] = useState(false)
   const [importing, setImporting] = useState(false)
-  const readOnly = !access.canEdit
 
   if (guests.isPending) return <div className="h-[420px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải khách mời" />
   if (guests.isError) {
@@ -148,8 +145,7 @@ export default function PlanGuestsPage() {
             <Download />
             Tải về
           </Button>
-          {!readOnly && (
-            <>
+          <>
               <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
                 <FileSpreadsheet />
                 Nhập từ Excel
@@ -163,7 +159,6 @@ export default function PlanGuestsPage() {
                 Thêm khách
               </Button>
             </>
-          )}
         </div>
 
         {visible.length ? (
@@ -177,7 +172,7 @@ export default function PlanGuestsPage() {
                   <th className="px-3 py-2.5 text-center font-medium">Số người</th>
                   <th className="px-3 py-2.5 text-center font-medium">Đã mời</th>
                   <th className="px-3 py-2.5 font-medium">Phản hồi</th>
-                  {!readOnly && <th className="px-[22px] py-2.5" aria-label="Thao tác" />}
+                  <th className="px-[22px] py-2.5" aria-label="Thao tác" />
                 </tr>
               </thead>
               <tbody>
@@ -192,7 +187,6 @@ export default function PlanGuestsPage() {
                         type="checkbox"
                         aria-label={`Đã mời ${g.fullName}`}
                         checked={g.isInvited}
-                        disabled={readOnly}
                         onChange={() => update.mutate({ id: g.id, patch: { isInvited: !g.isInvited } })}
                         className="size-[18px] cursor-pointer accent-sage"
                       />
@@ -201,7 +195,7 @@ export default function PlanGuestsPage() {
                       <select
                         aria-label={`Phản hồi của ${g.fullName}`}
                         value={g.rsvp}
-                        disabled={readOnly || !g.isInvited}
+                        disabled={!g.isInvited}
                         title={!g.isInvited ? 'Đánh dấu đã mời trước khi chọn phản hồi' : undefined}
                         onChange={(e) => update.mutate({ id: g.id, patch: { rsvp: e.target.value as GuestRsvp } })}
                         className={cn(
@@ -217,8 +211,7 @@ export default function PlanGuestsPage() {
                         ))}
                       </select>
                     </td>
-                    {!readOnly && (
-                      <td className="px-[22px] py-2 text-right whitespace-nowrap">
+                    <td className="px-[22px] py-2 text-right whitespace-nowrap">
                         <Button variant="ghost" size="icon" className="size-8" aria-label={`Sửa ${g.fullName}`} onClick={() => setEditing(g)}>
                           <Pencil className="size-3.5" />
                         </Button>
@@ -226,7 +219,6 @@ export default function PlanGuestsPage() {
                           <Trash2 className="size-3.5" />
                         </Button>
                       </td>
-                    )}
                   </tr>
                 ))}
               </tbody>
@@ -234,7 +226,7 @@ export default function PlanGuestsPage() {
           </div>
         ) : (
           <p className="border-t border-line px-[22px] py-6 text-center text-sm text-muted-foreground">
-            {items.length ? 'Không có khách nào khớp bộ lọc.' : readOnly ? 'Chưa có khách nào.' : 'Chưa có khách nào. Thêm từng khách, dán nhiều tên một lúc hoặc nhập từ Excel.'}
+            {items.length ? 'Không có khách nào khớp bộ lọc.' : 'Chưa có khách nào. Thêm từng khách, dán nhiều tên một lúc hoặc nhập từ Excel.'}
           </p>
         )}
       </section>

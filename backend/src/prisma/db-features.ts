@@ -8,24 +8,27 @@ import { Pool } from 'pg';
  * Mặc định là "đã chạy" (test và môi trường đã chạy đủ SQL không cần kiểm tra).
  */
 export const dbFeatures = {
-  /** backend/prisma/sql/2026-10-29-02-timeline-assign.sql */
-  timelineAssign: true,
+  /** backend/prisma/sql/2026-10-29-02-timeline-notes.sql */
+  timelineNotes: true,
   /** backend/prisma/sql/2026-10-29-04-guests.sql */
   guests: true,
   /** backend/prisma/manual/2026-10-30-01-budget-tiers.sql */
   budgetTiers: true,
-  /** backend/prisma/manual/2026-10-30-02-invites-share.sql */
+  /** backend/prisma/manual/2026-10-30-02-share-links.sql */
   sharing: true,
   /** backend/prisma/manual/2026-10-30-03-package-availability.sql */
   availability: true,
+  /** backend/prisma/manual/2026-11-01-01-wedding-ward.sql */
+  weddingWard: true,
 };
 
 const SQL_FILE: Record<keyof typeof dbFeatures, string> = {
-  timelineAssign: 'backend/prisma/sql/2026-10-29-02-timeline-assign.sql',
+  timelineNotes: 'backend/prisma/sql/2026-10-29-02-timeline-notes.sql',
   guests: 'backend/prisma/sql/2026-10-29-04-guests.sql',
   budgetTiers: 'backend/prisma/manual/2026-10-30-01-budget-tiers.sql',
-  sharing: 'backend/prisma/manual/2026-10-30-02-invites-share.sql',
+  sharing: 'backend/prisma/manual/2026-10-30-02-share-links.sql',
   availability: 'backend/prisma/manual/2026-10-30-03-package-availability.sql',
+  weddingWard: 'backend/prisma/manual/2026-11-01-01-wedding-ward.sql',
 };
 
 /** Kiểm tra cột và bảng của từng file SQL. Lỗi kết nối thì giữ mặc định (để lỗi thật hiện ra như trước). */
@@ -36,14 +39,14 @@ export async function detectDbFeatures(connectionString: string | undefined) {
     const { rows } = await pool.query<{ t: string; c: string | null }>(
       `SELECT table_name AS t, column_name AS c FROM information_schema.columns
        WHERE table_schema = 'public' AND (
-         (table_name = 'timeline_tasks' AND column_name IN ('assignee', 'assignee_user_id', 'note', 'note_by', 'note_date', 'completed_by'))
-         OR table_name IN ('wedding_guests', 'wedding_category_budgets', 'wedding_extra_costs', 'wedding_invites', 'wedding_share_links', 'package_availability', 'package_resources')
-         OR (table_name = 'weddings' AND column_name IN ('spending_tier', 'table_count_override'))
+         (table_name = 'timeline_tasks' AND column_name = 'note')
+         OR table_name IN ('wedding_guests', 'wedding_category_budgets', 'wedding_extra_costs', 'wedding_share_links', 'package_availability', 'package_resources')
+         OR (table_name = 'weddings' AND column_name IN ('spending_tier', 'table_count_override', 'ward'))
          OR (table_name = 'service_packages' AND column_name = 'unit')
          OR (table_name = 'plan_vendors' AND column_name = 'package_id'))`,
     );
     const has = (t: string, c?: string) => rows.some((r) => r.t === t && (!c || r.c === c));
-    dbFeatures.timelineAssign = ['assignee', 'assignee_user_id', 'note', 'note_by', 'note_date', 'completed_by'].every((c) => has('timeline_tasks', c));
+    dbFeatures.timelineNotes = has('timeline_tasks', 'note');
     dbFeatures.guests = has('wedding_guests');
     dbFeatures.budgetTiers =
       has('weddings', 'spending_tier') &&
@@ -52,8 +55,9 @@ export async function detectDbFeatures(connectionString: string | undefined) {
       has('plan_vendors', 'package_id') &&
       has('wedding_category_budgets') &&
       has('wedding_extra_costs');
-    dbFeatures.sharing = has('wedding_invites') && has('wedding_share_links');
+    dbFeatures.sharing = has('wedding_share_links');
     dbFeatures.availability = has('package_availability') && has('package_resources');
+    dbFeatures.weddingWard = has('weddings', 'ward');
   } catch {
     // Không kiểm tra được thì coi như đã chạy đủ
   } finally {
@@ -68,11 +72,12 @@ export const pendingSqlFiles = () => (Object.keys(dbFeatures) as (keyof typeof d
 /** Cột mới cần bỏ khỏi câu truy vấn mặc định khi file SQL tương ứng chưa chạy (Prisma global omit). */
 export function omitMissingColumns() {
   const omit: Record<string, Record<string, true>> = {};
-  if (!dbFeatures.timelineAssign) {
-    omit.timeline_tasks = { assignee: true, assignee_user_id: true, note: true, note_by: true, note_date: true, completed_by: true };
+  if (!dbFeatures.timelineNotes) {
+    omit.timeline_tasks = { note: true };
   }
+  if (!dbFeatures.weddingWard) omit.weddings = { ward: true };
   if (!dbFeatures.budgetTiers) {
-    omit.weddings = { spending_tier: true, table_count_override: true };
+    omit.weddings = { ...omit.weddings, spending_tier: true, table_count_override: true };
     omit.service_packages = { unit: true };
     omit.plan_vendors = { package_id: true };
   }

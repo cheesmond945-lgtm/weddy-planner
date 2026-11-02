@@ -6,7 +6,6 @@ import { VendorLayout } from '@/layouts/VendorLayout'
 import ForbiddenPage from '@/pages/ForbiddenPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import PublicPlanPage from '@/pages/PublicPlanPage'
-import InvitePage from '@/pages/couple/InvitePage'
 import TimelinePage from '@/pages/couple/TimelinePage'
 import DepositTermsPreviewPage from '@/pages/preview/DepositTermsPreviewPage'
 import TermsPreviewPage from '@/pages/preview/TermsPreviewPage'
@@ -61,8 +60,6 @@ export const router = createBrowserRouter([
       // Ai cũng xem được (như prototype)
       { path: paths.services, element: <ServicesPage /> },
       { path: '/services/:serviceId', element: <ServiceDetailPage /> },
-      // Nhận lời mời cùng lập kế hoạch: chưa đăng nhập vẫn xem được lời mời
-      { path: '/moi/:token', element: <InvitePage /> },
       // Cần đăng nhập với role cặp đôi
       {
         element: <RequireRole roles={['COUPLE']} />,

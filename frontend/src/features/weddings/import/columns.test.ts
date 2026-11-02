@@ -14,12 +14,12 @@ describe('autoMap', () => {
   it('mỗi cột chỉ dùng cho một trường, khớp đúng được ưu tiên hơn khớp đầu chữ', () => {
     // "Chi phí" là từ đồng nghĩa của cả Khoản chi và Số tiền: cột "Số tiền" khớp đúng nên Số tiền lấy cột đó
     assert.deepEqual(autoMap(['Chi phí', 'Số tiền'], 'expenses'), { title: 0, amount: 1 })
-    assert.deepEqual(autoMap(['Hạn hoàn thành (dd/mm/yyyy)', 'Việc'], 'tasks'), { title: 1, dueDate: 0, assignee: null, note: null })
+    assert.deepEqual(autoMap(['Hạn hoàn thành (dd/mm/yyyy)', 'Việc'], 'tasks'), { title: 1, dueDate: 0, note: null })
   })
 
   it('file mẫu và file tải về tự ghép đủ cột', () => {
     assert.deepEqual(autoMap(['Tên khách', 'Bên', 'Nhóm', 'Số người', 'Đã mời', 'Phản hồi'], 'guests'), { name: 0, side: 1, group: 2, partySize: 3, invited: 4, rsvp: 5 })
-    assert.deepEqual(autoMap(['Việc', 'Hạn', 'Phụ trách', 'Ghi chú', 'Hạng mục'], 'tasks'), { title: 0, dueDate: 1, assignee: 2, note: 3 })
+    assert.deepEqual(autoMap(['Việc', 'Hạn', 'Ghi chú', 'Hạng mục'], 'tasks'), { title: 0, dueDate: 1, note: 2 })
   })
 })
 

@@ -13,7 +13,7 @@ import type { Order } from '@/types/order'
  * cho hạng mục đó. Đơn mới, đơn đổi trạng thái hiện ngay nhờ realtime.
  */
 export default function PlanServicesPage() {
-  const { access, wedding } = usePlanContext()
+  const { wedding } = usePlanContext()
   const plan = usePlan()
   const orders = useMyOrders()
   const [revising, setRevising] = useState<Order | null>(null)
@@ -33,7 +33,7 @@ export default function PlanServicesPage() {
           }
         />
       ) : (
-        <PlanSlots categorySlugs={plan.data.categorySlugs} items={plan.data.items} hasWedding orders={orders.data ?? []} onRevise={setRevising} readOnly={!access.canChat} guestCount={wedding.guestCount ?? 0} />
+        <PlanSlots categorySlugs={plan.data.categorySlugs} items={plan.data.items} hasWedding orders={orders.data ?? []} onRevise={setRevising} guestCount={wedding.guestCount ?? 0} />
       )}
       <ReviseOrderDialog order={revising} onClose={() => setRevising(null)} />
     </>

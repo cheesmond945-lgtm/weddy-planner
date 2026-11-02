@@ -13,6 +13,8 @@ export interface Wedding {
   date: string
   /** Khu vực; NCC chỉ có ở Hà Nội nên form không hỏi, BE gán mặc định "Hà Nội" */
   location: string
+  /** Nơi tổ chức: một phường/xã của Hà Nội, có tiền tố ("Phường Cầu Giấy", HANOI_WARDS); null là chưa chọn (đám cưới tạo trước khi có trường này) */
+  ward: string | null
   /** Sức chứa dự kiến (khách) */
   guestCount: number | null
   /** Tổng ngân sách, đồng */
@@ -25,11 +27,9 @@ export interface Wedding {
   version?: string
   /** Danh mục dịch vụ muốn sử dụng (slug) */
   categorySlugs: string[]
-  /** Quyền của người đang xem trên đám cưới này (chế độ dữ liệu giả: không có, coi như owner) */
-  access?: WeddingAccess | null
 }
 
-export type WeddingInput = Omit<Wedding, 'id' | 'location' | 'access' | 'tableCountOverride' | 'version'> & { version?: string }
+export type WeddingInput = Omit<Wedding, 'id' | 'location' | 'tableCountOverride' | 'version'> & { version?: string }
 
 export interface WeddingPatch {
   budget?: number
@@ -40,32 +40,11 @@ export interface WeddingPatch {
   version: string
 }
 
-// ---- Thành viên và quyền (GĐ 2) ----
+// ---- Chia sẻ ----
 
-/** Subtab của Kế hoạch */
+/** Subtab của Kế hoạch (link xem công khai chọn phần nào được xem) */
 export type PlanTab = 'overview' | 'timeline' | 'services' | 'budget' | 'guests'
 export const PLAN_TABS: PlanTab[] = ['overview', 'timeline', 'services', 'budget', 'guests']
-
-export type MemberRole = 'OWNER' | 'EDITOR' | 'VIEWER'
-
-export interface WeddingAccess {
-  role: MemberRole
-  /** Subtab được xem, ít nhất 1 */
-  tabs: PlanTab[]
-}
-
-export interface WeddingMember {
-  userId: string
-  fullName: string
-  email: string
-  /** Tên owner đặt khi mời, ví dụ "Mẹ cô dâu" */
-  displayName: string | null
-  role: MemberRole
-  relation: 'BRIDE' | 'GROOM' | 'RELATIVE' | null
-  tabs: PlanTab[]
-  joinedDate: string
-  isMe: boolean
-}
 
 // ---- Timeline (4.2, 4.4) ----
 
@@ -130,27 +109,8 @@ export interface TimelineItem {
   suggest: boolean
   /** Nhãn nút theo dịch vụ ("Gợi ý studio chụp ảnh & quay phim"); null khi không có nút */
   suggestLabel: string | null
-  /** Người phụ trách; null là chưa giao */
-  assignee: TaskAssignee | null
-  /** Ghi chú (tối đa 200 ký tự), kèm người viết */
-  note: { text: string; by: PersonRef | null; date: string | null } | null
-  /** Người đánh dấu xong ("Xong bởi ...") */
-  completedBy: PersonRef | null
-}
-
-export interface PersonRef {
-  userId: string
-  name: string
-}
-
-/** BRIDE, GROOM, BOTH; MEMBER là một người thân (userId) */
-export type AssigneeKind = 'BRIDE' | 'GROOM' | 'BOTH' | 'MEMBER'
-
-export interface TaskAssignee {
-  kind: AssigneeKind
-  userId: string | null
-  /** Tên thành viên khi kind = MEMBER */
-  name: string | null
+  /** Ghi chú (tối đa 200 ký tự), không ghi người viết */
+  note: string | null
 }
 
 /** Mức độ gấp theo số ngày còn lại tới ngày cưới */
@@ -176,9 +136,6 @@ export interface TimelineItemPatch {
   title?: string
   dueDate?: string
   isDone?: boolean
-  /** null: bỏ giao */
-  assignee?: AssigneeKind | null
-  assigneeUserId?: string | null
   /** Chuỗi rỗng hoặc null: xóa ghi chú */
   note?: string | null
 }
@@ -186,8 +143,6 @@ export interface TimelineItemPatch {
 export interface NewTask {
   title: string
   dueDate: string
-  assignee?: AssigneeKind | null
-  assigneeUserId?: string | null
   note?: string
 }
 
@@ -199,10 +154,9 @@ export interface Overview {
     done: number
     total: number
     overdue: number
-    upcoming: { id: string; title: string; dueDate: string; daysLeft: number; category: CategoryRef | null; assignee: TaskAssignee | null }[]
+    upcoming: { id: string; title: string; dueDate: string; daysLeft: number; category: CategoryRef | null }[]
     /** slug null là "Việc chung" */
     byCategory: { slug: string | null; name: string; done: number; total: number }[]
-    assignees: { kind: AssigneeKind; userId: string | null; name: string | null; done: number; total: number }[]
   } | null
   /** null khi không được xem tab Ngân sách */
   budget: {

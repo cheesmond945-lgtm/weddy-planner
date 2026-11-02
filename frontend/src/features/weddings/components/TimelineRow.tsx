@@ -1,23 +1,12 @@
 import { Ban, CalendarDays, Check, Clock, Lock, MessageSquareText, Pencil, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
-import { createContext, useContext, type KeyboardEvent } from 'react'
+import type { KeyboardEvent } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { daysBetween, formatShortDate, parseDate, today } from '@/lib/date'
+import { daysBetween, parseDate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
-import type { TimelineItem, TimelineItemPatch, WeddingMember } from '@/types/wedding'
+import type { TimelineItem } from '@/types/wedding'
 import { DUE_SOON_DAYS } from '../timelineFilter'
-import { AssignMenu } from './TaskControls'
-
-/**
- * Phần nhiều người cùng lập kế hoạch: quyền chỉ xem, người phụ trách, ghi chú. TimelineView cấp một lần,
- * mọi thẻ (kể cả trong nhóm và lịch) đọc chung. Không có Provider: coi như owner, không hiện giao việc.
- */
-export const TimelineMembersContext = createContext<{
-  readOnly: boolean
-  relatives: WeddingMember[]
-  onPatch: (item: TimelineItem, patch: TimelineItemPatch, message: string) => void
-} | null>(null)
 
 /** Tên hạng mục dùng trong chữ ("Gợi ý nhà hàng", "Việc chi tiết của nhà hàng"); danh mục lạ thì dùng tên từ API. */
 export const SERVICE_LABEL: Record<string, string> = {
@@ -82,9 +71,7 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
   const waiting = vendorOwned && item.status === 'Waiting' && !done
   // Việc làm cùng NCC mà ngày mới là dự kiến: NCC sẽ hẹn lịch với khách
   const togetherUnconfirmed = vendorOwned && !done && !waiting && item.owner === 'BOTH' && item.dateStatus !== 'CONFIRMED'
-  const members = useContext(TimelineMembersContext)
-  const readOnly = members?.readOnly ?? false
-  const canComplete = !done && !autoDone && !vendorOwned && !readOnly
+  const canComplete = !done && !autoDone && !vendorOwned
   // Việc chi tiết của đơn đã xong: vẫn hiện đúng chỗ theo ngày, nhưng cả thẻ sang tông xám (không gạch ngang)
   const grayDone = done && vendorOwned
   const doneDay = grayDone && item.completedDate ? dm(new Date(new Date(item.completedDate).getTime() + 7 * 3600_000).toISOString().slice(0, 10)) : null
@@ -170,22 +157,8 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
         {item.note && (
           <p className="mt-1.5 flex gap-1.5 text-[13px]">
             <MessageSquareText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            <span>
-              {item.note.text}
-              <span className="text-muted-foreground"> ({[item.note.by?.name, item.note.date && formatShortDate(item.note.date.slice(0, 10))].filter(Boolean).join(', ')})</span>
-            </span>
+            <span>{item.note}</span>
           </p>
-        )}
-        {members && !vendorOwned && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 empty:hidden" onClick={(e) => e.stopPropagation()}>
-            <AssignMenu
-              assignee={item.assignee}
-              relatives={members.relatives}
-              readOnly={readOnly}
-              onPick={(v) => members.onPatch(item, v, v.assignee ? 'Đã giao việc' : 'Đã bỏ giao việc')}
-            />
-            {done && item.completedBy && !autoDone && <span className="text-xs text-muted-foreground">Xong bởi {item.completedBy.name}</span>}
-          </div>
         )}
       </div>
 
@@ -204,7 +177,7 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
             </Link>
           </Button>
         )}
-        {!done && item.isCustom && !readOnly && (
+        {!done && item.isCustom && (
           <span className="flex gap-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
             <Button variant="outline" size="icon" className="size-8" aria-label={`Sửa ${item.title}`} onClick={() => onEdit(item)}>
               <Pencil className="size-3.5" />
@@ -214,7 +187,7 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
             </Button>
           </span>
         )}
-        {done && !autoDone && !vendorOwned && !readOnly && (
+        {done && !autoDone && !vendorOwned && (
           <Button variant="outline" size="icon" className="size-8" aria-label={`Đưa về Chưa xong: ${item.title}`} title="Đưa về Chưa xong" onClick={() => onReopen(item)}>
             <RotateCcw className="size-3.5" />
           </Button>

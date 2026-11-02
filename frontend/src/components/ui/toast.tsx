@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react'
 /*
  * Thông báo ngắn ở góc phải dưới màn hình, theo .toast trong prototype.
  * Gọi toast('Đã lưu') ở bất cứ đâu; <Toaster /> đặt một lần trong App.
- * Có nút kèm theo (ví dụ "Hoàn tác"): toast('Đã giao việc', { action: { label: 'Hoàn tác', onClick } }).
+ * Có nút kèm theo (ví dụ "Hoàn tác"): toast('Đã xóa việc', { action: { label: 'Hoàn tác', onClick } }).
  */
 interface ToastAction {
   label: string

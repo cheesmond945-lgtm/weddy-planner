@@ -10,7 +10,6 @@ import {
   normalizeTasks,
   toCsv,
   type DateOrder,
-  type MemberRef,
   type RowResult,
 } from './import-rows';
 import { todayVNDate, toYmd } from './timeline-hooks';
@@ -35,14 +34,13 @@ export interface ImportBody {
   dateOrder?: unknown;
 }
 
-const ASSIGNEE_LABEL: Record<string, string> = { BRIDE: 'Cô dâu', GROOM: 'Chú rể', BOTH: 'Cả hai' };
 const PLAN_STATUS_LABEL: Record<string, string> = { PLANNED: 'Dự kiến', DISCUSSING: 'Đang trao đổi', AWAITING_DEPOSIT: 'Chờ thanh toán cọc', CONFIRMED: 'Đã chốt' };
 const SIDE_LABEL = { BRIDE: 'Nhà gái', GROOM: 'Nhà trai' } as const;
 const RSVP_LABEL = { PENDING: 'Chưa phản hồi', ATTENDING: 'Sẽ đến', DECLINED: 'Từ chối' } as const;
 
 /** Tiêu đề cột của file mẫu và file tải về (frontend ghép cột tự động theo các tên này và từ đồng nghĩa). */
 export const GUEST_HEADER = ['Tên khách', 'Bên', 'Nhóm', 'Số người', 'Đã mời', 'Phản hồi'];
-export const TASK_HEADER = ['Việc', 'Hạn', 'Phụ trách', 'Ghi chú'];
+export const TASK_HEADER = ['Việc', 'Hạn', 'Ghi chú'];
 export const EXPENSE_HEADER = ['Khoản chi', 'Số tiền'];
 
 export interface ExtraCostImportBody extends ImportBody {
@@ -101,24 +99,18 @@ export class ImportExportService {
     return this.report(results, data.length);
   }
 
-  private async memberRefs(weddingId: string): Promise<MemberRef[]> {
-    const rows = await this.prisma.wedding_members.findMany({ where: { wedding_id: weddingId, role: { not: 'Owner' } }, include: { users: { select: { full_name: true } } } });
-    return rows.map((m) => ({ userId: m.user_id, name: m.display_name || m.users.full_name || '', relation: m.relation as MemberRef['relation'] }));
-  }
-
   /** Công việc chỉ thêm vào (không thay toàn bộ, vì việc mẫu gắn với hạng mục và đơn). */
   async importTasks(userId: string, body: ImportBody) {
-    requireDbFeature('timelineAssign');
+    requireDbFeature('timelineNotes');
     const w = await this.weddings.requireWedding(userId);
     const { rows, dryRun } = this.parse(body, false);
     const dateOrder: DateOrder = body.dateOrder === 'MDY' ? 'MDY' : 'DMY';
     if (dateOrder === 'MDY' && !canBeMonthFirst(rows.map((r) => r.dueDate))) {
       return fail('VALIDATION_ERROR', 'Cột hạn không thể đọc theo kiểu tháng/ngày/năm.', 400);
     }
-    const results = normalizeTasks(rows, { dateOrder, today: toYmd(todayVNDate()), weddingDate: toYmd(w.wedding_date), members: await this.memberRefs(w.id) });
+    const results = normalizeTasks(rows, { dateOrder, today: toYmd(todayVNDate()), weddingDate: toYmd(w.wedding_date) });
     const values = results.flatMap((r) => (r.value ? [r.value] : []));
     if (dryRun || !values.length) return this.report(results, 0);
-    const now = new Date();
     await this.prisma.timeline_tasks.createMany({
       data: values.map((v) => ({
         wedding_id: w.id,
@@ -127,9 +119,7 @@ export class ImportExportService {
         status: 'Todo',
         task_type: 'Frame',
         display_order: 0,
-        assignee: v.assignee?.kind ?? null,
-        assignee_user_id: v.assignee?.userId ?? null,
-        ...(v.note && { note: v.note, note_by: userId, note_date: now }),
+        ...(v.note && { note: v.note }),
       })),
     });
     return this.report(results, values.length);
@@ -165,12 +155,11 @@ export class ImportExportService {
 
   async tasksCsv(userId: string) {
     const { items } = await this.timeline.get(userId);
-    const label = (a: (typeof items)[number]['assignee']) => (!a ? '' : a.kind === 'MEMBER' ? (a.name ?? '') : ASSIGNEE_LABEL[a.kind]);
     return toCsv(
-      [...TASK_HEADER, 'Hạng mục', 'Trạng thái', 'Xong bởi'],
+      [...TASK_HEADER, 'Hạng mục', 'Trạng thái'],
       items
         .filter((t) => t.kind !== 'LOCKED')
-        .map((t) => [t.title, t.dueDate ?? '', label(t.assignee), t.note?.text ?? '', t.category?.name ?? 'Việc chung', t.isDone ? 'Đã xong' : 'Chưa xong', t.completedBy?.name ?? '']),
+        .map((t) => [t.title, t.dueDate ?? '', t.note ?? '', t.category?.name ?? 'Việc chung', t.isDone ? 'Đã xong' : 'Chưa xong']),
     );
   }
 
@@ -203,7 +192,7 @@ export class ImportExportService {
   /** File mẫu để nhập (tiêu đề + 2 dòng ví dụ). */
   template(type: 'guests' | 'tasks' | 'expenses') {
     if (type === 'guests') return toCsv(GUEST_HEADER, [['Nguyễn Văn An', 'Nhà trai', 'Bạn bè', 2, 'Có', 'Sẽ đến'], ['Trần Thị Bình', 'Nhà gái', 'Gia đình', 1, 'Không', '']]);
-    if (type === 'tasks') return toCsv(TASK_HEADER, [['Đặt thiệp cưới', '15/01/2027', 'CD', 'Chọn mẫu thiệp màu kem'], ['Thuê xe hoa', '20/02/2027', 'Cả hai', '']]);
+    if (type === 'tasks') return toCsv(TASK_HEADER, [['Đặt thiệp cưới', '15/01/2027', 'Chọn mẫu thiệp màu kem'], ['Thuê xe hoa', '20/02/2027', '']]);
     return toCsv(EXPENSE_HEADER, [['Thiệp cưới', '3tr'], ['Xe đưa đón', '5.000.000']]);
   }
 }

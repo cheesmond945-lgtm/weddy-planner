@@ -3,15 +3,13 @@ import { weddingsApi } from '@/api/weddings'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/store/auth'
 import { ApiError } from '@/api/client'
-import type { Budget, GuestList, NewTask, PlanTab, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
-import { accessOf } from './access'
+import type { Budget, GuestList, NewTask, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
 
 /** Khóa cache theo người dùng để đổi tài khoản không lẫn dữ liệu. */
 export const planningKeys = {
   wedding: (uid?: string) => ['wedding', uid] as const,
   timeline: (uid?: string) => ['timeline', uid] as const,
   plan: (uid?: string) => ['plan', uid] as const,
-  members: (uid?: string) => ['members', uid] as const,
   overview: (uid?: string) => ['overview', uid] as const,
   budget: (uid?: string) => ['budget', uid] as const,
   guests: (uid?: string) => ['guests', uid] as const,
@@ -36,28 +34,6 @@ function useCoupleId() {
 export function useWedding() {
   const uid = useCoupleId()
   return useQuery({ queryKey: planningKeys.wedding(uid), queryFn: weddingsApi.getMine, enabled: !!uid })
-}
-
-/** Quyền của người đang xem trên đám cưới (vai trò, subtab được xem). */
-export function useWeddingAccess() {
-  return accessOf(useWedding().data?.access)
-}
-
-/** Người cùng lập kế hoạch. */
-export function useMembers(enabled = true) {
-  const uid = useCoupleId()
-  return useQuery({ queryKey: planningKeys.members(uid), queryFn: weddingsApi.listMembers, enabled: !!uid && enabled })
-}
-
-/** Owner đổi quyền hoặc tab được xem của thành viên. */
-export function useUpdateMember() {
-  const uid = useCoupleId()
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ userId, ...body }: { userId: string; role?: 'EDITOR' | 'VIEWER'; tabs?: PlanTab[] }) => weddingsApi.updateMember(userId, body),
-    onSuccess: (members) => qc.setQueryData(planningKeys.members(uid), members),
-    onError: (e) => toast(e.message),
-  })
 }
 
 export function useSaveWedding() {
@@ -113,8 +89,7 @@ export function useTimelineMutations() {
 /** Dịch vụ trong kế hoạch. Chỉ gọi khi được xem tab Dịch vụ (header, thanh subtab gọi ở mọi trang). */
 export function usePlan() {
   const uid = useCoupleId()
-  const { canSee } = useWeddingAccess()
-  return useQuery({ queryKey: planningKeys.plan(uid), queryFn: weddingsApi.getPlan, enabled: !!uid && canSee('services') })
+  return useQuery({ queryKey: planningKeys.plan(uid), queryFn: weddingsApi.getPlan, enabled: !!uid })
 }
 
 export function useRemovePlanItem() {

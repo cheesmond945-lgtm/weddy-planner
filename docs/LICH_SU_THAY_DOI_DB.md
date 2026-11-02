@@ -5,21 +5,20 @@ Quy trình như cũ: viết file trong `backend/prisma/sql/` (từ 30/10/2026: `
 
 ---
 
-## ⏳ CHƯA CHẠY: phân công việc, khách mời, mức chi tiêu và ngân sách theo giá gói
+## ⏳ CHƯA CHẠY: ghi chú việc, khách mời, mức chi tiêu và ngân sách theo giá gói, nơi tổ chức
 
-Code trên nhánh `Chie` đã dùng các cột và bảng này. Trước khi chạy, backend sẽ lỗi ở Tổng quan, Ngân sách, Khách mời, Dịch vụ (giá theo gói), gợi ý AI, So sánh và khi sửa việc trên Timeline. Chạy **đúng thứ tự** dưới đây. Mọi file chỉ thêm cột (cho phép rỗng hoặc có mặc định) và bảng mới, chạy lại nhiều lần vẫn an toàn.
+Code trên nhánh `Chie` đã dùng các cột và bảng này. Chưa chạy thì backend vẫn khởi động (in cảnh báo `[DB] Chưa chạy SQL: …`), các trang vẫn xem được, chỉ thao tác cần cột/bảng mới trả 503 `DB_MIGRATION_PENDING`: ghi chú việc, Khách mời, các thao tác ghi ở Ngân sách (sửa tay, cân đối, đặt lại, chi phí khác, đổi gói, mức chi tiêu), link xem kế hoạch, lịch khả dụng, nơi tổ chức. Chạy **đúng thứ tự** dưới đây. Mọi file chỉ thêm cột (cho phép rỗng hoặc có mặc định) và bảng mới, chạy lại nhiều lần vẫn an toàn.
 
 | Thứ tự | File | Nội dung | Gỡ (nếu cần) |
 |---|---|---|---|
-| 1 | [`prisma/sql/2026-10-29-02-timeline-assign.sql`](../backend/prisma/sql/2026-10-29-02-timeline-assign.sql) | `timeline_tasks`: thêm `assignee`, `assignee_user_id`, `note`, `note_by`, `note_date`, `completed_by` | `ALTER TABLE public.timeline_tasks DROP COLUMN assignee, DROP COLUMN assignee_user_id, DROP COLUMN note, DROP COLUMN note_by, DROP COLUMN note_date, DROP COLUMN completed_by;` |
+| 1 | [`prisma/sql/2026-10-29-02-timeline-notes.sql`](../backend/prisma/sql/2026-10-29-02-timeline-notes.sql) | `timeline_tasks.note` (ghi chú của việc, không ghi người viết) | `ALTER TABLE public.timeline_tasks DROP COLUMN note;` |
 | 2 | [`prisma/sql/2026-10-29-04-guests.sql`](../backend/prisma/sql/2026-10-29-04-guests.sql) | Bảng mới `wedding_guests` | `DROP TABLE public.wedding_guests;` |
 | 3 | [`prisma/manual/2026-10-30-01-budget-tiers.sql`](../backend/prisma/manual/2026-10-30-01-budget-tiers.sql) | `weddings.spending_tier`, `weddings.table_count_override`; `service_packages.unit` (kèm câu chuyển 29 gói nhà hàng ghi "/mâm" sang `mâm`); `plan_vendors.package_id`; bảng mới `wedding_category_budgets`, `wedding_extra_costs` | Câu ROLLBACK ở cuối file |
-| 4 | [`prisma/manual/2026-10-30-02-invites-share.sql`](../backend/prisma/manual/2026-10-30-02-invites-share.sql) | Bảng mới `wedding_invites` (link mời), `wedding_share_links` (link xem công khai) | Câu ROLLBACK ở cuối file |
+| 4 | [`prisma/manual/2026-10-30-02-share-links.sql`](../backend/prisma/manual/2026-10-30-02-share-links.sql) | Bảng mới `wedding_share_links` (link xem kế hoạch công khai, không cần đăng nhập) | Câu ROLLBACK ở cuối file |
 | 5 | [`prisma/manual/2026-10-30-03-package-availability.sql`](../backend/prisma/manual/2026-10-30-03-package-availability.sql) | Bảng mới `package_availability` (trạng thái gói theo ngày), `package_resources` (sảnh dùng chung) cho lịch khả dụng Trung tâm tiệc cưới ([availability.md](api/availability.md)). Chưa chạy thì chỉ phần lịch trả 503, trang khác không ảnh hưởng | Câu ROLLBACK ở cuối file |
+| 6 | [`prisma/manual/2026-11-01-01-wedding-ward.sql`](../backend/prisma/manual/2026-11-01-01-wedding-ward.sql) | `weddings.ward` (phường/xã nơi tổ chức, CHECK 126 phường/xã của Hà Nội). Chưa chạy thì form vẫn lưu được, chỉ bỏ qua nơi tổ chức | Câu ROLLBACK ở cuối file |
 
-File `prisma/sql/2026-10-29-03-budget.sql` (cột `wedding_categories.budget_amount`, bảng `wedding_expenses`) **đã bỏ, không chạy**: được thay bằng file số 3 theo đặc tả ngân sách mới. File SQL mới đặt ở `backend/prisma/manual/` theo yêu cầu ngày 30/10.
-
-Cách chạy (trong `backend/`): `npx prisma db execute --file <đường dẫn file>`, hoặc dán từng file vào SQL Editor của Supabase. `schema.prisma` đã được sửa tay cho khớp, **không** cần `db:pull` (xem cảnh báo DB lệch ở mục dưới). Chạy xong thì sửa mục này thành ngày chạy, người chạy và kết quả.
+Cách chạy (trong `backend/`): `npx prisma db execute --file <đường dẫn file>`, hoặc dán từng file vào SQL Editor của Supabase. `schema.prisma` đã được sửa tay cho khớp, **không** cần `db:pull`. Chạy xong thì sửa mục này thành ngày chạy, người chạy và kết quả.
 
 ---
 
@@ -34,46 +33,8 @@ Cách chạy (trong `backend/`): `npx prisma db execute --file <đường dẫn 
 | Ảnh hưởng tới code đang chạy | Không có. Chỉ thêm bảng mới, không sửa hay xóa bảng cũ |
 | Gỡ (nếu cần) | `DROP TABLE public.wedding_members;` |
 
-**Bảng mới `wedding_members`** lưu người cùng lập kế hoạch một đám cưới:
-- `role`: `Owner` (toàn quyền), `Editor` (sửa được), `Viewer` (chỉ xem, không xem chat).
-- `relation`: `Bride`, `Groom`, `Relative`. Owner để trống.
-- `display_name`: tên do owner đặt khi mời, tối đa 40 ký tự.
-- `tabs`: các subtab của Kế hoạch người đó được xem (`overview`, `timeline`, `services`, `budget`, `guests`), ít nhất 1 tab. `NULL` nghĩa là xem tất cả; owner luôn là `NULL`.
-- Mỗi tài khoản thuộc tối đa **một** đám cưới. Mỗi đám cưới có đúng **một** owner.
-- 13 đám cưới đang có đã được thêm người tạo làm owner.
-- `weddings.user_id` giữ nguyên và vẫn là owner. Hội thoại và đơn hàng vẫn gắn với owner.
+**Không dùng nữa (02/11/2026):** đã bỏ tính năng nhiều người cùng lập kế hoạch, chỉ còn chia sẻ link xem công khai. Code và `schema.prisma` không còn đọc bảng `wedding_members`; bảng vẫn nằm trên DB. Muốn xóa hẳn thì chạy câu gỡ ở bảng trên (báo nhóm trước) rồi ghi một mục mới vào đầu file này.
 
-Kế hoạch đầy đủ: [KE_HOACH_KE_HOACH_CUA_TOI.md](KE_HOACH_KE_HOACH_CUA_TOI.md).
+### DB lệch với `schema.prisma` (đã xử lý 01/11/2026)
 
-### ⚠ Cần nhóm xử lý: DB đang lệch với `schema.prisma` trong repo
-
-Sau khi chạy file trên, `npm run db:pull` cho thấy DB **khác repo ở nhiều chỗ không liên quan tới bảng mới**:
-
-- **154 cột trên 24 bảng** trong repo đang là `NOT NULL`, nhưng trên DB đã thành nullable. Ví dụ `commissions.order_amount` và `users.email` đều có `is_nullable = YES`.
-- Bảng `package_verifications` trên DB có thêm cột **`snapshot`**, repo chưa có.
-
-Số cột thành nullable theo từng bảng:
-
-| Bảng | Số cột | Bảng | Số cột |
-|---|---|---|---|
-| orders | 13 | order_items | 7 |
-| vendor_profiles | 13 | users | 7 |
-| consultation_requests | 10 | messages | 6 |
-| weddings | 10 | order_revisions | 6 |
-| commission_statements | 8 | vendor_documents | 6 |
-| commissions | 8 | invoices | 5 |
-| service_packages | 8 | package_albums | 5 |
-| timeline_tasks | 8 | package_verifications | 4 |
-| conversations | 7 | payments | 4 |
-| notifications | 7 | search_histories | 4 |
-| service_categories | 2 | vendor_verifications | 4 |
-| favorite_vendors | 1 | plan_vendors | 1 |
-
-**Cách đã xử lý lần này:** **không** lấy nguyên bản `db pull`. Nếu lấy, kiểu dữ liệu của gần như mọi bảng sẽ thành nullable và code của cả nhóm phải sửa theo. Thay vào đó, `schema.prisma` giữ như cũ và chỉ thêm tay model `wedding_members`.
-
-**Cần một người trong nhóm xác nhận:**
-1. Ai đã bỏ `NOT NULL` và thêm cột `snapshot`, và có cố ý không? Ví dụ có thể do dựng lại bảng bằng công cụ khác, hoặc khôi phục từ bản sao lưu.
-2. Nếu **không cố ý**: viết một file SQL đặt lại `NOT NULL` theo đúng `schema.prisma` hiện tại. Trước đó phải kiểm tra DB không còn dòng nào chứa `NULL` ở các cột này.
-3. Nếu **cố ý**: một người chạy `npm run db:pull`, sửa code theo kiểu mới rồi commit một lần, để cả nhóm cùng cập nhật.
-
-Trong lúc chưa thống nhất, **đừng commit kết quả `db pull`** nếu chưa xem kỹ phần thay đổi.
+Lúc chạy file trên, DB có 154 cột đã thành nullable và cột `package_verifications.snapshot` mà repo chưa có. Khi gộp nhánh `Chanh` vào `Chie` (01/11/2026), `schema.prisma` đã theo đúng DB (các cột nullable, có `snapshot`) và code đã sửa theo, nên không cần đặt lại `NOT NULL`.

@@ -24,7 +24,6 @@ export const IMPORT_FIELDS: Record<ImportType, ImportField[]> = {
   tasks: [
     { key: 'title', label: 'Việc', required: true, synonyms: ['viec', 'ten viec', 'cong viec', 'noi dung', 'task', 'title'] },
     { key: 'dueDate', label: 'Hạn', required: true, synonyms: ['han', 'han chot', 'ngay', 'deadline', 'han hoan thanh', 'due date', 'due'] },
-    { key: 'assignee', label: 'Phụ trách', synonyms: ['phu trach', 'nguoi phu trach', 'giao cho', 'nguoi lam', 'assignee'] },
     { key: 'note', label: 'Ghi chú', synonyms: ['ghi chu', 'note', 'notes', 'mo ta'] },
   ],
   expenses: [

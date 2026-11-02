@@ -13,7 +13,7 @@ import { useChoosePackage, usePatchWedding } from '../hooks'
  * `withTables` (nhà hàng, gói tính theo bàn): số bàn hiện trong ô và sửa được ở đầu danh sách gói.
  * Đã có đơn thì khóa. Không có `item` (không xem được tab Dịch vụ) thì chưa có danh sách gói, chỉ sửa được số bàn.
  */
-export function BudgetPackagePicker({ vendor, item, budget, withTables, readOnly }: { vendor?: BudgetVendor; item?: PlanItem; budget: Budget; withTables: boolean; readOnly: boolean }) {
+export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vendor?: BudgetVendor; item?: PlanItem; budget: Budget; withTables: boolean }) {
   const choose = useChoosePackage()
   const patch = usePatchWedding()
   const [open, setOpen] = useState(false)
@@ -67,7 +67,7 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables, readOnly
   const name = vendor || item ? packageLabel(pkg).replace(', bấm để đổi', '') : null
   const tablesText = `${count} bàn`
   const text = name && withTables ? `${name} · ${tablesText}` : (name ?? tablesText)
-  const canOpen = !readOnly && !locked && (options.length > 0 || withTables)
+  const canOpen = !locked && (options.length > 0 || withTables)
   const unavailable = pkg?.unavailable && <div className="mt-1 text-warn">Gói bạn chọn đã ngừng bán, đang tính theo gói dự kiến.</div>
 
   if (!canOpen) {

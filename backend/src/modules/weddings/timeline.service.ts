@@ -16,17 +16,10 @@ const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);
 };
 
-/** Phụ trách: API dùng chữ hoa, DB dùng PascalCase (timeline_tasks.assignee). */
-const ASSIGNEE_DTO = { Bride: 'BRIDE', Groom: 'GROOM', Both: 'BOTH', Member: 'MEMBER' } as const;
-const ASSIGNEE_DB: Record<string, 'Bride' | 'Groom' | 'Both' | 'Member'> = { BRIDE: 'Bride', GROOM: 'Groom', BOTH: 'Both', MEMBER: 'Member' };
-
 export interface TimelineUpdateBody {
   title?: string;
   dueDate?: string;
   isDone?: boolean;
-  /** BRIDE | GROOM | BOTH | MEMBER (kèm assigneeUserId) | null (bỏ giao) */
-  assignee?: string | null;
-  assigneeUserId?: string | null;
   /** Ghi chú tối đa 200 ký tự, chuỗi rỗng hoặc null để xóa */
   note?: string | null;
 }
@@ -56,15 +49,9 @@ const frameUrgent = (w: { wedding_date: Date | null; created_date: Date | null }
 export class TimelineService {
   constructor(private readonly prisma: PrismaService, private readonly weddings: WeddingsService) {}
 
-  /** Tên hiển thị của các thành viên (tên owner đặt khi mời, nếu không thì họ tên) và quan hệ. */
-  private async people(weddingId: string) {
-    const rows = await this.prisma.wedding_members.findMany({ where: { wedding_id: weddingId }, include: { users: { select: { full_name: true } } } });
-    return new Map(rows.map((m) => [m.user_id, { name: m.display_name || m.users.full_name, relation: m.relation as 'Bride' | 'Groom' | 'Relative' | null, role: m.role }]));
-  }
-
   async get(userId: string) {
     const w = await this.weddings.requireWedding(userId);
-    const [tasks, cats, plan, orders, people] = await Promise.all([
+    const [tasks, cats, plan, orders] = await Promise.all([
       this.prisma.timeline_tasks.findMany({ where: { wedding_id: w.id }, orderBy: [{ scheduled_date: 'asc' }, { display_order: 'asc' }, { created_date: 'asc' }], include: { task_confirmations: true } }),
       this.prisma.service_categories.findMany(),
       this.weddings.planSnapshot(w.user_id, w.id),
@@ -83,9 +70,7 @@ export class TimelineService {
           order_items: { select: { package_id: true, service_packages: { select: { name: true } } } },
         },
       }),
-      this.people(w.id),
     ]);
-    const person = (id: string | null) => (id ? { userId: id, name: people.get(id)?.name ?? 'Người đã rời kế hoạch' } : null);
     const catById = new Map(cats.map((c) => [c.id, { id: c.id, slug: categorySlug(c.name), name: c.name ?? '' }]));
     const keyOfCat = (id: string | null) => {
       const name = cats.find((c) => c.id === id)?.name;
@@ -177,9 +162,8 @@ export class TimelineService {
         processSyncFailed: kind === 'CATEGORY_DEADLINE' && done && processSyncFailed(t.category_id),
         /** CATEGORY_DEADLINE đang Todo: đơn ĐÃ CỌC rồi bị hủy gần nhất cùng hạng mục ("Đơn … với … đã hủy ngày …"); cọc đơn mới thì Mốc chốt xong và dòng này mất */
         cancelledOrder: kind === 'CATEGORY_DEADLINE' && !done ? cancelledOrderOf(t.category_id) : null,
-        assignee: t.assignee ? { kind: ASSIGNEE_DTO[t.assignee as keyof typeof ASSIGNEE_DTO], userId: t.assignee_user_id, name: t.assignee_user_id ? (person(t.assignee_user_id)?.name ?? null) : null } : null,
-        note: t.note ? { text: t.note, by: person(t.note_by), date: t.note_date?.toISOString() ?? null } : null,
-        completedBy: t.status === 'Done' ? person(t.completed_by) : null,
+        /** Ghi chú của việc (tối đa 200 ký tự), không ghi người viết */
+        note: t.note ?? null,
       };
     }).map((i, idx) => {
       const tpl = templateOf(tasks[idx].task_code);
@@ -230,32 +214,18 @@ export class TimelineService {
     return new Date(dueDate);
   }
 
-  async addTask(userId: string, body: Pick<TimelineUpdateBody, 'title' | 'dueDate' | 'assignee' | 'assigneeUserId' | 'note'>) {
+  async addTask(userId: string, body: Pick<TimelineUpdateBody, 'title' | 'dueDate' | 'note'>) {
     const w = await this.weddings.requireWedding(userId);
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     if (!title || title.length > 255) return fail('VALIDATION_ERROR', 'Nhập tên việc (tối đa 255 ký tự).', 400);
     const due = await this.checkDue(body.dueDate, w.wedding_date);
-    if ((body.assignee !== undefined && body.assignee !== null) || (typeof body.note === 'string' && body.note.trim())) requireDbFeature('timelineAssign');
-    const assignee = body.assignee !== undefined ? await this.checkAssignee(w.id, body) : {};
+    if (typeof body.note === 'string' && body.note.trim()) requireDbFeature('timelineNotes');
     const note = typeof body.note === 'string' ? body.note.trim() : '';
     if (note.length > 200) return fail('VALIDATION_ERROR', 'Ghi chú tối đa 200 ký tự.', 400);
     await this.prisma.timeline_tasks.create({
-      data: { wedding_id: w.id, title, scheduled_date: due, status: 'Todo', task_type: 'Frame', display_order: 0, ...assignee, ...(note && { note, note_by: userId, note_date: new Date() }) },
+      data: { wedding_id: w.id, title, scheduled_date: due, status: 'Todo', task_type: 'Frame', display_order: 0, ...(note && { note }) },
     });
     return this.get(userId);
-  }
-
-  /** Kiểm tra người được giao. Thành viên là cô dâu hoặc chú rể thì lưu là Bride/Groom (P4). */
-  private async checkAssignee(weddingId: string, body: TimelineUpdateBody) {
-    if (body.assignee === null || body.assignee === '') return { assignee: null, assignee_user_id: null };
-    const kind = ASSIGNEE_DB[String(body.assignee)];
-    if (!kind) return fail('VALIDATION_ERROR', 'Người phụ trách không hợp lệ.', 400);
-    if (kind !== 'Member') return { assignee: kind, assignee_user_id: null };
-    const uid = String(body.assigneeUserId ?? '');
-    const m = UUID.test(uid) ? (await this.people(weddingId)).get(uid) : undefined;
-    if (!m || m.role === 'Owner') return fail('MEMBER_NOT_FOUND', 'Không tìm thấy thành viên để giao việc.', 404);
-    if (m.relation === 'Bride' || m.relation === 'Groom') return { assignee: m.relation, assignee_user_id: null };
-    return { assignee: 'Member', assignee_user_id: uid };
   }
 
   async update(userId: string, id: string, body: TimelineUpdateBody) {
@@ -266,12 +236,7 @@ export class TimelineService {
       scheduled_date?: Date;
       status?: string;
       completed_date?: Date | null;
-      completed_by?: string | null;
-      assignee?: string | null;
-      assignee_user_id?: string | null;
       note?: string | null;
-      note_by?: string | null;
-      note_date?: Date | null;
     } = {};
 
     // Việc chi tiết gắn đơn do NCC quản lý: khách không tick, đổi hạn, đổi tên, xóa (403 TIMELINE_ITEM_READONLY)
@@ -289,15 +254,13 @@ export class TimelineService {
       if (deadline) return fail('TIMELINE_ITEM_READONLY', 'Mốc "Chốt" tự hoàn thành khi đặt cọc dịch vụ.', 400);
       data.status = body.isDone ? 'Done' : 'Todo';
       data.completed_date = body.isDone ? new Date() : null;
-      if (dbFeatures.timelineAssign) data.completed_by = body.isDone ? userId : null;
     }
-    if (body.assignee !== undefined || body.note !== undefined) requireDbFeature('timelineAssign');
-    if (body.assignee !== undefined) Object.assign(data, await this.checkAssignee(wedding.id, body));
+    if (body.note !== undefined) requireDbFeature('timelineNotes');
     if (body.note !== undefined) {
       const note = typeof body.note === 'string' ? body.note.trim() : '';
       if (body.note !== null && typeof body.note !== 'string') return fail('VALIDATION_ERROR', 'Ghi chú không hợp lệ.', 400);
       if (note.length > 200) return fail('VALIDATION_ERROR', 'Ghi chú tối đa 200 ký tự.', 400);
-      Object.assign(data, note ? { note, note_by: userId, note_date: new Date() } : { note: null, note_by: null, note_date: null });
+      data.note = note || null;
     }
     if (Object.keys(data).length) await this.prisma.timeline_tasks.update({ where: { id }, data });
     return this.get(userId);

@@ -9,7 +9,6 @@ export const IMPORT_MAX_ROWS = 500;
 export type DateOrder = 'DMY' | 'MDY';
 export type Side = 'Bride' | 'Groom';
 export type Rsvp = 'Pending' | 'Attending' | 'Declined';
-export type AssigneeKind = 'Bride' | 'Groom' | 'Both' | 'Member';
 
 export const GUEST_GROUPS = ['Gia đình', 'Họ hàng', 'Bạn bè', 'Đồng nghiệp', 'Khác'];
 
@@ -134,29 +133,6 @@ export function parsePartySize(v: unknown): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 50 ? n : null;
 }
 
-export interface MemberRef {
-  userId: string;
-  name: string;
-  relation: 'Bride' | 'Groom' | 'Relative' | null;
-}
-
-/**
- * Phụ trách: "CD"/"Cô dâu" -> Bride, "CR"/"Chú rể" -> Groom, "Tất cả"/"Cả hai" -> Both, tên thành viên -> Member
- * (thành viên là cô dâu hoặc chú rể thì thành Bride/Groom). Cụm lạ trả về undefined (bỏ qua, không đoán); trống là null.
- */
-export function parseAssignee(v: unknown, members: MemberRef[]): { kind: AssigneeKind; userId: string | null } | null | undefined {
-  const s = fold(str(v));
-  if (!s) return null;
-  if (['cd', 'co dau', 'bride'].includes(s)) return { kind: 'Bride', userId: null };
-  if (['cr', 'chu re', 'groom'].includes(s)) return { kind: 'Groom', userId: null };
-  if (['tat ca', 'ca hai', 'both', 'ca 2', 'cd + cr', 'cd va cr'].includes(s)) return { kind: 'Both', userId: null };
-  const hits = members.filter((m) => fold(m.name) === s);
-  if (hits.length !== 1) return undefined;
-  const m = hits[0];
-  if (m.relation === 'Bride' || m.relation === 'Groom') return { kind: m.relation, userId: null };
-  return { kind: 'Member', userId: m.userId };
-}
-
 export interface RowResult<T> {
   /** Số thứ tự dòng trong file (bắt đầu từ 1, không tính dòng tiêu đề) */
   row: number;
@@ -215,12 +191,11 @@ export function normalizeGuests(rows: Record<string, unknown>[], existing: Set<s
 export interface TaskRow {
   title: string;
   dueDate: string;
-  assignee: { kind: AssigneeKind; userId: string | null } | null;
   note: string | null;
 }
 
 /** Kiểm tra từng dòng công việc. Hạn phải từ `today` đến trước `weddingDate` (đều là YYYY-MM-DD). */
-export function normalizeTasks(rows: Record<string, unknown>[], opts: { dateOrder: DateOrder; today: string; weddingDate: string; members: MemberRef[] }): RowResult<TaskRow>[] {
+export function normalizeTasks(rows: Record<string, unknown>[], opts: { dateOrder: DateOrder; today: string; weddingDate: string }): RowResult<TaskRow>[] {
   return rows.map((r, i) => {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -231,15 +206,10 @@ export function normalizeTasks(rows: Record<string, unknown>[], opts: { dateOrde
     if (!str(r.dueDate)) errors.push('Thiếu hạn.');
     else if (!dueDate) errors.push(`Không hiểu ngày "${str(r.dueDate)}".`);
     else if (dueDate < opts.today || dueDate >= opts.weddingDate) errors.push('Hạn phải từ hôm nay đến trước ngày cưới.');
-    let assignee = parseAssignee(r.assignee, opts.members);
-    if (assignee === undefined) {
-      warnings.push(`Không rõ người phụ trách "${str(r.assignee)}", để trống.`);
-      assignee = null;
-    }
     const note = str(r.note) || null;
     if (note && note.length > 200) errors.push('Ghi chú tối đa 200 ký tự.');
     const ok = !errors.length;
-    return { row: i + 1, errors, warnings, value: ok ? { title, dueDate: dueDate!, assignee, note } : null };
+    return { row: i + 1, errors, warnings, value: ok ? { title, dueDate: dueDate!, note } : null };
   });
 }
 

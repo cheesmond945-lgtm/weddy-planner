@@ -19,8 +19,6 @@ export const paths = {
   },
   deal: (id: string | number) => `/plan/deal/${id}`,
   chat: '/chat',
-  /** Nhận lời mời cùng lập kế hoạch */
-  invite: (token: string) => `/moi/${token}`,
   /** Xem kế hoạch qua link công khai */
   publicPlanTab: (token: string, tab: string) => `/xem/${token}/${tab}`,
 

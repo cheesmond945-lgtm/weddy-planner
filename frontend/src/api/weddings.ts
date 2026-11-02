@@ -11,12 +11,10 @@ import type {
   NewTask,
   Overview,
   PlanItem,
-  PlanTab,
   Timeline,
   TimelineItemPatch,
   Wedding,
   WeddingInput,
-  WeddingMember,
   WeddingPatch,
 } from '@/types/wedding'
 import { download, http } from './client'
@@ -93,12 +91,5 @@ export const weddingsApi = {
     http.post(`/weddings/me/import/${type}`, body),
   downloadTemplate: (type: ImportType) => download(`/weddings/me/import/${type}/template.csv`, `mau-${TEMPLATE_NAME[type]}.csv`),
   downloadExport: (type: 'guests' | 'tasks' | 'budget') => download(`/weddings/me/export/${type}.csv`, EXPORT_NAME[type]),
-
-  // Người cùng lập kế hoạch (GĐ 2). Chế độ dữ liệu giả: chưa có thành viên nào khác
-  listMembers: (): Promise<WeddingMember[]> => (http.get('/weddings/me/members')),
-  updateMember: (userId: string, body: { role?: 'EDITOR' | 'VIEWER'; tabs?: PlanTab[] }): Promise<WeddingMember[]> =>
-    http.patch(`/weddings/me/members/${userId}`, body),
-  /** Owner xóa thành viên, hoặc thành viên tự rời kế hoạch */
-  removeMember: (userId: string): Promise<null> => (http.delete(`/weddings/me/members/${userId}`)),
 
 }

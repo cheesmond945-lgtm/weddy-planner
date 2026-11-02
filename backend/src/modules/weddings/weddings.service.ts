@@ -2,13 +2,13 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService, categoryRank, categorySlug, estimateCost } from '../catalog/services.service';
 import { ORDER_INCLUDE, toOrderDto, ymd } from '../orders/order-mapping';
-import { WeddingMembersService } from '../wedding-members/wedding-members.service';
 import { SPENDING_TIERS, type SpendingTier } from './budget.config';
 import { BudgetCalcService } from './budget-calc.service';
 import { fitsGuests, packageCost } from './budget-engine';
 import { notifyVendorsOfWeddingDate, onWeddingCategories, planWeddingDateChange } from './timeline-hooks';
 import { bumpVersion, versionOf } from './wedding-version';
 import { dbFeatures, requireDbFeature } from '../../prisma/db-features';
+import { isHanoiWard } from './wards';
 
 const fail = (code: string, message: string, status: number, details?: unknown): never => {
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
@@ -22,6 +22,8 @@ export interface WeddingInputBody {
   date?: string;
   guestCount?: number | null;
   budget?: number;
+  /** Phường/xã nơi tổ chức (HANOI_WARDS, có tiền tố); null hoặc bỏ trống là chưa chọn */
+  ward?: string | null;
   /** Mức chi tiêu, không bắt buộc (mặc định AUTO khi tạo, giữ nguyên khi sửa) */
   spendingTier?: string;
   categorySlugs?: string[];
@@ -56,7 +58,6 @@ export class WeddingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly services: ServicesService,
-    private readonly members: WeddingMembersService,
     private readonly calc: BudgetCalcService,
   ) {}
 
@@ -75,18 +76,15 @@ export class WeddingsService {
     return new Map((await this.prisma.service_categories.findMany()).map((c) => [c.id, c.name]));
   }
 
-  /** Đám cưới người này đang tham gia (owner, editor hoặc viewer), không chỉ đám cưới do họ tạo. */
+  /** Đám cưới của người này (weddings.user_id, mỗi tài khoản cặp đôi một đám cưới). */
   async findWedding(userId: string) {
-    const access = await this.members.resolve(userId);
-    return access ? this.prisma.weddings.findUnique({ where: { id: access.weddingId }, include: { wedding_categories: true } }) : null;
+    return this.prisma.weddings.findUnique({ where: { user_id: userId }, include: { wedding_categories: true } });
   }
 
   async requireWedding(userId: string) {
     const w = await this.findWedding(userId);
     if (!w) return fail('WEDDING_NOT_SET', 'Hãy thiết lập thông tin đám cưới trước.', 409);
-    // Cột user_id (owner) cho phép null trong DB; đám cưới nào cũng có owner nên coi thiếu là chưa thiết lập
-    if (!w.user_id) return fail('WEDDING_NOT_SET', 'Hãy thiết lập thông tin đám cưới trước.', 409);
-    return { ...w, user_id: w.user_id };
+    return { ...w, user_id: userId };
   }
 
   private async toWedding(w: NonNullable<Awaited<ReturnType<WeddingsService['findWedding']>>>) {
@@ -97,6 +95,7 @@ export class WeddingsService {
       brideName: w.bride_name === NAME_PLACEHOLDER ? '' : w.bride_name,
       date: ymd(w.wedding_date),
       location: w.city,
+      ward: w.ward ?? null,
       guestCount: w.guest_count,
       budget: Number(w.budget),
       spendingTier: (w.spending_tier ?? 'AUTO') as SpendingTier,
@@ -128,6 +127,8 @@ export class WeddingsService {
     if (guest === null) errors.guestCount = 'Vui lòng nhập số khách dự kiến.';
     else if (!Number.isInteger(guest) || guest < 1) errors.guestCount = 'Số khách là số nguyên từ 1.';
     if (body.spendingTier !== undefined && !isTier(body.spendingTier)) errors.spendingTier = 'Mức chi tiêu không hợp lệ.';
+    const ward = body.ward === undefined || body.ward === null || body.ward === '' ? null : body.ward;
+    if (ward !== null && !isHanoiWard(ward)) errors.ward = 'Nơi tổ chức phải là một phường/xã của Hà Nội.';
 
     const { idBySlug } = await this.categoryMaps();
     const slugs = [...new Set(body.categorySlugs ?? [])];
@@ -145,6 +146,8 @@ export class WeddingsService {
       guest_count: guest!,
       budget,
       ...(isTier(body.spendingTier) && dbFeatures.budgetTiers && { spending_tier: body.spendingTier }),
+      // Chưa chạy SQL thêm cột ward thì bỏ qua, các trường khác vẫn lưu
+      ...(body.ward !== undefined && dbFeatures.weddingWard && { ward }),
     };
     const categoryIds = slugs.map((s) => idBySlug.get(s)!);
     let weddingId: string;
@@ -165,10 +168,8 @@ export class WeddingsService {
         await tx.wedding_categories.createMany({ data: categoryIds.map((id) => ({ wedding_id: weddingId, category_id: id })), skipDuplicates: true });
       });
     } else {
-      // Người tạo đám cưới là owner (wedding_members), ghi cùng một giao dịch
       const created = await this.prisma.$transaction(async (tx) => {
         const w = await tx.weddings.create({ data: { ...data, user_id: userId } });
-        await tx.wedding_members.create({ data: { wedding_id: w.id, user_id: userId, role: 'Owner' } });
         await tx.wedding_categories.createMany({ data: categoryIds.map((id) => ({ wedding_id: w.id, category_id: id })) });
         return w;
       });

@@ -170,9 +170,9 @@ function CostCard({ budget }: { budget: NonNullable<Overview['budget']> }) {
   )
 }
 
-/** Subtab Tổng quan (P2). Thẻ của tab mà người xem không được xem thì không hiện (backend trả null). */
+/** Subtab Tổng quan (P2). */
 export default function PlanOverviewPage() {
-  const { wedding, access, openEdit } = usePlanContext()
+  const { wedding, openEdit } = usePlanContext()
   const overview = useOverview()
 
   if (overview.isError) {
@@ -196,10 +196,10 @@ export default function PlanOverviewPage() {
       <div className="grid grid-cols-[1.2fr_1fr] items-start gap-4 max-[900px]:grid-cols-1">
         <div className="flex flex-col gap-4">
           {data?.tasks && <TaskCards tasks={data.tasks} />}
-          {!data?.tasks && <SpendingServicesCard wedding={wedding} onEdit={access.canEdit ? openEdit : undefined} />}
+          {!data?.tasks && <SpendingServicesCard wedding={wedding} onEdit={openEdit} />}
         </div>
         <div className="flex flex-col gap-4">
-          {data?.tasks && <SpendingServicesCard wedding={wedding} onEdit={access.canEdit ? openEdit : undefined} />}
+          {data?.tasks && <SpendingServicesCard wedding={wedding} onEdit={openEdit} />}
           {data?.budget && <CostCard budget={data.budget} />}
         </div>
       </div>

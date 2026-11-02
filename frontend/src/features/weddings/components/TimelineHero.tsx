@@ -33,7 +33,7 @@ export function TimelineHero({ wedding, items, onEdit, onAddTask, onImport }: Ti
       <div className="grid gap-1">
         <b className="font-semibold">{formatDate(wedding.date)}</b>
         <div className="text-muted-foreground">
-          {wedding.location}, {wedding.guestCount ? `${wedding.guestCount} khách` : 'chưa nhập sức chứa'}, ngân sách {formatMoney(wedding.budget)}
+          {wedding.ward ? `${wedding.ward}, ` : ''}{wedding.location}, {wedding.guestCount ? `${wedding.guestCount} khách` : 'chưa nhập sức chứa'}, ngân sách {formatMoney(wedding.budget)}
         </div>
         <div className="mt-2.5 h-1.5 overflow-hidden rounded-[9px] bg-line" aria-hidden>
           <i className="block h-full bg-sage" style={{ width: `${percent}%` }} />

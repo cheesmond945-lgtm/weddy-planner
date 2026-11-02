@@ -11,7 +11,6 @@ import { toast } from '@/components/ui/toast'
 import { weddingsApi } from '@/api/weddings'
 import { budgetCellAction, diffView } from '@/features/weddings/budgetView'
 import { BudgetPackagePicker } from '@/features/weddings/components/BudgetPackagePicker'
-import { usePlanContext } from '@/features/weddings/components/PlanHub'
 import { StatCard, StatGrid } from '@/features/weddings/components/StatCard'
 import { useBudget, useBudgetMutations, usePatchWedding, usePlan } from '@/features/weddings/hooks'
 import { ImportDialog } from '@/features/weddings/import/ImportDialog'
@@ -22,7 +21,7 @@ import { cn } from '@/lib/utils'
 import type { Budget, BudgetCategory, BudgetVendor, PlanItem } from '@/types/wedding'
 
 /** Ô ngân sách hạng mục: sửa tại chỗ, lưu khi rời ô hoặc Enter; dòng lý do dưới số, nhãn "đã sửa" và nút "Đặt lại". */
-function BudgetCell({ c, readOnly }: { c: BudgetCategory; readOnly: boolean }) {
+function BudgetCell({ c }: { c: BudgetCategory }) {
   const { setManual, clearManual } = useBudgetMutations()
   const [text, setText] = useState<string | null>(null)
   const shown = text ?? c.budget.toLocaleString('vi-VN')
@@ -37,10 +36,7 @@ function BudgetCell({ c, readOnly }: { c: BudgetCategory; readOnly: boolean }) {
 
   return (
     <div className="flex flex-col gap-1">
-      {readOnly ? (
-        <b className="font-semibold">{formatMoney(c.budget)}</b>
-      ) : (
-        <Input
+      <Input
           inputMode="numeric"
           aria-label={`Ngân sách ${c.name}`}
           value={shown}
@@ -52,11 +48,10 @@ function BudgetCell({ c, readOnly }: { c: BudgetCategory; readOnly: boolean }) {
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           className={cn('w-[160px] px-2.5 py-1.5 text-right text-sm', !c.manual && 'text-muted-foreground')}
         />
-      )}
       <span className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
         {c.manual && <Badge tone="info">đã sửa</Badge>}
         {c.reason}
-        {c.manual && !readOnly && (
+        {c.manual && (
           <button type="button" className="font-medium text-primary underline underline-offset-[3px]" disabled={clearManual.isPending} onClick={() => clearManual.mutate(c.categoryId)}>
             Đặt lại
           </button>
@@ -68,12 +63,12 @@ function BudgetCell({ c, readOnly }: { c: BudgetCategory; readOnly: boolean }) {
 }
 
 /** Ô "Gói" của một dòng: mỗi nhà cung cấp một ô chọn gói; nhà hàng chưa chọn nhà cung cấp vẫn có ô sửa số bàn. */
-function PackageCell({ vendors, items, budget, withTables, readOnly }: { vendors: BudgetVendor[]; items: PlanItem[]; budget: Budget; withTables: boolean; readOnly: boolean }) {
-  if (!vendors.length) return withTables ? <BudgetPackagePicker budget={budget} withTables readOnly={readOnly} /> : null
+function PackageCell({ vendors, items, budget, withTables }: { vendors: BudgetVendor[]; items: PlanItem[]; budget: Budget; withTables: boolean }) {
+  if (!vendors.length) return withTables ? <BudgetPackagePicker budget={budget} withTables /> : null
   return (
     <div className="flex flex-col gap-2">
       {vendors.map((v) => (
-        <BudgetPackagePicker key={v.id} vendor={v} item={items.find((i) => i.id === v.id)} budget={budget} withTables={withTables} readOnly={readOnly} />
+        <BudgetPackagePicker key={v.id} vendor={v} item={items.find((i) => i.id === v.id)} budget={budget} withTables={withTables} />
       ))}
     </div>
   )
@@ -180,16 +175,13 @@ function AddExtraCostForm() {
 }
 
 /** Dòng chi phí khác: sửa số tiền tại chỗ, xóa. */
-function ExtraCostRow({ e, readOnly }: { e: Budget['extraCosts'][number]; readOnly: boolean }) {
+function ExtraCostRow({ e }: { e: Budget['extraCosts'][number] }) {
   const { updateExtraCost, removeExtraCost } = useBudgetMutations()
   const [amount, setAmount] = useState<number | null>(null)
   return (
     <li className="flex items-center gap-3 border-t border-line py-2 text-sm first:border-t-0">
       <span className="flex-1">{e.name}</span>
-      {readOnly ? (
-        <span className="font-medium">{formatMoney(e.amount)}</span>
-      ) : (
-        <MoneyInput
+      <MoneyInput
           aria-label={`Số tiền ${e.name}`}
           value={amount ?? e.amount}
           onChange={setAmount}
@@ -199,12 +191,9 @@ function ExtraCostRow({ e, readOnly }: { e: Budget['extraCosts'][number]; readOn
           }}
           className="w-[150px] px-2.5 py-1.5 text-right text-sm"
         />
-      )}
-      {!readOnly && (
-        <Button variant="ghost" size="icon" className="size-8" aria-label={`Xóa ${e.name}`} disabled={removeExtraCost.isPending} onClick={() => removeExtraCost.mutate(e.id)}>
+      <Button variant="ghost" size="icon" className="size-8" aria-label={`Xóa ${e.name}`} disabled={removeExtraCost.isPending} onClick={() => removeExtraCost.mutate(e.id)}>
           <Trash2 className="size-4" />
         </Button>
-      )}
     </li>
   )
 }
@@ -217,13 +206,11 @@ const diffClass = { left: 'text-sage', over: 'text-warn', none: 'text-muted-fore
  * Tổng ngân sách, mức chi, số khách chỉnh chính thức ở "Chỉnh sửa thông tin"; ở đây chỉ có sửa nhanh tổng ngân sách và số bàn.
  */
 export default function PlanBudgetPage() {
-  const { access } = usePlanContext()
   const budget = useBudget()
   const planItems = usePlan().data?.items ?? []
   const { reset, rebalance } = useBudgetMutations()
   const [importing, setImporting] = useState(false)
   const [editingTotal, setEditingTotal] = useState(false)
-  const readOnly = !access.canEdit
 
   if (budget.isPending) return <div className="h-[420px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải ngân sách" />
   if (budget.isError) {
@@ -252,8 +239,7 @@ export default function PlanBudgetPage() {
           label={
             <span className="flex items-center justify-between gap-2">
               Tổng ngân sách
-              {!readOnly && (
-                <button
+              <button
                   type="button"
                   aria-label="Sửa tổng ngân sách"
                   title="Sửa tổng ngân sách"
@@ -262,7 +248,6 @@ export default function PlanBudgetPage() {
                 >
                   <Pencil className="size-3.5" />
                 </button>
-              )}
             </span>
           }
           value={formatMoney(t.total)}
@@ -272,13 +257,12 @@ export default function PlanBudgetPage() {
           value={formatMoney(t.allocated)}
           sub={t.unallocated >= 0 ? `Chưa phân bổ ${formatMoney(t.unallocated)}` : <span className="text-warn">Vượt {formatMoney(-t.unallocated)}</span>}
         />
-        <StatCard label="Chi phí theo gói đã chọn" value={formatMoney(t.packagesCost)} sub="Theo đơn, gói bạn chọn hoặc gói dự kiến" />
+        <StatCard label="Chi phí theo gói đã chọn" value={formatMoney(t.packagesCost)} />
         <StatCard label="Chi phí khác" value={formatMoney(t.extraCosts)} />
         <StatCard
           label={t.remaining < 0 ? 'Vượt ngân sách' : 'Còn lại sau chi phí'}
           value={formatMoney(Math.abs(t.remaining))}
           tone={t.remaining < 0 ? 'warn' : 'good'}
-          sub="Tổng ngân sách − chi phí theo gói − chi phí khác"
         />
       </StatGrid>
 
@@ -301,8 +285,7 @@ export default function PlanBudgetPage() {
         <div className="flex flex-wrap items-center justify-between gap-2.5 px-[22px] pt-5 pb-3">
           <h2 className="text-lg">Theo hạng mục</h2>
           <div className="flex flex-wrap gap-2">
-            {!readOnly && (
-              <>
+            <>
                 <Button variant="outline" size="sm" disabled={rebalance.isPending || !b.categories.length} onClick={() => rebalance.mutate(undefined, { onSuccess: () => toast('Đã cân đối theo ngân sách tổng') })}>
                   <Scale />
                   Cân đối theo ngân sách tổng
@@ -314,7 +297,6 @@ export default function PlanBudgetPage() {
                   </Button>
                 )}
               </>
-            )}
             <Button variant="outline" size="sm" onClick={() => weddingsApi.downloadExport('budget').catch((e: Error) => toast(e.message))}>
               <Download />
               Tải về
@@ -341,7 +323,7 @@ export default function PlanBudgetPage() {
                     <tr key={c.categoryId} className="border-t border-line align-top">
                       <td className="px-[22px] py-3 font-medium">{c.name}</td>
                       <td className="px-3 py-2">
-                        <BudgetCell key={`${c.categoryId}-${c.budget}-${c.manual}`} c={c} readOnly={readOnly} />
+                        <BudgetCell key={`${c.categoryId}-${c.budget}-${c.manual}`} c={c} />
                       </td>
                       <td className="px-3 py-3">
                         {c.vendors.length ? (
@@ -356,7 +338,7 @@ export default function PlanBudgetPage() {
                         )}
                       </td>
                       <td className="px-3 py-3 text-[13px]">
-                        <PackageCell vendors={c.vendors} items={planItems} budget={b} withTables={c.slug === 'nha-hang' || c.vendors.some((v) => v.package.unit === 'TABLE')} readOnly={readOnly} />
+                        <PackageCell vendors={c.vendors} items={planItems} budget={b} withTables={c.slug === 'nha-hang' || c.vendors.some((v) => v.package.unit === 'TABLE')} />
                       </td>
                       <td className="px-3 py-3 text-right">{c.cost === null ? <span className="text-muted-foreground">—</span> : formatMoney(c.cost)}</td>
                       <td className={cn('px-[22px] py-3 text-right font-medium', diffClass[d.tone])}>{d.text}</td>
@@ -384,37 +366,33 @@ export default function PlanBudgetPage() {
         ) : (
           <p className="px-[22px] pb-5 text-sm text-muted-foreground">Chưa có hạng mục nào. Chọn dịch vụ muốn dùng ở phần Chỉnh sửa thông tin.</p>
         )}
-        {!readOnly && (
-          <p className="border-t border-line px-[22px] py-3 text-[13px] text-muted-foreground">
+        <p className="border-t border-line px-[22px] py-3 text-[13px] text-muted-foreground">
             Số xám là ngân sách gợi ý theo giá gói. Gõ số để sửa, xóa trắng ô hoặc bấm "Đặt lại" để quay về số gợi ý. Bấm tên gói để đổi gói, nhà hàng sửa được số bàn ngay tại dòng.
           </p>
-        )}
       </section>
 
       <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface px-[22px] py-5">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <h2 className="text-lg">Chi phí khác ngoài WebPlan</h2>
-          {!readOnly && (
-            <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
+          <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
               <FileSpreadsheet />
               Nhập từ Excel
             </Button>
-          )}
         </div>
         {b.extraCosts.length ? (
           <ul>
             {b.extraCosts.map((e) => (
-              <ExtraCostRow key={`${e.id}-${e.amount}`} e={e} readOnly={readOnly} />
+              <ExtraCostRow key={`${e.id}-${e.amount}`} e={e} />
             ))}
             <li className="flex justify-between border-t border-line pt-2.5 text-sm font-semibold">
               <span>Tổng</span>
-              <span className={cn(!readOnly && 'pr-11')}>{formatMoney(t.extraCosts)}</span>
+              <span className={cn('pr-11')}>{formatMoney(t.extraCosts)}</span>
             </li>
           </ul>
         ) : (
           <p className="text-sm text-muted-foreground">Chưa có khoản chi nào ngoài các dịch vụ trên WebPlan.</p>
         )}
-        {!readOnly && <AddExtraCostForm />}
+        <AddExtraCostForm />
       </section>
 
       <ImportDialog type="expenses" open={importing} onOpenChange={setImporting} version={b.version} />

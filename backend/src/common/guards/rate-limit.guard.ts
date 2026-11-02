@@ -14,7 +14,7 @@ interface RateLimitOptions {
 const hits = new Map<string, { count: number; resetAt: number }>();
 
 /**
- * Giới hạn tần suất đơn giản cho endpoint công khai dò được bằng cách thử mã (link mời, link xem).
+ * Giới hạn tần suất đơn giản cho endpoint công khai dò được bằng cách thử mã (link xem kế hoạch).
  * Vượt giới hạn thì 429 RATE_LIMITED.
  */
 @Injectable()

@@ -35,22 +35,6 @@ test('chỉ cho chọn tháng/ngày/năm khi có số thứ hai > 12 và không 
   assert.equal(m.canBeMonthFirst(['2027-03-15']), false);
 });
 
-test('phụ trách: CD, CR, Cả hai/Tất cả, tên thành viên; cụm lạ thì bỏ qua', () => {
-  const members = [
-    { userId: 'u-me', name: 'Mẹ cô dâu', relation: 'Relative' },
-    { userId: 'u-lan', name: 'Lan', relation: 'Bride' },
-  ];
-  assert.deepEqual(m.parseAssignee('CD', members), { kind: 'Bride', userId: null });
-  assert.deepEqual(m.parseAssignee('chú rể', members), { kind: 'Groom', userId: null });
-  assert.deepEqual(m.parseAssignee('Tất cả', members), { kind: 'Both', userId: null });
-  assert.deepEqual(m.parseAssignee('Cả hai', members), { kind: 'Both', userId: null });
-  assert.deepEqual(m.parseAssignee('me co dau', members), { kind: 'Member', userId: 'u-me' });
-  // Thành viên là cô dâu thì tính là Bride, không phải Member
-  assert.deepEqual(m.parseAssignee('Lan', members), { kind: 'Bride', userId: null });
-  assert.equal(m.parseAssignee('', members), null);
-  assert.equal(m.parseAssignee('Anh hàng xóm', members), undefined);
-});
-
 test('khách: báo trùng trong file và với danh sách có sẵn, có phản hồi thì tính là đã mời', () => {
   const existing = new Set([m.guestKey('Trần Bình', 'Bride')]);
   const r = m.normalizeGuests(
@@ -72,21 +56,18 @@ test('khách: báo trùng trong file và với danh sách có sẵn, có phản 
 });
 
 test('công việc: hạn phải từ hôm nay đến trước ngày cưới', () => {
-  const opts = { dateOrder: 'DMY', today: '2026-10-29', weddingDate: '2027-05-01', members: [] };
+  const opts = { dateOrder: 'DMY', today: '2026-10-29', weddingDate: '2027-05-01' };
   const r = m.normalizeTasks(
     [
-      { title: 'Đặt thiệp', dueDate: '15/01/2027', assignee: 'CD', note: 'màu kem' },
+      { title: 'Đặt thiệp', dueDate: '15/01/2027', note: 'màu kem' },
       { title: 'Muộn', dueDate: '02/05/2027' },
       { title: '', dueDate: '' },
-      { title: 'Giao lạ', dueDate: '2027-01-01', assignee: 'ông X' },
     ],
     opts,
   );
-  assert.deepEqual(r[0].value, { title: 'Đặt thiệp', dueDate: '2027-01-15', assignee: { kind: 'Bride', userId: null }, note: 'màu kem' });
+  assert.deepEqual(r[0].value, { title: 'Đặt thiệp', dueDate: '2027-01-15', note: 'màu kem' });
   assert.match(r[1].errors[0], /trước ngày cưới/);
   assert.equal(r[2].errors.length, 2);
-  assert.equal(r[3].value.assignee, null);
-  assert.equal(r[3].warnings.length, 1);
 });
 
 test('CSV có BOM, CRLF, bọc ngoặc kép và chặn công thức', () => {

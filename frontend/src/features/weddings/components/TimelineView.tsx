@@ -6,9 +6,8 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
-import type { PrepLevel, TimelineItem, TimelineItemPatch, Wedding } from '@/types/wedding'
-import { memberName, relativeMembers } from '../assignee'
-import { useMembers, useTimeline, useTimelineMutations, useUpdateMember, useWeddingAccess } from '../hooks'
+import type { PrepLevel, TimelineItem, Wedding } from '@/types/wedding'
+import { useTimeline, useTimelineMutations } from '../hooks'
 import { ImportDialog } from '../import/ImportDialog'
 import { countServices, groupByTime, type ViewMode } from '../timelineGroups'
 import { chatDraft, filterTimeline, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
@@ -18,7 +17,7 @@ import { TimelineGroupCard, defaultOpen } from './TimelineGroupCard'
 import { TimelineCalendar } from './TimelineCalendar'
 import { TimelineFilters } from './TimelineFilters'
 import { TimelineHero } from './TimelineHero'
-import { SERVICE_LABEL, TimelineCard, TimelineMembersContext } from './TimelineRow'
+import { SERVICE_LABEL, TimelineCard } from './TimelineRow'
 import { catalogApi } from '@/api/catalog'
 import { usePlanActions } from '../planActions'
 import { WeddingEditDialog } from './WeddingDialogs'
@@ -63,16 +62,6 @@ const saveOpen = (v: Record<string, boolean>) => {
   } catch {
     // không lưu được thì thôi: chỉ mất trạng thái khi tải lại trang
   }
-}
-
-/** Giá trị cũ của các trường sắp sửa, để "Hoàn tác". */
-function previous(item: TimelineItem, patch: TimelineItemPatch): TimelineItemPatch {
-  const prev: TimelineItemPatch = {}
-  if ('dueDate' in patch && item.dueDate) prev.dueDate = item.dueDate
-  if ('isDone' in patch) prev.isDone = item.isDone
-  if ('assignee' in patch) Object.assign(prev, { assignee: item.assignee?.kind ?? null, assigneeUserId: item.assignee?.userId ?? null })
-  if ('note' in patch) prev.note = item.note?.text ?? null
-  return prev
 }
 
 type Entry = { type: 'task'; key: string; due: string; item: TimelineItem } | { type: 'group'; key: string; due: string; book: TimelineItem; kids: TimelineItem[] }
@@ -139,11 +128,6 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   const timeline = useTimeline(true)
   const { update, remove } = useTimelineMutations()
   const { openChat } = usePlanActions()
-  // Nhiều người cùng lập kế hoạch: viewer chỉ xem; giao việc cho người thân
-  const access = useWeddingAccess()
-  const { data: members = [] } = useMembers()
-  const updateMember = useUpdateMember()
-  const relatives = relativeMembers(members)
   const [importing, setImporting] = useState(false)
   const [params, setParams] = useSearchParams()
   const show = (SHOWS.find((s) => s.value === params.get('show'))?.value ?? 'all') as Show
@@ -282,34 +266,8 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       () => toast('Không mở được khung chat với nhà cung cấp'),
     )
 
-  /** Sửa nhanh (giao việc) kèm Hoàn tác. Giao việc cho người chỉ xem thì báo, owner có nút "Cho phép chỉnh sửa". */
-  const patch = (item: TimelineItem, p: TimelineItemPatch, message: string) => {
-    const before = previous(item, p)
-    update.mutate(
-      { id: item.id, patch: p },
-      {
-        onSuccess: () => {
-          const target =
-            p.assignee === 'MEMBER'
-              ? members.find((m) => m.userId === p.assigneeUserId)
-              : p.assignee === 'BRIDE' || p.assignee === 'GROOM'
-                ? members.find((m) => m.relation === p.assignee)
-                : undefined
-          if (target?.role === 'VIEWER') {
-            toast(`${memberName(target)} đang chỉ xem nên chưa tích xong được`, {
-              duration: 8000,
-              action: access.isOwner ? { label: 'Cho phép chỉnh sửa', onClick: () => updateMember.mutate({ userId: target.userId, role: 'EDITOR' }, { onSuccess: () => toast('Đã cho phép chỉnh sửa') }) } : undefined,
-            })
-            return
-          }
-          toast(message, { action: { label: 'Hoàn tác', onClick: () => update.mutate({ id: item.id, patch: before }) } })
-        },
-      },
-    )
-  }
-
   const handlers = {
-    onChat: access.canChat ? (i: TimelineItem) => void chatWith(i.serviceId!, chatDraft(i)) : undefined,
+    onChat: (i: TimelineItem) => void chatWith(i.serviceId!, chatDraft(i)),
     onComplete: setCompleting,
     onReopen: setReopening,
     onEdit: setEditing,
@@ -320,13 +278,13 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
     cn('rounded-pill border px-3.5 py-1.5 text-[13px] font-medium transition-colors', active ? 'border-ink bg-ink text-bg' : 'border-line bg-surface text-ink hover:border-primary')
 
   return (
-    <TimelineMembersContext.Provider value={{ readOnly: !access.canEdit, relatives, onPatch: patch }}>
+    <>
       <TimelineHero
         wedding={wedding}
         items={items}
-        onEdit={access.canEdit ? () => setEditingWedding(true) : undefined}
-        onAddTask={access.canEdit ? () => setAdding(true) : undefined}
-        onImport={access.canEdit ? () => setImporting(true) : undefined}
+        onEdit={() => setEditingWedding(true)}
+        onAddTask={() => setAdding(true)}
+        onImport={() => setImporting(true)}
       />
       <UrgencyBanner level={level} daysLeft={daysLeft} />
       <WaitingBanner count={waitingCount} onPick={() => { setView('time'); setParam({ month: '', q: '', owner: 'mine', category: '', show: 'todo' }) }} />
@@ -411,10 +369,10 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
 
       <CompleteTaskDialog item={completing} onClose={() => setCompleting(null)} onConfirm={complete} />
       <ReopenTaskDialog item={reopening} onClose={() => setReopening(null)} onConfirm={reopen} />
-      <EditMilestoneDialog item={editing} wedding={wedding} relatives={relatives} onClose={() => setEditing(null)} />
-      <AddTaskDialog open={adding} wedding={wedding} relatives={relatives} onClose={() => setAdding(false)} />
+      <EditMilestoneDialog item={editing} wedding={wedding} onClose={() => setEditing(null)} />
+      <AddTaskDialog open={adding} wedding={wedding} onClose={() => setAdding(false)} />
       <WeddingEditDialog open={editingWedding} onOpenChange={setEditingWedding} />
       <ImportDialog type="tasks" open={importing} onOpenChange={setImporting} />
-    </TimelineMembersContext.Provider>
+    </>
   )
 }

@@ -5,7 +5,7 @@ import { toast } from '@/components/ui/toast'
 import { RatingMeta } from '@/features/catalog/components/RatingMeta'
 import { formatMillions, formatMoney } from '@/lib/format'
 import { paths } from '@/routes/paths'
-import { useAiSuggestions, useBudgetMutations, useWeddingAccess } from '../hooks'
+import { useAiSuggestions, useBudgetMutations } from '../hooks'
 import { AddToPlanButton } from '../planActions'
 
 interface AiSuggestionStripProps {
@@ -18,7 +18,6 @@ interface AiSuggestionStripProps {
 export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSuggestionStripProps) {
   const { data, isPending, isError, error, refetch } = useAiSuggestions(categorySlug, true)
   const { setManual, clearManual } = useBudgetMutations()
-  const access = useWeddingAccess()
   const cat = categoryName.toLowerCase()
 
   /** Một chạm: tăng ngân sách hạng mục lên đúng chi phí gói rẻ nhất đủ chỗ, kèm Hoàn tác. */
@@ -76,7 +75,7 @@ export function AiSuggestionStrip({ categorySlug, categoryName, onClose }: AiSug
     )
   } else {
     const need = data.guestCount ? `, đủ chỗ cho ${data.guestCount} khách${data.tables ? ` (${data.tables} bàn)` : ''}` : ''
-    const canRaise = access.canEdit && data.isChosenCategory && !!data.categoryId && !!data.raiseBudgetTo
+    const canRaise = data.isChosenCategory && !!data.categoryId && !!data.raiseBudgetTo
     body = (
       <>
         <p className="mt-1.5 text-muted-foreground">

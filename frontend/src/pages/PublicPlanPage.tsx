@@ -170,7 +170,7 @@ function TabContent({ token, tab }: { token: string; tab: PlanTab }) {
 
 /**
  * Xem kế hoạch qua link công khai (/xem/:token/:tab, docs/api/sharing.md mục 4): chỉ đọc, không cần đăng nhập.
- * Đầu trang chỉ có Đăng nhập và Đăng ký; chỉ hiện các tab chủ kế hoạch cho phép (dữ liệu đã lọc ở backend).
+ * Đầu trang chỉ có Đăng nhập và Đăng ký; chỉ hiện các tab cặp đôi cho phép (dữ liệu đã lọc ở backend).
  */
 export default function PublicPlanPage() {
   const { token = '', tab } = useParams()
@@ -200,7 +200,7 @@ export default function PublicPlanPage() {
     // Tab Timeline đã bỏ khỏi giao diện
     const tabs: PlanTab[] = p.tabs.filter((t) => t !== 'timeline')
     const current = (tab ?? tabs[0]) as PlanTab
-    if (!tabs.length) body = <EmptyState title="Không có phần nào để xem" description="Chủ kế hoạch chưa chia sẻ phần nào qua liên kết này." />
+    if (!tabs.length) body = <EmptyState title="Không có phần nào để xem" description="Cặp đôi chưa chia sẻ phần nào qua liên kết này." />
     else if (!tab || !tabs.includes(current)) return <Navigate to={paths.publicPlanTab(token, tabs[0])} replace />
     const left = Math.max(0, daysBetween(today(), parseDate(p.wedding.date)))
     if (tabs.length) body = (
@@ -218,7 +218,6 @@ export default function PublicPlanPage() {
           <p className="mt-1.5 text-muted-foreground">
             <b className="font-semibold text-ink">{formatDate(p.wedding.date)}</b>, còn {left} ngày
           </p>
-          <p className="mt-1 text-[13px] text-muted-foreground">Người cùng lập kế hoạch: {p.members.map((m) => m.name).join(', ')}</p>
         </div>
         <nav aria-label="Các phần của kế hoạch" className="mb-6 flex gap-1 overflow-x-auto rounded-[22px] border border-line bg-accent-soft/60 p-[5px]">
           {tabs.map((t) => (

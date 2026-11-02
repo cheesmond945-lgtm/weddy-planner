@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import type { WeddingAccess } from '../wedding-members/wedding-access';
+import { PLAN_TABS, type PlanTab } from '../wedding-sharing/plan-tabs';
 import { BudgetService } from './budget.service';
 import { guestStats } from './guests.service';
 import { todayVNDate, toYmd } from './timeline-hooks';
@@ -13,7 +13,7 @@ const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - D
 
 /**
  * Tab Tổng quan (P2): một endpoint gom số liệu của Timeline, Ngân sách, Khách mời.
- * Phần của tab mà người gọi không được xem thì trả null (không lộ số liệu).
+ * Xem qua link công khai: phần của tab không được chia sẻ thì trả null (không lộ số liệu).
  */
 @Injectable()
 export class OverviewService {
@@ -24,9 +24,9 @@ export class OverviewService {
     private readonly budget: BudgetService,
   ) {}
 
-  async get(userId: string, access: WeddingAccess) {
+  async get(userId: string, tabs: readonly PlanTab[] = PLAN_TABS) {
     const w = await this.weddings.requireWedding(userId);
-    const can = (t: string) => access.tabs.includes(t as never);
+    const can = (t: PlanTab) => tabs.includes(t);
     const [tasks, budget, guests] = await Promise.all([
       can('timeline') ? this.tasks(userId) : null,
       can('budget') ? this.budgetPart(w) : null,
@@ -44,7 +44,7 @@ export class OverviewService {
     const upcoming = [...todo]
       .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!))
       .slice(0, 5)
-      .map((t) => ({ id: t.id, title: t.title, dueDate: t.dueDate!, daysLeft: daysBetween(today, t.dueDate!), category: t.category, assignee: t.assignee }));
+      .map((t) => ({ id: t.id, title: t.title, dueDate: t.dueDate!, daysLeft: daysBetween(today, t.dueDate!), category: t.category }));
 
     const groups = new Map<string, { slug: string | null; name: string; done: number; total: number }>();
     for (const t of open) {
@@ -57,23 +57,12 @@ export class OverviewService {
     // "Việc chung" xếp cuối
     const byCategory = [...groups.values()].sort((a, b) => Number(a.slug === null) - Number(b.slug === null));
 
-    const people = new Map<string, { kind: string; userId: string | null; name: string | null; done: number; total: number }>();
-    for (const t of open) {
-      if (!t.assignee) continue;
-      const key = t.assignee.userId ?? t.assignee.kind;
-      const p = people.get(key) ?? { kind: t.assignee.kind, userId: t.assignee.userId, name: t.assignee.name, done: 0, total: 0 };
-      p.total++;
-      if (t.isDone) p.done++;
-      people.set(key, p);
-    }
-
     return {
       done: open.filter((t) => t.isDone).length,
       total: open.length,
       overdue: todo.filter((t) => t.dueDate! < today).length,
       upcoming,
       byCategory,
-      assignees: [...people.values()],
     };
   }
 
