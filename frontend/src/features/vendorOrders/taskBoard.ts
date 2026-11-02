@@ -1,12 +1,15 @@
 import type { BoardTask, TaskStatus } from '@/types/vendorOrder'
 
 /*
- * Bảng việc (kanban) ở Lịch làm việc của NCC: chia việc vào cột, gom hàng theo đơn, luật kéo thả. Hàm thuần: không đụng giao diện, không đọc đồng hồ.
- * Trạng thái việc trong CSDL chỉ có Todo / Done (docs/database.md) nên kéo thả chỉ là đánh dấu xong / mở lại; không có cột "Đang làm",
- * không tự sắp thứ tự trong cột (display_order dùng chung với timeline của khách).
+ * Bảng việc (kanban) ở Lịch làm việc của NCC: cột, luật kéo thả, nhắc chốt lịch, khoảng thời gian, lưu trữ, tìm kiếm. Hàm thuần: không đụng giao diện,
+ * không đọc đồng hồ ("hôm nay" do nơi gọi truyền vào, "YYYY-MM-DD").
+ * Cột theo trạng thái việc Todo / Waiting / Done (docs/TIMELINE.md "Hướng mới 11/2026"); NCC đổi được trạng thái mọi việc của đơn mình.
+ * Không tự sắp thứ tự trong cột (display_order dùng chung với timeline của khách).
+ * Nhiều khách (hàng trăm): không chia hàng theo khách mà luôn chỉ 3 cột, thu hẹp bằng khoảng thời gian, tìm kiếm, chọn khách;
+ * đơn đã xong hết việc rời bảng sang Lưu trữ (splitBoard).
  */
 
-/** customer: việc khách làm, chưa xong (NCC chỉ xem); todo: việc của NCC / hai bên chưa xong; done: đã xong. */
+/** customer: chờ khách (Waiting); todo: NCC đang làm (Todo); done: đã xong (Done). */
 export type BoardColumn = 'customer' | 'todo' | 'done'
 
 export const BOARD_COLUMNS: readonly { key: BoardColumn; title: string }[] = [
@@ -23,77 +26,121 @@ export const columnOf = (t: TaskState): BoardColumn => (t.isDone ? 'done' : t.st
 /** Trạng thái tương ứng với cột (kéo thả thẻ sang cột nào thì thành trạng thái đó). */
 export const statusOfColumn = (c: BoardColumn): TaskStatus => (c === 'done' ? 'Done' : c === 'customer' ? 'Waiting' : 'Todo')
 
+/** NCC kéo được mọi việc của đơn mình sang cột khác. */
+export const canMove = (t: TaskState, to: BoardColumn) => to !== columnOf(t)
+
+const dayNum = (s: string) => Math.round(Date.parse(`${s.slice(0, 10)}T00:00:00Z`) / 86_400_000)
+
 /** NCC chốt / đổi ngày tối đa sau ngày thực hiện bấy nhiêu ngày (khớp backend order-task-rules.ts). */
 export const SCHEDULE_MAX_AFTER_EVENT = 120
 /** Việc "Hai bên" chưa chốt lịch mà hạn còn từng này ngày (hoặc đã quá) thì nhắc "Cần chốt lịch". */
 export const CONFIRM_SOON_DAYS = 7
-const dayNum = (s: string) => Math.round(Date.parse(`${s}T00:00:00Z`) / 86_400_000)
 
 /** Việc owner BOTH chưa xong, ngày mới là dự kiến (chưa chốt với khách) và hạn còn ≤ 7 ngày: "Cần chốt lịch". */
 export const needsScheduleConfirm = (t: { owner: string; isDone: boolean; dateStatus: string; dueDate: string }, todayYmd: string) =>
   t.owner === 'BOTH' && !t.isDone && t.dateStatus !== 'CONFIRMED' && !!t.dueDate && dayNum(t.dueDate) - dayNum(todayYmd) <= CONFIRM_SOON_DAYS
 
-/** Thả việc vào cột `to` được không: chỉ việc NCC được tick, chỉ giữa Cần làm và Đã xong, và phải đổi cột. */
-/** NCC kéo được mọi việc của đơn mình sang cột khác. */
-export const canMove = (t: TaskState, to: BoardColumn) => to !== columnOf(t)
+/** "Sắp đến hạn" trong tóm tắt đầu bảng: hạn từ hôm nay đến từng này ngày tới. */
+export const SOON_DAYS = 7
 
-/** order: mỗi đơn một hàng (mỗi hạng mục của đám cưới chỉ có một đơn đã cọc nên theo khách cũng là theo đơn); none: một hàng chung. */
-export type BoardGroup = 'order' | 'none'
+/** Khoảng thời gian của bảng (mặc định soon). */
+export type BoardHorizon = 'soon' | 'month' | 'all'
+export const HORIZONS: readonly { key: BoardHorizon; label: string; days: number | null }[] = [
+  { key: 'soon', label: 'Quá hạn + 14 ngày tới', days: 14 },
+  { key: 'month', label: '30 ngày tới', days: 30 },
+  { key: 'all', label: 'Tất cả', days: null },
+]
 
-/** Khóa của hàng khi không gom. */
-export const ALL_LANE = 'all'
-
-export interface BoardLane {
-  /** orderId, hoặc ALL_LANE khi không gom */
-  key: string
-  /** Đơn của hàng; null khi không gom */
-  order: { id: string; code: string; customerName: string; eventDate: string } | null
-  columns: Record<BoardColumn, BoardTask[]>
-  total: number
-  done: number
-  /** Việc của NCC / hai bên chưa xong và quá hạn ("Trễ tiến độ") */
-  late: number
-  /** Số việc đã chốt lịch với khách (dateStatus CONFIRMED) */
-  confirmed: number
-  /** Tên gói gắn với đơn, ngăn cách bằng dấu phẩy; rỗng khi không có */
-  packages: string
+/**
+ * Việc có nằm trong khoảng không. Chưa xong: quá hạn luôn hiện, còn lại hạn trong `days` ngày tới.
+ * Đã xong: xong trong `days` ngày qua (việc xong từ lâu không chiếm chỗ); không rõ ngày xong thì coi như đã lâu.
+ */
+export function inHorizon(t: Pick<BoardTask, 'isDone' | 'dueDate' | 'completedDate'>, horizon: BoardHorizon, today: string): boolean {
+  const days = HORIZONS.find((h) => h.key === horizon)?.days ?? null
+  if (days === null) return true
+  if (t.isDone) return !!t.completedDate && dayNum(today) - dayNum(t.completedDate) <= days
+  return !t.dueDate || dayNum(t.dueDate) - dayNum(today) <= days
 }
 
-/** Hàng chứa việc `t` theo cách gom. */
-export const laneKeyOf = (t: Pick<BoardTask, 'orderId'>, group: BoardGroup) => (group === 'order' ? t.orderId : ALL_LANE)
-
-const byDue = (a: BoardTask, b: BoardTask) => a.dueDate.localeCompare(b.dueDate) || a.title.localeCompare(b.title)
-/** Cột Đã xong: việc xong gần nhất lên trên */
-const byCompleted = (a: BoardTask, b: BoardTask) => (b.completedDate ?? '').localeCompare(a.completedDate ?? '') || byDue(a, b)
-
-function laneOf(key: string, tasks: readonly BoardTask[], withOrder: boolean): BoardLane {
-  const columns: Record<BoardColumn, BoardTask[]> = { customer: [], todo: [], done: [] }
-  for (const t of tasks) columns[columnOf(t)].push(t)
-  columns.customer.sort(byDue)
-  columns.todo.sort(byDue)
-  columns.done.sort(byCompleted)
-  const first = tasks[0]
-  return {
-    key,
-    order: withOrder && first ? { id: first.orderId, code: first.orderCode, customerName: first.customerName, eventDate: first.eventDate } : null,
-    columns,
-    total: tasks.length,
-    done: columns.done.length,
-    late: columns.todo.filter((t) => t.overdue).length,
-    confirmed: tasks.filter((t) => t.dateStatus === 'CONFIRMED').length,
-    packages: withOrder && first ? (first.packageNames ?? []).join(', ') : '',
-  }
+/** Đơn đã xong hết việc (trên bảng là đơn Đã cọc): chờ NCC bấm Hoàn tất đơn, nằm ở Lưu trữ. */
+export interface FinishedOrder {
+  orderId: string
+  orderCode: string
+  customerName: string
+  eventDate: string
+  total: number
 }
 
 /**
- * Chia việc thành các hàng. Gom theo đơn: hàng có việc của NCC trễ nhiều hơn lên trước, rồi theo ngày thực hiện gần nhất, rồi mã đơn.
- * Trong cột: theo hạn tăng dần; cột Đã xong: xong gần nhất trước.
+ * Tách việc trên bảng: `active` là việc của đơn còn ít nhất một việc chưa xong (tab Đang làm); `finished` là các đơn đã xong hết việc
+ * (rời bảng, sang Lưu trữ > Chờ hoàn tất), sắp theo ngày thực hiện. Mở lại một việc thì đơn tự quay lại Đang làm.
  */
-export function boardLanes(tasks: readonly BoardTask[], group: BoardGroup): BoardLane[] {
-  if (group === 'none') return tasks.length ? [laneOf(ALL_LANE, tasks, false)] : []
+export function splitBoard(tasks: readonly BoardTask[]): { active: BoardTask[]; finished: FinishedOrder[] } {
   const byOrder = new Map<string, BoardTask[]>()
   for (const t of tasks) byOrder.set(t.orderId, [...(byOrder.get(t.orderId) ?? []), t])
-  return [...byOrder]
-    .map(([id, list]) => laneOf(id, list, true))
-    .sort((a, b) => b.late - a.late || a.order!.eventDate.localeCompare(b.order!.eventDate) || a.order!.code.localeCompare(b.order!.code))
+  const active: BoardTask[] = []
+  const finished: FinishedOrder[] = []
+  for (const list of byOrder.values()) {
+    if (list.some((t) => !t.isDone)) active.push(...list)
+    else finished.push({ orderId: list[0].orderId, orderCode: list[0].orderCode, customerName: list[0].customerName, eventDate: list[0].eventDate, total: list.length })
+  }
+  finished.sort((a, b) => a.eventDate.localeCompare(b.eventDate) || a.orderCode.localeCompare(b.orderCode))
+  return { active, finished }
+}
+
+const byDue = (a: BoardTask, b: BoardTask) => a.dueDate.localeCompare(b.dueDate) || a.customerName.localeCompare(b.customerName) || a.title.localeCompare(b.title)
+
+/** Thẻ trong từng cột, đã sắp: Cần làm và Chờ khách theo hạn (quá hạn tự nhiên đứng đầu); Đã xong: xong gần nhất trước. */
+export function boardColumns(tasks: readonly BoardTask[]): Record<BoardColumn, BoardTask[]> {
+  const out: Record<BoardColumn, BoardTask[]> = { customer: [], todo: [], done: [] }
+  for (const t of tasks) out[columnOf(t)].push(t)
+  out.customer.sort(byDue)
+  out.todo.sort(byDue)
+  out.done.sort((a, b) => (b.completedDate ?? '').localeCompare(a.completedDate ?? '') || byDue(a, b))
+  return out
+}
+
+/**
+ * Tóm tắt đầu bảng: việc Cần làm, trong đó quá hạn, sắp đến hạn (SOON_DAYS ngày tới); việc chờ khách; việc "Hai bên" cần chốt lịch
+ * (needsScheduleConfirm, ở cột nào cũng tính).
+ */
+export function boardSummary(tasks: readonly BoardTask[], today: string) {
+  const s = { todo: 0, late: 0, soon: 0, waiting: 0, confirm: 0 }
+  for (const t of tasks) {
+    if (needsScheduleConfirm(t, today)) s.confirm++
+    const col = columnOf(t)
+    if (col === 'customer') s.waiting++
+    if (col !== 'todo') continue
+    s.todo++
+    if (t.overdue) s.late++
+    else if (t.dueDate && dayNum(t.dueDate) - dayNum(today) <= SOON_DAYS) s.soon++
+  }
+  return s
+}
+
+/** Mục của ô chọn Khách: mỗi đơn đang làm một mục; đơn có việc Cần làm trễ lên trước (kèm số việc trễ), rồi theo tên khách. */
+export function customerOptions(tasks: readonly BoardTask[]): { orderId: string; customerName: string; orderCode: string; late: number }[] {
+  const map = new Map<string, { orderId: string; customerName: string; orderCode: string; late: number }>()
+  for (const t of tasks) {
+    const o = map.get(t.orderId) ?? { orderId: t.orderId, customerName: t.customerName, orderCode: t.orderCode, late: 0 }
+    if (columnOf(t) === 'todo' && t.overdue) o.late++
+    map.set(t.orderId, o)
+  }
+  return [...map.values()].sort((a, b) => b.late - a.late || a.customerName.localeCompare(b.customerName, 'vi'))
+}
+
+/** Bỏ dấu tiếng Việt, đ thành d, chữ thường: "Hùng" khớp "hung". */
+const fold = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+
+/** Tìm trên bảng việc: mỗi từ khóa (không cần dấu) phải có trong tên khách, mã đơn, tên việc hoặc tên gói. */
+export function matchesBoard(t: Pick<BoardTask, 'customerName' | 'orderCode' | 'title'> & { packageNames?: readonly string[] }, q: string): boolean {
+  const terms = fold(q).split(/\s+/).filter(Boolean)
+  if (!terms.length) return true
+  const text = fold(`${t.customerName} ${t.orderCode} ${t.title} ${(t.packageNames ?? []).join(' ')}`)
+  return terms.every((w) => text.includes(w))
 }
