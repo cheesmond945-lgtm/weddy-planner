@@ -372,7 +372,9 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
         blocked={
           values.name.trim() && (Number(values.price) > 0 || values.tags.length || (venue && values.capacity.trim()))
             ? null
-            : 'Hãy nhập Tên gói và ít nhất một trong: Giá, Sức chứa, Phong cách (tags) để AI có thông tin thật mà viết.'
+            : venue
+              ? 'AI chưa có đủ dữ liệu để viết. Bạn điền Tên gói, rồi thêm Giá mỗi mâm, Sức chứa hoặc vài Phong cách (tags) nhé.'
+              : 'AI chưa có đủ dữ liệu để viết. Bạn điền Tên gói, rồi thêm Giá hoặc vài Phong cách (tags) nhé.'
         }
         styles={PACKAGE_AI_STYLES}
         write={(style) =>

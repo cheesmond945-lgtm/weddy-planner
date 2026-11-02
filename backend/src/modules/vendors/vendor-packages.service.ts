@@ -1,5 +1,4 @@
 import { HttpException, Injectable } from '@nestjs/common';
-import { AiQuotaService } from '../../integrations/ai/ai-quota.service';
 import { GeminiService } from '../../integrations/ai/gemini.service';
 import { PACKAGE_STYLES, pickStyle } from '../../integrations/ai/writing-styles';
 import { Prisma } from '../../generated/prisma/client';
@@ -37,7 +36,7 @@ type PackageRow = NonNullable<Awaited<ReturnType<VendorPackagesService['loadOwne
 
 @Injectable()
 export class VendorPackagesService {
-  constructor(private readonly prisma: PrismaService, private readonly storage: StorageService, private readonly gemini: GeminiService, private readonly quota: AiQuotaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly storage: StorageService, private readonly gemini: GeminiService) {}
 
   private async vendorOf(userId: string) {
     const v = await this.prisma.vendor_profiles.findUnique({
@@ -192,17 +191,22 @@ export class VendorPackagesService {
    */
   async suggestDescription(userId: string, body: { style?: string; name?: string | null; tags?: string[]; price?: number | null; capacity?: number | null }) {
     const vendor = await this.vendorOf(userId);
-    this.quota.assertAvailable(userId);
     const style = pickStyle(PACKAGE_STYLES, body.style);
     const name = body.name?.trim() ?? '';
     const field = vendor.service_categories.name.toLowerCase();
     const tags = (body.tags ?? []).map((t) => String(t).trim()).filter(Boolean).slice(0, 5);
     const price = Number(body.price);
     const capacity = Number(body.capacity);
-    if (!name || !(tags.length || price > 0 || capacity > 0)) {
-      return fail('AI_NOT_ENOUGH_INFO', 'Hãy nhập tên gói và ít nhất một trong: giá, sức chứa, phong cách (tags) rồi mới tạo với AI, để AI có thông tin thật mà viết.', 400);
-    }
     const perTable = priceUnitOf(categorySlug(vendor.service_categories.name)) === 'TABLE';
+    if (!name || !(tags.length || price > 0 || (perTable && capacity > 0))) {
+      return fail(
+        'AI_NOT_ENOUGH_INFO',
+        perTable
+          ? 'AI chưa có đủ dữ liệu để viết. Bạn điền tên gói, rồi thêm giá mỗi mâm, sức chứa hoặc vài phong cách (tags) nhé.'
+          : 'AI chưa có đủ dữ liệu để viết. Bạn điền tên gói, rồi thêm giá hoặc vài phong cách (tags) nhé.',
+        400,
+      );
+    }
     const money = price > 0 ? `${price.toLocaleString('vi-VN')}đ${perTable ? '/mâm (mỗi mâm 10 khách)' : ''}` : null;
 
     const system =
@@ -223,7 +227,7 @@ export class VendorPackagesService {
       .join('\n');
 
     const ai = await this.gemini.write(system, prompt);
-    if (ai) return { description: ai, aiUsed: true, ...this.quota.consume(userId) };
+    if (ai) return { description: ai, aiUsed: true };
 
     const parts = [
       `${name} là gói ${field} dành cho tiệc cưới, được thiết kế gọn gàng và dễ tùy chỉnh theo nhu cầu của cặp đôi.`,
@@ -232,7 +236,7 @@ export class VendorPackagesService {
       price > 0 ? `Giá từ ${price.toLocaleString('vi-VN')}đ, có thể điều chỉnh theo yêu cầu cụ thể.` : null,
       'Liên hệ để được tư vấn chi tiết và nhận báo giá phù hợp.',
     ];
-    return { description: parts.filter(Boolean).join(' '), aiUsed: false, ...this.quota.status(userId) };
+    return { description: parts.filter(Boolean).join(' '), aiUsed: false };
   }
 
   /**

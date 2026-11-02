@@ -1,5 +1,4 @@
 import { HttpException, Injectable } from '@nestjs/common';
-import { AiQuotaService } from '../../integrations/ai/ai-quota.service';
 import { GeminiService } from '../../integrations/ai/gemini.service';
 import { PROFILE_STYLES, pickStyle } from '../../integrations/ai/writing-styles';
 import { randomUUID } from 'node:crypto';
@@ -48,7 +47,7 @@ export type UploadPurpose = 'VENDOR_DOCUMENT' | 'VENDOR_PHOTO' | 'PACKAGE_PHOTO'
 
 @Injectable()
 export class VendorProfileService {
-  constructor(private readonly prisma: PrismaService, private readonly storage: StorageService, private readonly gemini: GeminiService, private readonly quota: AiQuotaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly storage: StorageService, private readonly gemini: GeminiService) {}
 
   /** Hồ sơ NCC của tài khoản đang đăng nhập. */
   async findVendor(userId: string) {
@@ -282,7 +281,6 @@ export class VendorProfileService {
    */
   async suggestDescription(userId: string, body: { style?: string; businessName?: string | null; ward?: string | null; province?: string | null; hint?: string | null }) {
     const v = await this.findVendor(userId);
-    this.quota.assertAvailable(userId);
     const style = pickStyle(PROFILE_STYLES, body.style);
     const name = body.businessName?.trim() || v.business_name || 'Chúng tôi';
     const where = [body.ward?.trim() || v.ward, body.province?.trim() || v.city].filter(Boolean).join(', ');
@@ -307,7 +305,7 @@ export class VendorProfileService {
       .join('\n');
 
     const ai = await this.gemini.write(system, prompt);
-    if (ai) return { description: ai, aiUsed: true, ...this.quota.consume(userId) };
+    if (ai) return { description: ai, aiUsed: true };
 
     const parts = [
       `${name} là đơn vị cung cấp dịch vụ ${field} cho tiệc cưới${where ? ` tại ${where}` : ''}.`,
@@ -315,7 +313,7 @@ export class VendorProfileService {
       hint ? `Điểm nổi bật: ${hint}.` : null,
       'Liên hệ để được tư vấn gói phù hợp với ngân sách và phong cách của bạn.',
     ];
-    return { description: parts.filter(Boolean).join(' '), aiUsed: false, ...this.quota.status(userId) };
+    return { description: parts.filter(Boolean).join(' '), aiUsed: false };
   }
 
   /** Upload một tệp lên Supabase Storage; trả về VendorFile để FE đưa vào hồ sơ hoặc gói. */
