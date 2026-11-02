@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { actionsOf, useOrderActionRunner } from '../actions'
 import type { OrderFormMode } from './OrderFormDialog'
+import { OrderRequestsPanel } from './OrderRequestsPanel'
 
 interface OrderActionsProps {
   order: Order
@@ -21,6 +22,7 @@ export function OrderActions({ order: o, onOpenForm, onView, onViewInvoice }: Or
   const actions = actionsOf(o, { withView: !!onView })
   return (
     <>
+      <OrderRequestsPanel order={o} />
       <div className="mt-3 flex flex-wrap gap-2">
         {actions.map((a) => (
           <Button

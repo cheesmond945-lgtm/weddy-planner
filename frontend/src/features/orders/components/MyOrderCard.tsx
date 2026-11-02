@@ -15,6 +15,7 @@ import { paths } from '@/routes/paths'
 import type { InvoiceType, Order } from '@/types/order'
 import { hintOf, hintTone } from '../hint'
 import { EventDateNote } from './EventDateNote'
+import { CoupleOrderRequests } from './OrderRequests'
 
 const HOUR = 3_600_000
 
@@ -71,6 +72,8 @@ export function MyOrderCard({ order: o, onRevise }: { order: Order; onRevise: (o
       )}
 
       {hint && <div className={cn('mt-2.5 rounded-sm px-2.5 py-2 text-[13px] whitespace-pre-wrap', hintTone(o))}>{hint}</div>}
+      {/* Sau cọc: đổi số khách (đơn tiệc), yêu cầu hủy đơn */}
+      <CoupleOrderRequests order={o} />
 
       <div className="mt-auto flex flex-wrap gap-2 pt-3">
         {o.status === 'Pending' && (

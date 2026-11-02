@@ -1,20 +1,26 @@
 import { Bell, Handshake, LogOut, MessageCircle, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { PartnerRegistrationDialog } from '@/features/partnerRegistration/components/PartnerRegistrationDialog'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { SessionUser } from '@/types/auth'
 
-/** Nút "Đăng ký hợp tác" cho nhà cung cấp muốn làm đối tác. Chưa có chức năng. */
+/** Nút "Đăng ký hợp tác": mở form đăng ký tư vấn cho nhà cung cấp muốn làm đối tác (yêu cầu hiện ở trang Yêu cầu hợp tác của Admin). */
 export function PartnerButton() {
+  const [open, setOpen] = useState(false)
   return (
-    <button
-      type="button"
-      className="inline-flex h-10 items-center gap-2 rounded-pill border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:border-gold hover:text-gold max-sm:hidden"
-    >
-      <Handshake className="size-[18px]" aria-hidden />
-      Đăng ký hợp tác
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-10 items-center gap-2 rounded-pill border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:border-gold hover:text-gold max-sm:hidden"
+      >
+        <Handshake className="size-[18px]" aria-hidden />
+        Đăng ký hợp tác
+      </button>
+      <PartnerRegistrationDialog open={open} onOpenChange={setOpen} />
+    </>
   )
 }
 

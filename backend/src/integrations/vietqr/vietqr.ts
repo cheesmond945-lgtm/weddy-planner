@@ -4,7 +4,7 @@
  *
  * - Mã QR dựng bằng Quick Link của img.vietqr.io (số tiền và nội dung đã điền sẵn).
  * - Nội dung chuyển khoản bắt buộc bắt đầu bằng "SEVQR " (yêu cầu của SePay với VietinBank), sau đó phân biệt hai luồng:
- *   "EVERLY" + mã đơn (cọc), "EVHH" + 8 ký tự đầu của id bảng kê (hoa hồng). Tổng tối đa 25 ký tự, in hoa, không dấu.
+ *   "EVERLY" + mã đơn (cọc), "EVHH" + 8 ký tự đầu của id bảng kê (hoa hồng), "EVBS" + 8 ký tự đầu của id yêu cầu đổi số khách (cọc bổ sung). Tổng tối đa 25 ký tự, in hoa, không dấu.
  * - Xác nhận đã nhận tiền bằng cách hỏi SePay (sepay.ts), không tin kết quả do trình duyệt báo.
  */
 
@@ -16,6 +16,8 @@ export const SEPAY_PREFIX = 'SEVQR ';
 export const MAX_CONTENT_LENGTH = 25;
 export const DEPOSIT_PREFIX = 'EVERLY';
 export const COMMISSION_PREFIX = 'EVHH';
+/** Cọc bổ sung khi đổi số khách của đơn tiệc đã cọc */
+export const EXTRA_DEPOSIT_PREFIX = 'EVBS';
 
 export interface VietqrConfig {
   bankBin: string;
@@ -44,6 +46,9 @@ function withPrefix(code: string) {
 export const depositContent = (orderCode: string) => withPrefix(`${DEPOSIT_PREFIX}${orderCode}`);
 /** Mã bảng kê dùng trong nội dung chuyển khoản: 8 ký tự hex đầu của id (mã DS<MM><YYYY> trùng giữa các NCC nên không dùng được). */
 export const commissionContent = (statementId: string) => withPrefix(`${COMMISSION_PREFIX}${statementId.replace(/-/g, '').slice(0, 8)}`);
+
+/** Cọc bổ sung của một yêu cầu đổi số khách: 8 ký tự hex đầu của id yêu cầu */
+export const extraDepositContent = (adjustmentId: string) => withPrefix(`${EXTRA_DEPOSIT_PREFIX}${adjustmentId.replace(/-/g, '').slice(0, 8)}`);
 
 /** Ngân hàng thường bỏ dấu cách và ký tự đặc biệt trong nội dung: so khớp trên chuỗi chữ hoa, chỉ giữ chữ và số. */
 export const normalizeContent = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');

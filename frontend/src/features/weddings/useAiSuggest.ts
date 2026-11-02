@@ -4,7 +4,7 @@ import { useRequireCouple } from '@/features/auth/useRequireCouple'
 import { paths } from '@/routes/paths'
 import { useWedding } from './hooks'
 
-/** Mở gợi ý AI cho một hạng mục: sang trang Dịch vụ cưới, lọc theo hạng mục, hiện khung gợi ý (aiSuggest trong prototype). */
+/** Mở "Gợi ý cho bạn" của một hạng mục: sang trang Dịch vụ cưới ở trạng thái thu gọn (?category=…&ai=1). */
 export function useAiSuggest() {
   const requireCouple = useRequireCouple()
   const navigate = useNavigate()

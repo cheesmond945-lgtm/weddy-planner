@@ -41,26 +41,13 @@ export class PlanTabsController {
     return this.budget.summary(req.user.sub);
   }
 
-  /** Đặt ngân sách sửa tay của hạng mục. Body { amount, version } */
-  @Put('budget/categories/:categoryId')
-  setManualBudget(@Req() req: any, @Param('categoryId') categoryId: string, @Body() body: { amount?: unknown; version?: unknown }) {
-    return this.budget.setManual(req.user.sub, categoryId, body ?? {});
-  }
-
-  /** Bỏ số sửa tay, quay về số gợi ý. ?version= */
-  @Delete('budget/categories/:categoryId')
-  clearManualBudget(@Req() req: any, @Param('categoryId') categoryId: string, @Query('version') version?: string) {
-    return this.budget.clearManual(req.user.sub, categoryId, version);
-  }
-
-  @Post('budget/reset')
-  resetBudget(@Req() req: any, @Body() body: { version?: unknown }) {
-    return this.budget.reset(req.user.sub, body?.version);
-  }
-
-  @Post('budget/rebalance')
-  rebalanceBudget(@Req() req: any, @Body() body: { version?: unknown }) {
-    return this.budget.rebalance(req.user.sub, body?.version);
+  /**
+   * Cài đặt phân bổ: mức chia, tỷ lệ Tùy chỉnh, tiệc tự lo. Body { budgetPreset?, customWeights?, ownVenue?, ownVenueCost?, version }.
+   * Không có ô sửa số tiền theo hạng mục: phân bổ là giá trị dẫn xuất (allocation.ts).
+   */
+  @Patch('budget/settings')
+  budgetSettings(@Req() req: any, @Body() body: Record<string, unknown>) {
+    return this.budget.updateSettings(req.user.sub, body ?? {});
   }
 
   // ---------- Chi phí khác ngoài WebPlan ----------

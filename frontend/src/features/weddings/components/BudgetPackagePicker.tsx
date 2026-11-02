@@ -5,13 +5,14 @@ import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import type { Budget, BudgetVendor, PlanItem } from '@/types/wedding'
+import { chargedTables } from '@/features/catalog/price'
 import { packageLabel, packageOptionText } from '../budgetView'
 import { useChoosePackage, usePatchWedding } from '../hooks'
 
 /**
  * Ô "Gói" trên một dòng của bảng Ngân sách: bấm để đổi gói (cùng danh sách gói với tab Dịch vụ).
  * `withTables` (nhà hàng, gói tính theo bàn): số bàn hiện trong ô và sửa được ở đầu danh sách gói.
- * Đã có đơn thì khóa. Không có `item` (không xem được tab Dịch vụ) thì chưa có danh sách gói, chỉ sửa được số bàn.
+ * Đã có đơn thì khóa. Gói tiệc vượt sức chứa bị vô hiệu; gói khác chọn được kể cả vượt ngân sách, kèm hệ quả ngay dưới gói.
  */
 export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vendor?: BudgetVendor; item?: PlanItem; budget: Budget; withTables: boolean }) {
   const choose = useChoosePackage()
@@ -22,7 +23,8 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
   const pkg = item?.package ?? vendor?.package ?? null
   const locked = pkg?.source === 'ORDER'
   const { count, auto, override } = budget.tables
-  const options = item?.packages ?? []
+  // Danh sách gói từ tab Ngân sách (kèm hệ quả, sức chứa); không có thì lấy từ kế hoạch
+  const options = vendor?.options.length ? vendor.options : (item?.packages ?? []).map((p) => ({ ...p, chargedTables: null, consequence: null as string | null }))
 
   useEffect(() => {
     if (!open) return
@@ -39,7 +41,8 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
 
   const select = (packageId: string | null) => {
     setOpen(false)
-    if (item) choose.mutate({ vendorId: item.id, packageId })
+    const vendorId = item?.id ?? vendor?.id
+    if (vendorId) choose.mutate({ vendorId, packageId })
   }
 
   function saveTables(next: number | null) {
@@ -65,10 +68,23 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
   }
 
   const name = vendor || item ? packageLabel(pkg).replace(', bấm để đổi', '') : null
-  const tablesText = `${count} bàn`
+  // Số bàn tính phí = max(số bàn dự kiến, số bàn tối thiểu của gói), cùng công thức chi phí ở backend
+  const minTables = pkg?.minTables ?? options.find((o) => o.id === pkg?.id)?.minTables ?? null
+  const charged = chargedTables(count, minTables)
+  const byMinimum = withTables && !!name && charged.byMinimum
+  const tablesText = byMinimum ? `${charged.count} bàn (tối thiểu của gói)` : `${count} bàn`
   const text = name && withTables ? `${name} · ${tablesText}` : (name ?? tablesText)
   const canOpen = !locked && (options.length > 0 || withTables)
   const unavailable = pkg?.unavailable && <div className="mt-1 text-warn">Gói bạn chọn đã ngừng bán, đang tính theo gói dự kiến.</div>
+  // Hệ quả của gói đang chọn (khách tự chọn gói vượt trần cứng): "Chọn gói này, … thiếu Z."
+  const current = options.find((o) => o.id === pkg?.id)
+  const consequence = !locked && current?.consequence && <div className="mt-1 text-[12px] text-warn">{current.consequence}</div>
+  // Không ẩn gói: khách có thể chấp nhận đặt thêm bàn, chỉ báo rõ chi phí đang tính theo số tối thiểu
+  const minimumNote = byMinimum && !locked && (
+    <div className="mt-1 text-[12px] text-warn">
+      Gói này yêu cầu tối thiểu {minTables} bàn, nhiều hơn {charged.shortBy} bàn so với dự kiến của bạn
+    </div>
+  )
 
   if (!canOpen) {
     return (
@@ -78,6 +94,8 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
           {text}
         </span>
         {locked && <div className="text-muted-foreground">Giá theo đơn nhà cung cấp gửi.</div>}
+        {minimumNote}
+        {consequence}
         {unavailable}
       </div>
     )
@@ -100,6 +118,8 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
         <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden />
       </button>
       {withTables && <div className="mt-1 text-[12px] text-muted-foreground">{override === null ? `Số bàn tự tính từ ${budget.guestCount} khách` : `Bạn đã sửa số bàn, tự tính là ${auto}`}</div>}
+      {minimumNote}
+      {consequence}
       {unavailable}
 
       {open && (
@@ -137,7 +157,7 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
                   onClick={() => select(null)}
                   className={cn('block w-full px-3.5 py-2 text-left text-sm hover:bg-accent-soft', pkg?.source === 'PLANNED' && 'font-semibold text-gold-700')}
                 >
-                  Dùng gói dự kiến (lớn nhất vừa ngân sách hạng mục)
+                  Dùng gói dự kiến (gói rẻ nhất)
                 </button>
               </li>
               {options.map((p) => {
@@ -148,10 +168,13 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
                       type="button"
                       role="option"
                       aria-selected={active}
+                      // Gói tiệc vượt sức chứa: vô hiệu (điều kiện kỹ thuật); không chặn theo ngân sách
+                      disabled={!p.fits}
                       onClick={() => select(p.id)}
-                      className={cn('block w-full px-3.5 py-2 text-left text-sm hover:bg-accent-soft', active && 'font-semibold text-gold-700', !p.fits && 'text-muted-foreground')}
+                      className={cn('block w-full px-3.5 py-2 text-left text-sm hover:bg-accent-soft disabled:cursor-not-allowed disabled:hover:bg-transparent', active && 'font-semibold text-gold-700', !p.fits && 'text-muted-foreground')}
                     >
                       {packageOptionText(p, budget.guestCount, item?.tables ?? count)}
+                      {p.fits && p.consequence && <span className="mt-0.5 block text-[12px] font-normal text-warn">{p.consequence}</span>}
                     </button>
                   </li>
                 )

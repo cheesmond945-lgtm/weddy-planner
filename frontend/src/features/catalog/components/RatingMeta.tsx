@@ -1,12 +1,10 @@
-import { MapPin } from 'lucide-react'
+import { MapPin, Star } from 'lucide-react'
 import type { ServiceSummary } from '@/types/catalog'
-import { GoogleRatingBadge } from './GoogleRatingBadge'
 import { mapsHref } from './GoogleMapsLink'
 
 /**
- * Dòng địa chỉ + điểm Google (metaRow trong prototype). Trên thẻ chỉ hiện 2 cấp cuối của địa chỉ (quận, tỉnh / thành),
+ * Dòng địa chỉ + điểm đánh giá của khách trên web (metaRow trong prototype); chưa có đánh giá thì chỉ có địa chỉ. Trên thẻ chỉ hiện 2 cấp cuối của địa chỉ (quận, tỉnh / thành),
  * địa chỉ đầy đủ xem ở trang chi tiết. Là link mở Google Maps, chỉ gạch chân khi rê chuột.
- * Điểm tải riêng khi thẻ vào vùng nhìn thấy; chưa có điểm thì không hiện gì.
  */
 /** "131 Nguyễn Phong Sắc, Cầu Giấy, Hà Nội" -> "Cầu Giấy, Hà Nội" (2 phần sau dấu phẩy cuối cùng trở lên). */
 export const shortAddress = (address: string) =>
@@ -32,7 +30,13 @@ export function RatingMeta({ service }: { service: ServiceSummary }) {
         <span className="line-clamp-1">{address}</span>
         <span className="sr-only">(mở Google Maps trong tab mới)</span>
       </a>
-      <GoogleRatingBadge vendorId={service.id} />
+      {!!service.reviewCount && (
+        <span className="inline-flex shrink-0 items-center gap-1" aria-label={`Đánh giá ${service.rating?.toFixed(1)} trên 5, ${service.reviewCount} lượt`}>
+          <Star className="size-[15px] fill-gold text-gold" aria-hidden />
+          <b className="font-semibold text-ink">{service.rating?.toFixed(1)}</b>
+          <span>({service.reviewCount})</span>
+        </span>
+      )}
     </div>
   )
 }

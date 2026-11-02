@@ -3,6 +3,7 @@ import type { Prisma } from '../../generated/prisma/client';
 import { buildPayInfo, depositContent, vietqrConfig } from '../../integrations/vietqr/vietqr';
 import { demoPaymentEnabled } from '../../integrations/vietqr/demo-mode';
 import { SepayService } from '../../integrations/vietqr/sepay.service';
+import { dbFeatures } from '../../prisma/db-features';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
 import { Paginated } from '../../common/utils/pagination';
@@ -76,7 +77,7 @@ export class OrdersService {
     return v ?? fail('VENDOR_PROFILE_NOT_FOUND', 'Tài khoản chưa có hồ sơ nhà cung cấp.', 404);
   }
 
-  private async conversationOf(o: Pick<OrderRow, 'weddings' | 'vendor_profiles'>) {
+  async conversationOf(o: Pick<OrderRow, 'weddings' | 'vendor_profiles'>) {
     const c = await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: o.weddings!.user_id!, vendor_id: o.vendor_profiles!.user_id! } }, select: { id: true } });
     return c?.id ?? '';
   }
@@ -85,13 +86,13 @@ export class OrdersService {
     return this.prisma.orders.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
   }
 
-  private async dtoOf(id: string) {
+  async dtoOf(id: string) {
     const o = await this.loadFull(id);
     return toOrderDto(o, await this.conversationOf(o));
   }
 
   /** Đơn của NCC; quét hết hạn / tự hoàn thành riêng đơn của NCC này trước khi đọc. */
-  private async ownedByVendor(userId: string, id: string) {
+  async ownedByVendor(userId: string, id: string) {
     const vendor = await this.vendorOf(userId);
     await this.jobs.sweep({ vendorId: vendor.id });
     const o = UUID.test(id) ? await this.prisma.orders.findFirst({ where: { id, vendor_id: vendor.id }, include: ORDER_INCLUDE }) : null;
@@ -99,7 +100,7 @@ export class OrdersService {
   }
 
   /** Đơn của khách (không có bản nháp); quét riêng đơn của khách này trước khi đọc. */
-  private async ownedByCouple(userId: string, id: string) {
+  async ownedByCouple(userId: string, id: string) {
     await this.jobs.sweep({ coupleId: userId });
     const o = UUID.test(id) ? await this.prisma.orders.findFirst({ where: { id, weddings: { user_id: userId }, status: { not: 'Draft' } }, include: ORDER_INCLUDE }) : null;
     return o ?? fail('ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.', 404);
@@ -801,9 +802,14 @@ export class OrdersService {
 
     const r = await this.prisma.orders.updateMany({
       where: { id, status: 'Deposited' },
-      data: { status: 'Cancelled', cancelled_date: new Date(), cancel_reason: reason },
+      // Hủy thì bỏ luôn yêu cầu hủy của khách (nếu có)
+      data: { status: 'Cancelled', cancelled_date: new Date(), cancel_reason: reason, ...(dbFeatures.orderAdjustments && { cancel_requested_date: null, cancel_request_note: null }) },
     });
     if (!r.count) return fail('ORDER_NOT_CANCELLABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 422);
+    // Yêu cầu đổi số khách đang chờ không còn ý nghĩa
+    if (dbFeatures.orderAdjustments) {
+      await this.prisma.order_adjustments.updateMany({ where: { order_id: id, status: { in: ['AwaitingVendor', 'AwaitingDeposit'] } }, data: { status: 'Rejected', decided_date: new Date() } });
+    }
     await this.timelineHook('hủy đơn', order.order_code, () => onOrderCancelled(this.prisma, { id, wedding_id: order.wedding_id!, vendor_id: order.vendor_id! }));
 
     const label = CANCEL_LABEL[reason as CancelReason];

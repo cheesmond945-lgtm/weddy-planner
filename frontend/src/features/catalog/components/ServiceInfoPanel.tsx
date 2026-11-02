@@ -103,7 +103,7 @@ export function ServiceInfoPanel({ service, packageExtra }: ServiceInfoPanelProp
         </DetailCard>
       )}
 
-      <PackageDrawer service={service} pkg={opened} variant="gallery" extra={opened ? packageExtra?.(opened) : null} onClose={() => setOpened(null)} onSelect={setOpened} />
+      <PackageDrawer service={service} pkg={opened} variant="gallery" extra={opened ? packageExtra?.(opened) : null} onClose={() => setOpened(null)} />
 
       <Lightbox
         title={viewing?.title ?? ''}

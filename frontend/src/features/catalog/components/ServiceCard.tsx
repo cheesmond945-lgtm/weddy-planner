@@ -21,13 +21,17 @@ interface ServiceCardProps {
   badge?: ReactNode
   /** Nhãn danh mục trên ảnh; ẩn khi đang lọc đúng danh mục đó */
   showCategory?: boolean
+  /** Nhãn nhỏ góc trên bên trái ảnh (ví dụ "Gợi ý cho bạn") */
+  imageBadge?: ReactNode
+  /** Nội dung thêm dưới giá, trên các nút (ví dụ lý do gợi ý) */
+  details?: ReactNode
 }
 
 /**
  * Thẻ dịch vụ trong lưới (svcCard trong prototype).
  * Thứ tự ưu tiên: tên (lớn nhất) → địa chỉ → khoảng giá các gói. Nút "Xem chi tiết" dạng viền để lưới nhẹ hơn, rê chuột mới đổ nền vàng.
  */
-export function ServiceCard({ service, index = 0, imageAction, extraActions, badge, showCategory = true }: ServiceCardProps) {
+export function ServiceCard({ service, index = 0, imageAction, extraActions, badge, showCategory = true, imageBadge, details }: ServiceCardProps) {
   const location = useLocation()
   const reveal = useReveal<HTMLElement>()
   const detail = { pathname: paths.serviceDetail(service.id) }
@@ -46,6 +50,7 @@ export function ServiceCard({ service, index = 0, imageAction, extraActions, bad
               {service.category.name}
             </span>
           )}
+          {imageBadge && <div className="absolute top-3 left-3">{imageBadge}</div>}
           {imageAction && <div className="absolute top-3 right-3">{imageAction}</div>}
         </div>
 
@@ -69,10 +74,11 @@ export function ServiceCard({ service, index = 0, imageAction, extraActions, bad
                 formatMoney(service.priceFrom)
               )}
             </span>
-            <span className="text-[13px] text-ink-2">{isTablePriced(service) ? ' / mâm · đã gồm sảnh' : ' / gói'}</span>
+            <span className="text-[13px] text-ink-2">{isTablePriced(service) ? ' / bàn · đã gồm sảnh' : ' / gói'}</span>
           </p>
           {/* Trung tâm tiệc cưới: trạng thái từng gói theo ngày cưới của khách */}
           {service.category.slug === VENUE_SLUG && <ServiceCardAvailability serviceId={service.id} />}
+          {details}
           <div className="mt-auto flex gap-2 pt-3">
             <Link
               to={detail}

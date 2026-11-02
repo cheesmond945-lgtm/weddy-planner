@@ -8,7 +8,7 @@ import { Brand } from '@/components/Brand'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { PLAN_TAB_LABEL } from '@/features/weddings/access'
-import { diffView } from '@/features/weddings/budgetView'
+import { costSourceText } from '@/features/weddings/budgetView'
 import { StatCard, StatGrid } from '@/features/weddings/components/StatCard'
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { daysBetween, formatDate, formatShortDate, parseDate, today } from '@/lib/date'
@@ -86,8 +86,8 @@ function BudgetView({ d }: { d: PublicTabData['budget'] }) {
     <div className="flex flex-col gap-4">
       <StatGrid className="mb-0">
         <StatCard label="Tổng ngân sách" value={formatMoney(t.total)} />
-        <StatCard label="Ngân sách đã chia" value={formatMoney(t.allocated)} />
-        <StatCard label="Chi phí theo gói đã chọn" value={formatMoney(t.packagesCost)} />
+        <StatCard label="Đã cọc" value={formatMoney(t.deposited)} />
+        <StatCard label="Dự kiến chưa chốt" value={formatMoney(t.plannedTotal)} />
         <StatCard label={t.remaining < 0 ? 'Vượt ngân sách' : 'Còn lại'} value={formatMoney(Math.abs(t.remaining))} tone={t.remaining < 0 ? 'warn' : 'good'} />
       </StatGrid>
       <div className={cn(card, 'overflow-x-auto px-0 py-0')}>
@@ -95,23 +95,27 @@ function BudgetView({ d }: { d: PublicTabData['budget'] }) {
           <thead className="text-[13px] text-muted-foreground">
             <tr>
               <th className="px-4 py-2.5 font-medium">Hạng mục</th>
-              <th className="px-3 py-2.5 font-medium">Ngân sách</th>
               <th className="px-3 py-2.5 font-medium">Dịch vụ</th>
-              <th className="px-4 py-2.5 text-right font-medium">Chênh lệch</th>
+              <th className="px-4 py-2.5 text-right font-medium">Chi phí</th>
             </tr>
           </thead>
           <tbody>
-            {d.categories.map((c) => {
-              const v = diffView(c.diff)
-              return (
-                <tr key={c.categoryId} className="border-t border-line">
-                  <td className="px-4 py-2.5 font-medium">{c.name}</td>
-                  <td className="px-3 py-2.5">{formatMoney(c.budget)}</td>
-                  <td className="px-3 py-2.5">{c.vendors.map((x) => x.name).join(', ') || <span className="text-muted-foreground">Chưa chọn</span>}</td>
-                  <td className={cn('px-4 py-2.5 text-right', v.tone === 'over' ? 'text-warn' : v.tone === 'left' ? 'text-sage' : 'text-muted-foreground')}>{v.text}</td>
-                </tr>
-              )
-            })}
+            {d.categories.map((c) => (
+              <tr key={c.categoryId} className="border-t border-line align-top">
+                <td className="px-4 py-2.5 font-medium">{c.name}</td>
+                <td className="px-3 py-2.5">
+                  {c.vendors.map((x) => x.name).join(', ') || <span className="text-muted-foreground">{c.status === 'OWN_VENUE' ? 'Tự lo tiệc' : 'Chưa chọn'}</span>}
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  {c.status === 'CHOSEN' || c.status === 'OWN_VENUE' ? formatMoney(c.cost) : <span className="text-muted-foreground">—</span>}
+                  {c.vendors.map((v) => (
+                    <div key={v.id} className="text-[12px] text-muted-foreground">
+                      {costSourceText(v.costSource, v.deposited)}
+                    </div>
+                  ))}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

@@ -2,7 +2,7 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService, categoryRank, categorySlug, estimateCost } from '../catalog/services.service';
 import { ORDER_INCLUDE, toOrderDto, ymd } from '../orders/order-mapping';
-import { SPENDING_TIERS, type SpendingTier } from './budget.config';
+import { BUDGET_PRESETS, type BudgetPreset } from './allocation.config';
 import { BudgetCalcService } from './budget-calc.service';
 import { fitsGuests, packageCost } from './budget-engine';
 import { notifyVendorsOfWeddingDate, onWeddingCategories, planWeddingDateChange } from './timeline-hooks';
@@ -24,8 +24,8 @@ export interface WeddingInputBody {
   budget?: number;
   /** Phường/xã nơi tổ chức (HANOI_WARDS, có tiền tố); null hoặc bỏ trống là chưa chọn */
   ward?: string | null;
-  /** Mức chi tiêu, không bắt buộc (mặc định AUTO khi tạo, giữ nguyên khi sửa) */
-  spendingTier?: string;
+  /** Mức chia ngân sách, không bắt buộc (mặc định BALANCED khi tạo, giữ nguyên khi sửa) */
+  budgetPreset?: string;
   categorySlugs?: string[];
   /** Phiên bản đã đọc (GET trả về); có gửi thì kiểm tra ghi đồng thời */
   version?: string;
@@ -35,7 +35,7 @@ export interface WeddingInputBody {
 export interface WeddingPatchBody {
   budget?: unknown;
   guestCount?: unknown;
-  spendingTier?: unknown;
+  budgetPreset?: unknown;
   /** null: về số bàn tự tính */
   tableCountOverride?: unknown;
   version?: unknown;
@@ -51,7 +51,7 @@ const todayVN = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0,
 /** Đơn còn hiệu lực trong kế hoạch (bỏ nháp, đã hủy, hết hạn). */
 const ACTIVE_ORDER = ['Pending', 'NeedRevision', 'Deposited', 'Completed'];
 
-const isTier = (v: unknown): v is SpendingTier => typeof v === 'string' && (SPENDING_TIERS as string[]).includes(v);
+const isPreset = (v: unknown): v is BudgetPreset => typeof v === 'string' && (BUDGET_PRESETS as string[]).includes(v);
 
 @Injectable()
 export class WeddingsService {
@@ -98,7 +98,7 @@ export class WeddingsService {
       ward: w.ward ?? null,
       guestCount: w.guest_count,
       budget: Number(w.budget),
-      spendingTier: (w.spending_tier ?? 'AUTO') as SpendingTier,
+      budgetPreset: (isPreset((w as { budget_preset?: string }).budget_preset) ? (w as { budget_preset: string }).budget_preset : 'BALANCED') as BudgetPreset,
       tableCountOverride: w.table_count_override ?? null,
       categorySlugs: w.wedding_categories.map((c) => slugById.get(c.category_id)).filter((s): s is string => !!s).sort((a, b) => categoryRank(a) - categoryRank(b)),
       version: versionOf(w),
@@ -126,7 +126,8 @@ export class WeddingsService {
     const guest = body.guestCount === null || body.guestCount === undefined ? null : Number(body.guestCount);
     if (guest === null) errors.guestCount = 'Vui lòng nhập số khách dự kiến.';
     else if (!Number.isInteger(guest) || guest < 1) errors.guestCount = 'Số khách là số nguyên từ 1.';
-    if (body.spendingTier !== undefined && !isTier(body.spendingTier)) errors.spendingTier = 'Mức chi tiêu không hợp lệ.';
+    // Tùy chỉnh cần tỷ lệ nên chỉ chọn ở tab Ngân sách
+    if (body.budgetPreset !== undefined && (!isPreset(body.budgetPreset) || body.budgetPreset === 'CUSTOM')) errors.budgetPreset = 'Mức chia không hợp lệ.';
     const ward = body.ward === undefined || body.ward === null || body.ward === '' ? null : body.ward;
     if (ward !== null && !isHanoiWard(ward)) errors.ward = 'Nơi tổ chức phải là một phường/xã của Hà Nội.';
 
@@ -145,7 +146,7 @@ export class WeddingsService {
       city: DEFAULT_CITY,
       guest_count: guest!,
       budget,
-      ...(isTier(body.spendingTier) && dbFeatures.budgetTiers && { spending_tier: body.spendingTier }),
+      ...(isPreset(body.budgetPreset) && body.budgetPreset !== 'CUSTOM' && dbFeatures.budgetAllocation && { budget_preset: body.budgetPreset }),
       // Chưa chạy SQL thêm cột ward thì bỏ qua, các trường khác vẫn lưu
       ...(body.ward !== undefined && dbFeatures.weddingWard && { ward }),
     };
@@ -180,12 +181,12 @@ export class WeddingsService {
     return this.getMine(userId);
   }
 
-  /** Đổi nhanh tổng ngân sách, số khách, mức chi, số bàn. Ô ngân sách sửa tay giữ nguyên. */
+  /** Đổi nhanh tổng ngân sách, số khách, số bàn (mức chia, tiệc tự lo: PATCH …/budget/settings). */
   async patchMine(userId: string, body: WeddingPatchBody) {
     requireDbFeature('budgetTiers');
     const w = await this.requireWedding(userId);
     const errors: Record<string, string> = {};
-    const data: { budget?: number; guest_count?: number; spending_tier?: SpendingTier; table_count_override?: number | null } = {};
+    const data: { budget?: number; guest_count?: number; table_count_override?: number | null } = {};
     if (body.budget !== undefined) {
       const n = Number(body.budget);
       if (!Number.isInteger(n) || n <= 0 || n > 1e13) errors.budget = 'Ngân sách phải là số nguyên dương.';
@@ -195,10 +196,6 @@ export class WeddingsService {
       const n = Number(body.guestCount);
       if (!Number.isInteger(n) || n < 1 || n > 100000) errors.guestCount = 'Số khách là số nguyên từ 1.';
       else data.guest_count = n;
-    }
-    if (body.spendingTier !== undefined) {
-      if (!isTier(body.spendingTier)) errors.spendingTier = 'Mức chi tiêu phải là AUTO, SAVING, BALANCED hoặc PREMIUM.';
-      else data.spending_tier = body.spendingTier;
     }
     if (body.tableCountOverride !== undefined) {
       const n = body.tableCountOverride === null ? null : Number(body.tableCountOverride);
@@ -276,8 +273,8 @@ export class WeddingsService {
       withPrices ? this.calc.compute(weddingId) : null,
     ]);
     const sumById = new Map(summaries.map((s) => [s.id, s]));
-    const costById = new Map((calc?.result.vendors ?? []).map((c) => [c.vendorId, c]));
-    const tables = calc?.result.tables.count ?? 0;
+    const costById = new Map((calc?.result.rows.flatMap((r) => r.chosen) ?? []).map((c) => [c.vendorId, c]));
+    const tables = calc?.result.tables ?? 0;
     const guestCount = calc?.input.guestCount ?? 0;
     return vendors
       .filter((v) => sumById.has(v.id))
@@ -295,7 +292,7 @@ export class WeddingsService {
             packageName: order?.order_items[0]?.item_name ?? cost?.packageName ?? '',
             price: cost?.cost ?? (order ? Number(order.total_amount) : 0),
             /** Gói đang tính: ORDER (theo đơn, khóa), SELECTED (khách chọn), PLANNED (gói dự kiến) */
-            package: cost ? { id: cost.packageId, name: cost.packageName, source: cost.packageSource, unavailable: cost.packageUnavailable } : null,
+            package: cost ? { id: cost.packageId, name: cost.packageName, source: cost.packageSource, unavailable: cost.packageUnavailable, minTables: cost.minTables } : null,
             /** Các gói đổi được, kèm chi phí theo số bàn hiện tại */
             packages: pkgs.map((p) => ({
               id: p.id,

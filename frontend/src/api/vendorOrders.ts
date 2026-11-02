@@ -83,6 +83,12 @@ export const vendorOrdersApi = {
   rejectRevision: (orderId: string, note?: string): Promise<Order> =>
     http.post(`/vendors/me/orders/${orderId}/revision-requests/reject`, { note }),
 
+  /** Đồng ý yêu cầu đổi số khách (tăng giá trị thì chờ khách nộp cọc bổ sung, không tăng thì áp dụng ngay) */
+  approveGuestChange: (orderId: string): Promise<Order> => http.post(`/vendors/me/orders/${orderId}/guest-changes/approve`),
+  rejectGuestChange: (orderId: string, note?: string): Promise<Order> => http.post(`/vendors/me/orders/${orderId}/guest-changes/reject`, { note }),
+  /** Từ chối yêu cầu hủy của khách (đồng ý: cancel với reason CUSTOMER_REQUEST) */
+  rejectCancelRequest: (orderId: string, note?: string): Promise<Order> => http.post(`/vendors/me/orders/${orderId}/cancel-requests/reject`, { note }),
+
   /** Hoàn tất đơn (chỉ khi đã qua ngày sự kiện). */
   complete: (orderId: string): Promise<Order> =>
     http.post(`/vendors/me/orders/${orderId}/complete`),

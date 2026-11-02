@@ -1,6 +1,7 @@
 import type {
   AiSuggestionResult,
   Budget,
+  BudgetSettings,
   DateChangePreview,
   GuestInput,
   GuestList,
@@ -64,12 +65,8 @@ export const weddingsApi = {
 
   // Ngân sách và chi phí khác (7)
   getBudget: (): Promise<Budget> => (http.get('/weddings/me/budget')),
-  setManualBudget: (categoryId: string, amount: number, version: string): Promise<Budget> =>
-    http.put(`/weddings/me/budget/categories/${categoryId}`, { amount, version }),
-  clearManualBudget: (categoryId: string, version: string): Promise<Budget> =>
-    http.delete(`/weddings/me/budget/categories/${categoryId}${q(version)}`),
-  resetBudget: (version: string): Promise<Budget> => (http.post('/weddings/me/budget/reset', { version })),
-  rebalanceBudget: (version: string): Promise<Budget> => (http.post('/weddings/me/budget/rebalance', { version })),
+  /** Mức chia, tỷ lệ Tùy chỉnh, tiệc tự lo (không có ô sửa số tiền theo hạng mục) */
+  updateBudgetSettings: (body: BudgetSettings & { version: string }): Promise<Budget> => http.patch('/weddings/me/budget/settings', body),
   addExtraCost: (body: { name: string; amount: number; version: string }): Promise<Budget> =>
     http.post('/weddings/me/extra-costs', body),
   updateExtraCost: (id: string, body: { name?: string; amount?: number; version: string }): Promise<Budget> =>

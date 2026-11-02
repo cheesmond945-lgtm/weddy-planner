@@ -72,9 +72,10 @@ export class OverviewService {
       this.budget.summaryOf(w),
       this.prisma.orders.aggregate({ where: { wedding_id: w.id, status: { in: ['Deposited', 'Completed'] } }, _sum: { deposit_amount: true } }),
     ]);
-    const slices = s.categories.filter((c) => (c.cost ?? 0) > 0).map((c) => ({ slug: c.slug, name: c.name, amount: c.cost!, budget: c.budget, isOver: c.cost! > c.budget }));
+    // Chỉ hạng mục đã chọn (chi phí thật / dự kiến của gói đang chọn); hạng mục chưa chọn chỉ có gợi ý nên không vào biểu đồ
+    const slices = s.categories.filter((c) => c.status === 'CHOSEN' && c.cost > 0).map((c) => ({ slug: c.slug, name: c.name, amount: c.cost, budget: c.cost, isOver: false }));
     if (s.totals.extraCosts > 0) slices.push({ slug: 'other', name: 'Chi phí khác', amount: s.totals.extraCosts, budget: 0, isOver: false });
-    const planned = s.totals.packagesCost + s.totals.extraCosts;
+    const planned = s.totals.total - s.totals.remaining;
     return { total: s.totals.total, planned, deposited: Number(deposits._sum.deposit_amount ?? 0), remaining: s.totals.remaining, slices };
   }
 

@@ -20,6 +20,10 @@ export const dbFeatures = {
   availability: true,
   /** backend/prisma/manual/2026-11-01-01-wedding-ward.sql */
   weddingWard: true,
+  /** backend/prisma/manual/2026-11-02-01-budget-allocation.sql */
+  budgetAllocation: true,
+  /** backend/prisma/manual/2026-11-02-02-order-adjustments.sql */
+  orderAdjustments: true,
 };
 
 const SQL_FILE: Record<keyof typeof dbFeatures, string> = {
@@ -29,6 +33,8 @@ const SQL_FILE: Record<keyof typeof dbFeatures, string> = {
   sharing: 'backend/prisma/manual/2026-10-30-02-share-links.sql',
   availability: 'backend/prisma/manual/2026-10-30-03-package-availability.sql',
   weddingWard: 'backend/prisma/manual/2026-11-01-01-wedding-ward.sql',
+  budgetAllocation: 'backend/prisma/manual/2026-11-02-01-budget-allocation.sql',
+  orderAdjustments: 'backend/prisma/manual/2026-11-02-02-order-adjustments.sql',
 };
 
 /** Kiểm tra cột và bảng của từng file SQL. Lỗi kết nối thì giữ mặc định (để lỗi thật hiện ra như trước). */
@@ -40,8 +46,9 @@ export async function detectDbFeatures(connectionString: string | undefined) {
       `SELECT table_name AS t, column_name AS c FROM information_schema.columns
        WHERE table_schema = 'public' AND (
          (table_name = 'timeline_tasks' AND column_name = 'note')
-         OR table_name IN ('wedding_guests', 'wedding_category_budgets', 'wedding_extra_costs', 'wedding_share_links', 'package_availability', 'package_resources')
-         OR (table_name = 'weddings' AND column_name IN ('spending_tier', 'table_count_override', 'ward'))
+         OR table_name IN ('wedding_guests', 'wedding_category_budgets', 'wedding_extra_costs', 'wedding_share_links', 'package_availability', 'package_resources', 'order_adjustments')
+         OR (table_name = 'orders' AND column_name IN ('guest_count', 'cancel_requested_date', 'cancel_request_note'))
+         OR (table_name = 'weddings' AND column_name IN ('spending_tier', 'table_count_override', 'ward', 'budget_preset', 'custom_weights', 'own_venue', 'own_venue_cost'))
          OR (table_name = 'service_packages' AND column_name = 'unit')
          OR (table_name = 'plan_vendors' AND column_name = 'package_id'))`,
     );
@@ -58,6 +65,8 @@ export async function detectDbFeatures(connectionString: string | undefined) {
     dbFeatures.sharing = has('wedding_share_links');
     dbFeatures.availability = has('package_availability') && has('package_resources');
     dbFeatures.weddingWard = has('weddings', 'ward');
+    dbFeatures.orderAdjustments = has('order_adjustments') && ['guest_count', 'cancel_requested_date', 'cancel_request_note'].every((c) => has('orders', c));
+    dbFeatures.budgetAllocation = ['budget_preset', 'custom_weights', 'own_venue', 'own_venue_cost'].every((c) => has('weddings', c));
   } catch {
     // Không kiểm tra được thì coi như đã chạy đủ
   } finally {
@@ -76,6 +85,8 @@ export function omitMissingColumns() {
     omit.timeline_tasks = { note: true };
   }
   if (!dbFeatures.weddingWard) omit.weddings = { ward: true };
+  if (!dbFeatures.orderAdjustments) omit.orders = { guest_count: true, cancel_requested_date: true, cancel_request_note: true };
+  if (!dbFeatures.budgetAllocation) omit.weddings = { ...omit.weddings, budget_preset: true, custom_weights: true, own_venue: true, own_venue_cost: true };
   if (!dbFeatures.budgetTiers) {
     omit.weddings = { ...omit.weddings, spending_tier: true, table_count_override: true };
     omit.service_packages = { unit: true };

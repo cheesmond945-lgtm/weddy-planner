@@ -66,6 +66,12 @@ Response 200
 { "data": ["Hà Nội", "Hải Phòng", "Thái Bình", "Hưng Yên", "Hà Nam"] }
 ```
 
+### GET /services/areas
+Khu vực để lọc: các phường/xã khác nhau trong dữ liệu NCC đang hiển thị (`vendor_profiles.ward`), đổi về tên chính thức có tiền tố ("Đống Đa" → "Phường Đống Đa"), xếp theo tên.
+Dùng chung cho dropdown Khu vực trên thanh tìm kiếm trang Dịch vụ và ô "Nơi tổ chức" trong form thông tin đám cưới (giá trị lưu vào `weddings.ward`, khớp CHECK `ck_weddings_ward`).
+
+Response 200: `{ "data": ["Phường Ba Đình", "Phường Cầu Giấy", "…", "Xã Thanh Trì"] }`
+
 ### GET /services/styles
 Role: Public
 
@@ -84,11 +90,13 @@ Tìm và lọc dịch vụ (2.1). Có phân trang.
 
 | Query | Kiểu | Ghi chú |
 |---|---|---|
-| `q` | string | Tìm trong tên dịch vụ (tên NCC), tên danh mục và địa chỉ (đường, phường, quận, tỉnh); không phân biệt dấu và hoa thường ("cau giay" khớp "Cầu Giấy") |
+| `q` | string | Tìm kiếm tầng 1: chỉ khớp chữ trong **tên và mô tả** của NCC, không phân biệt dấu và hoa thường. **Không** khớp khu vực, địa chỉ hay danh mục (từ 02/11/2026) |
+| `area` | string | Khu vực: một giá trị trong `/services/areas` (phường/xã chính thức có tiền tố, ví dụ `Phường Đống Đa`). Lọc cứng, kết hợp **AND** với `q` và các bộ lọc khác |
 | `category` | string | `slug` danh mục |
-| `location` | string | Một giá trị trong `/services/locations` (trang Dịch vụ cưới không còn bộ lọc khu vực, tìm địa điểm bằng `q`) |
-| `priceMin` | int | `priceFrom >= priceMin` |
-| `priceMax` | int | `priceFrom < priceMax` (không bao gồm) |
+| `location` | string | Tỉnh/thành, một giá trị trong `/services/locations` |
+| `styles` | string | Phong cách, nối bằng dấu phẩy (FE gửi khi có bộ lọc AI đã hiểu) |
+| `priceMin` | int | Chi phí ước tính `>= priceMin` (gói rẻ nhất; trung tâm sự kiện = giá/bàn × max(số bàn dự kiến, số bàn tối thiểu)) |
+| `priceMax` | int | Chi phí ước tính `< priceMax` (không bao gồm) |
 | `page`, `pageSize` | int | Mặc định 1, 20; FE đang gửi `pageSize=24` |
 
 FE đổi các mức giá trên giao diện thành `priceMin`/`priceMax`: Dưới 10 triệu = `priceMax=10000000`; 10 đến 30 triệu = `priceMin=10000000&priceMax=30000000`; 30 đến 100 triệu; Trên 100 triệu = `priceMin=100000000`.
@@ -105,6 +113,49 @@ Response 200
 ```
 
 Lỗi: 400 `VALIDATION_ERROR` (ví dụ `priceMin` không phải số)
+
+### GET /services/search
+Role: Public (có token couple thì tính chi phí theo số bàn dự kiến và hạn mức AI theo tài khoản)
+
+Tìm kiếm 2 tầng theo câu gõ. FE chỉ gọi khi bấm Enter / Tìm kiếm; câu mới thì hủy yêu cầu cũ. Code: `backend/src/modules/catalog/search*.ts`, hằng số ở `search.config.ts`.
+
+| Query | Kiểu | Ghi chú |
+|---|---|---|
+| `q` | string | Tối đa `QUERY_MAX_LENGTH` = 100 ký tự (quá thì 400 `VALIDATION_ERROR`) |
+| `category` | string | Tab hạng mục đang chọn (slug) |
+| `area`, `priceMin`, `priceMax` | | Dropdown Khu vực / Mức giá, lọc cứng AND. Giá so với **chi phí ước tính** (như `GET /services`) |
+| `page`, `pageSize` | int | Mặc định 1, 24 |
+| `ai` | `1` | Cho phép gọi AI (tầng 2). Lần đầu FE gọi không có cờ này |
+
+Xử lý:
+1. Chuẩn hóa: chữ thường, bỏ dấu, bỏ emoji / ký tự đặc biệt, bỏ `STOP_WORDS`, đổi từ đồng nghĩa hạng mục (`CATEGORY_SYNONYMS`, ví dụ "chụp hình", "makeup", "nhà hàng"). Rỗng → `mode: EMPTY` (FE giữ nguyên danh sách).
+2. Bỏ `GENERIC_WORDS` ("đẹp", "uy tín"…; có thì xếp theo đánh giá). Không còn gì → `mode: GUIDE` kèm hướng dẫn và chip hạng mục / phong cách; không tìm, không gọi AI.
+3. Tầng 1 (bỏ qua nếu câu có số / từ chỉ giá): khớp **mọi** từ trong tên hoặc mô tả, trên mọi hạng mục, trùng tên xếp trước; "rẻ", "giá mềm", "tiết kiệm" → xếp chi phí tăng dần. Có kết quả → `mode: TEXT`, không gọi AI. Tab đang chọn không có nhưng hạng mục khác có → `hint`.
+4. Tầng 1 rỗng và câu có ≥ 2 từ hoặc có giá: chưa có `ai=1` → `mode: NEEDS_AI` (FE hiện "Đang hiểu yêu cầu của bạn…" rồi gọi lại kèm `ai=1`). Có `ai=1` → AI (Gemini, prompt "KHỐI 2" trong `search-ai.service.ts`) chỉ trả JSON bộ lọc; backend kiểm tra từng giá trị (hạng mục / khu vực / phong cách phải có trong danh sách, giá nguyên dương, min ≤ max; "tầm X" = X ± `PRICE_TOLERANCE` 20%), bỏ giá trị sai, rồi tự lọc. Khu vực / giá AI hiểu khác dropdown thì ưu tiên điều vừa gõ (`overridden`). Timeout `AI_TIMEOUT_MS` = 6 giây; cache theo câu đã chuẩn hóa 24 giờ; giới hạn mỗi giờ 10 lần (khách) / 30 lần (tài khoản).
+
+Response 200
+
+```json
+{
+  "data": {
+    "mode": "AI",
+    "query": "trang tri duoi 20tr",
+    "items": [ { "id": "…", "name": "…", "estimatedCost": 14000000, "…": "ServiceSummary" } ],
+    "total": 8, "page": 1, "pageSize": 24,
+    "sort": null,
+    "ai": {
+      "filters": { "category": "decor", "area": null, "styles": [], "priceMin": null, "priceMax": 20000000 },
+      "overridden": { "area": false, "price": false },
+      "priceRejected": false,
+      "cached": false
+    }
+  }
+}
+```
+
+Trường thêm tùy trường hợp: `hint { tab, categorySlug, categoryName, count }`; `guide { message, categories[], styles[] }`; `ai.error` = `UNAVAILABLE` | `TIMEOUT` | `LIMIT` | `FAILED` (trả danh sách rỗng, không treo); `empty.noServicesInArea` (khu vực chưa có dịch vụ) hoặc `empty.cheapestFrom` (giá rẻ nhất hiện có).
+
+FE: bộ lọc AI hiện thành chip kèm nhãn "Hiểu theo ngôn ngữ tự nhiên". Bỏ chip thì FE ghi phần còn lại lên URL (`nlCategory`, `nlArea`, `nlStyles`, `nlMin`, `nlMax`) và lọc bằng `GET /services`, không gọi AI nữa.
 
 ### GET /services/:id
 Role: Public

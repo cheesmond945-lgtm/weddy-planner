@@ -239,7 +239,7 @@ export class VendorPackagesService {
       return fail('AI_NOT_ENOUGH_INFO', 'Hãy nhập tên gói và ít nhất một trong: giá, sức chứa, phong cách (tags) rồi mới tạo với AI, để AI có thông tin thật mà viết.', 400);
     }
     const perTable = priceUnitOf(categorySlug(vendor.service_categories.name)) === 'TABLE';
-    const money = price > 0 ? `${price.toLocaleString('vi-VN')}đ${perTable ? '/mâm (mỗi mâm 10 khách)' : ''}` : null;
+    const money = price > 0 ? `${price.toLocaleString('vi-VN')}đ${perTable ? '/bàn (mỗi bàn 10 khách)' : ''}` : null;
 
     const system =
       'Bạn là biên tập viên nội dung cho nền tảng đặt dịch vụ cưới Forever. Viết phần mô tả một gói dịch vụ bằng tiếng Việt, một đoạn văn liền mạch dài khoảng 50 đến 90 từ. ' +

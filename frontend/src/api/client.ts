@@ -59,7 +59,8 @@ export async function requestRaw<T>(path: string, options: RequestOptions = {}):
       },
       body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     })
-  } catch {
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e
     throw new ApiError(0, 'NETWORK_ERROR', 'Không kết nối được máy chủ.')
   }
 

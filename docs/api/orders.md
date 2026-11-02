@@ -45,6 +45,30 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 > Bản này **thay thế hoàn toàn** bản cũ có phiên bản đơn v1/v2, đợt thanh toán tùy chỉnh, "ghi nhận thanh toán", phương án điều chỉnh. Frontend (`frontend/src/mocks/vendorOrders.ts`) và **backend (`backend/src/modules/orders`, 27/10/2026)** đều làm đúng theo tài liệu này. Mã HTTP: tạo đơn `201`; gửi/cập nhật, sửa, hủy, hoàn tất, xuất hóa đơn `200`. Phần còn chờ: endpoint `summary` (xem `LECH_FE_BE.md`).
 > Quy ước chung: [README.md](README.md). Role: **VENDOR**, chỉ thấy đơn của mình. JSON dùng camelCase, giá trị enum viết đúng như CSDL (`Pending`, `Deposited`…).
 
+### Đổi số khách khi tiệc đã cọc
+
+Đơn tiệc (tính theo bàn: có sảnh, hoặc dòng đơn vị bàn/mâm), trạng thái Deposited, hôm nay ≤ ngày thực hiện − 7 ngày (`GUEST_CHANGE_CUTOFF_DAYS`). Phép tính: `backend/src/modules/orders/order-adjustment-rules.ts` (test: `backend/test/order-adjustment-rules.test.cjs`). Cần `prisma/manual/2026-11-02-02-order-adjustments.sql` (chưa chạy: 503 `DB_MIGRATION_PENDING`).
+
+- Giá trị đơn mới = giá trị cũ − dòng tiền bàn + **đơn giá lúc đặt** × max(⌈số khách mới / 10⌉, số bàn tối thiểu của sảnh); số bàn tối thiểu không vượt số bàn đã thỏa thuận trong đơn (sảnh tăng tối thiểu sau khi đặt). Giảm khách không hoàn cọc (giá trị mới không thấp hơn số đã cọc).
+- Cọc bổ sung = 10% phần tăng (`EXTRA_DEPOSIT_RATE`). Hoa hồng tính trên giá trị đơn cuối cùng (lúc hoàn thành).
+- Số khách mới vượt sức chứa của sảnh: 409 `GUEST_CHANGE_CAPACITY`. Quá hạn: 409 `GUEST_CHANGE_CUTOFF`. Trùng số khách hiện tại: 409 `GUEST_CHANGE_SAME`. Đã có yêu cầu đang chờ: 409 `GUEST_CHANGE_PENDING`.
+- Trạng thái (`order_adjustments.status`): `AwaitingVendor` Chờ NCC xác nhận → (tăng giá trị) `AwaitingDeposit` Chờ nộp cọc bổ sung → `Applied` Đã áp dụng; hoặc `Rejected` Bị từ chối. Giảm hoặc giữ giá trị: NCC đồng ý là áp dụng ngay.
+- Áp dụng: dòng tiền bàn = đơn giá × số bàn tính tiền mới; `total_amount`, `deposit_amount` (+ cọc bổ sung), `guest_count` của đơn; số khách dự kiến của đám cưới; một dòng lịch sử chỉnh sửa (AfterDeposit, Quantity). Đơn đã đổi giá trị từ lúc khách gửi (NCC sửa đơn): 409 `ADJUSTMENT_OUTDATED`, khách gửi lại.
+
+| Phía | Endpoint |
+|---|---|
+| Khách | `GET /orders/:id/guest-changes/quote?guestCount=` xem trước `{ oldTables, newTables, chargedTables, oldAmount, newAmount, extraDeposit, deadline }` |
+| Khách | `POST /orders/:id/guest-changes` `{ guestCount, note? }` |
+| Khách | `POST /orders/:id/guest-changes/pay` mã VietQR cọc bổ sung (nội dung `EVBS` + 8 ký tự đầu id yêu cầu); `POST …/pay/check` hỏi SePay; `POST …/pay/demo-confirm` (chế độ thử) |
+| NCC | `POST /vendors/me/orders/:id/guest-changes/approve`, `POST /vendors/me/orders/:id/guest-changes/reject` `{ note? }` |
+
+### Khách yêu cầu hủy đơn đã cọc
+
+- `POST /orders/:id/cancel-requests` `{ note? }`: đơn Deposited, còn trước ngày thực hiện. Tiền cọc không hoàn. Ghi `orders.cancel_requested_date`, `cancel_request_note`; báo NCC. Đã gửi rồi: 409 `CANCEL_ALREADY_REQUESTED`.
+- `DELETE /orders/:id/cancel-requests`: khách rút yêu cầu.
+- NCC đồng ý: `POST /vendors/me/orders/:id/cancel` với `reason = CUSTOMER_REQUEST` (đơn Cancelled, không hoa hồng, cọc tính là khoản mất trong tab Ngân sách, hạng mục trở về chưa chọn). NCC từ chối: `POST /vendors/me/orders/:id/cancel-requests/reject` `{ note? }`, đơn giữ nguyên.
+- `Order` có thêm `guestCount`, `cancelRequest { requestedDate, note } | null`, `guestChanges[]` (mới nhất trước).
+
 ## Quy tắc nghiệp vụ (tóm tắt)
 
 - **7 trạng thái:** `Draft` → `Pending` → (`NeedRevision` ↔ `Pending`) → `Deposited` → `Completed`; `Pending` quá hạn thành `Expired`; `Deposited` bị **NCC hủy** (trước `eventDate`) thành `Cancelled`.

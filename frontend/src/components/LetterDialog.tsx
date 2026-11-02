@@ -13,11 +13,11 @@ const PAPER_GRAIN =
 type Props = { title: string; description: string; children: ReactNode } & Omit<ComponentProps<typeof DialogContent>, 'title'>
 
 /**
- * Khung "lá thư giấy xé tay" dùng chung cho hộp thiết lập và hộp chỉnh sửa thông tin đám cưới (hai hộp chỉ khác tiêu đề và nút):
+ * Khung "lá thư giấy xé tay" dùng chung cho hộp thiết lập / chỉnh sửa thông tin đám cưới và hộp Đăng ký hợp tác (các hộp chỉ khác tiêu đề và nội dung form):
  * tờ giấy kem mép gồ ghề (lọc SVG làm lệch mép), bên trong là ảnh nền cô dâu chú rể, form bên trái, tem thư ảnh nhỏ kèm dấu bưu điện WebPlan ở góc phải.
  * Khung ngoài trong suốt, không cuộn để mép giấy và bóng đổ không bị cắt; phần trong tờ giấy mới cuộn.
  */
-export function WeddingDialogContent({ title, description, children, className, ...props }: Props) {
+export function LetterDialogContent({ title, description, children, className, ...props }: Props) {
   return (
     <DialogContent showCloseButton={false} className={cn('max-w-[800px] overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none', className)} {...props}>
       <svg aria-hidden className="absolute size-0">

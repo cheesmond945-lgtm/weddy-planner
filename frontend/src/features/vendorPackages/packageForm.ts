@@ -1,10 +1,10 @@
 import type { VendorFile } from '@/types/vendor'
 import type { SavePackageRequest, VendorPackage } from '@/types/vendorPackage'
 
-/** Mỗi mâm 10 khách (giá gói trung tâm sự kiện là giá mỗi mâm). */
+/** Mỗi bàn 10 khách (giá gói trung tâm sự kiện là giá mỗi bàn). */
 export const GUESTS_PER_TABLE = 10
 
-/** Gợi ý số mâm tối thiểu theo sức chứa: khoảng 2/3 số mâm tối đa, làm tròn tới bội số 5, ít nhất 5. */
+/** Gợi ý số bàn tối thiểu theo sức chứa: khoảng 2/3 số bàn tối đa, làm tròn tới bội số 5, ít nhất 5. */
 export const suggestMinTables = (capacity: number) => Math.max(5, Math.round(capacity / 15 / 5) * 5)
 
 /** Giá trị đang sửa trên form gói. Giá và sức chứa 0 nghĩa là chưa nhập (ô tiền MoneyInput dùng 0 cho ô trống). */
@@ -76,7 +76,7 @@ const positiveInt = (s: string) => Number.isInteger(Number(s)) && Number(s) > 0
 
 /**
  * Kiểm tra gói (như prototype NCC).
- * - 'draft' (Lưu nháp): cần tên gói và giá; sức chứa, số mâm tối thiểu nếu đã nhập thì phải hợp lệ.
+ * - 'draft' (Lưu nháp): cần tên gói và giá; sức chứa, số bàn tối thiểu nếu đã nhập thì phải hợp lệ.
  * - 'submit' (Gửi duyệt): thêm mô tả, ít nhất một ảnh, và hồ sơ đã xác minh đúng lĩnh vực.
  */
 export function validatePackage(v: PackageFormValues, opts: { mode: 'draft' | 'submit'; venue: boolean; canSubmit: boolean }): PackageErrors {
@@ -85,9 +85,9 @@ export function validatePackage(v: PackageFormValues, opts: { mode: 'draft' | 's
   if (!v.price) errors.price = 'Nhập giá.'
   if (opts.venue && v.capacity.trim() && !positiveInt(v.capacity)) errors.capacity = 'Sức chứa là số nguyên dương.'
   if (opts.venue && v.minTables.trim()) {
-    if (!positiveInt(v.minTables)) errors.minTables = 'Số mâm tối thiểu là số nguyên dương.'
+    if (!positiveInt(v.minTables)) errors.minTables = 'Số bàn tối thiểu là số nguyên dương.'
     else if (positiveInt(v.capacity) && Number(v.minTables) * GUESTS_PER_TABLE > Number(v.capacity)) {
-      errors.minTables = `Sảnh ${v.capacity} khách chứa tối đa ${Math.floor(Number(v.capacity) / GUESTS_PER_TABLE)} mâm.`
+      errors.minTables = `Sảnh ${v.capacity} khách chứa tối đa ${Math.floor(Number(v.capacity) / GUESTS_PER_TABLE)} bàn.`
     }
   }
   if (opts.venue && v.unit === 'TABLE' && v.minTables.trim() && !(Number.isInteger(Number(v.minTables)) && Number(v.minTables) >= 1 && Number(v.minTables) <= 500)) {

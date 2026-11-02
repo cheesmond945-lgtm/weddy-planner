@@ -5,11 +5,11 @@ import { MoneyInput } from '@/components/MoneyInput'
 import { MultiSelect } from '@/components/MultiSelect'
 import { SearchSelect, type SearchSelectGroup } from '@/components/SearchSelect'
 import { Button } from '@/components/ui/button'
-import { useCategories } from '@/features/catalog/hooks'
+import { useCategories, useAreas } from '@/features/catalog/hooks'
 import { addDays, toISODate, today } from '@/lib/date'
-import type { SpendingTier, Wedding, WeddingInput } from '@/types/wedding'
-import { HANOI_PHUONG, HANOI_XA } from '../wards'
-import { SpendingTierPicker } from './SpendingTierPicker'
+import type { BudgetPreset, Wedding, WeddingInput } from '@/types/wedding'
+import { validateWeddingForm, type WeddingFormErrors } from '../weddingFormRules'
+import { BudgetPresetPicker } from './BudgetPresetPicker'
 
 interface WeddingFormProps {
   initial: Wedding | null
@@ -21,7 +21,7 @@ interface WeddingFormProps {
   secondaryAction?: ReactNode
 }
 
-type Errors = Partial<Record<'brideName' | 'groomName' | 'date' | 'ward' | 'guestCount' | 'budget' | 'services', string>>
+type Errors = WeddingFormErrors
 
 /** Form thông tin đám cưới (4.1), như wedForm trong prototype. Dùng chung cho tạo mới và chỉnh sửa: cùng thứ tự trường, cùng validate. */
 export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, secondaryAction }: WeddingFormProps) {
@@ -34,7 +34,8 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
   const [ward, setWard] = useState(initial?.ward ?? '')
   const [guestCount, setGuestCount] = useState(initial?.guestCount ? String(initial.guestCount) : '')
   const [budget, setBudget] = useState(initial?.budget ?? 0)
-  const [spendingTier, setSpendingTier] = useState<SpendingTier>(initial?.spendingTier ?? 'AUTO')
+  // Tùy chỉnh chỉ đặt ở tab Ngân sách; form chỉ gửi khi khách chọn một trong ba mức
+  const [budgetPreset, setBudgetPreset] = useState<BudgetPreset>(initial?.budgetPreset ?? 'BALANCED')
   // Lần đầu: mặc định chọn tất cả dịch vụ như prototype
   const [services, setServices] = useState<string[] | null>(initial?.categorySlugs ?? null)
   const serviceValue = services ?? categories.map((c) => c.slug)
@@ -42,19 +43,11 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    const errs: Errors = {}
+    const errs = validateWeddingForm({ brideName, groomName, date, ward, guestCount, budget, services: serviceValue }, toISODate(today()))
     const guests = guestCount ? Number(guestCount) : null
-    if (!brideName.trim()) errs.brideName = 'Vui lòng nhập tên cô dâu.'
-    if (!groomName.trim()) errs.groomName = 'Vui lòng nhập tên chú rể.'
-    if (!date) errs.date = 'Vui lòng chọn ngày tổ chức.'
-    else if (date <= toISODate(today())) errs.date = 'Ngày tổ chức phải sau hôm nay.'
-    if (!ward) errs.ward = 'Vui lòng chọn nơi tổ chức.'
-    if (!guestCount || !(guests! >= 1)) errs.guestCount = 'Vui lòng nhập số khách dự kiến (từ 1).'
-    if (!(budget > 0)) errs.budget = 'Vui lòng nhập tổng ngân sách lớn hơn 0.'
-    if (!serviceValue.length) errs.services = 'Vui lòng chọn ít nhất 1 dịch vụ.'
     setErrors(errs)
     if (Object.keys(errs).length) return
-    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, ward, guestCount: guests, budget, spendingTier, categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
+    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, ward, guestCount: guests, budget, ...(budgetPreset !== 'CUSTOM' && { budgetPreset }), categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
   }
 
   return (
@@ -117,6 +110,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
             setErrors((x) => ({ ...x, guestCount: undefined }))
           }}
           error={errors.guestCount}
+          hint="Nên nhập số khách tối đa dự kiến"
           className={FIELD}
         />
       </div>
@@ -167,7 +161,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
         )}
       </div>
 
-      <SpendingTierPicker value={spendingTier} onChange={setSpendingTier} />
+      <BudgetPresetPicker value={budgetPreset} onChange={setBudgetPreset} />
 
       <FormError message={error} />
 
@@ -210,13 +204,17 @@ function BudgetField({ value, onChange, error }: { value: number; onChange: (v: 
 }
 
 /** Nơi tổ chức: một phường/xã của Hà Nội (NCC hiện chỉ có ở Hà Nội). Giá trị lưu có tiền tố "Phường …"/"Xã …". */
-const WARD_GROUPS: SearchSelectGroup[] = [
-  { label: 'Phường', options: HANOI_PHUONG.map((n) => ({ value: `Phường ${n}`, label: n })) },
-  { label: 'Xã', options: HANOI_XA.map((n) => ({ value: `Xã ${n}`, label: n })) },
+/** Nhóm Phường / Xã từ danh sách khu vực (cùng danh sách với bộ lọc Khu vực ở trang Dịch vụ) */
+const wardGroups = (areas: string[]): SearchSelectGroup[] => [
+  { label: 'Phường', options: areas.filter((a) => a.startsWith('Phường ')).map((a) => ({ value: a, label: a.replace(/^Phường /, '') })) },
+  { label: 'Xã', options: areas.filter((a) => a.startsWith('Xã ')).map((a) => ({ value: a, label: a.replace(/^Xã /, '') })) },
 ]
 
 function WardField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
   const id = useId()
+  // Cùng danh sách với bộ lọc Khu vực; đám cưới cũ đã chọn phường/xã không còn trong danh sách thì vẫn giữ giá trị đó
+  const { data: areas = [] } = useAreas()
+  const options = value && !areas.includes(value) ? [value, ...areas] : areas
   return (
     <div>
       <span id={`${id}-label`} className="mb-1.5 block text-[13px] font-medium">
@@ -226,10 +224,10 @@ function WardField({ value, onChange, error }: { value: string; onChange: (v: st
         aria-labelledby={`${id}-label`}
         aria-describedby={error ? `${id}-err` : undefined}
         icon={<MapPin />}
-        groups={WARD_GROUPS}
+        groups={wardGroups(options)}
         value={value}
         onChange={onChange}
-        placeholder="Chọn phường/xã"
+        placeholder={areas.length ? 'Chọn phường/xã' : 'Đang tải khu vực…'}
         searchPlaceholder="Tìm phường/xã, vd: cau giay"
         display={(v) => `${v}, Hà Nội`}
         invalid={!!error}

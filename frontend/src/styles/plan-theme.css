@@ -1,0 +1,90 @@
+/*
+ * Phong cách "thiệp cưới cổ điển" (moodboard: xanh rêu, giấy kem, chữ serif tạp chí, ảnh như tranh sơn dầu).
+ * - Toàn site: vân giấy rất nhẹ trên nền (chế độ sáng).
+ * - Trang Kế hoạch của tôi (.plan-theme): đổi bộ màu sang xanh rêu / kem, thẻ như giấy, tiêu đề Cormorant Garamond.
+ * Chỉ đổi biến màu trong phạm vi .plan-theme nên mọi component bên trong tự đổi theo, hộp thoại (portal) giữ nguyên.
+ * Chế độ tối không áp dụng (giữ bộ màu tối hiện có).
+ */
+:root {
+  /* Vân giấy: nhiễu rất mờ, dùng chung cho nền trang và thẻ */
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.3 0 0 0 0 0.2 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --editorial: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+}
+
+/* Bộ màu xanh rêu / kem (chế độ sáng) */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) body {
+    background-image: var(--paper-grain);
+  }
+  :root:not([data-theme='dark']) .plan-theme {
+    --surface: #fcfaf1;
+    --line: #dcdcc4;
+    --line-soft: #e9e9d8;
+    --accent: #55633f;
+    --accent-hover: #47542f;
+    --accent-ink: #fbf7ec;
+    --accent-soft: #e8ebd9;
+    --gold-100: #efe9d2;
+    --moss-700: #4a5734;
+  }
+}
+:root[data-theme='light'] body {
+  background-image: var(--paper-grain);
+}
+:root[data-theme='light'] .plan-theme {
+  --surface: #fcfaf1;
+  --line: #dcdcc4;
+  --line-soft: #e9e9d8;
+  --accent: #55633f;
+  --accent-hover: #47542f;
+  --accent-ink: #fbf7ec;
+  --accent-soft: #e8ebd9;
+  --gold-100: #efe9d2;
+  --moss-700: #4a5734;
+}
+
+/* Thẻ như giấy: vân giấy + bóng đổ mềm, viền ngả xanh */
+:root:not([data-theme='dark']) .plan-theme .bg-surface {
+  background-image: var(--paper-grain);
+}
+:root:not([data-theme='dark']) .plan-theme :is(section, article).rounded-lg.border,
+:root:not([data-theme='dark']) .plan-theme a.rounded-lg.border {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.7),
+    0 14px 30px -22px rgb(52 62 34 / 0.45);
+}
+
+/* Tiêu đề trong nội dung kế hoạch: serif kiểu tạp chí */
+.plan-theme h2,
+.plan-theme h3 {
+  font-family: var(--editorial);
+  font-weight: 600;
+  letter-spacing: 0.005em;
+}
+.plan-theme h2 {
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+/* Đầu trang kế hoạch dạng thiệp: ảnh nền phủ lớp xanh rêu, viền mảnh bên trong */
+.plan-hero::after {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border: 1px solid rgb(246 240 220 / 0.38);
+  border-radius: 20px;
+  pointer-events: none;
+}
+.plan-hero-photo {
+  animation: plan-hero-in 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes plan-hero-in {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { hasPrice, priceLabel, type ServiceFilters } from '../filters'
+import { ALL_AREAS, dropdownArea, hasPrice, priceLabel, type ServiceFilters } from '../filters'
 
 interface ServiceResultsBarProps {
   filters: ServiceFilters
@@ -10,15 +10,17 @@ interface ServiceResultsBarProps {
 }
 
 /**
- * Hàng kết quả cố định dưới chip danh mục, luôn hiện: "N dịch vụ", các bộ lọc đang bật (từ khóa, mức giá) dạng tag có nút x,
+ * Hàng kết quả cố định dưới chip danh mục, luôn hiện: "N dịch vụ", các bộ lọc đang bật (từ khóa, khu vực, mức giá) dạng tag có nút x,
  * và "Xóa bộ lọc" khi có bộ lọc. Chiều cao cố định để trang không nhảy khi bật / tắt lọc.
  */
 export function ServiceResultsBar({ filters, total, onRemove, onClear }: ServiceResultsBarProps) {
   const tags = [
     filters.q && { key: 'q', label: `"${filters.q}"`, remove: () => onRemove({ q: '' }) },
+    // Bỏ tag khu vực = chọn "Tất cả khu vực" (không tự chọn lại khu vực đám cưới)
+    dropdownArea(filters) && { key: 'area', label: filters.area, remove: () => onRemove({ area: ALL_AREAS }) },
     hasPrice(filters.price) && { key: 'price', label: priceLabel(filters.price), remove: () => onRemove({ price: {} }) },
   ].filter((t): t is { key: string; label: string; remove: () => void } => !!t)
-  const anyFilter = tags.length > 0 || !!filters.category
+  const anyFilter = tags.length > 0 || !!filters.category || !!filters.nl
 
   return (
     <div className="mt-4 mb-6 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2">

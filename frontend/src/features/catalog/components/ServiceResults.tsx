@@ -1,22 +1,38 @@
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import type { ServiceSummary } from '@/types/catalog'
-import type { useServices } from '../hooks'
 import { ServiceCard } from './ServiceCard'
 
 interface ServiceResultsProps {
-  query: ReturnType<typeof useServices>
+  /** Danh sách thường (useServices) hoặc kết quả tìm kiếm (useServiceSearch): cùng dạng pages[].data */
+  query: ResultsQuery
+  /** Thay khung trống mặc định (tìm kiếm có lời gợi ý riêng) */
+  empty?: ReactNode
   onClearFilters: () => void
   /** Cho module khác gắn nút vào thẻ (yêu thích, thêm vào kế hoạch) */
-  renderCardProps?: (s: ServiceSummary) => { imageAction?: ReactNode; extraActions?: ReactNode; badge?: ReactNode; showCategory?: boolean }
+  renderCardProps?: (s: ServiceSummary) => Partial<Pick<ComponentProps<typeof ServiceCard>, 'imageAction' | 'extraActions' | 'badge' | 'showCategory' | 'imageBadge' | 'details'>>
+  /** Dịch vụ ghim lên đầu lưới (gợi ý cho bạn); bỏ khỏi phần còn lại để không lặp. Số đếm ở hàng bộ lọc vẫn là tổng. */
+  pinned?: ServiceSummary[]
+}
+
+interface ResultsQuery {
+  data: { pages: { data: ServiceSummary[] }[] } | undefined
+  isPending: boolean
+  isError: boolean
+  error: Error | null
+  refetch: () => unknown
+  hasNextPage: boolean
+  fetchNextPage: () => unknown
+  isFetchingNextPage: boolean
+  isPlaceholderData: boolean
 }
 
 // Lưới tự chia cột (3 → 2 → 1 theo bề rộng khung), thẻ tối thiểu 300px
 const grid = 'grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] gap-6'
 
 /** Lưới thẻ + trạng thái trống/lỗi/đang tải + Xem thêm (số kết quả nằm ở hàng bộ lọc). */
-export function ServiceResults({ query, onClearFilters, renderCardProps }: ServiceResultsProps) {
+export function ServiceResults({ query, onClearFilters, renderCardProps, pinned = [], empty }: ServiceResultsProps) {
   const { data, isPending, isError, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage, isPlaceholderData } = query
 
   if (isPending) {
@@ -38,11 +54,11 @@ export function ServiceResults({ query, onClearFilters, renderCardProps }: Servi
     )
   }
 
-  if (isError) {
+  if (isError || !data) {
     return (
       <EmptyState
         title="Không tải được danh sách dịch vụ"
-        description={error.message}
+        description={error?.message}
         action={
           <Button variant="outline" onClick={() => refetch()}>
             Thử lại
@@ -52,12 +68,13 @@ export function ServiceResults({ query, onClearFilters, renderCardProps }: Servi
     )
   }
 
-  const services = data.pages.flatMap((p) => p.data)
+  const pinnedIds = new Set(pinned.map((s) => s.id))
+  const services = [...pinned, ...data.pages.flatMap((p) => p.data).filter((s) => !pinnedIds.has(s.id))]
 
   return (
     <div className={isPlaceholderData ? 'opacity-60 transition-opacity' : undefined}>
       {services.length === 0 ? (
-        <EmptyState
+        (empty ?? <EmptyState
           title="Không tìm thấy dịch vụ phù hợp"
           description="Thử bỏ bớt bộ lọc."
           action={
@@ -65,7 +82,7 @@ export function ServiceResults({ query, onClearFilters, renderCardProps }: Servi
               Xóa bộ lọc
             </Button>
           }
-        />
+        />)
       ) : (
         <div className={grid}>
           {services.map((s, i) => (

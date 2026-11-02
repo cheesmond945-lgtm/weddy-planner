@@ -3,7 +3,7 @@ import { weddingsApi } from '@/api/weddings'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/store/auth'
 import { ApiError } from '@/api/client'
-import type { Budget, GuestList, NewTask, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
+import type { Budget, BudgetSettings, GuestList, NewTask, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
 
 /** Khóa cache theo người dùng để đổi tài khoản không lẫn dữ liệu. */
 export const planningKeys = {
@@ -149,15 +149,12 @@ function useAfterBudgetWrite() {
   }
 }
 
-/** Sửa tay, đặt lại, cân đối, chi phí khác. API trả ngân sách mới, ghi thẳng vào cache. */
+/** Mức chia / tiệc tự lo, chi phí khác. API trả ngân sách mới, ghi thẳng vào cache. */
 export function useBudgetMutations() {
   const version = useVersion()
   const after = useAfterBudgetWrite()
   return {
-    setManual: useMutation({ mutationFn: ({ categoryId, amount }: { categoryId: string; amount: number }) => weddingsApi.setManualBudget(categoryId, amount, version()), ...after }),
-    clearManual: useMutation({ mutationFn: (categoryId: string) => weddingsApi.clearManualBudget(categoryId, version()), ...after }),
-    reset: useMutation({ mutationFn: () => weddingsApi.resetBudget(version()), ...after }),
-    rebalance: useMutation({ mutationFn: () => weddingsApi.rebalanceBudget(version()), ...after }),
+    settings: useMutation({ mutationFn: (body: BudgetSettings) => weddingsApi.updateBudgetSettings({ ...body, version: version() }), ...after }),
     addExtraCost: useMutation({ mutationFn: (body: { name: string; amount: number }) => weddingsApi.addExtraCost({ ...body, version: version() }), onSuccess: after.onSuccess }),
     updateExtraCost: useMutation({
       mutationFn: ({ id, ...body }: { id: string; name?: string; amount?: number }) => weddingsApi.updateExtraCost(id, { ...body, version: version() }),
@@ -167,7 +164,7 @@ export function useBudgetMutations() {
   }
 }
 
-/** Đổi nhanh tổng ngân sách, số khách, mức chi, số bàn. Ô sửa tay giữ nguyên. */
+/** Đổi nhanh tổng ngân sách, số khách, số bàn. */
 export function usePatchWedding() {
   const uid = useCoupleId()
   const qc = useQueryClient()

@@ -14,7 +14,6 @@ import {
 } from './import-rows';
 import { todayVNDate, toYmd } from './timeline-hooks';
 import { TimelineService } from './timeline.service';
-import { TIER_LABEL } from './budget.config';
 import { bumpVersion } from './wedding-version';
 import { WeddingsService } from './weddings.service';
 import { requireDbFeature } from '../../prisma/db-features';
@@ -166,28 +165,23 @@ export class ImportExportService {
   async budgetCsv(userId: string) {
     const s = await this.budget.summary(userId);
     const pkgLabel = { ORDER: 'theo đơn', SELECTED: 'đã chọn', PLANNED: 'dự kiến' } as const;
+    const srcLabel = { PLANNED: 'Dự kiến', ORDER: 'Theo đơn', DEPOSITED: 'Đã cọc' } as const;
     return toCsv(
-      ['Loại', 'Tên', 'Ngân sách', 'Cách tính ngân sách', 'Dịch vụ đã chọn', 'Trạng thái', 'Gói', 'Chi phí theo gói', 'Chênh lệch'],
+      ['Loại', 'Tên', 'Gợi ý ngân sách', 'Dịch vụ', 'Trạng thái', 'Gói', 'Chi phí', 'Nguồn chi phí'],
       [
         ...s.categories.flatMap((c) =>
-          (c.vendors.length ? c.vendors : [null]).map((v, i) => [
-            'Hạng mục',
-            c.name,
-            i === 0 ? c.budget : '',
-            i === 0 ? c.reason : '',
-            v?.name ?? '',
-            v?.status ? PLAN_STATUS_LABEL[v.status] : '',
-            v?.package.name ? `${v.package.name} (${pkgLabel[v.package.source]})` : '',
-            v?.cost ?? '',
-            i === 0 && c.diff !== null ? c.diff : '',
-          ]),
+          c.vendors.length
+            ? c.vendors.map((v, i) => ['Hạng mục', c.name, i === 0 && c.limit !== null ? c.limit : '', v.name, v.status ? PLAN_STATUS_LABEL[v.status] : '', v.package.name ? `${v.package.name} (${pkgLabel[v.package.source]})` : '', v.cost, srcLabel[v.costSource]])
+            : [['Hạng mục', c.name, c.limit ?? '', c.suggestion ? `Gợi ý: ${c.suggestion.vendorName}` : (c.message ?? ''), '', c.suggestion?.packageName ?? '', c.suggestion?.cost ?? '', c.suggestion ? 'Gợi ý' : '']],
         ),
-        ...s.extraCosts.map((e) => ['Chi phí khác', e.name, '', '', '', '', '', e.amount, '']),
-        ['Tổng', `Mức chi: ${s.tier === 'AUTO' ? `Tự động (${TIER_LABEL[s.effectiveTier]})` : TIER_LABEL[s.tier]}`, s.totals.allocated, 'Ngân sách đã chia', '', '', '', s.totals.packagesCost + s.totals.extraCosts, s.totals.remaining],
-        ['Tổng', 'Tổng ngân sách', s.totals.total, '', '', '', '', '', ''],
+        ...s.extraCosts.map((e) => ['Chi phí khác', e.name, '', '', '', '', e.amount, '']),
+        ['Tổng', `Mức chia: ${s.presetLabel}`, '', '', '', '', s.totals.total - s.totals.remaining, 'Đã chọn'],
+        ['Tổng', 'Tổng ngân sách', s.totals.total, '', '', '', '', ''],
+        ['Tổng', s.totals.remaining < 0 ? 'Vượt ngân sách' : 'Còn lại', Math.abs(s.totals.remaining), '', '', '', '', ''],
       ],
     );
   }
+
 
   /** File mẫu để nhập (tiêu đề + 2 dòng ví dụ). */
   template(type: 'guests' | 'tasks' | 'expenses') {

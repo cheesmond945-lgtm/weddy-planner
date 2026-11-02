@@ -12,7 +12,7 @@ import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
 import type { DateChangePreview, WeddingInput } from '@/types/wedding'
 import { useSaveWedding, useWedding } from '../hooks'
-import { WeddingDialogContent } from './LetterDialog'
+import { LetterDialogContent } from '@/components/LetterDialog'
 import { usePlanActions } from '../planActions'
 import { DateChangePreviewDialog } from './DateChangePreviewDialog'
 import { WeddingForm } from './WeddingForm'
@@ -55,7 +55,7 @@ export function WeddingSetupDialog() {
 
   return (
     <Dialog open={state.open && user?.role === 'COUPLE'}>
-      <WeddingDialogContent
+      <LetterDialogContent
         title="Thiết lập thông tin đám cưới"
         description="Nhập thông tin để tạo timeline khung"
         onEscapeKeyDown={(e) => (state.preview ? closeSetup() : e.preventDefault())}
@@ -101,7 +101,7 @@ export function WeddingSetupDialog() {
             }
           />
         )}
-      </WeddingDialogContent>
+      </LetterDialogContent>
     </Dialog>
   )
 }
@@ -143,7 +143,7 @@ export function WeddingEditDialog({ open, onOpenChange }: { open: boolean; onOpe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <WeddingDialogContent title="Chỉnh sửa thông tin đám cưới" description="Khi đổi ngày tổ chức, bạn sẽ được xem trước hạn mới của các việc chưa xong rồi mới xác nhận.">
+      <LetterDialogContent title="Chỉnh sửa thông tin đám cưới" description="Khi đổi ngày tổ chức, bạn sẽ được xem trước hạn mới của các việc chưa xong rồi mới xác nhận.">
         {open && wedding && (
           <WeddingForm
             initial={wedding}
@@ -167,7 +167,7 @@ export function WeddingEditDialog({ open, onOpenChange }: { open: boolean; onOpe
           onConfirm={() => pending && save.mutate(pending.input, { onSuccess: finish })}
           onMessageVendor={messageVendor}
         />
-      </WeddingDialogContent>
+      </LetterDialogContent>
     </Dialog>
   )
 }

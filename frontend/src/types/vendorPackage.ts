@@ -29,7 +29,7 @@ export interface VendorPackage extends ServicePackage {
   capacity: number | null
   /** Đơn vị tính (API trả TABLE/PACKAGE) */
   unit?: string
-  /** Trung tâm sự kiện: số mâm tối thiểu để được kèm sảnh (giá gói là giá mỗi mâm 10 khách) */
+  /** Trung tâm sự kiện: số bàn tối thiểu để được kèm sảnh (giá gói là giá mỗi bàn 10 khách) */
   minTables?: number | null
   /** Bộ ảnh của gói, theo thứ tự hiển thị */
   photos: VendorFile[]

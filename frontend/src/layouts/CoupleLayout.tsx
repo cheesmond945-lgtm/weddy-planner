@@ -145,6 +145,8 @@ function Header() {
           <div className="ml-auto flex flex-none items-center gap-2 min-[1180px]:ml-0">
             {!user && (
               <>
+                {/* Đăng ký hợp tác công khai: nhà cung cấp thường chưa có tài khoản */}
+                <PartnerButton />
                 <Button asChild variant="outline" size="sm" className="rounded-pill">
                   <Link to={paths.login}>Đăng nhập</Link>
                 </Button>

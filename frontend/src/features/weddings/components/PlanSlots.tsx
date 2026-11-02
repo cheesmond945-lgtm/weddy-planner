@@ -1,4 +1,4 @@
-import { Sparkles, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router'
 import { Badge } from '@/components/Badge'
@@ -123,8 +123,7 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, 
                   </Button>
                   {hasWedding && (
                     <Button variant="secondary" size="sm" onClick={() => aiSuggest(slug)}>
-                      <Sparkles className="size-[15px]" />
-                      Gợi ý bằng AI
+                      Gợi ý cho bạn
                     </Button>
                   )}
                 </div>

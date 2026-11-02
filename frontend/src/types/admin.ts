@@ -257,7 +257,7 @@ export interface AdminPackage {
   description: string
   price: number
   capacity: number | null
-  /** Trung tâm sự kiện: số mâm tối thiểu để được kèm sảnh */
+  /** Trung tâm sự kiện: số bàn tối thiểu để được kèm sảnh */
   minTables?: number | null
   tags: string[]
   /** Ảnh theo thứ tự, ảnh đầu là ảnh bìa */

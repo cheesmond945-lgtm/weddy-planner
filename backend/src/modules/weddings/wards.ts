@@ -139,3 +139,18 @@ export const HANOI_XA = [
 export const HANOI_WARDS: readonly string[] = [...HANOI_PHUONG.map((n) => `Phường ${n}`), ...HANOI_XA.map((n) => `Xã ${n}`)];
 
 export const isHanoiWard = (v: unknown): v is string => typeof v === 'string' && HANOI_WARDS.includes(v);
+
+/** "Phường Đống Đa" / "đống đa" → "dong da": bỏ tiền tố Phường/Xã và dấu để so */
+const foldWard = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/^\s*(phuong|xa)\s+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** Tên phường/xã chính thức (có tiền tố) của khu vực NCC lưu không tiền tố: "Đống Đa" → "Phường Đống Đa"; không khớp thì null. */
+export const officialWard = (raw: string | null | undefined) => (raw ? (HANOI_WARDS.find((w) => foldWard(w) === foldWard(raw)) ?? null) : null);

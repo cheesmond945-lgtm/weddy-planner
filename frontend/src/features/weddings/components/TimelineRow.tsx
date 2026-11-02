@@ -1,4 +1,4 @@
-import { Ban, CalendarDays, Check, Clock, Lock, MessageSquareText, Pencil, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
+import { Ban, CalendarDays, Check, Clock, Lock, MessageSquareText, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import type { KeyboardEvent } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -171,8 +171,8 @@ export function TimelineCard({ item, leaving, nested, showService, compactDate, 
         )}
         {suggests && item.category && (
           <Button asChild variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5">
-            <Link to={`${paths.services}?category=${item.category.slug}`}>
-              <Sparkles className="size-[15px] shrink-0" />
+            {/* ai=1: trang Dịch vụ bật khung gợi ý (tối đa 3 nhà cung cấp) như nút gợi ý ở Kế hoạch (useAiSuggest) */}
+            <Link to={`${paths.services}?category=${item.category.slug}&ai=1`}>
               <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${label}`} →</span>
             </Link>
           </Button>

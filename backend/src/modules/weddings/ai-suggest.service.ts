@@ -3,7 +3,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
 import { CAPACITY_CATEGORIES } from './budget.config';
 import { BudgetCalcService } from './budget-calc.service';
-import { fitsGuests, packageCost, type EnginePackage } from './budget-engine';
+import { packageCost, type EnginePackage } from './budget-engine';
+import { SUGGESTION_COUNT } from './suggest.config';
+import { buildReasons, dropSharedReasons, hardFilter, rankSuggestions, type SuggestCandidate, type SuggestContext } from './suggest-rules';
 import { versionOf } from './wedding-version';
 import { WeddingsService } from './weddings.service';
 
@@ -13,19 +15,21 @@ const fail = (code: string, message: string, status: number): never => {
 
 const money = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
 
-/** Phép tính chi phí một gói để hiện cho khách: "25 bàn × 5.000.000đ = 125.000.000đ". */
-export function costCalculation(p: EnginePackage, tables: number) {
+/**
+ * Phép tính chi phí một gói để hiện cho khách: "25 bàn × 5.000.000đ = 125.000.000đ".
+ * Số bàn = max(số bàn dự kiến, số bàn tối thiểu của gói, 1); withMinNote: thêm "(tối thiểu N bàn)" khi tính theo số tối thiểu.
+ */
+export function costCalculation(p: EnginePackage, tables: number, withMinNote = true) {
   if (p.unit !== 'mâm') return `${p.name}: ${money(p.price)} trọn gói`;
   const n = Math.max(tables, p.minTables ?? 0, 1);
-  const min = p.minTables && p.minTables > tables ? ` (tối thiểu ${p.minTables} bàn)` : '';
+  const min = withMinNote && p.minTables && p.minTables > tables ? ` (tối thiểu ${p.minTables} bàn)` : '';
   return `${p.name}: ${n} bàn × ${money(p.price)} = ${money(packageCost(p, tables))}${min}`;
 }
 
 /**
- * Gợi ý dịch vụ theo hạng mục. Bộ lọc và xếp hạng theo luật (không gọi mô hình ngôn ngữ), chạy trên dữ liệu thật:
- * - Lọc: cùng khu vực; nhà hàng phải có sảnh đủ chỗ cho số khách; gói rẻ nhất (đủ chỗ) nằm trong ngân sách hạng mục.
- * - Xếp: điểm đánh giá, rồi số lượt đánh giá (cuối cùng chi phí thấp hơn, chỉ để thứ tự ổn định).
- * Ngân sách hạng mục lấy như tab Ngân sách (budget-engine.ts). Không xét phong cách.
+ * "Gợi ý cho bạn" theo hạng mục: thuật toán theo luật (không gọi mô hình ngôn ngữ), chạy trên dữ liệu thật.
+ * Lọc cứng, xếp hạng và lý do nằm ở hàm thuần suggest-rules.ts (có unit test); ở đây chỉ gom dữ liệu từ DB.
+ * Ngân sách hạng mục ("Giới hạn") và số bàn dự kiến lấy như tab Ngân sách (allocation.ts).
  */
 @Injectable()
 export class AiSuggestService {
@@ -42,57 +46,117 @@ export class AiSuggestService {
     if (!category) return fail('VALIDATION_ERROR', 'Hạng mục không hợp lệ.', 400);
 
     const { input, result } = await this.calc.compute(w.id, [category.id]);
-    const row = result.categories.find((c) => c.categoryId === category.id)!;
-    const budget = row.budget;
-    const tables = result.tables.count;
+    const row = result.rows.find((c) => c.categoryId === category.id)!;
     const isVenue = CAPACITY_CATEGORIES.includes(categorySlug);
     const packages = input.categories.find((c) => c.id === category.id)?.packages ?? [];
 
-    // Mỗi nhà cung cấp: gói rẻ nhất trong các gói đủ chỗ (nhà hàng không có sảnh nào đủ chỗ thì loại)
+    // Nhà cung cấp đang hiển thị của hạng mục (có gói đã duyệt)
     const vendorIds = [...new Set(packages.map((p) => p.vendorId))];
     const summaries = new Map((await this.services.summaries(vendorIds)).map((s) => [s.id, s]));
-    const options = vendorIds
-      .map((id) => {
-        const pkgs = packages.filter((p) => p.vendorId === id);
-        const fit = pkgs.filter((p) => fitsGuests(p, categorySlug, input.guestCount)).map((p) => ({ p, cost: packageCost(p, tables) }));
-        fit.sort((a, b) => a.cost - b.cost);
-        const capacity = Math.max(0, ...pkgs.map((p) => p.capacity ?? 0));
-        return { id, summary: summaries.get(id), cheapest: fit[0] ?? null, capacity };
-      })
-      .filter((o) => o.summary && o.summary.location === w.city);
+    const visibleIds = vendorIds.filter((id) => summaries.has(id));
+    const [places, ratings] = await Promise.all([
+      this.prisma.vendor_profiles.findMany({ where: { id: { in: visibleIds } }, select: { id: true, ward: true, city: true } }),
+      this.webRatings(visibleIds),
+    ]);
+    const placeOf = new Map(places.map((p) => [p.id, p]));
+    const planIds = new Set(input.planVendors.map((v) => v.vendorId));
 
-    const fitting = options.filter((o) => o.cheapest);
-    const picked = fitting
-      .filter((o) => o.cheapest!.cost <= budget)
-      .sort((a, b) => b.summary!.rating - a.summary!.rating || b.summary!.reviewCount - a.summary!.reviewCount || a.cheapest!.cost - b.cheapest!.cost)
-      .slice(0, 3);
-    const cheapest = picked.length ? null : ([...fitting].sort((a, b) => a.cheapest!.cost - b.cheapest!.cost)[0] ?? null);
+    // Nơi tổ chức (phường/xã): cột weddings.ward chưa có trên DB thì Prisma bỏ cột này, coi như chưa có dữ liệu
+    const ward = (w as { ward?: string | null }).ward ?? null;
+    const weddingStyles = (w.style ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const ctx: SuggestContext = {
+      slug: categorySlug,
+      categoryName: category.name ?? '',
+      city: w.city,
+      ward,
+      guestCount: input.guestCount,
+      tables: result.tables,
+      // Giới hạn riêng của hạng mục (allocation.ts, cùng số "Gợi ý" ở tab Ngân sách); tiệc dùng Mục tiêu; còn lại theo chi phí đang chọn
+      budget: row.shareLimit ?? row.limit ?? row.cost,
+      styles: weddingStyles,
+    };
+    const tagsOf = weddingStyles.length ? await this.packageTags(packages.filter((p) => summaries.has(p.vendorId)).map((p) => p.id)) : new Map<string, string[]>();
 
-    const pkgDto = (o: (typeof options)[number]) => ({ id: o.cheapest!.p.id, name: o.cheapest!.p.name, cost: o.cheapest!.cost, calculation: costCalculation(o.cheapest!.p, tables) });
+    const candidates: SuggestCandidate[] = visibleIds.map((id) => {
+      const pkgs = packages.filter((p) => p.vendorId === id);
+      const r = ratings.get(id);
+      return {
+        id,
+        name: summaries.get(id)!.name ?? '',
+        city: placeOf.get(id)?.city ?? summaries.get(id)!.location,
+        ward: placeOf.get(id)?.ward ?? null,
+        packages: pkgs,
+        rating: r && r.count ? r.sum / r.count : null,
+        reviewCount: r?.count ?? 0,
+        styles: [...new Set(pkgs.flatMap((p) => tagsOf.get(p.id) ?? []))],
+        inPlan: planIds.has(id),
+      };
+    });
+
+    const { passed, overBudget, noCapacity } = hardFilter(candidates, ctx);
+    const picked = rankSuggestions(passed, ctx).slice(0, SUGGESTION_COUNT);
+    // Không gợi ý nào: dịch vụ có chi phí ước tính thấp nhất ngoài ngân sách (để gợi ý tăng ngân sách)
+    const cheapest = picked.length ? null : ([...overBudget].sort((a, b) => a.estimate.cost - b.estimate.cost)[0] ?? null);
+    const pkgDto = (c: (typeof passed)[number]) => ({
+      id: c.estimate.package.id,
+      name: c.estimate.package.name,
+      cost: c.estimate.cost,
+      chargedTables: c.estimate.chargedTables,
+      calculation: costCalculation(c.estimate.package, ctx.tables),
+    });
+
     return {
       category,
-      budget,
-      budgetSource: row.manual ? 'ALLOCATED' : 'ESTIMATED',
-      budgetReason: row.reason,
+      budget: ctx.budget,
+      /** ALLOCATED: Giới hạn của hạng mục theo thuật toán phân bổ; CHOSEN: hạng mục đã chọn, theo chi phí đang chọn */
+      budgetSource: row.status === 'CHOSEN' ? 'CHOSEN' : 'ALLOCATED',
+      budgetReason: row.status === 'CHOSEN' ? 'Theo chi phí dịch vụ bạn đã chọn' : 'Theo gợi ý phân bổ ngân sách',
       location: w.city,
-      guestCount: isVenue ? input.guestCount : null,
-      tables: isVenue ? tables : null,
-      suggestions: picked.map((o) => {
-        const s = o.summary!;
-        const reasons = [`${costCalculation(o.cheapest!.p, tables)}, trong ngân sách hạng mục ${money(budget)}.`];
-        if (s.rating > 0) reasons.push(`Điểm ${s.rating.toFixed(1)} trên Google Maps (${s.reviewCount.toLocaleString('vi-VN')} đánh giá).`);
-        if (isVenue && o.capacity) reasons.push(`Sảnh chứa tối đa ${o.capacity.toLocaleString('vi-VN')} khách, đủ cho ${input.guestCount.toLocaleString('vi-VN')} khách.`);
-        return { service: s, reasons, package: pkgDto(o) };
-      }),
-      cheapest: cheapest ? cheapest.summary! : null,
+      /** Phường/xã nơi tổ chức; null khi chưa có (giao diện ghi "tại {tỉnh/thành}") */
+      ward,
+      guestCount: isVenue ? ctx.guestCount : null,
+      tables: isVenue ? ctx.tables : null,
+      suggestions: dropSharedReasons(picked.map((c) => ({ service: summaries.get(c.id)!, ...buildReasons(c, ctx), package: pkgDto(c) }))),
+      /** Số dịch vụ đang hiển thị của hạng mục (để ghi "Xem thêm n dịch vụ") */
+      totalInCategory: visibleIds.length,
+      /** Qua mọi điều kiện trừ ngân sách */
+      outOfBudgetCount: overBudget.length,
+      cheapest: cheapest ? summaries.get(cheapest.id)! : null,
       cheapestPackage: cheapest ? pkgDto(cheapest) : null,
-      /** Không gợi ý nào: tăng ngân sách hạng mục lên đúng chi phí gói rẻ nhất đủ chỗ */
-      raiseBudgetTo: cheapest ? cheapest.cheapest!.cost : null,
+      /** Không gợi ý nào: tăng ngân sách hạng mục lên đúng chi phí ước tính thấp nhất */
+      raiseBudgetTo: cheapest ? cheapest.estimate.cost : null,
       /** Nhà hàng: không nhà hàng nào có sảnh đủ chỗ (gợi ý sửa số khách) */
-      noVenueFits: isVenue && options.length > 0 && !fitting.length,
+      noVenueFits: isVenue && !passed.length && !overBudget.length && noCapacity > 0,
       categoryId: category.id,
       isChosenCategory: w.wedding_categories.some((c) => c.category_id === category.id),
       version: versionOf(await this.prisma.weddings.findUniqueOrThrow({ where: { id: w.id }, select: { updated_date: true } })),
     };
+  }
+
+  /** Thẻ phong cách theo gói */
+  private async packageTags(packageIds: string[]) {
+    const out = new Map<string, string[]>();
+    if (!packageIds.length) return out;
+    for (const t of await this.prisma.package_tags.findMany({ where: { package_id: { in: packageIds } }, select: { package_id: true, tag: true } })) {
+      out.set(t.package_id, [...(out.get(t.package_id) ?? []), t.tag]);
+    }
+    return out;
+  }
+
+  /** Tổng số sao và số đánh giá trên web của từng nhà cung cấp (đánh giá gắn với dòng đơn của NCC đó). */
+  private async webRatings(vendorIds: string[]) {
+    const out = new Map<string, { sum: number; count: number }>();
+    if (!vendorIds.length) return out;
+    const rows = await this.prisma.reviews.findMany({
+      where: { order_items: { orders: { vendor_id: { in: vendorIds } } } },
+      select: { rating: true, order_items: { select: { orders: { select: { vendor_id: true } } } } },
+    });
+    for (const r of rows) {
+      const id = r.order_items.orders?.vendor_id;
+      if (!id) continue;
+      const cur = out.get(id) ?? { sum: 0, count: 0 };
+      out.set(id, { sum: cur.sum + r.rating, count: cur.count + 1 });
+    }
+    return out;
   }
 }

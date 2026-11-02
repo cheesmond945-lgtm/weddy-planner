@@ -27,13 +27,16 @@ export interface ServiceSummary {
   priceFrom: number
   /** Giá cao nhất trong các gói, đồng (dữ liệu giả có thể không có) */
   priceTo?: number
-  // Điểm Google Maps không thuộc catalog (CSDL không có cột điểm): lấy riêng qua GET /vendors/{id}/google-rating
-  /** TABLE: giá mỗi mâm 10 khách, đã gồm sảnh (trung tâm sự kiện); PACKAGE: giá trọn gói. Thiếu thì coi là PACKAGE */
+  /** Điểm trung bình đánh giá của khách trên web (0 khi chưa có), 1 chữ số thập phân */
+  rating?: number
+  /** Số lượt đánh giá trên web */
+  reviewCount?: number
+  /** TABLE: giá mỗi bàn 10 khách, đã gồm sảnh (trung tâm sự kiện); PACKAGE: giá trọn gói. Thiếu thì coi là PACKAGE */
   priceUnit?: 'TABLE' | 'PACKAGE'
-  /** Giá theo mâm: số mâm tối thiểu của gói rẻ nhất để được kèm sảnh */
+  /** Giá theo bàn: số bàn tối thiểu của gói rẻ nhất để được kèm sảnh */
   minTables?: number | null
   coverImageUrl: string
-  /** Link Google Maps của NCC (vendor_profiles.google_maps_url); hiện thay điểm khi chưa lấy được điểm Google */
+  /** Link Google Maps của NCC (vendor_profiles.google_maps_url): mở bản đồ từ dòng địa chỉ */
   googleMapsUrl?: string | null
   /** NCC đang bị Admin ẩn nhưng bạn đã có đơn với họ: tạm ngừng nhận đơn mới */
   paused?: boolean
@@ -100,9 +103,45 @@ export interface ServiceListQuery {
   /** slug danh mục */
   category?: string
   location?: string
+  /** Khu vực: phường/xã chính thức có tiền tố, lấy từ GET /services/areas; lọc cứng AND với từ khóa */
+  area?: string
+  /** Phong cách, nối bằng dấu phẩy (bộ lọc AI đã hiểu) */
+  styles?: string
   priceMin?: number
   /** Không bao gồm giá trị này (giá < priceMax) */
   priceMax?: number
   page?: number
   pageSize?: number
+}
+
+/** Bộ lọc AI đã hiểu từ câu gõ (đã được backend kiểm tra) */
+export interface NlFilters {
+  /** slug hạng mục */
+  category: string | null
+  area: string | null
+  styles: string[]
+  priceMin: number | null
+  priceMax: number | null
+}
+
+/** GET /services/search (docs/api/catalog.md) */
+export interface ServiceSearchResult {
+  /** EMPTY: câu rỗng; GUIDE: hướng dẫn; TEXT: tầng 1; NEEDS_AI: cần gọi lại kèm ai=1; AI: tầng 2 */
+  mode: 'EMPTY' | 'GUIDE' | 'TEXT' | 'NEEDS_AI' | 'AI'
+  query: string
+  items: (ServiceSummary & { estimatedCost?: number })[]
+  total: number
+  page: number
+  pageSize: number
+  sort?: 'CHEAP' | 'RATING' | null
+  /** Tab đang chọn không có kết quả, hạng mục khác có */
+  hint?: { tab: string; categorySlug: string; categoryName: string; count: number } | null
+  guide?: { message: string; categories: { slug: string; name: string }[]; styles: string[] }
+  ai?: {
+    filters?: NlFilters
+    overridden?: { area: boolean; price: boolean }
+    priceRejected?: boolean
+    error?: 'UNAVAILABLE' | 'TIMEOUT' | 'LIMIT' | 'FAILED'
+  }
+  empty?: { cheapestFrom?: number; noServicesInArea?: string }
 }

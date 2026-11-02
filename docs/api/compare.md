@@ -1,84 +1,66 @@
-# API: compare (kết quả so sánh và đề xuất)
+# API: compare (so sánh dịch vụ)
 
-> **Bản nháp để nhóm duyệt** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/compare.ts`).
 > Quy ước chung: [README.md](README.md). `ServiceDetail`: xem [catalog.md](catalog.md).
-> **Chờ đối chiếu `docs/database.md`** (đang trống). Theo quyết định của nhóm, đơn vị so sánh là **nhà cung cấp**; ở FE và tài liệu catalog đang gọi là "service" (`serviceId`). Khi database.md được chốt, đổi tên tham số theo (ví dụ `vendorIds`).
-> Điểm Google (`rating`, `reviewCount`) **không** nằm trong `items`: BE lấy lúc gọi qua `PlaceId` (xem [vendors.md](vendors.md)); FE ở chế độ dữ liệu giả lấy qua `GET /vendors/{id}/google-rating?fields=summary` rồi tự tính đề xuất (`recommendation = null` trong response giả).
+> Đơn vị so sánh là **nhà cung cấp**; ở FE và tài liệu catalog đang gọi là "service" (`serviceId`).
 
 Role: **COUPLE**.
 
+So sánh bằng **thuật toán**, không gọi AI và **không đề xuất** chọn bên nào (bỏ banner "Forever đề xuất", nhãn "Đề xuất", icon lấp lánh, dòng "Khoảng giá", khoảng cách km từ 02/11/2026). Mọi phép tính nằm trong hàm thuần `backend/src/modules/compare/compare-rules.ts` (test: `backend/test/compare-rules.test.cjs`), hằng số trong `compare.config.ts`. FE chỉ hiển thị.
+
 Danh sách đang chọn để so sánh chỉ nằm ở FE (sessionStorage của tab), không lưu lên BE.
 
-### GET /compare?serviceIds=sv-1,sv-2,sv-3
+### GET /compare?serviceIds=a,b,c&packageIds=a:p1,b:p2
 
-Quy tắc: 2 đến 3 id, không trùng, **cùng hạng mục**.
+- `serviceIds`: 2 đến 3 id, không trùng, **cùng hạng mục**. Khác hạng mục: 400 `COMPARE_MIXED_CATEGORIES` "Chỉ so sánh được dịch vụ cùng hạng mục.". Dịch vụ ẩn / chưa duyệt: 404 `SERVICE_NOT_FOUND`.
+- `packageIds` (không bắt buộc): gói khách chọn ở dropdown, dạng `serviceId:packageId`. Gói không thuộc dịch vụ thì bỏ qua (dùng gói mặc định). FE gọi lại mỗi lần đổi gói để BE tính lại các dòng và dòng tóm tắt.
 
 Response 200
 
 ```json
 {
   "data": {
-    "items": [ { "id": "sv-1", "name": "Grand Lotus Palace", "cost": 125000000, "…": "ServiceDetail" } ],
-    "categoryBudget": 127000000,
-    "tables": 25,
-    "recommendation": {
-      "serviceId": "sv-2",
-      "reasons": ["giá thấp nhất"],
-      "isTie": false,
-      "usedRating": true
+    "category": { "id": "…", "slug": "nha-hang", "name": "Trung tâm tổ chức sự kiện" },
+    "items": [ "ServiceDetail (đầu cột, nút)" ],
+    "budget": 234000000,
+    "guestCount": 300,
+    "tables": 30,
+    "comparison": {
+      "summary": ["Mipec Place rẻ hơn Hanoi Tower 53.000.000đ.", "Hanoi Tower có sức chứa lớn hơn Mipec Place 200 khách."],
+      "rows": { "budget": true, "tables": true, "location": false, "capacity": true },
+      "columns": [{
+        "id": "…", "name": "Hanoi Tower",
+        "package": { "id": "…", "name": "Sảnh Hoa Dạ Quang", "price": 5800000 },
+        "packages": [{ "id": "…", "name": "Sảnh Hoa Dạ Quang", "total": 203000000 }],
+        "total": 203000000, "formula": "35 × 5.800.000đ", "assumption": null,
+        "budget": { "kind": "LEFT", "amount": 31000000, "text": "Còn dư 31.000.000đ" },
+        "tables": { "count": 35, "byMinimum": true, "text": "35 bàn, tối thiểu của gói", "warning": "Gói này yêu cầu tối thiểu 35 bàn, nhiều hơn 5 bàn so với dự kiến của bạn" },
+        "location": null,
+        "capacity": { "max": 500, "fits": true, "text": "Tối đa 500 khách, đủ cho 300 khách của bạn" },
+        "rating": { "value": null, "count": 0, "text": "Chưa có đánh giá" },
+        "includes": ["Phong cách lãng mạn", "Thích hợp cho tiệc cưới gia đình và bạn bè"],
+        "canAdd": true, "blockReason": null,
+        "labels": { "cheapest": false, "largestCapacity": true, "topRated": false }
+      }]
     }
   }
 }
 ```
 
-- `items`: theo đúng thứ tự id gửi lên. `cost` là **chi phí gói** dùng để so: gói rẻ nhất đang bán của nhà cung cấp (nhà hàng: trong các sảnh đủ chỗ, `giá bàn × max(số bàn, số bàn tối thiểu)`), cùng cách tính với tab Ngân sách ([weddings.md](weddings.md) mục 7).
-- `categoryBudget`: ngân sách hạng mục **đang hiển thị trong kế hoạch** (số khách sửa tay nếu có, ngược lại số gợi ý theo mức chi). `null` khi chưa có đám cưới hoặc hạng mục không nằm trong dịch vụ muốn dùng.
-- `tables`: số bàn đang dùng; `null` khi chưa có đám cưới.
-- `recommendation`: BE **luôn** tính (thiếu điểm Google thì bỏ yếu tố điểm). Chỉ `null` ở chế độ dữ liệu giả của FE. `serviceId` là `null` khi `isTie = true`.
-- `reasons`: chữ thường, FE tự viết hoa chữ đầu và nối bằng dấu phẩy. Tối đa 3.
-
 Lỗi: 400 `COMPARE_INVALID_COUNT`, 400 `COMPARE_MIXED_CATEGORIES`, 404 `SERVICE_NOT_FOUND`, 401, 403
 
----
+## Cách tính
 
-## Công thức đề xuất
-
-BE và FE dùng **cùng một hàm**: `backend/src/modules/compare/recommend.ts` là bản sao **giống hệt** `frontend/src/features/compare/recommend.ts` (hằng số trong `recommend.config.ts` hai bên). Test `backend/test/recommend-same.test.cjs` báo lỗi khi hai bản lệch nhau.
-
-**Trung lập:** chỉ dùng điểm Google Maps, chi phí gói và độ phù hợp với ngân sách hạng mục. Không có yếu tố ưu tiên NCC trả phí, quảng cáo hay hoa hồng. **Không xét phong cách** (bỏ ngày 30/10/2026): tag của gói do NCC nhập chỉ dùng cho tìm kiếm và bộ lọc.
-
-Đầu vào cho mỗi phương án: `price` (= `cost` ở trên), `rating`, `reviewCount` (từ Google, **có thể thiếu**), `capacity`.
-Thông tin đám cưới (có thể chưa có): `categoryBudget`, `guestCount`.
-
-Với mỗi phương án:
-
-1. `bayes = (rating × reviewCount + 4.3 × 100) / (reviewCount + 100)`; `R = bayes / 5`
-2. `P = chi phí thấp nhất trong nhóm / price`
-3. **Phù hợp** `F = min(1, categoryBudget / price)`; không có `categoryBudget` thì không có `F`.
-4. `điểm = 0.55 × R + 0.45 × P` khi không có `F`; ngược lại `0.40 × R + 0.30 × P + 0.30 × F`.
-5. **Thiếu điểm:** có ít nhất một phương án thiếu `rating` thì bỏ yếu tố điểm cho **cả nhóm**: `điểm = P` khi không có `F`, `0.5 × P + 0.5 × F` khi có `F`.
-6. Hạng mục có sức chứa (hiện chỉ **nhà hàng**), có `guestCount` và `capacity < guestCount` thì `điểm × 0.7`.
-7. Sắp xếp giảm dần. Nếu `điểm[0] − điểm[1] < 0.03` thì `isTie = true`, không đề xuất.
-
-**Lý do** (chỉ nêu khi phương án đề xuất thật sự hơn các phương án còn lại; lấy tối đa 3 theo thứ tự):
-
-1. `đủ chỗ cho N khách`: đề xuất đủ chỗ và có phương án khác thiếu chỗ.
-2. `nằm trong ngân sách hạng mục`: đề xuất có `F = 1` và có phương án khác `F < 1`.
-3. `giá thấp nhất`: chi phí của đề xuất thấp nhất và không bị trùng.
-4. `điểm Google Maps cao nhất`: chỉ khi dùng điểm; điểm của đề xuất cao nhất và không bị trùng.
-5. Không có lý do nào: `nhiều đánh giá nhất` hoặc `cân bằng tốt giữa giá và đánh giá` (thiếu điểm: `cân bằng tốt giữa giá và nhu cầu của bạn`).
-
-### Ví dụ (đã có trong `recommend.test.ts`)
-
-| Trường hợp | Kết quả |
-|---|---|
-| A: 128.000.000đ, 4.7, 1824 đánh giá, sức chứa 600. B: 96.000.000đ, 4.5, 932 đánh giá, sức chứa 400. Không có đám cưới | Đề xuất B, lý do `giá thấp nhất` |
-| Như trên, 500 khách, ngân sách hạng mục 120.000.000đ | Đề xuất A, lý do `đủ chỗ cho 500 khách` |
-| C: 95.000.000đ, D: 140.000.000đ, cùng điểm, ngân sách hạng mục 100.000.000đ | Đề xuất C, có lý do `nằm trong ngân sách hạng mục` |
-| Hai phương án gần như giống nhau về giá và đánh giá | `isTie = true` |
+- **Tổng chi phí ước tính** (mọi so sánh và nhãn dùng số này, **không** dùng đơn giá): trung tâm tiệc = đơn giá/bàn × max(số bàn của kế hoạch, `min_tables` của gói), số bàn của kế hoạch = ⌈số khách / `GUESTS_PER_TABLE`⌉ (hoặc số bàn khách tự nhập); hạng mục khác = giá gói. Kế hoạch chưa có số khách: tiệc tạm tính theo `min_tables` và ghi rõ giả định (`assumption`); gói không ghi tối thiểu thì `total = null`.
+- **Ngân sách hạng mục** (`budget`): giới hạn của hàm phân bổ ([weddings.md](weddings.md) mục 7): `shareLimit` của dịch vụ, Mục tiêu (`limit`) của tiệc chưa chọn, hoặc chi phí đang chọn nếu hạng mục đã chọn. Hạng mục chưa nằm trong kế hoạch vẫn được tính thêm. Kế hoạch chưa có tổng ngân sách: `null`, bỏ dòng "So với ngân sách".
+- **Gói mặc định**: gói rẻ nhất có tổng chi phí ≤ ngân sách hạng mục; không có thì gói rẻ nhất (theo tổng chi phí). Dropdown xếp theo tổng chi phí tăng dần.
+- **Thứ tự dòng** (FE): Chọn gói; Tổng chi phí ước tính (kèm `formula`); So với ngân sách hạng mục ("Còn dư X" / "Vừa đủ (còn 0đ)" / "Vượt X"); Số bàn tính phí (chỉ tiệc; cảnh báo khi tối thiểu > dự kiến, ghi chênh lệch); Vị trí; Sức chứa (chỉ tiệc); Đánh giá; Bao gồm (kèm "Xem chi tiết"); Nút.
+- **Vị trí**: "Cùng {phường/xã} với địa điểm tổ chức" hoặc "Khác khu vực ({phường/xã})", chỉ so khi cả nơi tổ chức và NCC đều xác định được phường/xã chính thức. Khách chưa chọn nơi tổ chức: ẩn dòng (`rows.location = false`).
+- **Bao gồm**: 3–4 ý: thẻ của gói trước ("Phong cách …", dữ liệu có cấu trúc), rồi cụm ngắn từ mô tả; bỏ cụm dài hơn 60 ký tự, cụm nhắc tên NCC / tên gói, giá, sức chứa, điều chỉnh, lịch.
+- **Nhãn theo dòng**, chỉ khi các bên khác nhau (hòa thì không gắn): `cheapest` "Chi phí thấp nhất" (theo tổng chi phí); `largestCapacity` "Sức chứa lớn nhất" (chỉ tiệc); `topRated` "Điểm cao nhất" (chỉ khi mọi bên có ít nhất `MIN_REVIEWS` = 3 lượt).
+- **Dòng tóm tắt** (`summary`, BE ghép, không khuyên chọn): "{A} rẻ hơn {B} Xđ." (A rẻ nhất duy nhất); "{B} có sức chứa lớn hơn {C} Y khách." (chỉ tiệc, mọi bên đủ chỗ, chênh ≥ `CAPACITY_NOTABLE_GAP` = 50); "{A} cùng khu vực với địa điểm tổ chức." (chỉ khi có bên cùng, có bên khác); "{B} vượt ngân sách hạng mục Zđ." (chỉ khi có bên vượt, có bên không). Không có khác biệt: mảng rỗng, FE ẩn dòng.
+- **Gói tiệc không đủ chỗ** (sức chứa < số khách): cảnh báo ở dòng Sức chứa, `canAdd = false` kèm `blockReason`; FE khóa nút "Thêm vào kế hoạch". Nút "Thêm vào kế hoạch" thêm NCC ở trạng thái "Dự kiến", không bắt chọn gói.
+- Tiền định dạng đầy đủ dấu chấm (232.000.000đ), không dùng "tr"/"triệu"; dùng thống nhất từ "bàn".
 
 ## Cần chốt
 
 1. Tên tham số theo database.md (`serviceIds` hay `vendorIds`).
-2. (Đã chốt 30/10/2026) Ngân sách hạng mục lấy từ tab Ngân sách, không còn tỷ lệ riêng ở đây.
-3. (Đã chốt) Điểm Google lấy lúc gọi qua `PlaceId`, không lưu database: xem vendors.md.

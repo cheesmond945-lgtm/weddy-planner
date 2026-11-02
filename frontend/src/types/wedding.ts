@@ -19,8 +19,8 @@ export interface Wedding {
   guestCount: number | null
   /** Tổng ngân sách, đồng */
   budget: number
-  /** Mức chi tiêu (bỏ phong cách 30/10/2026) */
-  spendingTier: SpendingTier
+  /** Mức chia ngân sách (docs/api/weddings.md mục 7) */
+  budgetPreset: BudgetPreset
   /** Số bàn khách tự nhập; null là tự tính */
   tableCountOverride: number | null
   /** Phiên bản dữ liệu (weddings.updated_date) */
@@ -29,12 +29,11 @@ export interface Wedding {
   categorySlugs: string[]
 }
 
-export type WeddingInput = Omit<Wedding, 'id' | 'location' | 'tableCountOverride' | 'version'> & { version?: string }
+export type WeddingInput = Omit<Wedding, 'id' | 'location' | 'tableCountOverride' | 'version' | 'budgetPreset'> & { budgetPreset?: Exclude<BudgetPreset, 'CUSTOM'>; version?: string }
 
 export interface WeddingPatch {
   budget?: number
   guestCount?: number
-  spendingTier?: SpendingTier
   /** null: về số bàn tự tính */
   tableCountOverride?: number | null
   version: string
@@ -174,8 +173,8 @@ export interface Overview {
 // ---- Ngân sách (7) ----
 
 /** Mức chi tiêu: AUTO chọn mức cao nhất vừa ngân sách */
-export type SpendingTier = 'AUTO' | 'SAVING' | 'BALANCED' | 'PREMIUM'
-export type ConcreteTier = Exclude<SpendingTier, 'AUTO'>
+/** Mức chia: Cân bằng, Ưu tiên không gian, Ưu tiên hình ảnh, Tùy chỉnh (thanh kéo ở tab Ngân sách) */
+export type BudgetPreset = 'BALANCED' | 'SPACE' | 'VISUAL' | 'CUSTOM'
 
 /** Gói đang tính của một nhà cung cấp: ORDER theo đơn (khóa), SELECTED khách chọn, PLANNED gói dự kiến */
 export interface PlanPackageRef {
@@ -184,37 +183,81 @@ export interface PlanPackageRef {
   source: 'ORDER' | 'SELECTED' | 'PLANNED'
   /** Gói khách chọn đã ngừng bán, đang tính theo gói dự kiến */
   unavailable: boolean
+  /** Số bàn tối thiểu của gói (nhà hàng); số bàn tính phí = max(số bàn dự kiến, số này) */
+  minTables?: number | null
+}
+
+/** Một gói trong ô chọn gói của tab Ngân sách: chi phí theo số bàn, gói tiệc vượt sức chứa bị vô hiệu, hệ quả nếu chọn */
+export interface BudgetPackageOption {
+  id: string
+  name: string
+  price: number
+  unit: 'TABLE' | 'PACKAGE' | null
+  minTables: number | null
+  capacity: number | null
+  cost: number
+  chargedTables: number | null
+  fits: boolean
+  /** "Chọn gói này, 5 dịch vụ còn lại còn tối đa X so với gói rẻ nhất cần Y, thiếu Z."; null khi không thiếu */
+  consequence: string | null
 }
 
 export interface BudgetVendor {
   id: string
   name: string
   status: PlanItemStatus | null
-  /** Chi phí theo gói (có đơn thì tổng đơn) */
+  /** Chi phí: có đơn thì giá đơn, chưa có đơn thì theo gói đang chọn (mặc định gói rẻ nhất) */
   cost: number
   hasOrder: boolean
-  package: PlanPackageRef & { unit: 'TABLE' | 'PACKAGE' | null }
+  /** Nguồn của số chi phí: PLANNED "Dự kiến", ORDER "Theo đơn", DEPOSITED "Đã cọc" */
+  costSource: BudgetCostSource
+  /** Tiền cọc đã trả (đơn đã cọc) */
+  deposited: number
+  /** Gói tiệc vượt sức chứa so với số khách */
+  overCapacity: boolean
+  package: PlanPackageRef & { unit: 'TABLE' | 'PACKAGE' | null; chargedTables: number | null }
+  /** Gói đổi được (rỗng khi đã có đơn) */
+  options: BudgetPackageOption[]
 }
+
+export type BudgetCostSource = 'PLANNED' | 'ORDER' | 'DEPOSITED'
+
+/** Nhãn của gói gợi ý: vượt phần chia (vẫn trong trần cứng) hoặc vượt X đồng */
+export type BudgetSuggestionLabel = { code: 'OVER_ALLOCATION' } | { code: 'OVER_BY'; amount: number }
 
 export interface BudgetCategory {
   categoryId: string
   slug: string
   name: string
-  /** Ngân sách hiển thị: số sửa tay nếu có, ngược lại số gợi ý */
-  budget: number
-  /** Số gợi ý theo mức chi đang áp dụng */
-  suggested: number
-  /** Khách đã sửa tay ("đã sửa") */
-  manual: boolean
-  /** Lý do dưới số, ví dụ "Theo giá gói mức Cân đối" */
-  reason: string
-  source: 'PACKAGES' | 'FALLBACK'
-  packageCount: number
+  kind: 'VENUE' | 'SERVICE'
+  /** CHOSEN đã chọn; SUGGESTED có gói gợi ý; NO_VENDOR chưa có NCC; OWN_VENUE tự lo tiệc */
+  status: 'CHOSEN' | 'SUGGESTED' | 'NO_VENDOR' | 'OWN_VENUE'
+  /** Chi phí đang tính: đã chọn, tự lo, hoặc gói gợi ý */
+  cost: number
+  /** Trọng số (%) dùng khi duyệt thuật toán (dịch vụ chưa chọn); không hiển thị */
+  weight: number | null
+  /** Tỷ lệ (%) của hạng mục trong mức chia hiện tại; null với tiệc */
+  share: number | null
+  /** Giới hạn riêng của hạng mục ("Gợi ý: X"); null với tiệc (dùng limit = Mục tiêu) */
+  shareLimit: number | null
+  allocation: number | null
+  cap: number | null
+  /** "Gợi ý: X" (giá trị dẫn xuất, không sửa tay) */
+  limit: number | null
+  minPrice: number | null
+  medianPrice: number | null
+  message: string | null
+  suggestion: {
+    packageId: string
+    packageName: string
+    vendorId: string
+    vendorName: string
+    cost: number
+    chargedTables: number | null
+    unit: 'TABLE' | 'PACKAGE' | null
+    label: BudgetSuggestionLabel | null
+  } | null
   vendors: BudgetVendor[]
-  /** Tổng chi phí theo gói của hạng mục; null khi chưa có nhà cung cấp */
-  cost: number | null
-  /** budget - cost: dương là còn, âm là vượt; null khi chưa có nhà cung cấp */
-  diff: number | null
 }
 
 export interface ExtraCost {
@@ -225,37 +268,60 @@ export interface ExtraCost {
 }
 
 export interface BudgetWarning {
-  code: 'BELOW_SAVING' | 'TIER_OVER_BUDGET' | 'ALLOCATED_OVER_BUDGET' | 'PACKAGE_UNAVAILABLE'
+  code: 'PACKAGE_UNAVAILABLE'
   message: string
-  amount?: number
   vendorId?: string
 }
 
 export interface Budget {
   /** Phiên bản dữ liệu, gửi kèm mỗi lần ghi (ghi đồng thời thì nhận 409 STALE_DATA) */
   version: string
-  tier: SpendingTier
-  effectiveTier: ConcreteTier
-  /** "Tự động, đang áp dụng mức Cân đối" */
-  tierLabel: string
-  tierTotals: Record<ConcreteTier, number>
+  preset: BudgetPreset
+  presetLabel: string
+  /** Tỷ lệ % của các dịch vụ chưa cọc (đã chọn hoặc chưa), khởi tạo thanh kéo Tùy chỉnh, tổng 100 */
+  presetWeights: Record<string, number>
+  /** Tiền chia cho các dịch vụ chưa cọc: số tiền ở thanh kéo = sliderPool × % */
+  sliderPool: number
+  ownVenue: boolean
+  ownVenueCost: number | null
   guestCount: number
   tables: { count: number; auto: number; override: number | null }
   categories: BudgetCategory[]
   totals: {
     total: number
+    /** Giá các đơn đã chốt */
+    ordersTotal: number
+    deposited: number
+    /** Còn phải trả cho nhà cung cấp = giá đơn − đã cọc */
+    owed: number
+    /** Dự kiến chưa chốt: theo gói đang chọn của dịch vụ chưa có đơn */
+    plannedTotal: number
+    /** Cọc của đơn đã hủy (không hoàn) */
+    lostDeposits: number
     extraCosts: number
-    /** Ngân sách đã chia: tổng ngân sách hiển thị của các hạng mục */
-    allocated: number
-    /** Tổng − chi phí khác − ngân sách đã chia: dương là còn dư, âm là vượt */
-    unallocated: number
-    /** Chi phí theo gói đã chọn */
-    packagesCost: number
-    /** Tổng − chi phí theo gói − chi phí khác: dương là còn lại, âm là vượt */
+    ownVenueCost: number
+    /** Tổng − giá đơn đã chốt − dự kiến chưa chốt (− cọc mất, chi phí khác, tiệc tự lo) */
     remaining: number
+    /** Tổng chi phí các gói gợi ý cho hạng mục chưa chọn */
+    suggestedTotal: number
+    /** Còn dư sau khi trừ cả gói gợi ý */
+    leftover: number
   }
+  status: 'OK' | 'OVER_BUDGET'
+  /** Vượt ngân sách (cảnh báo mềm): soft khi do số dự kiến, strong khi do giá đơn thật */
+  overBudget: { level: 'soft' | 'strong'; amount: number; message: string } | null
+  /** Kiểm tra khả thi (chỉ cảnh báo) */
+  feasibility: { ok: boolean; minNeed: number; shortfall: number; message: string | null; options: string[] }
+  leftoverMessage: string | null
   extraCosts: ExtraCost[]
   warnings: BudgetWarning[]
+}
+
+export interface BudgetSettings {
+  budgetPreset?: BudgetPreset
+  customWeights?: Record<string, number>
+  ownVenue?: boolean
+  ownVenueCost?: number | null
 }
 
 // ---- Khách mời (8) ----
@@ -361,11 +427,19 @@ export interface AiSuggestedPackage {
   cost: number
   /** Phép tính, ví dụ "Sảnh A: 25 bàn × 5.000.000đ = 125.000.000đ" */
   calculation: string
+  /** Gói theo bàn: số bàn tính phí = max(số bàn dự kiến, số bàn tối thiểu); trọn gói: null */
+  chargedTables?: number | null
 }
 
+/** Một thẻ "Gợi ý cho bạn" (thuật toán theo luật ở backend, không dùng AI) */
 export interface AiSuggestion {
   service: ServiceSummary
+  /** 2 đến 3 ý ngắn: chi phí so với ngân sách, địa điểm, đánh giá */
   reasons: string[]
+  /** Nhà hàng có số bàn tối thiểu cao hơn dự kiến */
+  warning?: string | null
+  /** Dưới ngưỡng số lượt đánh giá: nhãn "Ít đánh giá" */
+  fewReviews?: boolean
   package?: AiSuggestedPackage
 }
 
@@ -373,15 +447,21 @@ export interface AiSuggestionResult {
   category: CategoryRef
   /** Ngân sách dùng để lọc */
   budget: number
-  budgetSource: 'ALLOCATED' | 'ESTIMATED'
+  budgetSource: 'ALLOCATED' | 'CHOSEN'
   /** Lý do của ngân sách hạng mục, ví dụ "Theo giá gói mức Cân đối" */
   budgetReason?: string
   location: string
+  /** Phường/xã nơi tổ chức; null khi chưa có (ghi "tại {tỉnh/thành}") */
+  ward?: string | null
   /** Với nhà hàng: số khách cần chứa */
   guestCount: number | null
   /** Với nhà hàng: số bàn dùng để tính */
   tables?: number | null
   suggestions: AiSuggestion[]
+  /** Số dịch vụ đang hiển thị của hạng mục ("Xem thêm n dịch vụ") */
+  totalInCategory?: number
+  /** Số dịch vụ qua mọi điều kiện trừ ngân sách */
+  outOfBudgetCount?: number
   /** Khi không có gợi ý: lựa chọn rẻ nhất hiện có */
   cheapest: ServiceSummary | null
   cheapestPackage?: AiSuggestedPackage | null
