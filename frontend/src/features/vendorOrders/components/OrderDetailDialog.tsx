@@ -9,6 +9,7 @@ import { CANCEL_REASON } from '../constants'
 import { changesLabel, depositDeadline, formatDay, formatDayTime, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
 import { OrderStatusBadge } from './OrderBadges'
+import { OrderDaySlotPanel } from './OrderDaySlotPanel'
 import { OrderProgressPanel } from './OrderProgressPanel'
 import type { OrderFormMode } from './OrderFormDialog'
 import { PanelDialog } from './PanelDialog'
@@ -146,9 +147,12 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
       </Section>
 
       {vendorView && (o.status === 'Deposited' || o.status === 'Completed') && (
-        <Section title="Tiến độ đơn">
-          <OrderProgressPanel orderId={o.id} readOnly={o.status !== 'Deposited'} />
-        </Section>
+        <>
+          <OrderDaySlotPanel orderId={o.id} frame={(c) => <Section title="Giờ có mặt ngày cưới">{c}</Section>} />
+          <Section title="Tiến độ đơn">
+            <OrderProgressPanel orderId={o.id} readOnly={o.status !== 'Deposited'} />
+          </Section>
+        </>
       )}
 
       <Section title="Hạng mục báo giá">

@@ -2,7 +2,11 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService, categoryRank, categorySlug, estimateCost } from '../catalog/services.service';
 import { ORDER_INCLUDE, toOrderDto, ymd } from '../orders/order-mapping';
+import { notify } from '../chat/chat-messages';
+import { publish } from '../realtime/realtime.bus';
 import { notifyVendorsOfWeddingDate, onWeddingCategories, planWeddingDateChange } from './timeline-hooks';
+import { hm, minutesOfTime, parseHm, timeOfMinutes } from './wedding-day';
+import { dayScheduleDto, loadWeddingDay } from './wedding-day-store';
 
 const fail = (code: string, message: string, status: number, details?: unknown): never => {
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
@@ -17,6 +21,8 @@ export interface WeddingInputBody {
   budget?: number;
   styles?: string[];
   categorySlugs?: string[];
+  /** Giờ chính của ngày cưới "HH:mm" (đón khách / làm lễ); null hoặc "" để xóa; không gửi thì giữ nguyên */
+  mainTime?: string | null;
 }
 
 const todayVN = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
@@ -53,6 +59,7 @@ export class WeddingsService {
     return {
       id: w.id,
       date: ymd(w.wedding_date),
+      mainTime: w.main_time ? hm(minutesOfTime(w.main_time)!) : null,
       location: w.city,
       guestCount: w.guest_count,
       budget: Number(w.budget),
@@ -83,13 +90,27 @@ export class WeddingsService {
     const style = styles.join(', ');
     if (style.length > 100) errors.styles = 'Chọn ít phong cách hơn.';
 
+    // Giờ chính: không gửi thì giữ nguyên (FE cũ), null / "" là xóa
+    const mainRaw = body.mainTime;
+    const mainMin = mainRaw === undefined || mainRaw === null || mainRaw === '' ? null : parseHm(mainRaw);
+    if (mainRaw !== undefined && mainRaw !== null && mainRaw !== '' && mainMin === null) errors.mainTime = 'Giờ dạng HH:mm, ví dụ 11:00.';
+
     const { idBySlug } = await this.categoryMaps();
     const slugs = [...new Set(body.categorySlugs ?? [])];
     if (slugs.some((s) => !idBySlug.has(s))) errors.categorySlugs = 'Hạng mục không hợp lệ.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin đám cưới chưa hợp lệ.', 400, errors);
 
     const existing = await this.prisma.weddings.findUnique({ where: { user_id: userId } });
-    const data = { wedding_date: new Date(date), city: location, guest_count: guest!, budget, style: style || null, updated_date: new Date() };
+    const data = {
+      wedding_date: new Date(date),
+      city: location,
+      guest_count: guest!,
+      budget,
+      style: style || null,
+      updated_date: new Date(),
+      ...(mainRaw !== undefined && { main_time: mainMin === null ? null : timeOfMinutes(mainMin) }),
+    };
+    const oldMain = existing ? minutesOfTime(existing.main_time) : null;
     const user = existing ? null : await this.prisma.users.findUnique({ where: { id: userId }, select: { full_name: true } });
     // Một transaction: lưu thông tin + hạng mục + (đổi ngày cưới) cập nhật hạn các việc khung chưa xong
     let dateChanged = false;
@@ -111,7 +132,37 @@ export class WeddingsService {
     });
     await onWeddingCategories(this.prisma, weddingId, new Date(date), slugs.map((s) => idBySlug.get(s)!));
     if (dateChanged) await notifyVendorsOfWeddingDate(this.prisma, weddingId, date).catch(() => undefined);
+    else if (existing && mainRaw !== undefined && oldMain !== mainMin) await this.notifyVendorsOfMainTime(weddingId, oldMain, mainMin).catch(() => undefined);
     return this.getMine(userId);
+  }
+
+  /** Khách đổi giờ chính: báo NCC có đơn làm đúng ngày cưới để kiểm tra lại giờ có mặt (đổi ngày cưới đã có thông báo riêng). */
+  private async notifyVendorsOfMainTime(weddingId: string, oldMin: number | null, newMin: number | null) {
+    const day = await loadWeddingDay(this.prisma, weddingId);
+    if (!day) return;
+    const text = (m: number | null) => (m === null ? 'chưa có' : hm(m));
+    const dmy = day.date.split('-').reverse().join('/');
+    for (const s of day.plan.slots) {
+      const userId = day.vendorUserOf.get(s.orderId);
+      if (!userId) continue;
+      await notify(this.prisma, {
+        userId,
+        type: 'WeddingTimeChanged',
+        title: 'Khách đổi giờ chính ngày cưới',
+        content: `Đơn ${s.orderCode}: giờ chính ngày ${dmy} đổi từ ${text(oldMin)} sang ${text(newMin)}. Kiểm tra lại giờ có mặt của bạn.`,
+        referenceType: 'Order',
+        referenceId: s.orderId,
+      });
+      // Chi tiết đơn đang mở của NCC tải lại giờ dự kiến
+      publish({ users: [userId], event: 'task', data: { orderId: s.orderId } });
+    }
+  }
+
+  /** Lịch trình ngày cưới theo giờ (docs/LICH_TRINH_NGAY_CUOI.md): giờ có mặt của từng NCC làm đúng ngày cưới. */
+  async daySchedule(userId: string) {
+    const w = await this.requireWedding(userId);
+    const day = await loadWeddingDay(this.prisma, w.id);
+    return day ? dayScheduleDto(day) : { date: null, mainTime: null, venue: null, slots: [] };
   }
 
   // ---------- Kế hoạch (nhà cung cấp đã chọn) ----------

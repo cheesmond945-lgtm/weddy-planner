@@ -301,6 +301,11 @@ Mọi API trả việc chi tiết (timeline khách, bảng việc, lịch, tiế
 - NCC: việc chưa Done quá hạn; việc đang Todo sắp đến hạn; mỗi ngày một thông báo "N việc chưa chốt lịch với khách" cho việc owner BOTH chưa chốt ngày còn ≤ 7 ngày.
 - Khách: việc `Waiting` sắp đến hạn ("<NCC> đang chờ bạn: <tên việc>") hoặc quá hạn.
 
+### Giờ trong ngày cưới
+
+Việc của đơn vẫn tính theo ngày. Giờ có mặt của từng NCC trong ngày cưới (theo giờ đón khách, thời gian gói khai, giờ sảnh cho vào setup) là phần riêng:
+xem [LICH_TRINH_NGAY_CUOI.md](LICH_TRINH_NGAY_CUOI.md).
+
 ### Dữ liệu cũ
 
 Không xóa. Việc chi tiết cũ (mã mẫu) vẫn hiện nhờ `LEGACY_OWNER`, NCC vẫn đổi được trạng thái. Script `timelines:rebuild` chỉ dựng lại việc khung (giữ việc gắn đơn), `timelines:repair` sinh bù việc PKG / PAY cho đơn Deposited thiếu việc; cả hai mặc định dry-run, chưa chạy ở đợt này. SQL `appointment_date` đã bỏ (không chạy).

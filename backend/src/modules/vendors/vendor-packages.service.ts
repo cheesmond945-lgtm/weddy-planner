@@ -10,6 +10,7 @@ import { GUESTS_PER_TABLE, categorySlug, priceUnitOf } from '../catalog/services
 import { fileNameOfPath, mimeOfPath } from './vendor-files';
 import { parseTasks, syncPackageTasks, toTaskDto } from './package-tasks';
 import { hasChanges, livePhotos, liveSnapshot, openUpdate, UPDATE_STATUS_OUT, type PackageSnapshot } from './package-update';
+import { VENUE_SLUG, defaultOf, hm, minutesOfTime, parseDayPlan, timeOfMinutes, type DayPlanInput } from '../weddings/wedding-day';
 
 export interface SavePackageBody {
   name?: string | null;
@@ -111,6 +112,14 @@ export class VendorPackagesService {
       updatedAt: upd?.data.savedAt ?? p.updated_date?.toISOString() ?? '',
       /** Số việc NCC đã khai cho gói (chưa xóa) */
       taskCount,
+      /** Thời gian trong ngày cưới (docs/LICH_TRINH_NGAY_CUOI.md): null là chưa khai, dùng mặc định theo lĩnh vực (defaults) */
+      dayPlan: {
+        leadMinutes: p.dayof_lead_minutes,
+        durationMinutes: p.dayof_duration_minutes,
+        setupOpenTime: p.setup_open_time ? hm(minutesOfTime(p.setup_open_time)!) : null,
+        isVenue: categorySlug(category.name) === VENUE_SLUG,
+        defaults: { leadMinutes: defaultOf(categorySlug(category.name)).lead, durationMinutes: defaultOf(categorySlug(category.name)).duration },
+      },
     };
   }
 
@@ -151,6 +160,22 @@ export class VendorPackagesService {
     const { foreign } = await this.prisma.$transaction((tx) => syncPackageTasks(tx as never, pkg.id, tasks));
     if (foreign.length) return fail('VALIDATION_ERROR', `Công việc không thuộc gói này (dòng ${foreign[0] + 1}).`, 400, foreign.map((index) => ({ index, field: 'id', message: 'Công việc không thuộc gói này.' })));
     return this.listTasks(userId, id);
+  }
+
+  /**
+   * Thời gian trong ngày cưới của gói: có mặt trước giờ chính, làm trong bao lâu; gói sảnh thêm giờ cho đơn vị khác vào setup.
+   * Như việc của gói: không qua Admin duyệt, sửa được ở mọi trạng thái, không đổi updated_date (form gói dùng để phát hiện sửa chồng).
+   */
+  async saveDayPlan(userId: string, id: string, body: DayPlanInput) {
+    const { vendor, pkg } = await this.loadOwned(userId, id);
+    const parsed = parseDayPlan(body ?? {}, categorySlug(vendor.service_categories.name) === VENUE_SLUG);
+    if ('errors' in parsed) return fail('VALIDATION_ERROR', 'Thời gian trong ngày cưới chưa hợp lệ.', 400, parsed.errors);
+    const { lead, duration, setupOpen } = parsed.value;
+    await this.prisma.service_packages.update({
+      where: { id: pkg.id },
+      data: { dayof_lead_minutes: lead, dayof_duration_minutes: duration, setup_open_time: setupOpen === null ? null : timeOfMinutes(setupOpen) },
+    });
+    return this.get(userId, id);
   }
 
   /** Kiểm tra và chuẩn hóa dữ liệu lưu nháp. */

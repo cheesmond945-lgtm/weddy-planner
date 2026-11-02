@@ -6,6 +6,8 @@ import { CALENDAR_MAX_DAYS, calendarItems } from '../weddings/calendar-items';
 import { loadPackageMeta, ownersFrom, type PackageTaskMeta } from '../weddings/package-task-meta';
 import { dmyOf, orderProgress, ownerOf } from '../weddings/task-owner';
 import { PKG_PREFIX, pkgTaskIdOf } from '../weddings/timeline-rows';
+import { hm, instantOf, localOf, minutesFrom, plannedOf, slotRangeIssue } from '../weddings/wedding-day';
+import { loadWeddingDay, slotDto, venueDto } from '../weddings/wedding-day-store';
 import { OrderJobsService } from './order-jobs.service';
 import { checkVendorTaskEdit, dateStatusOf, parseStatusBody, scheduleDateIssue, type RuleError } from './order-task-rules';
 import { UUID, fail, todayVn, ymdOf } from './order-rules';
@@ -46,7 +48,7 @@ export class OrderTasksService {
     const vendor = await this.vendorOf(userId);
     await this.jobs.sweep({ vendorId: vendor.id });
     const o = UUID.test(orderId)
-      ? await this.prisma.orders.findFirst({ where: { id: orderId, vendor_id: vendor.id }, select: { id: true, order_code: true, status: true, event_date: true, weddings: { select: { user_id: true } } } })
+      ? await this.prisma.orders.findFirst({ where: { id: orderId, vendor_id: vendor.id }, select: { id: true, order_code: true, status: true, event_date: true, wedding_id: true, weddings: { select: { user_id: true } } } })
       : null;
     return { vendor, order: o ?? fail('ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.', 404) };
   }
@@ -277,6 +279,82 @@ export class OrderTasksService {
     await this.prisma.task_confirmations.deleteMany({ where: { task_id: task.id } });
     this.notifyChange(userId, order, task.id);
     return this.list(userId, orderId);
+  }
+
+  // ---------- Giờ có mặt ngày cưới (docs/LICH_TRINH_NGAY_CUOI.md) ----------
+
+  /**
+   * Lịch trình ngày cưới nhìn từ một đơn: chỉ đơn Đã cọc / Hoàn thành làm ĐÚNG ngày cưới (applicable = false kèm lý do nếu không).
+   * Trả khung của đơn (đã chốt hoặc dự kiến), khung dự kiến theo gói (để điền sẵn khi chốt), giờ sảnh mở, và khung của các NCC khác
+   * (chỉ lĩnh vực và giờ, không lộ tên NCC khác).
+   */
+  private async daySlotOf(order: { id: string; status: string | null; event_date: Date | null; wedding_id: string | null }) {
+    if (order.status !== 'Deposited' && order.status !== 'Completed') return { applicable: false as const, reason: 'NOT_ACTIVE', message: 'Giờ có mặt ngày cưới có sau khi khách đặt cọc.' };
+    const day = order.wedding_id ? await loadWeddingDay(this.prisma, order.wedding_id) : null;
+    if (!day) return { applicable: false as const, reason: 'NO_WEDDING_DATE', message: 'Khách chưa có ngày cưới.' };
+    const event = order.event_date ? ymdOf(order.event_date) : '';
+    if (event !== day.date) {
+      return { applicable: false as const, reason: 'NOT_WEDDING_DAY', message: `Đơn thực hiện ngày ${dmyOf(event)}, không phải ngày cưới ${dmyOf(day.date)}, nên không nằm trong lịch trình ngày cưới.` };
+    }
+    const slot = day.plan.slots.find((s) => s.orderId === order.id)!;
+    const input = day.orders.find((o) => o.orderId === order.id)!;
+    const planned = day.plan.mainTime === null ? null : plannedOf(input, day.plan.mainTime);
+    return {
+      applicable: true as const,
+      date: day.date,
+      mainTime: day.plan.mainTime === null ? null : hm(day.plan.mainTime),
+      slot: slotDto(day.date, slot),
+      planned: planned && { start: localOf(day.date, planned.start), end: localOf(day.date, planned.end), source: planned.source },
+      venue: venueDto(day.plan),
+      others: day.plan.slots
+        .filter((s) => s.orderId !== order.id)
+        .map((s) => ({ categoryName: s.categoryName, isVenue: s.isVenue, start: s.start === null ? null : localOf(day.date, s.start), end: s.end === null ? null : localOf(day.date, s.end), confirmed: s.source === 'CONFIRMED' })),
+      canEdit: order.status === 'Deposited',
+    };
+  }
+
+  async daySlot(userId: string, orderId: string) {
+    const { order } = await this.ownedOrder(userId, orderId);
+    return this.daySlotOf(order);
+  }
+
+  /** Đơn đang thực hiện, làm đúng ngày cưới: trả ngày cưới (409 nếu không). */
+  private async editableDay(userId: string, orderId: string) {
+    const { vendor, order } = await this.ownedOrder(userId, orderId);
+    if (order.status !== 'Deposited') return fail('ORDER_NOT_ACTIVE', 'Chỉ chốt giờ cho đơn đang thực hiện (đã cọc).', 409);
+    const info = await this.daySlotOf(order);
+    if (!info.applicable) return fail('NOT_WEDDING_DAY', info.message, 409);
+    return { vendor, order, date: info.date };
+  }
+
+  /** NCC chốt giờ có mặt / xong việc ({ start, end } giờ VN "YYYY-MM-DDTHH:mm", từ hôm trước đến hết ngày cưới). Khách được báo. */
+  async confirmDaySlot(userId: string, orderId: string, body: { start?: unknown; end?: unknown }) {
+    const { vendor, order, date } = await this.editableDay(userId, orderId);
+    const start = minutesFrom(date, body.start);
+    const end = minutesFrom(date, body.end);
+    const issue = slotRangeIssue(start, end);
+    if (issue) return fail('VALIDATION_ERROR', issue, 400);
+    await this.prisma.orders.update({ where: { id: order.id }, data: { dayof_start_at: instantOf(date, start!), dayof_end_at: instantOf(date, end!), dayof_confirmed_at: new Date() } });
+    const coupleId = this.notifyChange(userId, order, order.id);
+    if (coupleId) {
+      await notify(this.prisma, {
+        userId: coupleId,
+        type: 'DaySlotConfirmed',
+        title: 'Nhà cung cấp đã chốt giờ có mặt',
+        content: `${vendor.business_name ?? 'Nhà cung cấp'} có mặt ${hm(start!)}${start! < 0 ? ' (tối hôm trước)' : ''} đến ${hm(end!)} ngày cưới ${dmyOf(date)} (đơn ${order.order_code ?? ''}).`,
+        referenceType: 'Order',
+        referenceId: order.id,
+      }).catch(() => undefined);
+    }
+    return this.daySlotOf(order);
+  }
+
+  /** Bỏ chốt giờ có mặt: về giờ dự kiến theo giờ chính và gói. */
+  async clearDaySlot(userId: string, orderId: string) {
+    const { order } = await this.editableDay(userId, orderId);
+    await this.prisma.orders.update({ where: { id: order.id }, data: { dayof_start_at: null, dayof_end_at: null, dayof_confirmed_at: null } });
+    this.notifyChange(userId, order, order.id);
+    return this.daySlotOf(order);
   }
 }
 

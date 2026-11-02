@@ -4,6 +4,7 @@ import { MoneyInput } from '@/components/MoneyInput'
 import { MultiSelect } from '@/components/MultiSelect'
 import { Button } from '@/components/ui/button'
 import { useCategories, useLocations } from '@/features/catalog/hooks'
+import { TimeCombobox } from '@/features/vendors/components/TimeCombobox'
 import { addDays, toISODate, today } from '@/lib/date'
 import type { Wedding, WeddingInput } from '@/types/wedding'
 import { useStyles } from '../hooks'
@@ -18,7 +19,7 @@ interface WeddingFormProps {
   secondaryAction?: ReactNode
 }
 
-type Errors = Partial<Record<'date' | 'location' | 'guestCount' | 'budget', string>>
+type Errors = Partial<Record<'date' | 'mainTime' | 'location' | 'guestCount' | 'budget', string>>
 
 const styleSummary = (a: string[]) => (!a.length ? 'Chọn một hoặc nhiều phong cách' : a.length <= 2 ? a.join(', ') : `${a.length} phong cách đã chọn`)
 
@@ -30,6 +31,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
   const ids = { loc: useId(), styles: useId(), services: useId() }
 
   const [date, setDate] = useState(initial?.date ?? '')
+  const [mainTime, setMainTime] = useState(initial?.mainTime ?? '')
   const [location, setLocation] = useState(initial?.location ?? '')
   const [guestCount, setGuestCount] = useState(initial?.guestCount ? String(initial.guestCount) : '')
   const [budget, setBudget] = useState(initial?.budget ?? 0)
@@ -48,12 +50,14 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
     const guests = guestCount ? Number(guestCount) : null
     if (!date) errs.date = 'Vui lòng chọn ngày tổ chức.'
     else if (date <= toISODate(today())) errs.date = 'Ngày tổ chức phải sau hôm nay.'
+    const hm = /^([01]\d|2[0-3]):[0-5]\d$/
+    if (mainTime.trim() && !hm.test(mainTime.trim())) errs.mainTime = 'Nhập giờ dạng HH:mm, ví dụ 11:00.'
     if (!location) errs.location = 'Vui lòng chọn địa điểm tổ chức.'
     if (!guestCount || !(guests! >= 1)) errs.guestCount = 'Vui lòng nhập số khách dự kiến (từ 1).'
     if (!(budget > 0)) errs.budget = 'Vui lòng nhập tổng ngân sách lớn hơn 0.'
     setErrors(errs)
     if (Object.keys(errs).length) return
-    onSubmit({ date, location, guestCount: guests, budget, styles: chosenStyles, categorySlugs: serviceValue })
+    onSubmit({ date, mainTime: mainTime.trim() || null, location, guestCount: guests, budget, styles: chosenStyles, categorySlugs: serviceValue })
   }
 
   return (
@@ -91,6 +95,20 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
           </select>
           {errors.location && <p className="mt-1.5 text-[13px] text-destructive">{errors.location}</p>}
         </div>
+      </div>
+
+      <div className="grid items-start gap-3.5 sm:grid-cols-2">
+        <TimeCombobox
+          label="Giờ đón khách / làm lễ (không bắt buộc)"
+          placeholder="Ví dụ 11:00"
+          value={mainTime}
+          onChange={(v) => {
+            setMainTime(v)
+            setErrors((x) => ({ ...x, mainTime: undefined }))
+          }}
+          error={errors.mainTime}
+        />
+        <p className="text-[13px] text-muted-foreground sm:mt-7">Mốc để xếp giờ có mặt cho trang trí, makeup, hoa, chụp ảnh… trong ngày cưới. Nhập sau cũng được.</p>
       </div>
 
       <div className="grid gap-3.5 sm:grid-cols-2">
