@@ -21,6 +21,8 @@ const CATEGORY_SLUGS: Record<string, string> = {
   Makeup: 'makeup',
   'Trang phục': 'trang-phuc',
   'Trang trí': 'decor',
+  'Trung tâm tiệc cưới': 'nha-hang',
+  // Tên cũ, giữ để backend chạy trên DB chưa đổi tên vẫn ra đúng slug
   'Trung tâm tổ chức sự kiện': 'nha-hang',
 };
 
@@ -30,7 +32,7 @@ const slugify = (s: string) =>
 export const categorySlug = (name: string | null) => (name ? (CATEGORY_SLUGS[name] ?? slugify(name)) : '');
 
 /**
- * Trung tâm tổ chức sự kiện báo giá theo mâm (menu cho 10 khách), đã gồm sảnh và dịch vụ đi kèm;
+ * Trung tâm tiệc cưới báo giá theo mâm (menu cho 10 khách), đã gồm sảnh và dịch vụ đi kèm;
  * đặt từ số mâm tối thiểu (service_packages.min_tables) mới được kèm sảnh. Các danh mục khác: giá trọn gói.
  */
 export const TABLE_PRICED_SLUGS = ['nha-hang'];

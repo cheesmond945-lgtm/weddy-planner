@@ -67,7 +67,7 @@ interface PackageEditorProps {
 
 /**
  * Form gói dịch vụ, hai khung: thông tin gói; hình ảnh dịch vụ (cùng cách trình bày với trang Hồ sơ NCC).
- * Thứ tự: tên gói, giá (trung tâm tổ chức sự kiện: giá mỗi mâm), tags, sức chứa và số mâm tối thiểu (trung tâm tổ chức sự kiện), mô tả (có "Tạo với AI"), ảnh.
+ * Thứ tự: tên gói, giá (trung tâm tiệc cưới: giá mỗi mâm), tags, sức chứa và số mâm tối thiểu (trung tâm tiệc cưới), mô tả (có "Tạo với AI"), ảnh.
  * Lưu nháp: cần tên gói và giá. Gửi duyệt: thêm mô tả, ít nhất một ảnh, và hồ sơ đã được duyệt đúng lĩnh vực.
  * Đặt key theo pkg.updatedAt để nạp lại sau khi lưu.
  */

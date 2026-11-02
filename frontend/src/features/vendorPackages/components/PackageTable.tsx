@@ -32,7 +32,7 @@ interface PackageTableProps {
   packages: VendorPackage[]
   /** Số thứ tự của dòng đầu (qua các trang) */
   startIndex?: number
-  /** Hiện cột sức chứa (lĩnh vực trung tâm tổ chức sự kiện) */
+  /** Hiện cột sức chứa (lĩnh vực trung tâm tiệc cưới) */
   showCapacity?: boolean
 }
 
