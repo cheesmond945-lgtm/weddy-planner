@@ -14,6 +14,7 @@ import { OrderJobsService } from './order-jobs.service';
 import { completeOrder, notifyRestCleared, notifyRestReceived } from './order-lifecycle';
 import { runAfter } from '../../common/after-response';
 import { payCode } from '../weddings/timeline-rows';
+import { UPCOMING_DAYS, needsActionWhere, parseStatusFilter, restPendingWhere, tileWheres } from './order-filters';
 import { applyRestReceived, clearRestGate, clearRestReceived, completeGate, finalInvoiceGate, restPaymentOf, type RestDb } from './rest-payment';
 import { ORDER_INCLUDE, OrderRow, toOrderDto, ymd, ymdVN } from './order-mapping';
 import { publish } from '../realtime/realtime.bus';
@@ -43,6 +44,7 @@ import {
   parseContent,
   sameContent,
   wantsSend,
+  addDaysYmd,
   startOfDayVn,
   todayVn,
   ymdVn,
@@ -56,6 +58,10 @@ export interface ListQuery {
   to?: string;
   depositFrom?: string;
   depositTo?: string;
+  /** "1": chỉ đơn cần NCC xử lý (Chờ chỉnh sửa, hoặc Đã cọc có yêu cầu chỉnh sửa đang chờ) */
+  needsAction?: string;
+  /** "1": chỉ đơn Đã cọc / Hoàn thành mà đợt 2 (tiền mặt) chưa được ghi nhận */
+  restPending?: string;
   page?: number;
   pageSize?: number;
 }
@@ -489,9 +495,13 @@ export class OrdersService {
     const where: Prisma.ordersWhereInput = { vendor_id: v.id };
     const and: Prisma.ordersWhereInput[] = [];
     if (q.status) {
-      if (!(ORDER_STATUSES as readonly string[]).includes(q.status)) return fail('VALIDATION_ERROR', 'Trạng thái đơn không hợp lệ.', 400, { status: `Chọn trong: ${ORDER_STATUSES.join(', ')}.` });
-      where.status = q.status;
+      const parsed = parseStatusFilter(q.status);
+      if ('error' in parsed) return fail('VALIDATION_ERROR', 'Trạng thái đơn không hợp lệ.', 400, { status: parsed.error });
+      if (parsed.statuses.length === 1) where.status = parsed.statuses[0];
+      else if (parsed.statuses.length) where.status = { in: parsed.statuses };
     }
+    if (q.needsAction === '1') and.push(needsActionWhere());
+    if (q.restPending === '1') and.push(restPendingWhere());
     if (q.conversationId) {
       const couple = convs.find((c) => c.id === q.conversationId)?.couple_id;
       if (!couple) return Paginated.of([], 0, { page: 1, pageSize: Math.min(100, Math.max(1, Math.trunc(Number(q.pageSize)) || 20)) });
@@ -539,7 +549,21 @@ export class OrdersService {
     const rows = await this.prisma.orders.groupBy({ by: ['status'], where: { vendor_id: v.id }, _count: { _all: true } });
     const counts: Record<string, number> = Object.fromEntries(ORDER_STATUSES.map((s) => [s, 0]));
     for (const r of rows) if (r.status) counts[r.status] = r._count._all;
-    return counts;
+
+    // 4 thẻ thống kê: tính trên TOÀN BỘ đơn của NCC (không bị giới hạn bởi trang hay bộ lọc)
+    const today = todayVn();
+    const w = tileWheres({ today, in30: addDaysYmd(today, UPCOMING_DAYS), soon: new Date(Date.now() + 24 * HOUR) });
+    const own = { vendor_id: v.id };
+    const [pending, expiringSoon, needsAction, upcoming, upcomingSum, dueToComplete, dueRestPending] = await Promise.all([
+      this.prisma.orders.count({ where: { ...own, ...w.pending } }),
+      this.prisma.orders.count({ where: { ...own, ...w.expiringSoon } }),
+      this.prisma.orders.count({ where: { ...own, ...w.needsAction } }),
+      this.prisma.orders.count({ where: { ...own, ...w.upcoming } }),
+      this.prisma.orders.aggregate({ where: { ...own, ...w.upcoming }, _sum: { total_amount: true } }),
+      this.prisma.orders.count({ where: { ...own, ...w.dueToComplete } }),
+      this.prisma.orders.count({ where: { ...own, ...w.dueRestPending } }),
+    ]);
+    return { ...counts, tiles: { pending, expiringSoon, needsAction, upcoming, upcomingValue: Number(upcomingSum._sum.total_amount ?? 0), dueToComplete, dueRestPending } };
   }
 
   async getForVendor(userId: string, id: string) {
