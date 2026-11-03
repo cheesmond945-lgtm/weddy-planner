@@ -2,7 +2,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { TaskOwner } from './task-owner.ts';
 import { pkgTaskIdOf } from './timeline-rows.ts';
 
-/** Gói của đơn: sảnh của đơn (orders.package_id, chỉ Trung tâm tổ chức sự kiện) hợp với gói của từng dòng hạng mục (order_items.package_id); bỏ null, bỏ trùng. */
+/** Gói của đơn: sảnh của đơn (orders.package_id, chỉ Trung tâm tiệc cưới) hợp với gói của từng dòng hạng mục (order_items.package_id); bỏ null, bỏ trùng. */
 export function packagesOfOrder(order: { package_id?: string | null; order_items?: readonly { package_id?: string | null }[] }): string[] {
   const out: string[] = [];
   for (const id of [order.package_id, ...(order.order_items ?? []).map((i) => i.package_id)]) if (id && !out.includes(id)) out.push(id);

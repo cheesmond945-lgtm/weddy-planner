@@ -22,7 +22,7 @@ export default function ServiceDetailPage() {
   const location = useLocation()
   const { data: service, isPending, isError, error, refetch } = useService(serviceId)
   const planItem = usePlanItemOf(serviceId)
-  // Trung tâm tổ chức sự kiện: mỗi gói là một sảnh có lịch bận (docs/LICH_BAN_SANH.md); so với ngày cưới nếu khách đã thiết lập
+  // Trung tâm tiệc cưới: mỗi gói là một sảnh có lịch bận (docs/LICH_BAN_SANH.md); so với ngày cưới nếu khách đã thiết lập
   const { data: wedding } = useWedding()
   const halls = service?.category.slug === RESTAURANT_SLUG
   // Sảnh chính khách này đã đặt cọc: lịch hiện "Bạn đã đặt" thay vì "Bận"

@@ -2,6 +2,7 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../integrations/storage/storage.service';
 import { Paginated } from '../../common/utils/pagination';
+import { categoryKindOf } from './category-kind';
 
 export interface ServiceQuery {
   q?: string;
@@ -13,24 +14,14 @@ export interface ServiceQuery {
   pageSize?: number;
 }
 
-/** Tên danh mục trong CSDL -> slug mà frontend dùng cho URL và icon. */
-const CATEGORY_SLUGS: Record<string, string> = {
-  'Chụp ảnh': 'chup-anh',
-  'Hoa cưới': 'hoa-cuoi',
-  'Trang điểm': 'makeup',
-  Makeup: 'makeup',
-  'Trang phục': 'trang-phuc',
-  'Trang trí': 'decor',
-  'Trung tâm tổ chức sự kiện': 'nha-hang',
-};
-
 const slugify = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-export const categorySlug = (name: string | null) => (name ? (CATEGORY_SLUGS[name] ?? slugify(name)) : '');
+/** Slug mà frontend dùng cho URL và icon: loại hạng mục nhận diện theo từ khóa (category-kind.ts), tên lạ thì slugify tên. */
+export const categorySlug = (name: string | null) => (name ? (categoryKindOf(name) ?? slugify(name)) : '');
 
 /**
- * Trung tâm tổ chức sự kiện báo giá theo mâm (menu cho 10 khách), đã gồm sảnh và dịch vụ đi kèm;
+ * Trung tâm tiệc cưới báo giá theo mâm (menu cho 10 khách), đã gồm sảnh và dịch vụ đi kèm;
  * đặt từ số mâm tối thiểu (service_packages.min_tables) mới được kèm sảnh. Các danh mục khác: giá trọn gói.
  */
 export const TABLE_PRICED_SLUGS = ['nha-hang'];

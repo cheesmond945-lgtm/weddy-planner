@@ -188,7 +188,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   // Ngày cưới của khách: ngày thực hiện không được sau ngày này (backend kiểm lại, 422 EVENT_DATE_AFTER_WEDDING)
   const weddingDate = customer.weddingDate ?? (order ?? (mode.kind === 'again' ? mode.from : null))?.weddingDate ?? null
   const categorySlug = (order ?? (mode.kind === 'again' ? mode.from : null))?.category?.slug ?? packages?.[0]?.category?.slug ?? null
-  // Trung tâm tổ chức sự kiện: đơn phải chọn sảnh (gói đang đăng, hoặc đúng sảnh đơn đang có dù đã ẩn); sảnh bận ngày đó thì gửi bị từ chối
+  // Trung tâm tiệc cưới: đơn phải chọn sảnh (gói đang đăng, hoặc đúng sảnh đơn đang có dù đã ẩn); sảnh bận ngày đó thì gửi bị từ chối
   const venue = categorySlug === RESTAURANT_SLUG
   const currentHall = order?.package?.id ?? (mode.kind === 'again' ? mode.from.package?.id : undefined)
   const halls = (packages ?? []).filter((p) => isVenue(p.category) && (p.status === 'PUBLISHED' || p.id === currentHall))

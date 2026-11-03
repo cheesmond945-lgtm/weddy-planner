@@ -16,7 +16,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
 import { packagesOfOrder } from '../src/modules/weddings/package-task-meta';
-import { orderTaskRows, PAY_PREFIX, PKG_PREFIX, type PackageTaskRef, type TaskRow } from '../src/modules/weddings/timeline-rows';
+import { orderTaskRows, ORD_PREFIX, PAY_PREFIX, PKG_PREFIX, type PackageTaskRef, type TaskRow } from '../src/modules/weddings/timeline-rows';
 
 const apply = process.argv.includes('--apply');
 const ordersArg = process.argv.find((a) => a === '--orders' || a.startsWith('--orders='));
@@ -30,7 +30,7 @@ if (apply && !only) {
   process.exit(1);
 }
 /** Việc chi tiết của đơn sinh từ mẫu cũ (mọi task_code gắn đơn không phải của gói / thanh toán mới) */
-const isLegacyCode = (code: string) => !code.startsWith(PKG_PREFIX) && !code.startsWith(PAY_PREFIX);
+const isLegacyCode = (code: string) => !code.startsWith(PKG_PREFIX) && !code.startsWith(PAY_PREFIX) && !code.startsWith(ORD_PREFIX);
 const vnYmd = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 

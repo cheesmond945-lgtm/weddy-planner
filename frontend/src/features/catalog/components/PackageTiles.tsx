@@ -164,7 +164,7 @@ interface PackageDrawerProps {
    * gallery: thông tin ở đầu, bên dưới là lưới toàn bộ ảnh của gói để lướt nhanh (sảnh, trang trí: layout album).
    */
   variant?: 'photos' | 'gallery'
-  /** Phần thêm dưới thông tin gói (lịch bận của sảnh, Trung tâm tổ chức sự kiện) */
+  /** Phần thêm dưới thông tin gói (lịch bận của sảnh, Trung tâm tiệc cưới) */
   extra?: ReactNode
   onClose: () => void
 }

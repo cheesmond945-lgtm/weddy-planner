@@ -31,7 +31,7 @@ export function validateDraft(v: OrderFormValues): OrderErrors {
  * `deposit` = false (sửa sau cọc, tiền cọc đã khóa): bỏ kiểm "tổng đơn quá nhỏ để đặt cọc".
  * `weddingDate`: ngày cưới của khách; ngày thực hiện không được sau ngày đó, và (trừ `afterDeposit`) ngày cưới không được đã qua.
  * `afterDeposit` (sửa sau cọc): giữ nguyên ngày đang có của đơn thì qua kiểm ngày cưới, như backend.
- * `requireHall` (Trung tâm tổ chức sự kiện): phải chọn sảnh (docs/LICH_BAN_SANH.md).
+ * `requireHall` (Trung tâm tiệc cưới): phải chọn sảnh (docs/LICH_BAN_SANH.md).
  */
 export function validateOrder(
   v: OrderFormValues,

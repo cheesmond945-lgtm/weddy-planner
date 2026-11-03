@@ -2,7 +2,7 @@
  * Lịch trình ngày cưới theo giờ (docs/LICH_TRINH_NGAY_CUOI.md). Hàm thuần: không đụng CSDL, không đọc đồng hồ.
  * Mốc là giờ chính của khách (weddings.main_time, vd 11:00 đón khách). Mỗi đơn đã cọc / hoàn thành làm ĐÚNG ngày cưới có một khung giờ
  * có mặt: NCC đã chốt thì lấy giờ đã chốt; chưa chốt thì dự kiến = giờ chính − thời gian có mặt trước (gói khai, hoặc mặc định theo lĩnh vực).
- * Sảnh (Nhà hàng / Trung tâm tổ chức sự kiện) cho đơn vị khác vào setup từ setup_open_time; hôm trước sảnh có tiệc khác thì không vào sớm hơn được.
+ * Sảnh (Nhà hàng / Trung tâm tiệc cưới) cho đơn vị khác vào setup từ setup_open_time; hôm trước sảnh có tiệc khác thì không vào sớm hơn được.
  * Thời điểm trong ngày tính bằng PHÚT kể từ 00:00 ngày cưới (giờ VN); âm là tối hôm trước.
  */
 

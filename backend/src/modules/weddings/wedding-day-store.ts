@@ -39,7 +39,7 @@ export interface LoadedDay {
 
 /**
  * Lịch trình của một đám cưới: các đơn Đã cọc / Hoàn thành có ngày thực hiện ĐÚNG ngày cưới (đơn làm ngày khác, vd chụp ảnh trước, không vào lịch này).
- * Sảnh là đơn Nhà hàng / Trung tâm tổ chức sự kiện; biết sảnh nào (orders.package_id) thì xem hôm trước sảnh có bận không.
+ * Sảnh là đơn Nhà hàng / Trung tâm tiệc cưới; biết sảnh nào (orders.package_id) thì xem hôm trước sảnh có bận không.
  * null khi đám cưới chưa có ngày.
  */
 export async function loadWeddingDay(db: Db, weddingId: string): Promise<LoadedDay | null> {

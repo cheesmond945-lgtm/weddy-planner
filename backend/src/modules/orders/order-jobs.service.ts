@@ -33,7 +33,10 @@ export class OrderJobsService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
-    if (process.env.ORDER_JOBS_ENABLED?.trim().toLowerCase() !== 'true') return;
+    if (process.env.ORDER_JOBS_ENABLED?.trim().toLowerCase() !== 'true') {
+      this.log.warn('ORDER_JOBS_ENABLED chưa bật: không có quét nền hết hạn cọc / nhắc hạn việc; chỉ quét khi có người mở màn. Đặt ORDER_JOBS_ENABLED=true để chạy nền.');
+      return;
+    }
     this.log.log('ORDER_JOBS_ENABLED=true: quét hết hạn cọc mỗi phút, quét toàn bộ lúc khởi động và mỗi giờ');
     void this.runAll();
     this.timers.push(setInterval(() => void this.runAll(), GLOBAL_EVERY_MS));

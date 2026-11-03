@@ -21,7 +21,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
 import { frameRows, type ServiceRef, type TaskRow } from '../src/modules/weddings/timeline-rows';
 import { dayOf } from '../src/modules/weddings/timeline-schedule';
-import { SERVICE_BY_CATEGORY_NAME, TIMELINE_TEMPLATES } from '../src/modules/weddings/timeline-templates';
+import { serviceKeyOf, TIMELINE_TEMPLATES } from '../src/modules/weddings/timeline-templates';
 
 const apply = process.argv.includes('--apply');
 const vnYmd = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
@@ -35,7 +35,7 @@ async function main() {
     const cats = await prisma.service_categories.findMany({ select: { id: true, name: true } });
     const refOf = new Map<string, ServiceRef>();
     for (const c of cats) {
-      const key = c.name ? SERVICE_BY_CATEGORY_NAME[c.name] : undefined;
+      const key = serviceKeyOf(c.name);
       if (key) refOf.set(c.id, { key, categoryId: c.id });
     }
     const bookCode = (key: string) => TIMELINE_TEMPLATES.find((t) => t.service === key && t.kind === 'BOOK')!.code;

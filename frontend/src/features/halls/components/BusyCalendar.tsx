@@ -26,7 +26,7 @@ const dot = (hue: number | undefined) => ({ backgroundColor: hue === undefined ?
 const range = (m: Manual) => (m.startDate === m.endDate ? formatDate(m.startDate) : `${formatDate(m.startDate)} – ${formatDate(m.endDate)}`)
 
 /**
- * Tab "Lịch bận" ở Lịch làm việc của Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md): lịch tháng các ngày từng sảnh bận, ghi rõ nguồn
+ * Tab "Lịch bận" ở Lịch làm việc của Trung tâm tiệc cưới (docs/LICH_BAN_SANH.md): lịch tháng các ngày từng sảnh bận, ghi rõ nguồn
  * "Đơn" (đơn Đã cọc / Hoàn thành) hay "Thủ công" (NCC đánh dấu, gỡ được). Mỗi sảnh một màu; lọc theo sảnh; danh sách của ngày theo sảnh.
  */
 export function BusyCalendar() {

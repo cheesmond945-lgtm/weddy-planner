@@ -130,7 +130,7 @@ export interface ContentInput {
   note?: string | null;
   depositPercent?: number | string | null;
   items?: { itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string; packageId?: string | null }[];
-  /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tổ chức sự kiện gửi / sửa đơn (docs/LICH_BAN_SANH.md); dịch vụ khác bỏ qua */
+  /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tiệc cưới gửi / sửa đơn (docs/LICH_BAN_SANH.md); dịch vụ khác bỏ qua */
   packageId?: string | null;
 }
 

@@ -12,7 +12,7 @@ type Db = PrismaService | Prisma.TransactionClient;
 const at = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
 const ymdOf = (d: Date) => d.toISOString().slice(0, 10);
 
-/** Danh mục này có lịch bận theo sảnh không (chỉ Trung tâm tổ chức sự kiện). */
+/** Danh mục này có lịch bận theo sảnh không (chỉ Trung tâm tiệc cưới). */
 export async function usesHalls(db: Db, categoryId: string | null | undefined): Promise<boolean> {
   if (!categoryId) return false;
   const cat = await db.service_categories.findUnique({ where: { id: categoryId }, select: { name: true } });

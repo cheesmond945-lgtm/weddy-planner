@@ -23,7 +23,7 @@ function checkRange(from: unknown, to: unknown): { from: string; to: string } {
 }
 
 /**
- * Lịch bận theo sảnh của Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md): NCC xem và đánh dấu / gỡ ngày bận thủ công;
+ * Lịch bận theo sảnh của Trung tâm tiệc cưới (docs/LICH_BAN_SANH.md): NCC xem và đánh dấu / gỡ ngày bận thủ công;
  * khách xem ngày bận của từng sảnh (không lộ khách hay đơn khác) và số sảnh còn trống ngày cưới.
  */
 @Injectable()
@@ -62,7 +62,7 @@ export class HallsService {
    */
   async addManual(userId: string, body: { packageIds?: unknown; startDate?: unknown; endDate?: unknown; reason?: unknown }) {
     const v = await this.vendorOf(userId);
-    if (!(await usesHalls(this.prisma, v.category_id))) return fail('HALLS_NOT_SUPPORTED', 'Lịch bận theo sảnh chỉ dành cho Trung tâm tổ chức sự kiện.', 409);
+    if (!(await usesHalls(this.prisma, v.category_id))) return fail('HALLS_NOT_SUPPORTED', 'Lịch bận theo sảnh chỉ dành cho Trung tâm tiệc cưới.', 409);
     const parsed = parseManual(body ?? {}, todayVn());
     if ('errors' in parsed) return fail('VALIDATION_ERROR', 'Ngày bận chưa hợp lệ.', 400, parsed.errors);
     const { packageIds, startDate, endDate, reason } = parsed.value;
