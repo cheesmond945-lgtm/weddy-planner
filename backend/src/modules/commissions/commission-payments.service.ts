@@ -1,5 +1,5 @@
 import { HttpException, Injectable } from '@nestjs/common';
-import { buildPayInfo, commissionContent, vietqrConfig } from '../../integrations/vietqr/vietqr';
+import { buildPayInfo, commissionContent, commissionMatchContents, vietqrConfig } from '../../integrations/vietqr/vietqr';
 import { demoPaymentEnabled } from '../../integrations/vietqr/demo-mode';
 import { SepayService } from '../../integrations/vietqr/sepay.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -8,7 +8,7 @@ import { ymd } from '../orders/order-mapping';
 
 /*
  * NCC thanh toán hoa hồng qua VietQR + SePay (integrations/vietqr), cùng tài khoản nhận với tiền cọc.
- * - pay: trả mã QR, số tiền lấy từ commission_statements.total_amount, nội dung "EVHH" + 8 ký tự đầu của id bảng kê.
+ * - pay: trả mã QR, số tiền lấy từ commission_statements.total_amount, nội dung "FOREVERHH" + 8 ký tự đầu của id bảng kê.
  * - check: hỏi SePay đã nhận đúng nội dung và số tiền chưa (mỗi giao dịch chỉ dùng một lần), có thì ghi nhận Paid.
  */
 const fail = (code: string, message: string, status: number): never => {
@@ -66,7 +66,7 @@ export class CommissionPaymentsService {
     const { row, period } = await this.statementOf(userId, id);
     if (row.status === 'Paid') return this.paidOutcome(row.id, 'Bảng kê đã được ghi nhận thanh toán.');
     this.assertPayable(row, period);
-    const txn = await this.sepay.findPayment(commissionContent(row.id), Number(row.total_amount));
+    const txn = await this.sepay.findPayment(commissionMatchContents(row.id), Number(row.total_amount));
     if (!txn) return { status: 'PENDING', message: 'Chưa nhận được tiền. Nếu bạn vừa chuyển khoản, vui lòng đợi ít giây.' };
     const full = (await this.load(row.id))!;
     await this.markPaid(full, txn.id, txn.paidAt);

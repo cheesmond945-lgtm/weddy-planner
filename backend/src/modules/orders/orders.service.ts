@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client';
-import { buildPayInfo, depositContent, vietqrConfig } from '../../integrations/vietqr/vietqr';
+import { buildPayInfo, depositContent, depositMatchContents, vietqrConfig } from '../../integrations/vietqr/vietqr';
 import { demoPaymentEnabled } from '../../integrations/vietqr/demo-mode';
 import { SepayService } from '../../integrations/vietqr/sepay.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -313,7 +313,7 @@ export class OrdersService {
   }
 
   /**
-   * Đặt cọc qua VietQR + SePay (docs/api/payments.md): trả mã QR với số tiền cọc lấy từ DB và nội dung "EVERLY" + mã đơn.
+   * Đặt cọc qua VietQR + SePay (docs/api/payments.md): trả mã QR với số tiền cọc lấy từ DB và nội dung "FOREVER" + mã đơn.
    * Tiền chỉ được ghi nhận ở checkDeposit, sau khi SePay xác nhận đã nhận đúng nội dung và số tiền.
    */
   async createDeposit(userId: string, orderId: string) {
@@ -390,7 +390,7 @@ export class OrdersService {
     const o = await this.ownedByCouple(userId, orderId);
     if (o.status === 'Deposited' || o.status === 'Completed') return { status: 'PAID' as const, message: 'Đơn đã được đặt cọc.' };
     if (o.status !== 'Pending') return fail('ORDER_NOT_PAYABLE', 'Đơn không ở trạng thái chờ đặt cọc.', 409);
-    const txn = await this.sepay.findPayment(depositContent(o.order_code!), Number(o.deposit_amount));
+    const txn = await this.sepay.findPayment(depositMatchContents(o.order_code!), Number(o.deposit_amount));
     if (!txn) return { status: 'PENDING' as const, message: 'Chưa nhận được tiền. Nếu bạn vừa chuyển khoản, vui lòng đợi ít giây.' };
     const res = await this.markDepositPaid(o, txn.id, txn.paidAt);
     if (res === 'CATEGORY_TAKEN') {

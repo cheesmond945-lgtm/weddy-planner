@@ -3,7 +3,7 @@ export interface PayInfo {
   /** Ảnh mã QR (img.vietqr.io), đã điền sẵn số tiền và nội dung */
   qrUrl: string
   amount: number
-  /** Nội dung chuyển khoản bắt buộc: EVERLY + mã đơn (cọc) hoặc EVHH + mã bảng kê (hoa hồng) */
+  /** Nội dung chuyển khoản bắt buộc: FOREVER + mã đơn (cọc) hoặc FOREVERHH + mã bảng kê (hoa hồng) */
   content: string
   bankBin: string
   accountNo: string

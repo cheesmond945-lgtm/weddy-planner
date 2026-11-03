@@ -17,7 +17,7 @@ export const ordersApi = {
 
 /** Hợp đồng: docs/api/payments.md */
 export const paymentsApi = {
-  /** Mã QR VietQR cho tiền cọc (số tiền lấy từ đơn, nội dung EVERLY + mã đơn) */
+  /** Mã QR VietQR cho tiền cọc (số tiền lấy từ đơn, nội dung FOREVER + mã đơn) */
   createDeposit: (orderId: string): Promise<PaymentCreated> => http.post('/payments', { orderId }),
   /** Backend hỏi SePay đã nhận đủ tiền cọc chưa và ghi nhận nếu đã nhận */
   checkDeposit: (orderId: string): Promise<PayCheckResult> => http.post('/payments/check', { orderId }),
