@@ -77,6 +77,10 @@ export function chatDraft(i: Pick<TimelineItem, 'title' | 'orderCode' | 'status'
     : `Chào shop, mình muốn hẹn lịch cho việc ${ref}, bên mình tiện ngày nào ạ?`
 }
 
+/** Câu nhắn soạn sẵn khi khách muốn thêm / bỏ bước trong quy trình của một đơn. */
+export const processChangeDraft = (orderCode: string | null) =>
+  `Chào shop, mình muốn trao đổi về các bước trong quy trình${orderCode ? ` của đơn ${orderCode}` : ''}: mình muốn thêm hoặc bỏ bước ... bạn xem giúp mình ạ.`
+
 export const isOverdue = (i: TimelineItem, today: string) => !i.isDone && !!i.dueDate && i.dueDate < today
 
 /** Nhắc "sắp đến hạn" khi còn từng này ngày (gồm đúng hôm nay); cùng giá trị với backend (task-owner.ts DUE_SOON_DAYS). */

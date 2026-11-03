@@ -29,14 +29,14 @@ Mặc định theo lĩnh vực (`DAY_DEFAULTS`):
 | Trang điểm | 4 giờ | 3 giờ | Có |
 | Trang phục | 5 giờ | 1 giờ | Có |
 | Hoa cưới | 3 giờ | 1 giờ | Có |
-| Nhà hàng / Trung tâm tổ chức sự kiện | 3 giờ | 7 giờ | Không |
+| Nhà hàng / Trung tâm tiệc cưới | 3 giờ | 7 giờ | Không |
 | Chụp ảnh | 3 giờ | 8 giờ | Không |
 
 Khách chưa nhập giờ chính: chỉ đơn đã chốt có giờ, đơn khác ghi "Chưa có giờ".
 
 ## 3. Sảnh và cảnh báo
 
-Sảnh là đơn của Nhà hàng / Trung tâm tổ chức sự kiện trong cùng ngày cưới. Gói sảnh khai **giờ cho đơn vị khác vào setup** (`service_packages.setup_open_time`);
+Sảnh là đơn của Nhà hàng / Trung tâm tiệc cưới trong cùng ngày cưới. Gói sảnh khai **giờ cho đơn vị khác vào setup** (`service_packages.setup_open_time`);
 chưa khai thì coi như **06:00**. Hôm trước sảnh có bận không lấy từ [lịch bận theo sảnh](LICH_BAN_SANH.md) (đơn đã cọc hoặc bận thủ công ngày hôm trước).
 
 | Cảnh báo | Điều kiện | Mức |

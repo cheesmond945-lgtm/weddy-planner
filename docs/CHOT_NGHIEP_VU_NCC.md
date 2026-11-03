@@ -13,7 +13,7 @@
 ## 1. Tài khoản và hồ sơ NCC
 
 - Mỗi tài khoản NCC gắn **đúng 1 lĩnh vực** (`VendorProfiles.CategoryId`), do Admin chọn khi tạo tài khoản. Trên trang Hồ sơ hiển thị chỉ đọc (có biểu tượng khóa), NCC không đổi được.
-- 6 dịch vụ: Nhà hàng (Trung tâm tổ chức sự kiện, đã gồm cỗ cưới), Decor, Trang phục, Makeup, Chụp ảnh (gồm quay phim), Hoa cưới. **Không còn "Cỗ cưới" riêng.**
+- 6 dịch vụ: Nhà hàng (Trung tâm tiệc cưới, đã gồm cỗ cưới), Decor, Trang phục, Makeup, Chụp ảnh (gồm quay phim), Hoa cưới. **Không còn "Cỗ cưới" riêng.**
 - Trạng thái hồ sơ: `Draft`, `Pending`, `NeedRevision`, `Approved`.
 - Địa chỉ: `Address` + `Ward` (phường/xã) + `City`. Không có quận. `GoogleMapsUrl` tùy chọn.
 - Giờ làm việc: một chuỗi mô tả (`WorkingHours`).

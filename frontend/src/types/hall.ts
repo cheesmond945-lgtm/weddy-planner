@@ -1,5 +1,5 @@
 /*
- * Lịch bận theo sảnh của Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md). Sảnh = một gói dịch vụ của trung tâm.
+ * Lịch bận theo sảnh của Trung tâm tiệc cưới (docs/LICH_BAN_SANH.md). Sảnh = một gói dịch vụ của trung tâm.
  * Bận khi có đơn Đã cọc / Hoàn thành của sảnh vào ngày thực hiện (nguồn "Đơn"), hoặc NCC tự đánh dấu (nguồn "Thủ công").
  */
 
@@ -24,7 +24,7 @@ export interface BusyDay {
   source: BusySource
 }
 
-/** GET /vendors/me/busy-dates: enabled = false nếu NCC không phải Trung tâm tổ chức sự kiện. */
+/** GET /vendors/me/busy-dates: enabled = false nếu NCC không phải Trung tâm tiệc cưới. */
 export interface VendorBusyCalendar {
   enabled: boolean
   halls: HallRef[]

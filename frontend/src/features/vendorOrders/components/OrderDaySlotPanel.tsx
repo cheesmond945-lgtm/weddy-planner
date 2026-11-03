@@ -1,3 +1,4 @@
+import { TASK_LABELS } from '@/lib/taskLabels'
 import { AlertTriangle, Info } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Badge } from '@/components/Badge'
@@ -16,9 +17,9 @@ const prevDay = (ymd: string) => new Date(Date.parse(`${ymd}T00:00:00Z`) - 86_40
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/
 
 const SOURCE: Record<'CONFIRMED' | 'PACKAGE' | 'DEFAULT', { label: string; tone: 'done' | 'info' | 'neutral' }> = {
-  CONFIRMED: { label: 'Đã chốt với khách', tone: 'done' },
-  PACKAGE: { label: 'Dự kiến theo gói', tone: 'info' },
-  DEFAULT: { label: 'Dự kiến theo lĩnh vực', tone: 'neutral' },
+  CONFIRMED: { label: TASK_LABELS.slotConfirmed, tone: 'done' },
+  PACKAGE: { label: `${TASK_LABELS.slotPlanned} theo gói`, tone: 'info' },
+  DEFAULT: { label: `${TASK_LABELS.slotPlanned} theo lĩnh vực`, tone: 'neutral' },
 }
 
 export function IssueList({ issues }: { issues: readonly DaySlotIssue[] }) {
@@ -107,7 +108,7 @@ function SlotForm({ target, busy, onClose, onSave }: { target: { date: string; s
           Hủy
         </Button>
         <Button type="submit" disabled={busy}>
-          {busy ? 'Đang lưu…' : 'Chốt giờ'}
+          {busy ? 'Đang lưu…' : TASK_LABELS.confirmSlot}
         </Button>
       </DialogFooter>
     </form>
@@ -160,7 +161,7 @@ export function OrderDaySlotPanel({ orderId, frame = (c) => c }: { orderId: stri
           <div className="mt-2.5 flex flex-wrap gap-2">
             {s.source !== 'CONFIRMED' && hasTimes && (
               <Button size="sm" disabled={set.isPending} onClick={() => set.mutate({ start: s.start!, end: s.end! })}>
-                Chốt giờ này
+                Xác nhận giờ này
               </Button>
             )}
             <Button size="sm" variant="outline" className="border-line-strong" disabled={set.isPending} onClick={open}>
@@ -168,7 +169,7 @@ export function OrderDaySlotPanel({ orderId, frame = (c) => c }: { orderId: stri
             </Button>
             {s.source === 'CONFIRMED' && (
               <Button size="sm" variant="ghost" disabled={set.isPending} onClick={() => set.mutate(null)}>
-                Bỏ chốt
+                {TASK_LABELS.unconfirmSlot}
               </Button>
             )}
           </div>
@@ -195,7 +196,7 @@ export function OrderDaySlotPanel({ orderId, frame = (c) => c }: { orderId: stri
                   {o.categoryName}
                   {o.isVenue && ' (sảnh)'}
                 </span>
-                <span className="text-muted-foreground">{o.confirmed ? 'đã chốt' : 'dự kiến'}</span>
+                <span className="text-muted-foreground">{o.confirmed ? 'đã xác nhận' : 'dự kiến'}</span>
               </li>
             ))}
           </ul>

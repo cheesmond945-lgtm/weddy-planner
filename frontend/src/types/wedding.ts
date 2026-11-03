@@ -68,7 +68,7 @@ export interface DaySlot {
   vendorName: string
   categorySlug: string
   categoryName: string
-  /** Đơn của sảnh (Nhà hàng / Trung tâm tổ chức sự kiện) */
+  /** Đơn của sảnh (Nhà hàng / Trung tâm tiệc cưới) */
   isVenue: boolean
   /** Giờ VN "YYYY-MM-DDTHH:mm" (có thể là tối hôm trước); null khi chưa có giờ chính và NCC chưa chốt */
   start: string | null
@@ -139,6 +139,10 @@ export interface TimelineItem {
   status: 'Todo' | 'Waiting' | 'Done'
   /** SERVICE_TASK: việc lấy từ gói của NCC (khách chỉ xem) */
   isPackageTask: boolean
+  /** SERVICE_TASK: việc "Thanh toán phần còn lại"; Done = NCC đã nhận đủ tiền mặt, completedDate là ngày nhận */
+  isRestPayment?: boolean
+  /** SERVICE_TASK: việc riêng NCC thêm cho đơn này (khách thấy nhãn "NCC thêm") */
+  isCustomOrderTask?: boolean
   /** SERVICE_TASK: ngày dự kiến (PLANNED) hay NCC đã chốt với khách (CONFIRMED) */
   dateStatus: 'PLANNED' | 'CONFIRMED'
   confirmedAt: string | null

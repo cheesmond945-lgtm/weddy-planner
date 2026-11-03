@@ -6,7 +6,7 @@ import { loadPackageMeta } from './package-task-meta';
 import { cancelPlan, frameRows, isOrderTaskCode, replanOrderTasks, type ServiceRef } from './timeline-rows';
 import { replanOnWeddingDateChange } from './timeline-schedule';
 import { customerDateWarning, dateChangeIssue, vendorDateNotice } from './timeline-rules';
-import { SERVICE_BY_CATEGORY_NAME, TIMELINE_TEMPLATES, templateOf, type ServiceKey } from './timeline-templates';
+import { serviceKeyOf, TIMELINE_TEMPLATES, templateOf, type ServiceKey } from './timeline-templates';
 
 const ymdOf = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
 /** Ngày theo giờ Việt Nam của một thời điểm, dạng "YYYY-MM-DD". */
@@ -22,7 +22,10 @@ export const toYmd = ymdOf;
  */
 export async function onWeddingCategories(prisma: PrismaService, weddingId: string, weddingDate: Date, categoryIds: string[]) {
   const cats = categoryIds.length ? await prisma.service_categories.findMany({ where: { id: { in: categoryIds } }, select: { id: true, name: true } }) : [];
-  const services: ServiceRef[] = cats.flatMap((c) => (c.name && SERVICE_BY_CATEGORY_NAME[c.name] ? [{ key: SERVICE_BY_CATEGORY_NAME[c.name], categoryId: c.id }] : []));
+  const services: ServiceRef[] = cats.flatMap((c) => {
+    const key = serviceKeyOf(c.name);
+    return key ? [{ key, categoryId: c.id }] : [];
+  });
   const rows = frameRows(TIMELINE_TEMPLATES, { weddingId, wedding: ymdOf(weddingDate), today: vnYmd(new Date()), services });
   const existing = new Set((await prisma.timeline_tasks.findMany({ where: { wedding_id: weddingId, task_code: { not: null } }, select: { task_code: true } })).map((t) => t.task_code));
   const todo = rows.filter((r) => !existing.has(r.task_code));
@@ -127,7 +130,7 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
   ]);
   const keyOf = (categoryId: string | null) => {
     const name = cats.find((c) => c.id === categoryId)?.name;
-    return name ? SERVICE_BY_CATEGORY_NAME[name] : undefined;
+    return serviceKeyOf(name);
   };
   const today = vnYmd(new Date());
   const services = [...new Set(tasks.map((t) => keyOf(t.category_id)).filter((k): k is ServiceKey => !!k))];

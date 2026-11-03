@@ -1,3 +1,4 @@
+import { TASK_LABELS } from '@/lib/taskLabels'
 import { AlertTriangle, Clock, Info } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '@/components/Badge'
@@ -81,7 +82,7 @@ export function WeddingDaySchedule({ onEditWedding }: { onEditWedding: () => voi
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="text-[13.5px] font-medium [overflow-wrap:anywhere]">{r.slot.vendorName}</span>
                       <span className="text-[12.5px] text-muted-foreground">{r.slot.categoryName}</span>
-                      {r.slot.start && <Badge tone={r.slot.source === 'CONFIRMED' ? 'done' : 'neutral'}>{r.slot.source === 'CONFIRMED' ? 'Đã chốt' : 'Dự kiến'}</Badge>}
+                      {r.slot.start && <Badge tone={r.slot.source === 'CONFIRMED' ? 'done' : 'neutral'}>{r.slot.source === 'CONFIRMED' ? TASK_LABELS.slotConfirmed : TASK_LABELS.slotPlanned}</Badge>}
                     </span>
                     {r.slot.issues.length > 0 && (
                       <ul className="mt-1 grid gap-0.5">
@@ -98,7 +99,7 @@ export function WeddingDaySchedule({ onEditWedding }: { onEditWedding: () => voi
               ),
             )}
           </ol>
-          <p className="mt-2.5 text-[12.5px] text-muted-foreground">Giờ dự kiến tính từ giờ đón khách và thời gian mỗi nhà cung cấp cần; nhà cung cấp chốt giờ thì hiện "Đã chốt" và bạn được báo.</p>
+          <p className="mt-2.5 text-[12.5px] text-muted-foreground">Giờ dự kiến tính từ giờ đón khách và thời gian mỗi nhà cung cấp cần; nhà cung cấp xác nhận giờ thì hiện "Giờ đã xác nhận" và bạn được báo.</p>
         </>
       )}
     </section>

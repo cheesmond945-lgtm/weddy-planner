@@ -139,10 +139,10 @@ describe("'Waiting' được tính là chưa xong (không chỉ 'Todo')", () => 
 
   const base = { title: 'Gửi ảnh', orderCode: 'DH001', vendorName: 'Studio A', due: '2027-03-11', owner: 'CUSTOMER' as const };
 
-  it('nhắc khách: việc Waiting sắp đến hạn "<NCC> đang chờ bạn"; không nhắc NCC', () => {
+  it('nhắc khách: việc Waiting sắp đến hạn "Bạn cần làm"; không nhắc NCC', () => {
     const r = remindersFor({ ...base, status: 'Waiting' }, 'DUE_SOON');
     assert.deepEqual(r.map((x) => x.to), ['COUPLE']);
-    assert.match(r[0].content, /Studio A đang chờ bạn: "Gửi ảnh"/);
+    assert.match(r[0].content, /Bạn cần làm: "Gửi ảnh".*Studio A/);
   });
 
   it('nhắc NCC: việc Todo sắp đến hạn; không nhắc khách', () => {

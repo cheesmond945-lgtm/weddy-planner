@@ -1,5 +1,5 @@
 /*
- * Lịch bận theo sảnh của Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md). Hàm thuần: không đụng CSDL, không đọc đồng hồ.
+ * Lịch bận theo sảnh của Trung tâm tiệc cưới (docs/LICH_BAN_SANH.md). Hàm thuần: không đụng CSDL, không đọc đồng hồ.
  * Ngày là chuỗi "YYYY-MM-DD"; "hôm nay" do nơi gọi truyền vào.
  *
  * Một sảnh (một gói của trung tâm) bận một ngày khi:
@@ -8,7 +8,7 @@
  * Các danh mục khác (chụp ảnh, trang điểm…) có nhiều ekip nên chưa có lịch bận.
  */
 
-/** Danh mục có lịch bận theo sảnh: slug của "Trung tâm tổ chức sự kiện". */
+/** Danh mục có lịch bận theo sảnh: slug của "Trung tâm tiệc cưới". */
 export const HALL_CATEGORY_SLUG = 'nha-hang';
 /** Đơn làm sảnh bận. */
 export const BUSY_ORDER_STATUSES = ['Deposited', 'Completed'];

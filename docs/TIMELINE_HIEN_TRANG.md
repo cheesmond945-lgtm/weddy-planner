@@ -233,7 +233,7 @@ Ràng buộc: `@@unique([wedding_id, task_code])` (Postgres cho nhiều dòng `t
 
 ### 4.3 Đơn hàng biết khách đặt gói nào bằng cách nào?
 
-- `orders` (`:205-240`): có cột `package_id` (FK `service_packages`) **nhưng chỉ ghi cho Trung tâm tổ chức sự kiện** (chọn sảnh): `checkHall` trả `null` và bỏ `packageId` với dịch vụ khác (`orders.service.ts:163-175`, comment "Dịch vụ khác không theo sảnh"); FE chỉ gửi `packageId` khi là nhà hàng (`OrderFormDialog.tsx:194,448`).
+- `orders` (`:205-240`): có cột `package_id` (FK `service_packages`) **nhưng chỉ ghi cho Trung tâm tiệc cưới** (chọn sảnh): `checkHall` trả `null` và bỏ `packageId` với dịch vụ khác (`orders.service.ts:163-175`, comment "Dịch vụ khác không theo sảnh"); FE chỉ gửi `packageId` khi là nhà hàng (`OrderFormDialog.tsx:194,448`).
 - `order_items` (`:156-171`): có cột `package_id` (+ index, quan hệ `service_packages`) nhưng **không có code nào ghi** (`itemRows` ở `orders.service.ts` chỉ ghi `item_name`, `unit`, `quantity`, `unit_price`, `amount`); chỉ `reviews` đọc quan hệ này (`reviews.service.ts:65,76`).
 - Vậy với 5/6 hạng mục (chụp ảnh, trang phục, trang trí, trang điểm, hoa cưới) **đơn không biết gói nào**: chỉ có tên hạng mục là chữ tự do (`item_name`) cộng NCC. Với nhà hàng chỉ biết sảnh.
 - Không có bảng nào kiểu `PackageTasks` / quy trình phục vụ (tìm `package_tasks`, `process`, `quy trình`, `workflow` trong schema và `prisma/sql`: không có).
@@ -337,7 +337,7 @@ Realtime: sự kiện `task` (`timeline.service.ts:214`, `order-tasks.service.ts
 ### 9.1 File và route
 
 - **Route:** `/vendor/calendar` (`routes/paths.ts:29`, `router.tsx:97` → `VendorCalendarPage`).
-- **Page:** `FE/pages/vendor/VendorCalendarPage.tsx` (303 dòng). Có 4 cách xem: `'month'` (Lịch tháng), `'board'` (**Bảng việc**, kanban), `'busy'` (Lịch bận sảnh, chỉ Trung tâm tổ chức sự kiện), `'orders'` (Theo đơn). Nhớ lựa chọn bằng `localStorage` (`weddy.vendor.calendar.view`, `weddy.vendor.board.group`).
+- **Page:** `FE/pages/vendor/VendorCalendarPage.tsx` (303 dòng). Có 4 cách xem: `'month'` (Lịch tháng), `'board'` (**Bảng việc**, kanban), `'busy'` (Lịch bận sảnh, chỉ Trung tâm tiệc cưới), `'orders'` (Theo đơn). Nhớ lựa chọn bằng `localStorage` (`weddy.vendor.calendar.view`, `weddy.vendor.board.group`).
 - **Component / logic:** `FE/features/vendorOrders/components/TaskBoard.tsx` (kanban kéo thả `@dnd-kit`), `FE/features/vendorOrders/taskBoard.ts` (hàm thuần chia cột / hàng), `OrderProgressPanel.tsx` (`TaskRow`), `OrderBoard.tsx` (`useHues`, `ACTIVE_STATUSES`), `FE/features/calendar/*` (lưới tháng, màu đơn).
 - **Hook:** `FE/features/vendorOrders/hooks.ts`: `useTaskBoard` (`:211`), `useMoveBoardTask` (`:217`, cập nhật lạc quan), `useSetOrderTask` (`:189`), `useOrderProgress` (`:205`), `useVendorCalendar` (`:246`); khóa cache `keys.ts`.
 - **API FE / kiểu:** `FE/api/vendorOrders.ts`, `FE/types/vendorOrder.ts:155-198` (`OrderTask`, `BoardTask`, `CalendarItem`).

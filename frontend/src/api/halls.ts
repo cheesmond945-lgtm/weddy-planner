@@ -1,7 +1,7 @@
 import type { AddBusyResult, BusyInput, HallRef, HallsFree, VendorBusyCalendar } from '@/types/hall'
 import { http } from './client'
 
-/** Lịch bận theo sảnh (Trung tâm tổ chức sự kiện). Hợp đồng: docs/LICH_BAN_SANH.md */
+/** Lịch bận theo sảnh (Trung tâm tiệc cưới). Hợp đồng: docs/LICH_BAN_SANH.md */
 export const hallsApi = {
   /** Các sảnh của NCC (form đơn chọn sảnh, tab Lịch bận); enabled = false nếu không phải trung tâm sự kiện. */
   vendorHalls: (): Promise<{ enabled: boolean; halls: HallRef[] }> =>

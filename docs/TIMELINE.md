@@ -13,7 +13,7 @@ Mẫu nằm trong code (`TIMELINE_TEMPLATES`, 62 việc), không lưu bảng CSD
 | BOOK | Mốc chốt (mã `*_BOOK`): tự xong khi đặt cọc | Khung |
 | DETAIL / EVENT / PAYMENT | Việc chi tiết, ngày thực hiện, thanh toán phần còn lại: chỉ sinh sau khi đặt cọc | Chi tiết |
 
-Sáu hạng mục: nhà hàng (Trung tâm tổ chức sự kiện), chụp ảnh (gồm quay phim), trang phục, trang trí (decor), trang điểm (makeup), hoa cưới. Loại việc, `needsMeeting` (nút "Hẹn với NCC") và nguồn sinh suy ra từ `task_code` qua mẫu; `task_code` rỗng là việc khách tự thêm.
+Sáu hạng mục: nhà hàng (Trung tâm tiệc cưới), chụp ảnh (gồm quay phim), trang phục, trang trí (decor), trang điểm (makeup), hoa cưới. Loại việc, `needsMeeting` (nút "Hẹn với NCC") và nguồn sinh suy ra từ `task_code` qua mẫu; `task_code` rỗng là việc khách tự thêm.
 
 ## 2. Công thức ngày
 
@@ -190,7 +190,7 @@ Danh sách việc có thêm cách xem **Lịch tháng** (kiểu Google Calendar,
   - **Lọc.** Chú giải là các nút bấm được, mỗi khách / đơn một nút (kèm 4 số cuối mã đơn và số việc trễ); bấm để chỉ xem khách đó, chọn nhiều được, "Bỏ lọc" để về tất cả. Nhiều khách thì chỉ hiện 8 nút đầu và nút đang chọn, còn lại gom vào "+N khách". Thêm bộ lọc **Việc của tôi** ẩn các việc do khách làm.
   - **Danh sách của ngày gom theo khách**: mỗi khách một nhóm có tên đầy đủ, mã đơn. Ngày có từ hai đơn cùng thực hiện hiện nhắc "Có N đơn cùng thực hiện trong ngày này".
   - **Chế độ "Bảng việc"** (tab thứ hai): kanban kéo thả, xem mục 9.2.
-  - **Chế độ "Lịch bận"** (chỉ Trung tâm tổ chức sự kiện): lịch bận theo từng sảnh, nguồn Đơn / Thủ công, xem [LICH_BAN_SANH.md](LICH_BAN_SANH.md).
+  - **Chế độ "Lịch bận"** (chỉ Trung tâm tiệc cưới): lịch bận theo từng sảnh, nguồn Đơn / Thủ công, xem [LICH_BAN_SANH.md](LICH_BAN_SANH.md).
   - **Chế độ "Theo đơn"** (tab thứ ba; tab đang chọn nhớ trong `localStorage` `weddy.vendor.calendar.view`): mỗi đơn đang theo dõi một thẻ có màu riêng: tên khách, trạng thái, nhãn "Trễ tiến độ" / "Sắp đến hạn", ngày thực hiện còn bao lâu, thanh tiến độ `đã xong / tổng`, việc tiếp theo của NCC (hoặc "Đang chờ khách thực hiện" / "Đã xong mọi việc"), và nút mở danh sách việc để tick ngay. Đơn có việc của NCC bị trễ lên trước, rồi theo ngày thực hiện gần nhất.
 - **API:** `GET /vendors/me/orders/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` (tối đa 100 ngày, `400 VALIDATION_ERROR` nếu sai) trả `{ items }`: mốc `ORDER` (`orderId`, `orderCode`, `customerName`, `date`, `status`) và `TASK` (thêm `owner`, `canTick`, `overdue`). Việc "Ngày thực hiện" trùng đúng ngày thực hiện của đơn bị bỏ vì đã có mốc ORDER. Logic thuần: `backend/src/modules/weddings/calendar-items.ts`.
 
@@ -310,3 +310,22 @@ xem [LICH_TRINH_NGAY_CUOI.md](LICH_TRINH_NGAY_CUOI.md).
 
 Không xóa. Việc chi tiết cũ (mã mẫu) vẫn hiện nhờ `LEGACY_OWNER`, NCC vẫn đổi được trạng thái. Script `timelines:rebuild` chỉ dựng lại việc khung (giữ việc gắn đơn), `timelines:repair` sinh bù việc PKG / PAY cho đơn Deposited thiếu việc; cả hai mặc định dry-run, chưa chạy ở đợt này. SQL `appointment_date` đã bỏ (không chạy).
 
+### Việc riêng của từng đơn (thêm / bỏ việc)
+
+Gói (package_tasks) là khuôn mẫu; việc của đơn (timeline_tasks có order_id) là bản riêng của đơn đó. NCC tùy chỉnh một đơn đã cọc mà không đổi gói và các đơn khác:
+
+- Việc riêng: task_code ORD:<C|V|B>:<8 ký tự ngẫu nhiên>:<8 ký tự đầu order_id> (chữ cái là chủ việc), task_type Detail, đã chốt ngày ngay khi thêm.
+- API NCC (đơn Deposited của chính NCC): POST /vendors/me/orders/:id/tasks { title, note?, owner, date, addToPackage? } · PATCH .../tasks/:taskId { title?, note?, owner? } (chỉ ORD:; có status / isDone thì vẫn là đổi trạng thái) · DELETE .../tasks/:taskId (Bỏ việc khỏi đơn: PKG: hoặc ORD: chưa Done; không bỏ được PAY:; không đụng package_tasks).
+- addToPackage = true (đơn có gói): thêm 1 package_tasks vào gói với offset_days = ngày - E, chỉ áp cho đơn đặt sau.
+- timelines:repair và mọi chỗ sinh bù (orderTaskRows): chỉ sinh cho đơn HOÀN TOÀN chưa có việc nào gắn order_id. Đơn đã có bất kỳ việc nào (kể cả PAY: là việc không xóa được, nên luôn còn khi đơn đã được sinh / tùy chỉnh) thì không sinh gì nữa, nên việc gói NCC đã bỏ không hiện lại.
+- NCC đổi ngày thực hiện E: việc ORD: giữ nguyên ngày. Hủy đơn: gỡ việc chưa Done như các việc khác.
+- Khách được thông báo (TaskUpdated, gửi sau response); khách chỉ xem, thấy nhãn NCC thêm và dòng Nhắn NCC cuối nhóm quy trình.
+
+### Chữ dùng chung, hoàn tác đổi ngày, job nền (đợt A sau rà soát UX 02/11/2026)
+
+- Một file chữ dùng chung ở FE: frontend/src/lib/taskLabels.ts. Phía NCC "Chờ khách" (cả tên cột Bảng việc); phía khách "Bạn cần làm" (banner "Có N việc bạn cần làm"). Ngày của việc: "Dự kiến · dd/mm/yyyy" / "Đã hẹn · dd/mm/yyyy"; nút "Xác nhận ngày" / "Bỏ xác nhận"; "Cần xác nhận ngày". "Đã chốt" chỉ còn cho dịch vụ đã chốt NCC (Mốc chốt). Giờ có mặt ngày cưới: "Giờ dự kiến" / "Giờ đã xác nhận". Thông báo backend dùng cùng cụm ("Bạn cần làm", "đã hẹn ngày", "xác nhận giờ có mặt").
+- Nhận diện hạng mục: MỘT hàm categoryKindOf (backend/src/modules/catalog/category-kind.ts) so khớp từ khóa không dấu / không phân biệt hoa thường, không phụ thuộc tên hiển thị (Trung tâm tổ chức sự kiện -> Trung tâm tiệc cưới đều ra nha-hang). Tên lạ: log cảnh báo một lần.
+- Đổi ngày việc: bấm một ngày trong lịch chỉ CHỌN; chân lịch hỏi "Đổi sang dd/mm/yyyy và báo khách?" (Xác nhận / Hủy). Sau khi đổi có toast "Đã đổi ngày · Hoàn tác" 5 giây (hoàn tác trả ngày cũ + trạng thái xác nhận cũ: PATCH .../schedule { date, undo: true, confirmed }). Thông báo cho khách gửi SAU 6 giây (5 giây + 1 giây đệm, delayed-notice.ts); hoàn tác trong khoảng đó thì thông báo bị hủy. Thông báo đang chờ nằm trong bộ nhớ tiến trình: khởi động lại giữa chừng thì mất (chấp nhận được).
+- Việc riêng: timeline_tasks không có cột ghi chú nên tiêu đề lưu dạng "tên — ghi chú"; FE tách lại theo lần xuất hiện đầu tiên của " — " khi hiển thị (tên đậm, ghi chú dòng nhỏ) và khi mở Sửa, ghép lại khi lưu.
+- Job nền: ORDER_JOBS_ENABLED=true (backend/.env.example) để hết hạn cọc / nhắc hạn chạy nền. Nhắc hạn không còn giới hạn 300 việc (đọc theo lô 500 tới hết). Cờ tắt thì backend log một dòng cảnh báo lúc khởi động.
+- Bảng việc: khoảng thời gian mặc định là "Tất cả" khi NCC có từ 5 đơn đang làm trở xuống, ngược lại "Quá hạn + 14 ngày tới"; cột trống mà còn việc bị ẩn hiện "Có N việc hạn xa hơn — Xem tất cả". "Việc của tôi" ở Lịch tháng, Bảng việc và số đếm đầu trang cùng một nghĩa: ẩn việc có chủ là Khách.

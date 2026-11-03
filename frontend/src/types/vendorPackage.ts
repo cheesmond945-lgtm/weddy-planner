@@ -50,7 +50,7 @@ export interface PackageDayPlan {
   durationMinutes: number | null
   /** Chỉ gói sảnh: giờ sớm nhất đơn vị khác được vào setup "HH:mm" */
   setupOpenTime: string | null
-  /** Gói của Nhà hàng / Trung tâm tổ chức sự kiện (có ô giờ cho vào setup) */
+  /** Gói của Nhà hàng / Trung tâm tiệc cưới (có ô giờ cho vào setup) */
   isVenue: boolean
   /** Mặc định theo lĩnh vực khi chưa khai */
   defaults: { leadMinutes: number; durationMinutes: number }

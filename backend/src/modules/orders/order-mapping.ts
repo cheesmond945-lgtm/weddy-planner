@@ -8,6 +8,7 @@
  */
 import type { Prisma } from '../../generated/prisma/client';
 import { categorySlug } from '../catalog/services.service';
+import { restPaymentOf } from './rest-payment';
 
 export const ORDER_INCLUDE = {
   order_items: { orderBy: { id: 'asc' as const }, include: { service_packages: { select: { id: true, name: true } } } },
@@ -17,6 +18,8 @@ export const ORDER_INCLUDE = {
   weddings: { select: { user_id: true, wedding_date: true } },
   vendor_profiles: { select: { id: true, user_id: true, status: true, business_name: true, service_categories: { select: { id: true, name: true } } } },
   service_packages: { select: { id: true, name: true } },
+  /** Việc thanh toán phần còn lại 'PAY:<orderId>': Done = NCC đã nhận tiền mặt đợt 2 (rest-payment.ts) */
+  timeline_tasks: { where: { task_code: { startsWith: 'PAY:' } }, select: { status: true, completed_date: true } },
 } satisfies Prisma.ordersInclude;
 
 export type OrderRow = Prisma.ordersGetPayload<{ include: typeof ORDER_INCLUDE }>;
@@ -78,7 +81,7 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
     serviceId: o.vendor_profiles!.id,
     vendorName: o.vendor_profiles!.business_name!,
     category: { id: cat.id, slug: categorySlug(cat.name), name: cat.name },
-    /** Sảnh (gói) của đơn, Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md); null với dịch vụ khác và đơn cũ */
+    /** Sảnh (gói) của đơn, Trung tâm tiệc cưới (docs/LICH_BAN_SANH.md); null với dịch vụ khác và đơn cũ */
     package: o.service_packages ? { id: o.service_packages.id, name: o.service_packages.name ?? '' } : null,
     status: o.status,
     customerName: o.customer_name,
@@ -98,6 +101,8 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
       packageName: i.service_packages?.name ?? null,
     })),
     totalAmount: Number(o.total_amount),
+    /** Đợt 2 (phần còn lại, tiền mặt): Pending | Received | NotApplicable (đơn chưa cọc / hết hạn / đã hủy) */
+    restPayment: restPaymentOf({ status: o.status, total: Number(o.total_amount), deposit: Number(o.deposit_amount) }, o.timeline_tasks[0] ?? null),
     depositPercent: Number(o.deposit_percent),
     depositAmount: Number(o.deposit_amount),
     depositDueDate: o.deposit_due_date ? o.deposit_due_date.toISOString() : null,

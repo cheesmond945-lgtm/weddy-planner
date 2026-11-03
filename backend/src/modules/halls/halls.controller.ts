@@ -36,7 +36,7 @@ export class VendorBusyController {
 export class VendorHallsController {
   constructor(private readonly halls: HallsService) {}
 
-  /** { enabled, halls: [{ id, name, hidden }] }; enabled = false nếu NCC không phải Trung tâm tổ chức sự kiện. */
+  /** { enabled, halls: [{ id, name, hidden }] }; enabled = false nếu NCC không phải Trung tâm tiệc cưới. */
   @Get()
   list(@Req() req: any) {
     return this.halls.vendorHalls(req.user.sub);

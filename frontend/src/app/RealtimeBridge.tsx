@@ -5,6 +5,7 @@ import { coupleOrderKeys } from '@/features/orders/hooks'
 import { vendorKeys } from '@/features/vendorOrders/keys'
 import { planningKeys } from '@/features/weddings/hooks'
 import { connectRealtime, disconnectRealtime } from '@/lib/realtime'
+import { isSelfEvent } from '@/lib/selfEvents'
 import { useAuth } from '@/store/auth'
 
 /**
@@ -56,7 +57,9 @@ export function RealtimeBridge() {
         }
       },
       // Việc của đơn đổi (khách tick / đổi hạn, NCC tick / bỏ tick): timeline của khách, lịch và tiến độ của NCC tải lại
-      task: () => {
+      // Sự kiện do chính phiên này vừa gây ra (giao diện đã cập nhật sẵn): bỏ qua, không tải lại
+      task: (e) => {
+        if (isSelfEvent(e?.taskId)) return
         if (role === 'COUPLE') invalidate(planningKeys.timeline(uid))
         if (role === 'VENDOR') {
           invalidate(vendorKeys.orderProgress(uid))

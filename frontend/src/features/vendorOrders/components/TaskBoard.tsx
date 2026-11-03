@@ -16,16 +16,20 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Check } from 'lucide-react'
+import { Check, Loader2 } from 'lucide-react'
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Badge, type BadgeTone } from '@/components/Badge'
 import { shortCouple } from '@/features/calendar/orderColors'
-import { daysBetween, formatDate, parseDate, toISODate, today } from '@/lib/date'
+import { daysBetween, parseDate, toISODate, today } from '@/lib/date'
+import { TASK_LABELS } from '@/lib/taskLabels'
 import { cn } from '@/lib/utils'
 import type { BoardTask, TaskOwner } from '@/types/vendorOrder'
-import { useMoveBoardTask, useRescheduleTask } from '../hooks'
+import { usePendingTask, useTaskActions } from '../taskActions'
+import { RestReceivedDialog } from './RestReceivedDialog'
 import { BOARD_COLUMNS, boardColumns, canMove, needsScheduleConfirm, statusOfColumn, type BoardColumn } from '../taskBoard'
-import { TaskDateDialog } from './TaskDateDialog'
+import { DateChip, TaskDateRow } from './TaskDateRow'
+import { CustomTaskTag, TaskMenu } from './TaskMenu'
+import { TaskTitle } from './TaskTitle'
 
 /** Mỗi cột hiện từng này thẻ, bấm "Xem thêm" để hiện thêm từng ấy nữa (vài trăm việc vẫn nhẹ trang). */
 const PAGE = 20
@@ -52,27 +56,33 @@ const collision: CollisionDetection = (args) => {
 }
 
 /** Nội dung thẻ việc (dùng cho thẻ trên bảng và thẻ đang kéo): tên việc, khách và mã đơn, hạn, chốt lịch, chủ việc. */
-function CardBody({ task }: { task: BoardTask }) {
+/** Hàng chủ việc của thẻ: nhãn cảnh báo bên trái; bên phải [menu ⋯] [Thêm riêng] [chủ việc] — nhãn chủ việc sát mép phải, thẳng với cụm nút ngày. */
+function CardMeta({ task, menu }: { task: BoardTask; menu?: ReactNode }) {
   // Sắp đến hạn: còn 0 đến 2 ngày (cùng ngưỡng với thông báo của backend)
   const soon = !task.isDone && !task.overdue && !!task.dueDate && daysBetween(today(), parseDate(task.dueDate)) <= 2
   const confirmSoon = needsScheduleConfirm(task, toISODate(today()))
   const owner = OWNER[task.owner]
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+      {soon && <span className="font-semibold text-gold-ink">Sắp đến hạn</span>}
+      {confirmSoon && <span className="font-semibold text-warn">{TASK_LABELS.needsConfirmDate}</span>}
+      <span className="ml-auto flex items-center gap-1.5">
+        {menu}
+        {task.isCustomOrderTask && <CustomTaskTag />}
+        <Badge tone={owner.tone}>{owner.label}</Badge>
+      </span>
+    </div>
+  )
+}
+
+function CardBody({ task }: { task: BoardTask }) {
   const packages = (task.packageNames ?? []).join(', ')
   return (
     <>
-      <p className={cn('text-[13.5px] leading-snug font-medium [overflow-wrap:anywhere]', task.isDone && 'text-muted-foreground line-through')}>{task.title}</p>
+      <TaskTitle title={task.title} className={cn('text-[13.5px] leading-snug font-semibold [overflow-wrap:anywhere]', task.isDone && 'text-muted-foreground line-through')} />
       <p className="mt-0.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]" title={packages ? `${task.customerName} · Gói ${packages}` : task.customerName}>
         {shortCouple(task.customerName)} · {task.orderCode}
-      </p>
-      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
-        <span className={cn(task.overdue && 'font-semibold text-warn')}>Hạn {formatDate(task.dueDate)}</span>
-        {task.overdue && <span className="font-semibold text-warn">· Quá hạn</span>}
-        {soon && <span className="font-semibold text-gold-ink">· Sắp đến hạn</span>}
-        {confirmSoon && <span className="font-semibold text-warn">· Cần chốt lịch</span>}
-        {task.dateStatus === 'CONFIRMED' && !task.isDone && <span>· Đã chốt</span>}
-        <Badge tone={owner.tone} className="ml-auto">
-          {owner.label}
-        </Badge>
+        {packages && ` · Gói ${packages}`}
       </p>
       {task.needsRecheck && (
         <p className="mt-1 flex items-start gap-1.5 text-[12px] font-medium text-warn">
@@ -87,21 +97,21 @@ function CardBody({ task }: { task: BoardTask }) {
 interface CardProps {
   task: BoardTask
   hue: number
-  busy: boolean
   onToggle: (t: BoardTask) => void
-  onReschedule: (t: BoardTask) => void
 }
 
 /**
- * Thẻ việc: kéo được (nắm vào phần chữ), có ô tick cho ai không kéo được và nút "Đổi ngày…" khi chưa xong.
- * Ô tick và nút Đổi ngày nằm ngoài vùng kéo để Enter / Space trên đó không nhấc thẻ lên.
+ * Thẻ việc: kéo được (nắm vào phần chữ), có ô tick và nhãn ngày bấm được ("Dự kiến …" / "Đã chốt … ✓", bấm mở popover chốt / đổi ngày).
+ * Chỉ thẻ đang xử lý bị khóa (spinner nhỏ ở ô tick); thẻ khác vẫn bấm và kéo được.
  */
-function BoardCard({ task, hue, busy, onToggle, onReschedule }: CardProps) {
+function BoardCard({ task, hue, onToggle }: CardProps) {
+  const run = useTaskActions()
+  const busy = usePendingTask(task.id)
   const confirmSoon = needsScheduleConfirm(task, toISODate(today()))
   const { setNodeRef, setActivatorNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: task.id,
     data: { task },
-    disabled: !task.canTick,
+    disabled: !task.canTick || busy,
     attributes: { roleDescription: 'việc kéo được' },
   })
   return (
@@ -119,15 +129,16 @@ function BoardCard({ task, hue, busy, onToggle, onReschedule }: CardProps) {
           type="button"
           role="checkbox"
           aria-checked={task.isDone}
+          aria-busy={busy}
           aria-label={`${task.isDone ? 'Mở lại' : 'Hoàn thành'}: ${task.title}`}
           disabled={busy}
           onClick={() => onToggle(task)}
           className={cn(
-            'mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:opacity-60',
+            'mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage',
             task.isDone ? 'border-sage bg-sage text-white' : 'border-line-strong bg-surface hover:border-sage',
           )}
         >
-          {task.isDone && <Check className="size-3" strokeWidth={3} aria-hidden />}
+          {busy ? <Loader2 className="size-3 animate-spin" aria-hidden /> : task.isDone && <Check className="size-3" strokeWidth={3} aria-hidden />}
         </button>
       ) : (
         <span aria-hidden className={cn('mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border-2', task.isDone ? 'border-sage bg-sage text-white' : 'border-line bg-surface-2')}>
@@ -147,11 +158,21 @@ function BoardCard({ task, hue, busy, onToggle, onReschedule }: CardProps) {
         ) : (
           <CardBody task={task} />
         )}
-        {task.canTick && !task.isDone && (
-          <button type="button" onClick={() => onReschedule(task)} className="mt-1 text-[12px] font-medium text-gold-ink underline underline-offset-2">
-            Đổi ngày…
-          </button>
-        )}
+        <CardMeta task={task} menu={<TaskMenu task={task} orderId={task.orderId} customerName={task.customerName} eventDate={task.eventDate} readOnly={!task.canTick} />} />
+        <div className="mt-1.5">
+          <TaskDateRow
+            dueDate={task.dueDate}
+            eventDate={task.eventDate}
+            confirmed={task.dateStatus === 'CONFIRMED'}
+            overdue={task.overdue}
+            isDone={task.isDone}
+            readOnly={!task.canTick}
+            busy={busy}
+            onPickDate={(date) => void run(task.orderId, task.id, { kind: 'date', date })}
+            onConfirm={() => void run(task.orderId, task.id, { kind: 'confirm' })}
+            onUnconfirm={() => void run(task.orderId, task.id, { kind: 'unconfirm' })}
+          />
+        </div>
       </div>
     </li>
   )
@@ -185,6 +206,10 @@ interface TaskBoardProps {
   hideCustomer: boolean
   /** Lời khi không có việc nào khớp bộ lọc */
   emptyText: string
+  /** Số việc bị khoảng thời gian ẩn theo cột (hạn xa hoặc xong đã lâu), để cột trống nói rõ còn việc */
+  hidden?: Readonly<Record<BoardColumn, number>>
+  /** "Xem tất cả": đổi khoảng thời gian sang Tất cả */
+  onShowAll?: () => void
 }
 
 /**
@@ -194,10 +219,10 @@ interface TaskBoardProps {
  * NCC kéo mọi việc của đơn mình giữa các cột = đổi trạng thái Waiting / Todo / Done (PATCH việc của đơn); "Đổi ngày…" chốt ngày mới với khách.
  * Chuột: kéo ngay; cảm ứng: nhấn giữ rồi kéo (để vẫn cuộn được); bàn phím: Space / Enter nhấc, mũi tên di chuyển, Space / Enter thả, Esc hủy.
  */
-export function TaskBoard({ tasks, hueFor, hideCustomer, emptyText }: TaskBoardProps) {
-  const move = useMoveBoardTask()
-  const reschedule = useRescheduleTask()
-  const [rescheduling, setRescheduling] = useState<BoardTask | null>(null)
+export function TaskBoard({ tasks, hueFor, hideCustomer, emptyText, hidden, onShowAll }: TaskBoardProps) {
+  const run = useTaskActions()
+  // Việc "Thanh toán phần còn lại" sang Đã xong = ghi nhận đã nhận tiền mặt: hỏi xác nhận, không kéo âm thầm
+  const [receiving, setReceiving] = useState<BoardTask | null>(null)
   const [dragging, setDragging] = useState<BoardTask | null>(null)
   const [shown, setShown] = useState<Record<BoardColumn, number>>({ customer: PAGE, todo: PAGE, done: PAGE })
   const sensors = useSensors(
@@ -209,8 +234,8 @@ export function TaskBoard({ tasks, hueFor, hideCustomer, emptyText }: TaskBoardP
   const columns = BOARD_COLUMNS.filter((c) => !(hideCustomer && c.key === 'customer'))
   const cols = boardColumns(tasks)
   // Bỏ tick: việc của khách về Chờ khách, còn lại về Cần làm
-  const toggle = (t: BoardTask) => move.mutate({ orderId: t.orderId, taskId: t.id, status: t.isDone ? (t.owner === 'CUSTOMER' ? 'Waiting' : 'Todo') : 'Done' })
-  const busyId = move.isPending ? move.variables?.taskId : undefined
+  const toggle = (t: BoardTask) =>
+    t.isRestPayment && !t.isDone ? setReceiving(t) : void run(t.orderId, t.id, { kind: 'status', status: t.isDone ? (t.owner === 'CUSTOMER' ? 'Waiting' : 'Todo') : 'Done' }, { isRestPayment: t.isRestPayment })
 
   const titleOf = (data: unknown) => (data as { task?: BoardTask } | undefined)?.task?.title ?? 'việc'
   const columnOfOver = (data: unknown) => COLUMN_TITLE[(data as CellData | undefined)?.column ?? 'todo']
@@ -227,10 +252,23 @@ export function TaskBoard({ tasks, hueFor, hideCustomer, emptyText }: TaskBoardP
     const task = active.data.current?.task as BoardTask | undefined
     const cell = over?.data.current as CellData | undefined
     if (!task || !cell || !canMove(task, cell.column)) return
-    move.mutate({ orderId: task.orderId, taskId: task.id, status: statusOfColumn(cell.column) })
+    if (task.isRestPayment && cell.column === 'done') return setReceiving(task)
+    void run(task.orderId, task.id, { kind: 'status', status: statusOfColumn(cell.column) }, { isRestPayment: task.isRestPayment })
   }
 
-  if (!tasks.length) return <p className="rounded-xl border border-line bg-surface px-4 py-8 text-center text-muted-foreground">{emptyText}</p>
+  const hiddenTotal = hidden ? hidden.customer + hidden.todo + hidden.done : 0
+  if (!tasks.length) {
+    return (
+      <div className="rounded-xl border border-line bg-surface px-4 py-8 text-center text-muted-foreground">
+        <p>{emptyText}</p>
+        {hiddenTotal > 0 && onShowAll && (
+          <button type="button" onClick={onShowAll} className="mt-2 font-semibold text-ink underline underline-offset-[3px]">
+            Có {hiddenTotal} việc hạn xa hơn — Xem tất cả
+          </button>
+        )}
+      </div>
+    )
+  }
 
   const grid: CSSProperties = { gridTemplateColumns: `repeat(${columns.length}, minmax(240px, 1fr))` }
   return (
@@ -260,9 +298,19 @@ export function TaskBoard({ tasks, hueFor, hideCustomer, emptyText }: TaskBoardP
               return (
                 <BoardCell key={c.key} column={c.key}>
                   {list.slice(0, shown[c.key]).map((t) => (
-                    <BoardCard key={t.id} task={t} hue={hueFor(t.orderId)} busy={busyId === t.id} onToggle={toggle} onReschedule={setRescheduling} />
+                    <BoardCard key={t.id} task={t} hue={hueFor(t.orderId)} onToggle={toggle} />
                   ))}
-                  {list.length === 0 && <li className="px-2 py-6 text-center text-[12.5px] text-muted-foreground">Không có việc</li>}
+                  {list.length === 0 && (
+                    <li className="px-2 py-6 text-center text-[12.5px] text-muted-foreground">
+                      {hidden && hidden[c.key] > 0 && onShowAll ? (
+                        <button type="button" onClick={onShowAll} className="font-semibold text-ink underline underline-offset-[3px]">
+                          Có {hidden[c.key]} việc hạn xa hơn — Xem tất cả
+                        </button>
+                      ) : (
+                        'Không có việc'
+                      )}
+                    </li>
+                  )}
                   {rest > 0 && (
                     <li>
                       <button
@@ -283,15 +331,19 @@ export function TaskBoard({ tasks, hueFor, hideCustomer, emptyText }: TaskBoardP
           {dragging && (
             <div style={hueStripe(hueFor(dragging.orderId))} className="w-[260px] rotate-1 cursor-grabbing rounded-md border border-sage bg-surface py-2.5 pr-3 pl-3.5 shadow-lg">
               <CardBody task={dragging} />
+              <CardMeta task={dragging} />
+              <div className="mt-1.5">
+                <DateChip dueDate={dragging.dueDate} confirmed={dragging.dateStatus === 'CONFIRMED'} overdue={dragging.overdue} isDone={dragging.isDone} />
+              </div>
             </div>
           )}
         </DragOverlay>
       </DndContext>
-      <TaskDateDialog
-        target={rescheduling && { title: rescheduling.title, dueDate: rescheduling.dueDate, eventDate: rescheduling.eventDate }}
-        busy={reschedule.isPending}
-        onClose={() => setRescheduling(null)}
-        onPick={(date) => rescheduling && reschedule.mutate({ orderId: rescheduling.orderId, taskId: rescheduling.id, date }, { onSuccess: () => setRescheduling(null) })}
+      <RestReceivedDialog
+        open={!!receiving}
+        amount={receiving?.restAmount}
+        onOpenChange={(o) => !o && setReceiving(null)}
+        onConfirm={() => receiving && void run(receiving.orderId, receiving.id, { kind: 'status', status: 'Done' }, { isRestPayment: true })}
       />
     </>
   )

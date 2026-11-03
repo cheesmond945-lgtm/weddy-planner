@@ -173,7 +173,7 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 
 Không có `totalAmount`, `depositAmount`, `amount`: backend tính.
 
-`OrderContent` có thêm `packageId` (sảnh, uuid hoặc `null`) cho **Trung tâm tổ chức sự kiện**; dịch vụ khác gửi lên cũng bị bỏ qua. `Order` trả `package: { id, name } | null`. Lịch bận theo sảnh: [../LICH_BAN_SANH.md](../LICH_BAN_SANH.md).
+`OrderContent` có thêm `packageId` (sảnh, uuid hoặc `null`) cho **Trung tâm tiệc cưới**; dịch vụ khác gửi lên cũng bị bỏ qua. `Order` trả `package: { id, name } | null`. Lịch bận theo sảnh: [../LICH_BAN_SANH.md](../LICH_BAN_SANH.md).
 
 ## Kiểm tra
 
@@ -183,7 +183,7 @@ Không có `totalAmount`, `depositAmount`, `amount`: backend tính.
 | Gửi đơn (`send`) | Đủ `customerName`, `customerPhone` (9 đến 15 ký tự gồm số, khoảng trắng, `+ ( ) . -`), `eventDate`, ít nhất một hạng mục (`itemName` không rỗng, `quantity` nguyên > 0, `unitPrice` ≥ 0), `totalAmount` > 0, `depositPercent` lớn hơn 0 và nhỏ hơn 100 |
 | Cập nhật đơn / Chỉnh sửa sau cọc | Như gửi đơn, và phải có thay đổi so với nội dung hiện tại |
 | **Ngày sự kiện** (Gửi đơn, Tạo lại đơn, Chỉnh sửa sau cọc) | `eventDate` phải **từ hôm nay trở đi** (giờ Việt Nam), nếu không trả **`422 EVENT_DATE_IN_PAST`** (`details.eventDate`). Cập nhật đơn hoặc Chỉnh sửa mà **giữ nguyên** `eventDate` đang có của đơn thì không kiểm (đơn đã qua ngày vẫn sửa được hạng mục để Hoàn tất). **Lưu nháp không chặn.** |
-| **Sảnh** (Trung tâm tổ chức sự kiện: Gửi đơn, Cập nhật đơn, Tạo lại đơn, Chỉnh sửa sau cọc) | Bắt buộc `packageId` là gói của chính NCC (`400 VALIDATION_ERROR`, `details.packageId`), gói đang đăng (giữ được sảnh đơn đang có dù đã ẩn). Sảnh **bận** ngày `eventDate` (đơn khác Đã cọc / Hoàn thành cùng sảnh, hoặc NCC đánh dấu bận) thì **`409 HALL_BUSY`**. Chỉnh sửa sau cọc mà giữ nguyên sảnh và ngày thì không kiểm lại. Lưu nháp chỉ kiểm sảnh thuộc NCC. |
+| **Sảnh** (Trung tâm tiệc cưới: Gửi đơn, Cập nhật đơn, Tạo lại đơn, Chỉnh sửa sau cọc) | Bắt buộc `packageId` là gói của chính NCC (`400 VALIDATION_ERROR`, `details.packageId`), gói đang đăng (giữ được sảnh đơn đang có dù đã ẩn). Sảnh **bận** ngày `eventDate` (đơn khác Đã cọc / Hoàn thành cùng sảnh, hoặc NCC đánh dấu bận) thì **`409 HALL_BUSY`**. Chỉnh sửa sau cọc mà giữ nguyên sảnh và ngày thì không kiểm lại. Lưu nháp chỉ kiểm sảnh thuộc NCC. |
 | **Ngày thực hiện so với ngày cưới** (Gửi đơn, Cập nhật đơn, Tạo lại đơn, Chỉnh sửa sau cọc) | `eventDate` **không được sau ngày cưới của khách** (`Weddings.WeddingDate`), nếu không **`422 EVENT_DATE_AFTER_WEDDING`** (`details.eventDate`, `details.weddingDate`). Gửi hoặc Cập nhật đơn khi ngày cưới của khách đã qua hoặc là hôm nay: **`409 WEDDING_DATE_PASSED`**. Chỉnh sửa sau cọc mà **giữ nguyên** `eventDate` đang có (đơn cũ lệch ngày) thì không kiểm; Cập nhật đơn `Pending` / `NeedRevision` **không** được miễn (khách chưa cọc, NCC phải sửa). Khách **đặt cọc** cũng bị kiểm lại (`409 EVENT_DATE_AFTER_WEDDING`) phòng khi khách đổi ngày cưới sau lúc đơn được gửi. **Lưu nháp không chặn.** DTO đơn và hội thoại NCC (`customer.weddingDate`) trả ngày cưới để form điền sẵn. |
 
 Lỗi kiểm tra trả `400 VALIDATION_ERROR` với `details` theo trường: `customerName`, `customerPhone`, `eventDate`, `depositPercent`, `items`, `items.<i>.itemName`, `items.<i>.quantity`, `items.<i>.unitPrice`.
@@ -298,7 +298,7 @@ Lịch làm việc của NCC: `?from=YYYY-MM-DD&to=YYYY-MM-DD` (tối đa 100 ng
 | 409 | `WEDDING_NOT_SET` | Khách chưa có thông tin đám cưới, chưa tạo được đơn |
 | 409 | `ORDER_NOT_DRAFT` | Lưu nháp đơn không còn là `Draft` |
 | 409 | `ORDER_NOT_SENDABLE` | Gửi đơn không ở `Draft`, `Pending`, `NeedRevision` |
-| 409 | `HALL_BUSY` | Trung tâm tổ chức sự kiện: sảnh của đơn đã bận ngày thực hiện, khi NCC Gửi / Cập nhật / Tạo lại / Chỉnh sửa (đổi sảnh hoặc ngày) hoặc khách đặt cọc (`POST /payments`). NCC thấy nguồn (mã đơn, lý do đã ghi); khách chỉ thấy sảnh không nhận ngày đó. Chưa đổi gì. Đã thu cọc qua VietQR mà sảnh vừa bận (hai khách cọc cùng lúc): không ghi nhận, trang quay về báo liên hệ hoàn tiền |
+| 409 | `HALL_BUSY` | Trung tâm tiệc cưới: sảnh của đơn đã bận ngày thực hiện, khi NCC Gửi / Cập nhật / Tạo lại / Chỉnh sửa (đổi sảnh hoặc ngày) hoặc khách đặt cọc (`POST /payments`). NCC thấy nguồn (mã đơn, lý do đã ghi); khách chỉ thấy sảnh không nhận ngày đó. Chưa đổi gì. Đã thu cọc qua VietQR mà sảnh vừa bận (hai khách cọc cùng lúc): không ghi nhận, trang quay về báo liên hệ hoàn tiền |
 | 409 | `CATEGORY_ALREADY_DEPOSITED` | Gửi / Cập nhật / Tạo lại đơn (có `send`) khi hạng mục của khách đã có đơn `Deposited` khác. Khách đặt cọc đơn thứ hai cùng hạng mục cũng trả mã này (`POST /payments`, xem payments.md). Chưa tạo / đổi gì |
 | 409 | `ORDER_NOT_EDITABLE` | Sửa sau cọc nhưng đơn không phải `Deposited` |
 | 422 | `EVENT_DATE_IN_PAST` | Gửi đơn, Tạo lại đơn hoặc Chỉnh sửa sau cọc với `eventDate` trước hôm nay (giờ VN) |

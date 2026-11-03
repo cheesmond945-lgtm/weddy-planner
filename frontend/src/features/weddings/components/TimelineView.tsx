@@ -10,7 +10,7 @@ import type { PrepLevel, TimelineItem, Wedding } from '@/types/wedding'
 import { useTimeline, useTimelineMutations } from '../hooks'
 import { ImportDialog } from '../import/ImportDialog'
 import { countServices, groupByTime, type ViewMode } from '../timelineGroups'
-import { chatDraft, filterTimeline, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
+import { chatDraft, filterTimeline, processChangeDraft, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
 import { CompleteTaskDialog, ReopenTaskDialog } from './TimelineConfirmDialogs'
 import { AddTaskDialog, EditMilestoneDialog } from './TimelineDialogs'
 import { TimelineGroupCard, defaultOpen } from './TimelineGroupCard'
@@ -72,7 +72,7 @@ function WaitingBanner({ count, onPick }: { count: number; onPick: () => void })
   if (!count) return null
   return (
     <div role="status" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-gold-500 bg-gold-100 px-4 py-3 text-sm text-gold-800">
-      <span className="font-semibold">Có {count} việc nhà cung cấp đang chờ bạn</span>
+      <span className="font-semibold">Có {count} việc bạn cần làm</span>
       <button type="button" className="font-semibold underline underline-offset-2" onClick={onPick}>
         Xem
       </button>
@@ -362,6 +362,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
               open={openMap[slugOf(e.book)] ?? defaultOpen(e.kids)}
               onToggle={() => toggleGroup(slugOf(e.book), openMap[slugOf(e.book)] ?? defaultOpen(e.kids))}
               leaving={leaving}
+              onAskVendor={(serviceId, orderCode) => void chatWith(serviceId, processChangeDraft(orderCode))}
               {...handlers}
             />
           ),

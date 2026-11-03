@@ -12,8 +12,12 @@ import { hallBusyMessage } from '../halls/hall-busy';
 import { findHallConflict, lockHallDay, usesHalls } from '../halls/hall-store';
 import { onOrderCancelled, onOrderDeposited, onOrderEventDateChanged } from '../weddings/timeline-hooks';
 import { OrderJobsService } from './order-jobs.service';
-import { completeOrder } from './order-lifecycle';
-import { ORDER_INCLUDE, OrderRow, toOrderDto, ymd } from './order-mapping';
+import { completeOrder, notifyRestReceived } from './order-lifecycle';
+import { runAfter } from '../../common/after-response';
+import { payCode } from '../weddings/timeline-rows';
+import { applyRestReceived, clearRestReceived, completeGate, finalInvoiceGate, restPaymentOf, type RestDb } from './rest-payment';
+import { ORDER_INCLUDE, OrderRow, toOrderDto, ymd, ymdVN } from './order-mapping';
+import { publish } from '../realtime/realtime.bus';
 import {
   CANCEL_LABEL,
   CategoryOrder,
@@ -154,7 +158,7 @@ export class OrdersService {
   }
 
   /**
-   * Sảnh của đơn (Trung tâm tổ chức sự kiện, docs/LICH_BAN_SANH.md). Sảnh phải là gói của chính NCC. Gửi / sửa đơn (`strict`) thì bắt buộc
+   * Sảnh của đơn (Trung tâm tiệc cưới, docs/LICH_BAN_SANH.md). Sảnh phải là gói của chính NCC. Gửi / sửa đơn (`strict`) thì bắt buộc
    * chọn sảnh, sảnh phải đang đăng và không bận ngày thực hiện (409 HALL_BUSY); sửa đơn giữ nguyên sảnh và ngày (`keep`) thì không kiểm lại.
    * Dịch vụ khác không theo sảnh: trả null (bỏ sảnh nếu có gửi lên).
    */
@@ -420,7 +424,7 @@ export class OrdersService {
         const other = await tx.orders.findFirst({ where: { wedding_id: o.wedding_id, status: 'Deposited', id: { not: orderId }, vendor_profiles: { category_id: categoryId } }, select: { id: true } });
         if (other) return 'TAKEN' as const;
       }
-      // Sảnh (Trung tâm tổ chức sự kiện): hai khoản cọc cùng sảnh, cùng ngày không chạy song song; sảnh vừa bận thì không ghi nhận
+      // Sảnh (Trung tâm tiệc cưới): hai khoản cọc cùng sảnh, cùng ngày không chạy song song; sảnh vừa bận thì không ghi nhận
       if (o.package_id && o.event_date) {
         await lockHallDay(tx, o.package_id, ymd(o.event_date));
         if (await findHallConflict(tx, o.package_id, ymd(o.event_date), orderId)) return 'HALL' as const;
@@ -753,12 +757,75 @@ export class OrdersService {
   }
 
   /** Hoàn tất: chỉ khi Deposited và đã qua EventDate (giờ VN). Tạo hoa hồng vào bảng kê tháng hoàn thành. */
-  async complete(userId: string, id: string) {
+  /**
+   * NCC hoàn tất đơn. Phần còn lại (tiền mặt) phải được ghi nhận: chưa ghi nhận mà body không có restReceived = true thì 409 REST_PAYMENT_NOT_RECORDED
+   * (kèm số tiền để giao diện hỏi); có restReceived = true thì ghi nhận rồi hoàn tất cùng một transaction.
+   */
+  async complete(userId: string, id: string, body: { restReceived?: unknown } = {}) {
     const { order } = await this.ownedByVendor(userId, id);
     if (order.status !== 'Deposited') return fail('ORDER_NOT_COMPLETABLE', 'Chỉ hoàn tất được đơn đã đặt cọc.', 409);
     if (todayVn() <= ymd(order.event_date)) return fail('ORDER_EVENT_NOT_PASSED', 'Chỉ hoàn tất được khi đã qua ngày thực hiện.', 409);
-    if (!(await completeOrder(this.prisma, id, new Date(), 'VENDOR'))) return fail('ORDER_NOT_COMPLETABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 409);
+    const gate = completeGate(this.restOf(order), body?.restReceived);
+    if (typeof gate !== 'string') return fail(gate.code, gate.message, gate.status, gate.details);
+    if (!(await completeOrder(this.prisma, id, new Date(), 'VENDOR', { restReceived: gate === 'record' }))) return fail('ORDER_NOT_COMPLETABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 409);
     return this.dtoOf(id);
+  }
+
+  private restOf(order: OrderRow) {
+    return restPaymentOf({ status: order.status, total: Number(order.total_amount), deposit: Number(order.deposit_amount) }, order.timeline_tasks[0] ?? null);
+  }
+
+  /** Đơn của NCC cho API đợt 2: một truy vấn nhẹ, không quét hết hạn và không dựng lại cả đơn. */
+  private async restOrderOf(userId: string, id: string) {
+    const o = UUID.test(id)
+      ? await this.prisma.orders.findFirst({
+          where: { id, vendor_profiles: { user_id: userId } },
+          select: {
+            id: true,
+            order_code: true,
+            status: true,
+            event_date: true,
+            wedding_id: true,
+            total_amount: true,
+            deposit_amount: true,
+            vendor_profiles: { select: { business_name: true, category_id: true } },
+            weddings: { select: { user_id: true } },
+          },
+        })
+      : null;
+    return o ?? fail('ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.', 404);
+  }
+
+  /**
+   * NCC ghi nhận đã nhận đủ tiền mặt phần còn lại (đơn Deposited hoặc Completed). Chưa có việc PAY (đơn cũ) thì tạo.
+   * Trả NGAY { restPayment, taskId }; thông báo cho khách chạy sau response.
+   */
+  async recordRestPayment(userId: string, id: string) {
+    const order = await this.restOrderOf(userId, id);
+    if (order.status !== 'Deposited' && order.status !== 'Completed') return fail('REST_PAYMENT_NOT_AVAILABLE', 'Chỉ ghi nhận được cho đơn đã đặt cọc hoặc đã hoàn thành.', 409);
+    const vendorName = order.vendor_profiles?.business_name ?? 'Nhà cung cấp';
+    const changed = await applyRestReceived(
+      this.prisma as unknown as RestDb,
+      { id: order.id, wedding_id: order.wedding_id, category_id: order.vendor_profiles?.category_id ?? null, event_date: order.event_date!, vendorName },
+      new Date(),
+    );
+    const pay = await this.prisma.timeline_tasks.findFirst({ where: { order_id: order.id, task_code: payCode(order.id) }, select: { id: true, status: true, completed_date: true } });
+    const coupleId = order.weddings?.user_id;
+    if (changed && coupleId) {
+      runAfter('thông báo nhận tiền mặt', () => notifyRestReceived(this.prisma, { orderId: order.id, taskId: pay?.id, orderCode: order.order_code, coupleUserId: coupleId, vendorUserId: userId, vendorName, amount: Number(order.total_amount) - Number(order.deposit_amount) }), (m) => this.logger.warn(m));
+    }
+    return { restPayment: restPaymentOf({ status: order.status, total: Number(order.total_amount), deposit: Number(order.deposit_amount) }, pay), taskId: pay?.id ?? null };
+  }
+
+  /** "Bỏ ghi nhận": việc PAY về Waiting. Trả NGAY { restPayment, taskId }; realtime chạy sau response. */
+  async clearRestPayment(userId: string, id: string) {
+    const order = await this.restOrderOf(userId, id);
+    if (order.status !== 'Deposited' && order.status !== 'Completed') return fail('REST_PAYMENT_NOT_AVAILABLE', 'Chỉ bỏ ghi nhận được cho đơn đã đặt cọc hoặc đã hoàn thành.', 409);
+    await clearRestReceived(this.prisma as unknown as RestDb, order.id);
+    const pay = await this.prisma.timeline_tasks.findFirst({ where: { order_id: order.id, task_code: payCode(order.id) }, select: { id: true, status: true, completed_date: true } });
+    const coupleId = order.weddings?.user_id;
+    runAfter('realtime bỏ ghi nhận tiền mặt', async () => publish({ users: coupleId ? [coupleId, userId] : [userId], event: 'task', data: { orderId: order.id, taskId: pay?.id } }), (m) => this.logger.warn(m));
+    return { restPayment: restPaymentOf({ status: order.status, total: Number(order.total_amount), deposit: Number(order.deposit_amount) }, pay), taskId: pay?.id ?? null };
   }
 
   /** Xuất hóa đơn cuối (mỗi đơn một lần): Deposited hoặc Completed. Tạo Invoices FinalInvoice và gửi tin FinalInvoice (NCC gửi). */
@@ -766,6 +833,11 @@ export class OrdersService {
     const { order } = await this.ownedByVendor(userId, id);
     if (!['Deposited', 'Completed'].includes(order.status ?? '')) return fail('INVOICE_NOT_AVAILABLE', 'Chỉ xuất được hóa đơn cho đơn đã đặt cọc hoặc đã hoàn thành.', 409);
     if (order.invoices.some((i) => i.type === 'FinalInvoice')) return fail('INVOICE_EXISTS', 'Đơn đã xuất hóa đơn cuối.', 409);
+    // Hóa đơn cuối ghi "đã thanh toán tiền mặt": chỉ xuất khi NCC đã ghi nhận đã nhận phần còn lại
+    const rest = this.restOf(order);
+    const blocked = finalInvoiceGate(rest);
+    if (blocked) return fail(blocked.code, blocked.message, blocked.status, blocked.details);
+    const receivedOn = rest.receivedDate ? dmy(ymdVN(new Date(rest.receivedDate))) : '';
 
     const code = await this.nextCode('HD');
     await this.prisma.invoices.create({ data: { order_id: id, invoice_code: code, type: 'FinalInvoice' } });
@@ -778,7 +850,7 @@ export class OrdersService {
         senderId: userId,
         type: 'FinalInvoice',
         orderId: id,
-        content: `Hóa đơn ${code} cho đơn ${order.order_code}: tổng ${money(total)}, đã cọc ${money(deposit)}, đã thanh toán tiền mặt ${money(total - deposit)}.`,
+        content: `Hóa đơn ${code} cho đơn ${order.order_code}: tổng ${money(total)}, đã cọc ${money(deposit)}, đã thanh toán tiền mặt ${money(rest.amount)}${receivedOn ? ` ngày ${receivedOn}` : ''}.`,
       });
     }
     return this.dtoOf(id);

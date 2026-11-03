@@ -20,7 +20,7 @@ interface HallCalendarProps {
 }
 
 /**
- * Lịch của một sảnh trong khung chi tiết gói (Trung tâm tổ chức sự kiện, docs/LICH_BAN_SANH.md): hai trạng thái bận / còn trống theo ngày.
+ * Lịch của một sảnh trong khung chi tiết gói (Trung tâm tiệc cưới, docs/LICH_BAN_SANH.md): hai trạng thái bận / còn trống theo ngày.
  * Bận = sảnh đã có tiệc đặt cọc hoặc nhà cung cấp báo bận; không hiện khách hay đơn nào. Giúp khách chọn ngày hoặc đổi sảnh trước khi nhắn.
  * Mặc định thu gọn (chỉ tiêu đề và nhãn ngày cưới); bấm thì lịch trượt mở ra, lúc đó mới tải lịch tháng.
  */

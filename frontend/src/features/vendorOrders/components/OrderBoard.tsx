@@ -95,7 +95,7 @@ function OrderCardRow({ order, progress, hue }: { order: Order; progress?: Order
       </div>
       {open && (
         <div className="border-t border-line bg-surface-2/50 px-4 py-3 pl-5">
-          <OrderProgressPanel orderId={order.id} />
+          <OrderProgressPanel orderId={order.id} customerName={order.customerName} />
         </div>
       )}
     </li>

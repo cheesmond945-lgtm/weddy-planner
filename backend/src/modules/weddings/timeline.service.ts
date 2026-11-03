@@ -3,12 +3,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { categorySlug } from '../catalog/services.service';
 import { customerReadonlyIssue, dateStatusOf } from '../orders/order-task-rules';
 import { loadPackageMeta, ownersFrom, packagesOfOrder } from './package-task-meta';
-import { PAY_PREFIX, PKG_PREFIX } from './timeline-rows';
+import { isCustomOrderTaskCode, PAY_PREFIX, PKG_PREFIX } from './timeline-rows';
 import { planWeddingDateChange, todayVNDate, toYmd, vnYmd } from './timeline-hooks';
 import { dayOf, levelOf, planFrame } from './timeline-schedule';
 import { dueBounds, dueRangeIssue, sequenceIssue } from './timeline-rules';
 import { ownerOf } from './task-owner';
-import { SERVICE_BY_CATEGORY_NAME, SUGGEST_LABEL, TIMELINE_TEMPLATES, suggestOf, templateOf, type ServiceKey } from './timeline-templates';
+import { serviceKeyOf, SUGGEST_LABEL, TIMELINE_TEMPLATES, suggestOf, templateOf, type ServiceKey } from './timeline-templates';
 import { WeddingsService } from './weddings.service';
 import { dbFeatures, requireDbFeature } from '../../prisma/db-features';
 
@@ -74,7 +74,7 @@ export class TimelineService {
     const catById = new Map(cats.map((c) => [c.id, { id: c.id, slug: categorySlug(c.name), name: c.name ?? '' }]));
     const keyOfCat = (id: string | null) => {
       const name = cats.find((c) => c.id === id)?.name;
-      return name ? SERVICE_BY_CATEGORY_NAME[name] : undefined;
+      return serviceKeyOf(name);
     };
     const orderById = new Map(orders.map((o) => [o.id, o]));
     const cancelledOrderOf = (categoryId: string | null) => {
@@ -146,6 +146,10 @@ export class TimelineService {
         status: (t.status ?? 'Todo') as 'Todo' | 'Waiting' | 'Done',
         /** SERVICE_TASK: việc lấy từ gói của NCC ('PKG:<id>') */
         isPackageTask: !!t.task_code?.startsWith(PKG_PREFIX),
+        /** SERVICE_TASK: việc "Thanh toán phần còn lại" (PAY:); Done = NCC đã nhận đủ tiền mặt, completedDate là ngày nhận */
+        isRestPayment: !!t.task_code?.startsWith(PAY_PREFIX),
+        /** SERVICE_TASK: việc riêng NCC thêm cho đơn này ('ORD:'), khách thấy nhãn "NCC thêm" */
+        isCustomOrderTask: isCustomOrderTaskCode(t.task_code),
         ...dateStatusOf(t.task_confirmations?.confirmed_date, t.task_confirmations?.confirmed_at, { due: toYmd(t.scheduled_date), event: '', isPackageBefore: false }),
         /** SERVICE_TASK: ai làm việc này (CUSTOMER / VENDOR / BOTH); chỉ để hiển thị, khách không tick được việc gắn đơn */
         owner: kind === 'SERVICE_TASK' ? ownerOf(t.task_code, owners) : null,

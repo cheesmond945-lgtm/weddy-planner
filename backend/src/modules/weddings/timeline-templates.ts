@@ -8,6 +8,7 @@
  * Mã *_BOOK (Mốc chốt) giữ nguyên để khớp timeline-hooks và các timeline cũ.
  * Việc khung: 31 việc (đợt 1). Mã không còn trong mẫu (vd SELF_ENGAGEMENT của timeline cũ) vẫn nằm trong CSDL; templateOf trả undefined, các nơi dùng phải chịu được.
  */
+import { categoryKindOf } from '../catalog/category-kind.ts';
 
 /** Hạng mục theo slug (xem categorySlug trong catalog). Chụp ảnh và quay phim là một hạng mục "chup-anh". */
 export type ServiceKey = 'nha-hang' | 'chup-anh' | 'trang-phuc' | 'decor' | 'makeup' | 'hoa-cuoi';
@@ -77,16 +78,8 @@ const byCode = new Map(TIMELINE_TEMPLATES.map((t) => [t.code, t]));
 /** Mẫu theo task_code; undefined với việc khách tự thêm hoặc mã của timeline cũ. */
 export const templateOf = (code: string | null | undefined) => (code ? byCode.get(code) : undefined);
 
-/** Tên danh mục trong CSDL (service_categories.name) -> hạng mục của mẫu. Chụp ảnh và quay phim là một danh mục "Chụp ảnh". */
-export const SERVICE_BY_CATEGORY_NAME: Record<string, ServiceKey> = {
-  'Trung tâm tổ chức sự kiện': 'nha-hang',
-  'Chụp ảnh': 'chup-anh',
-  'Trang phục': 'trang-phuc',
-  'Trang trí': 'decor',
-  'Trang điểm': 'makeup',
-  Makeup: 'makeup',
-  'Hoa cưới': 'hoa-cuoi',
-};
+/** Hạng mục của mẫu theo tên danh mục trong CSDL (service_categories.name), nhận diện theo từ khóa: xem catalog/category-kind.ts. */
+export const serviceKeyOf = (categoryName: string | null | undefined): ServiceKey | undefined => categoryKindOf(categoryName);
 
 /** Nhãn nút Gợi ý theo dịch vụ: một chỗ dùng chung, backend trả kèm `suggest.label`. */
 export const SUGGEST_LABEL: Record<ServiceKey, string> = {

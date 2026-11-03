@@ -6,6 +6,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
 import { dbFeatures, detectDbFeatures, pendingSqlFiles } from './prisma/db-features';
 import { enableOrderAdjustments } from './modules/orders/order-mapping';
+import { requestTiming } from './common/middleware/request-timing';
 
 async function bootstrap() {
   // DB dùng chung chưa chạy SQL thủ công mới thì vẫn khởi động được: bỏ cột mới khỏi truy vấn, khóa tính năng mới
@@ -15,6 +16,8 @@ async function bootstrap() {
   if (pending.length) console.warn(`[DB] Chưa chạy SQL: ${pending.join(', ')}. Các tính năng cần file này trả 503 DB_MIGRATION_PENDING (docs/LICH_SU_THAY_DOI_DB.md).`);
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
+  // Dev: ghi thời gian xử lý từng API (ms) ra console
+  if (process.env.NODE_ENV !== 'production') app.use(requestTiming());
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(new TransformResponseInterceptor(app.get(Reflector)));
   app.enableCors({

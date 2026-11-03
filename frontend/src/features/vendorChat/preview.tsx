@@ -1,4 +1,5 @@
 import type { BadgeTone } from '@/components/Badge'
+import { effectiveSender } from '@/features/chat/messageSender'
 import { cn } from '@/lib/utils'
 import type { VendorConversation } from '@/types/vendorConversation'
 
@@ -46,13 +47,15 @@ export function conversationBadge(c: Pick<VendorConversation, 'latestOrder' | 'h
 /** Dòng tóm tắt tin cuối trong danh sách hội thoại. */
 export function lastMessagePreview(m: VendorConversation['lastMessage']) {
   if (!m) return ''
-  const mine = m.sender === 'VENDOR' ? 'Bạn: ' : ''
+  // Suy người gửi theo loại tin: hóa đơn cuối là của NCC ("Bạn: …"), giấy xác nhận cọc và tin hệ thống không có tiền tố
+  const mine = effectiveSender(m) === 'VENDOR' ? 'Bạn: ' : ''
   switch (m.type) {
     case 'Order':
       return `${mine}Đơn dịch vụ ${m.orderCode ?? ''}`
     case 'DepositReceipt':
-    case 'FinalInvoice':
       return m.content
+    case 'FinalInvoice':
+      return `${mine}${m.content}`
     default:
       return `${mine}${m.content}`
   }

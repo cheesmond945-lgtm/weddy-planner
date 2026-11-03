@@ -17,17 +17,17 @@ import { BusyCalendar } from '@/features/halls/components/BusyCalendar'
 import { useVendorHalls } from '@/features/halls/hooks'
 import { TaskBoard } from '@/features/vendorOrders/components/TaskBoard'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
-import { TaskDateDialog } from '@/features/vendorOrders/components/TaskDateDialog'
-import { useConfirmTaskDate, useOrderProgress, useOrders, useRescheduleTask, useSetOrderTask, useTaskBoard, useVendorCalendar } from '@/features/vendorOrders/hooks'
-import { HORIZONS, SOON_DAYS, boardSummary, customerOptions, inHorizon, matchesBoard, splitBoard, type BoardHorizon } from '@/features/vendorOrders/taskBoard'
+import { useOrderProgress, useOrders, useTaskBoard, useVendorCalendar } from '@/features/vendorOrders/hooks'
+import { HORIZONS, SOON_DAYS, boardSummary, columnOf, customerOptions, inHorizon, matchesBoard, splitBoard, type BoardColumn, type BoardHorizon } from '@/features/vendorOrders/taskBoard'
 import { daysBetween, formatDate, parseDate, toISODate, today } from '@/lib/date'
+import { TASK_LABELS } from '@/lib/taskLabels'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { CalendarItem, OrderTask } from '@/types/vendorOrder'
 
 type TaskItem = Extract<CalendarItem, { kind: 'TASK' }>
 type OrderItem = Extract<CalendarItem, { kind: 'ORDER' }>
-/** busy: Lịch bận theo sảnh, chỉ Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md) */
+/** busy: Lịch bận theo sảnh, chỉ Trung tâm tiệc cưới (docs/LICH_BAN_SANH.md) */
 type View = 'month' | 'board' | 'busy' | 'orders'
 
 const VIEW_KEY = 'weddy.vendor.calendar.view'
@@ -40,15 +40,18 @@ const loadView = (): View => {
     return 'month'
   }
 }
-/** Khoảng thời gian của Bảng việc, mặc định quá hạn + 14 ngày tới. */
-const loadHorizon = (): BoardHorizon => {
+/** Khoảng thời gian NCC đã chọn cho Bảng việc; null là chưa chọn (dùng mặc định theo số đơn, xem defaultHorizon). */
+const loadHorizon = (): BoardHorizon | null => {
   try {
     const h = localStorage.getItem(HORIZON_KEY)
-    return h === 'month' || h === 'all' ? h : 'soon'
+    return h === 'soon' || h === 'month' || h === 'all' ? h : null
   } catch {
-    return 'soon'
+    return null
   }
 }
+/** Ít đơn (≤ 5 đơn đang làm) thì xem Tất cả cho khỏi tưởng mất việc; nhiều đơn thì Quá hạn + 14 ngày tới. */
+const FEW_ORDERS = 5
+const defaultHorizon = (activeOrders: number): BoardHorizon => (activeOrders <= FEW_ORDERS ? 'all' : 'soon')
 const store = (key: string, v: string) => {
   try {
     localStorage.setItem(key, v)
@@ -64,30 +67,26 @@ const CHIP_LIMIT = 8
 
 const toneOf = (i: CalendarItem): CalendarTone => (i.kind === 'ORDER' ? 'event' : i.isDone ? 'done' : i.overdue ? 'overdue' : 'todo')
 
-/** Một việc trong lịch: tick được nếu là việc của NCC / hai bên; mỗi dòng gọi hook theo đơn của nó. */
+/** Một việc trong lịch: mọi thao tác (tick, chốt / đổi ngày, ghi nhận tiền mặt) cập nhật ngay, xem TaskRow. */
 function CalendarTaskRow({ item }: { item: TaskItem }) {
-  const set = useSetOrderTask(item.orderId)
-  const confirm = useConfirmTaskDate(item.orderId)
-  const reschedule = useRescheduleTask()
-  const [picking, setPicking] = useState(false)
-  const task: OrderTask = { id: item.id, title: item.title, dueDate: item.date, isDone: item.isDone, completedDate: null, owner: item.owner, status: item.status, canTick: item.canTick, overdue: item.overdue, isPackageTask: false, dateStatus: item.dateStatus, confirmedAt: null, needsRecheck: false }
-  return (
-    <>
-      <TaskRow
-        t={task}
-        busy={set.isPending || confirm.isPending}
-        onToggle={(t) => set.mutate({ taskId: t.id, isDone: !t.isDone })}
-        onConfirm={(t) => confirm.mutate(t.dateStatus === 'CONFIRMED' ? { taskId: t.id, unconfirm: true } : { taskId: t.id })}
-        onReschedule={() => setPicking(true)}
-      />
-      <TaskDateDialog
-        target={picking ? { title: item.title, dueDate: item.date, eventDate: item.eventDate } : null}
-        busy={reschedule.isPending}
-        onClose={() => setPicking(false)}
-        onPick={(date) => reschedule.mutate({ orderId: item.orderId, taskId: item.id, date }, { onSuccess: () => setPicking(false) })}
-      />
-    </>
-  )
+  const task: OrderTask = {
+    id: item.id,
+    title: item.title,
+    dueDate: item.date,
+    isDone: item.isDone,
+    completedDate: null,
+    owner: item.owner,
+    status: item.status,
+    canTick: item.canTick,
+    overdue: item.overdue,
+    isPackageTask: item.isPackageTask,
+    isCustomOrderTask: item.isCustomOrderTask,
+    isRestPayment: item.isRestPayment,
+    dateStatus: item.dateStatus,
+    confirmedAt: null,
+    needsRecheck: false,
+  }
+  return <TaskRow t={task} orderId={item.orderId} eventDate={item.eventDate} />
 }
 
 function CalendarOrderRow({ item }: { item: OrderItem }) {
@@ -115,7 +114,7 @@ function CalendarOrderRow({ item }: { item: OrderItem }) {
 export default function VendorCalendarPage() {
   const now = toISODate(today())
   const [view, setViewState] = useState<View>(loadView)
-  const [horizon, setHorizonState] = useState<BoardHorizon>(loadHorizon)
+  const [horizonChoice, setHorizonState] = useState<BoardHorizon | null>(loadHorizon)
   const [month, setMonth] = useState(monthOf(now))
   const [selected, setSelected] = useState<string | null>(now)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
@@ -132,7 +131,7 @@ export default function VendorCalendarPage() {
   const { data: progress } = useOrderProgress()
   const board = useTaskBoard()
   const { data: halls } = useVendorHalls()
-  // Tab Lịch bận chỉ có ở Trung tâm tổ chức sự kiện; đã nhớ tab này mà tài khoản không phải trung tâm thì về Lịch tháng
+  // Tab Lịch bận chỉ có ở Trung tâm tiệc cưới; đã nhớ tab này mà tài khoản không phải trung tâm thì về Lịch tháng
   const shown: View = view === 'busy' && !halls?.enabled ? 'month' : view
 
   const orders = useMemo(() => ordersPage?.data ?? [], [ordersPage])
@@ -155,7 +154,7 @@ export default function VendorCalendarPage() {
     })
 
   const items = useMemo(
-    () => (cal.data ?? []).filter((i) => (picked.size === 0 || picked.has(i.orderId)) && !(mineOnly && i.kind === 'TASK' && i.status === 'Waiting')),
+    () => (cal.data ?? []).filter((i) => (picked.size === 0 || picked.has(i.orderId)) && !(mineOnly && i.kind === 'TASK' && i.owner === 'CUSTOMER')),
     [cal.data, picked, mineOnly],
   )
   const events: CalendarEvent[] = useMemo(
@@ -176,14 +175,21 @@ export default function VendorCalendarPage() {
   const { active: liveTasks, finished } = useMemo(() => splitBoard(board.data ?? []), [board.data])
   const custOptions = useMemo(() => customerOptions(liveTasks), [liveTasks])
   // Khách đang chọn đã rời bảng (đơn vừa xong hết việc / bị hủy) thì về tất cả khách
+  const horizon = horizonChoice ?? defaultHorizon(custOptions.length)
   const boardOrder = custOptions.some((o) => o.orderId === boardCustomer) ? boardCustomer : ''
   const scoped = useMemo(
-    () => liveTasks.filter((t) => (!boardOrder || t.orderId === boardOrder) && !(mineOnly && t.status === 'Waiting') && matchesBoard(t, boardQ)),
+    () => liveTasks.filter((t) => (!boardOrder || t.orderId === boardOrder) && !(mineOnly && t.owner === 'CUSTOMER') && matchesBoard(t, boardQ)),
     [liveTasks, boardOrder, mineOnly, boardQ],
   )
   const boardTasks = useMemo(() => scoped.filter((t) => inHorizon(t, horizon, now)), [scoped, horizon, now])
   const summary = boardSummary(scoped, now)
   const outside = scoped.length - boardTasks.length
+  // Việc bị khoảng thời gian ẩn, đếm theo cột: cột trống mà còn việc hạn xa thì cột nói rõ và có nút "Xem tất cả"
+  const hiddenByColumn = useMemo(() => {
+    const out: Record<BoardColumn, number> = { customer: 0, todo: 0, done: 0 }
+    for (const t of scoped) if (!inHorizon(t, horizon, now)) out[columnOf(t)]++
+    return out
+  }, [scoped, horizon, now])
   const boardEmpty = !liveTasks.length
     ? finished.length
       ? 'Mọi đơn đã xong hết việc. Mở tab Lưu trữ để hoàn tất đơn.'
@@ -195,7 +201,8 @@ export default function VendorCalendarPage() {
       : 'Không có việc nào trong khoảng thời gian này. Chọn 30 ngày tới hoặc Tất cả để xem thêm.'
   const visibleChips = allChips ? active : active.filter((o, i) => i < CHIP_LIMIT || picked.has(o.id))
   const hiddenChips = active.length - visibleChips.length
-  const todoCount = (board.data ?? []).filter((t) => t.status !== 'Waiting' && !t.isDone).length
+  // "Việc của tôi" một nghĩa ở mọi nơi: ẩn việc có chủ là Khách (không lọc theo status); số đếm theo đúng bộ lọc đang chọn
+  const todoCount = (board.data ?? []).filter((t) => t.status !== 'Waiting' && !t.isDone && !(mineOnly && t.owner === 'CUSTOMER')).length
   const lateCount = items.filter((i) => i.kind === 'TASK' && i.overdue).length
   const soonCount = items.filter((i) => i.kind === 'TASK' && !i.isDone && !i.overdue && i.status !== 'Waiting' && daysBetween(today(), parseDate(i.date)) <= 2).length
   const totalLate = Object.values(progress ?? {}).reduce((n, p) => n + p.overdueVendor, 0)
@@ -272,8 +279,8 @@ export default function VendorCalendarPage() {
                     <b className="font-semibold text-ink">{summary.todo} việc cần làm</b>
                     {summary.late > 0 && <b className="font-semibold text-warn"> · {summary.late} quá hạn</b>}
                     {summary.soon > 0 && <span>{` · ${summary.soon} đến hạn trong ${SOON_DAYS} ngày`}</span>}
-                    {summary.confirm > 0 && <b className="font-semibold text-warn">{` · ${summary.confirm} cần chốt lịch`}</b>}
-                    {!mineOnly && summary.waiting > 0 && <span> · {summary.waiting} việc chờ khách</span>}
+                    {summary.confirm > 0 && <b className="font-semibold text-warn">{` · ${summary.confirm} ${TASK_LABELS.needsConfirmDate.toLowerCase()}`}</b>}
+                    {summary.waiting > 0 && <span> · {summary.waiting} việc chờ khách</span>}
                     {outside > 0 && (
                       <>
                         <span> · ẩn {outside} việc hạn xa hoặc xong đã lâu </span>
@@ -293,7 +300,7 @@ export default function VendorCalendarPage() {
                   </span>
                 </div>
                 {/* key: đổi bộ lọc thì mỗi cột quay về PAGE thẻ đầu */}
-                <TaskBoard key={`${horizon}|${boardOrder}|${boardQ}|${mineOnly}`} tasks={boardTasks} hueFor={hueFor} hideCustomer={mineOnly} emptyText={boardEmpty} />
+                <TaskBoard key={`${horizon}|${boardOrder}|${boardQ}|${mineOnly}`} tasks={boardTasks} hueFor={hueFor} hideCustomer={false} emptyText={boardEmpty} hidden={hiddenByColumn} onShowAll={() => setHorizon('all')} />
               </>
             )}
           </>

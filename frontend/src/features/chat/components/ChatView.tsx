@@ -1,4 +1,5 @@
 import { Filter, Receipt, Search, Send } from 'lucide-react'
+import { effectiveSender } from '../messageSender'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { Badge, type BadgeTone } from '@/components/Badge'
@@ -275,8 +276,16 @@ function ReceiptCard({ message, vendorName }: { message: Message; vendorName: st
   const { data: order } = useOrder(message.orderId ?? '')
   const [open, setOpen] = useState(false)
   const type = message.type === 'FinalInvoice' ? 'FinalInvoice' : 'DepositReceipt'
+  // Suy theo loại tin: giấy xác nhận cọc là tin hệ thống GIỮA khung ("Forever xác nhận"); hóa đơn cuối của NCC bên TRÁI kèm tên NCC
+  const system = effectiveSender(message) === 'SYSTEM'
   return (
-    <div className="w-[min(360px,100%)] self-start rounded-[22px] rounded-bl-[4px] border border-line bg-surface px-4 py-3 shadow-bubble">
+    <div
+      className={cn(
+        'w-[min(360px,100%)] border px-4 py-3',
+        system ? 'self-center rounded-[22px] border-sage/25 bg-sage-soft' : 'self-start rounded-[22px] rounded-bl-[4px] border-line bg-surface shadow-bubble',
+      )}
+    >
+      {system ? <p className="mb-1 text-[11px] font-semibold tracking-[0.06em] text-sage uppercase">Forever xác nhận</p> : <p className="mb-1 text-[12px] font-semibold text-muted-foreground">{vendorName}</p>}
       <div className="flex items-start gap-2.5 text-[13px] leading-relaxed">
         <Receipt className="mt-0.5 size-4 flex-none text-sage" aria-hidden />
         <span>{message.content}</span>

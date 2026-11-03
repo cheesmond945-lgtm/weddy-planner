@@ -1,5 +1,5 @@
 import type { Paginated } from '@/types/api'
-import type { BoardTask, CalendarItem, CancelReason, Order, OrderContent, OrderDaySlot, OrderListQuery, OrderProgress, OrderStatus, OrderTasks, TaskStatus } from '@/types/vendorOrder'
+import type { AddTaskResult, BoardTask, CalendarItem, CancelReason, Order, NewOrderTaskInput, OrderContent, OrderDaySlot, OrderListQuery, OrderProgress, OrderStatus, OrderTasks, RestResult, TaskItemResult, TaskOwner, TaskStatus } from '@/types/vendorOrder'
 import { http, requestRaw } from './client'
 
 /** Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp). */
@@ -27,20 +27,26 @@ export const vendorOrdersApi = {
   tasks: (orderId: string): Promise<OrderTasks> =>
     http.get(`/vendors/me/orders/${orderId}/tasks`),
 
-  /** NCC đánh dấu xong / mở lại việc của NCC (hoặc hai bên); khách nhận thông báo khi việc xong. */
-  setTaskDone: (orderId: string, taskId: string, isDone: boolean): Promise<OrderTasks> =>
-    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}`, { isDone }),
-
-  /** Đổi trạng thái một việc của đơn (Todo | Waiting | Done), cho mọi việc kể cả việc của khách */
-  setTaskStatus: (orderId: string, taskId: string, status: TaskStatus): Promise<OrderTasks> =>
+  /** Đổi trạng thái một việc của đơn (Todo | Waiting | Done), cho mọi việc kể cả việc của khách. Trả đúng việc đã cập nhật. */
+  setTaskStatus: (orderId: string, taskId: string, status: TaskStatus): Promise<TaskItemResult> =>
     http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}`, { status }),
 
-  /** "Chốt ngày này" (không gửi date) hoặc "Đổi ngày" (date: YYYY-MM-DD) */
-  confirmTaskDate: (orderId: string, taskId: string, date?: string): Promise<OrderTasks> =>
-    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}/schedule`, date ? { date } : {}),
+  /** Thêm việc RIÊNG cho đơn đã cọc (đã chốt ngày luôn); addToPackage thêm luôn vào quy trình của gói (chỉ áp cho đơn sau). */
+  addOrderTask: (orderId: string, body: NewOrderTaskInput): Promise<AddTaskResult> => http.post(`/vendors/me/orders/${orderId}/tasks`, body),
 
-  /** "Bỏ chốt": xóa xác nhận ngày, giữ nguyên ngày */
-  unconfirmTaskDate: (orderId: string, taskId: string): Promise<OrderTasks> =>
+  /** Sửa việc riêng của đơn: tên, ghi chú, người phụ trách. */
+  updateOrderTask: (orderId: string, taskId: string, body: { title?: string; note?: string | null; owner?: TaskOwner }): Promise<TaskItemResult> =>
+    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}`, body),
+
+  /** "Bỏ việc khỏi đơn": việc của gói hoặc việc riêng, chưa xong. Gói và các đơn khác giữ nguyên. */
+  removeOrderTask: (orderId: string, taskId: string): Promise<{ id: string }> => http.delete(`/vendors/me/orders/${orderId}/tasks/${taskId}`),
+
+  /** "Chốt ngày này" (không gửi date) hoặc "Đổi ngày" (date: YYYY-MM-DD, đổi và chốt luôn). Trả đúng việc đã cập nhật. */
+  confirmTaskDate: (orderId: string, taskId: string, date?: string, opts?: { undo?: boolean; confirmed?: boolean }): Promise<TaskItemResult> =>
+    http.patch(`/vendors/me/orders/${orderId}/tasks/${taskId}/schedule`, { ...(date && { date }), ...(opts?.undo && { undo: true }), ...(opts?.confirmed !== undefined && { confirmed: opts.confirmed }) }),
+
+  /** "Bỏ chốt": xóa xác nhận ngày, giữ nguyên ngày. Trả đúng việc đã cập nhật. */
+  unconfirmTaskDate: (orderId: string, taskId: string): Promise<TaskItemResult> =>
     http.delete(`/vendors/me/orders/${orderId}/tasks/${taskId}/schedule`),
 
   /** Giờ có mặt ngày cưới của đơn (docs/LICH_TRINH_NGAY_CUOI.md) */
@@ -97,8 +103,15 @@ export const vendorOrdersApi = {
   rejectCancelRequest: (orderId: string, note?: string): Promise<Order> => http.post(`/vendors/me/orders/${orderId}/cancel-requests/reject`, { note }),
 
   /** Hoàn tất đơn (chỉ khi đã qua ngày sự kiện). */
-  complete: (orderId: string): Promise<Order> =>
-    http.post(`/vendors/me/orders/${orderId}/complete`),
+  /** restReceived: true = đồng thời ghi nhận đã nhận đủ tiền mặt phần còn lại (chưa ghi nhận mà không gửi thì 409 REST_PAYMENT_NOT_RECORDED) */
+  complete: (orderId: string, restReceived?: boolean): Promise<Order> =>
+    http.post(`/vendors/me/orders/${orderId}/complete`, restReceived ? { restReceived: true } : {}),
+
+  /** Ghi nhận đã nhận đủ tiền mặt phần còn lại (đợt 2); khách nhận thông báo */
+  recordRestPayment: (orderId: string): Promise<RestResult> => http.post(`/vendors/me/orders/${orderId}/rest-payment`),
+
+  /** Bỏ ghi nhận đợt 2 */
+  clearRestPayment: (orderId: string): Promise<RestResult> => http.delete(`/vendors/me/orders/${orderId}/rest-payment`),
 
   /** Xuất hóa đơn (mỗi đơn một lần). */
   issueFinalInvoice: (orderId: string): Promise<Order> =>
