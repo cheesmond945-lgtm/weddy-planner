@@ -1,16 +1,16 @@
+import { displayMoney } from './budgetSplit.ts'
 import type { BudgetCostSource, BudgetSuggestionLabel, PlanPackageOption, PlanPackageRef } from '@/types/wedding'
 
 /*
  * Cách hiển thị số liệu ngân sách và gói (hàm thuần, có test ở budgetView.test.ts).
- * Không tính lại ngân sách ở FE: mọi số lấy từ backend (allocation.ts).
+ * Phần chia Tùy chỉnh tính ở budgetSplit.ts (cùng thuật toán với backend); còn lại lấy từ backend (allocation.ts).
  */
 
 const money = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`
 
-/** Nhãn của gói gợi ý: "Vượt phân bổ" (vẫn trong trần cứng) hoặc "Vượt X" (không gói nào vừa, vẫn gợi ý gói rẻ nhất) */
+/** Nhãn của gói gợi ý khi không gói nào vừa giới hạn (vẫn gợi ý gói rẻ nhất): "Vượt X", X làm tròn hiển thị 10.000đ */
 export function suggestionLabelText(label: BudgetSuggestionLabel | null) {
-  if (!label) return null
-  return label.code === 'OVER_ALLOCATION' ? 'Vượt phân bổ' : `Vượt ${money(label.amount)}`
+  return label ? `Vượt ${money(displayMoney(label.amount))}` : null
 }
 
 /** Ô tiền khách gõ: bỏ mọi ký tự không phải số. Trống là null. */

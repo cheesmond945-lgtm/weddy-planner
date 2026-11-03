@@ -1,21 +1,39 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-/** Thẻ số ở đầu các tab Ngân sách, Khách mời và Tổng quan (.stat trong prototype). */
-export function StatCard({ label, value, sub, tone, children }: { label: ReactNode; value: ReactNode; sub?: ReactNode; tone?: 'warn' | 'good'; children?: ReactNode }) {
+/**
+ * Thẻ số ở đầu các tab Ngân sách, Khách mời (và trang chia sẻ kế hoạch), theo ảnh tham khảo "aesthetics in the village":
+ * số nằm trong ô giấy kem như một tấm ảnh, nhãn là chú thích chữ serif màu kem bên dưới, trên dải nền ô liu (StatGrid).
+ * Kiểu ở plan-theme.css (.olive-*).
+ */
+export function StatCard({
+  label,
+  value,
+  sub,
+  tone,
+  children,
+}: {
+  label: ReactNode
+  value: ReactNode
+  sub?: ReactNode
+  tone?: 'warn' | 'good'
+  children?: ReactNode
+}) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface px-[18px] py-4">
-      <div className="text-[13px] text-muted-foreground">{label}</div>
-      <div className={cn('font-serif text-[24px] leading-tight font-semibold', tone === 'warn' && 'text-warn', tone === 'good' && 'text-sage')}>{value}</div>
-      {sub && <div className="text-[13px] text-muted-foreground">{sub}</div>}
-      {children}
+    <div className="olive-stat">
+      <div className="olive-tile">
+        <div className={cn('olive-value', tone === 'warn' && 'text-warn', tone === 'good' && 'text-sage')}>{value}</div>
+        {sub && <div className="text-[12.5px] text-muted-foreground">{sub}</div>}
+        {children}
+      </div>
+      <div className="olive-caption">{label}</div>
     </div>
   )
 }
 
-/** Lưới thẻ số: 4 cột, co lại trên màn hình hẹp. */
+/** Dải nền ô liu chứa các thẻ số: 4 cột, co lại trên màn hình hẹp. */
 export function StatGrid({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('mb-5 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3', className)}>{children}</div>
+  return <div className={cn('olive-band mb-5 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3', className)}>{children}</div>
 }
 
 /** Thanh ghép nhiều đoạn (Đã cọc / Chưa cọc / Còn lại...). Tổng các đoạn tối đa 100%. */

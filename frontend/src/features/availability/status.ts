@@ -74,6 +74,6 @@ const vnDate = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4
 export function availabilityRequestText(input: { vendorName: string; packageName: string; date: string | null; status: DayStatus | null; guestCount?: number | null }) {
   const when = input.date ? `ngày ${vnDate(input.date)} (${weekdayName(input.date).toLowerCase()})` : 'ngày tổ chức (mình chưa chốt ngày)'
   const guests = input.guestCount ? `, khoảng ${input.guestCount.toLocaleString('vi-VN')} khách` : ''
-  const shown = input.date && input.status ? ` Lịch trên WebPlan đang hiển thị: ${STATUS_VIEW[input.status].label}.` : ''
+  const shown = input.date && input.status ? ` Lịch trên Forever đang hiển thị: ${STATUS_VIEW[input.status].label}.` : ''
   return `Chào ${input.vendorName}, mình muốn đặt tiệc cưới gói "${input.packageName}" vào ${when}${guests}.${shown} Nhờ bạn xác nhận giúp mình gói này ngày đó còn nhận tiệc không ạ.`
 }

@@ -2,6 +2,7 @@ import type {
   AiSuggestionResult,
   Budget,
   BudgetSettings,
+  BudgetSplitBody,
   DateChangePreview,
   DaySchedule,
   GuestInput,
@@ -68,8 +69,10 @@ export const weddingsApi = {
 
   // Ngân sách và chi phí khác (7)
   getBudget: (): Promise<Budget> => (http.get('/weddings/me/budget')),
-  /** Mức chia, tỷ lệ Tùy chỉnh, tiệc tự lo (không có ô sửa số tiền theo hạng mục) */
+  /** Mức chia, tiệc tự lo; chọn CUSTOM lần đầu thì backend khởi tạo cấu hình Tùy chỉnh */
   updateBudgetSettings: (body: BudgetSettings & { version: string }): Promise<Budget> => http.patch('/weddings/me/budget/settings', body),
+  /** Tự lưu cấu hình Tùy chỉnh (toàn bộ); 422 không hợp lệ, 409 lệch phiên bản (details.budget). keepalive: gửi khi rời trang */
+  saveBudgetSplit: (body: BudgetSplitBody, keepalive = false): Promise<Budget> => http.put('/weddings/me/budget/split', body, { keepalive }),
   addExtraCost: (body: { name: string; amount: number; version: string }): Promise<Budget> =>
     http.post('/weddings/me/extra-costs', body),
   updateExtraCost: (id: string, body: { name?: string; amount?: number; version: string }): Promise<Budget> =>

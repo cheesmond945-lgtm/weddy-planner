@@ -88,3 +88,303 @@
     transform: scale(1);
   }
 }
+
+/*
+ * Đầu trang Kế hoạch (PlanHubHeader): ảnh phủ kín thẻ (assets/plan-hero.jpg 1200×500: váy kem bên trái, đôi tay đeo nhẫn ở giữa,
+ * vest đen và hoa cam bên phải). Khối chữ gọn (khoảng 1/3 bề ngang) màu kem đặt bên phải trên nền vest đen,
+ * phủ thêm lớp tối mờ dần từ mép phải để chữ nổi;
+ * "Lễ thành hôn" và tên viết tay Ballet (đủ dấu tiếng Việt), "&" serif nghiêng vàng, ngày cưới chữ serif in hoa.
+ */
+/*
+ * Ảnh xé mép (theo ảnh tham khảo): mép trên / dưới của ảnh cắt theo đường xé (clip-path --torn-photo), phía sau là dải giấy trắng
+ * xé nông hơn (--torn-paper) lộ ra thành viền trắng lởm chởm dày mỏng không đều; hai cạnh bên thẳng; bóng đổ nhẹ cho cả khối.
+ * Đường xé tính sẵn trong PlanHub.tsx (tornPolygon).
+ */
+.couple-paper {
+  position: relative;
+  padding-block: 10px;
+  filter: drop-shadow(0 6px 10px rgb(50 40 20 / 0.28));
+}
+.couple-paper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--paper-grain), #fbfaf6;
+  clip-path: var(--torn-paper);
+}
+/* Bóng mảnh của mép ảnh in lên dải giấy trắng */
+.couple-photo-shadow {
+  position: relative;
+  filter: drop-shadow(0 0 0.8px rgb(30 22 10 / 0.5));
+}
+/* Ảnh phim lấy liền (assets/plan-hero-film.jpg, 480×600 thu nhỏ sẵn từ ảnh gốc cho nét) dán đè trên phần váy bên trái: khung trắng
+   ngà, cạnh dưới dày ghi ngày cưới viết tay, hơi nghiêng, bóng đổ như ảnh đặt trên giấy; ẩn trên màn hẹp */
+.couple-pin {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: clamp(18px, 7%, 110px);
+  display: flex;
+  flex-direction: column;
+  height: 88%;
+  aspect-ratio: 0.72;
+  padding: 7px 7px 0;
+  background: var(--paper-grain), #fdfbf6;
+  transform: translateY(-50%) rotate(-4deg);
+  box-shadow:
+    0 1px 2px rgb(40 30 15 / 0.2),
+    0 10px 18px -6px rgb(40 30 15 / 0.45);
+}
+.couple-pin-photo {
+  flex: 1;
+  background-position: center 30%;
+  background-size: cover;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06);
+}
+.couple-pin-caption {
+  padding: 3px 4px 5px;
+  font-family: 'Ballet', 'Great Vibes', cursive;
+  font-size: 15px;
+  line-height: 1.2;
+  text-align: center;
+  color: #6b5a3e;
+}
+@media (max-width: 760px) {
+  .couple-pin {
+    display: none;
+  }
+}
+.couple-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  /* Dải thấp như các bản trước (khoảng 5:1 trên màn rộng) */
+  min-height: clamp(190px, 17vw, 245px);
+  overflow: hidden;
+  clip-path: var(--torn-photo);
+  text-align: center;
+  color: #fbf6e9;
+  background:
+    linear-gradient(270deg, rgb(18 16 12 / 0.72) 0%, rgb(18 16 12 / 0.5) 24%, rgb(18 16 12 / 0.1) 40%, transparent 48%),
+    var(--couple-photo) 40% 50% / cover no-repeat;
+}
+.couple-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: min(34%, 420px);
+  /* Lùi khỏi mép phải một chút cho cân với ảnh */
+  margin-right: clamp(8px, 4vw, 64px);
+  padding: 14px clamp(14px, 2.4vw, 26px) 14px;
+}
+@media (max-width: 760px) {
+  .couple-card {
+    background:
+      linear-gradient(180deg, rgb(18 16 12 / 0.45), rgb(18 16 12 / 0.7)),
+      var(--couple-photo) 45% 50% / cover no-repeat;
+  }
+  .couple-text {
+    width: 100%;
+    margin-right: 0;
+  }
+}
+.couple-eyebrow {
+  margin: 0;
+  font-family: 'Ballet', 'Great Vibes', cursive;
+  font-size: clamp(20px, 2vw, 26px);
+  line-height: 1.2;
+  color: #f2d48c;
+  text-shadow: 0 2px 10px rgb(0 0 0 / 0.5);
+}
+.couple-names {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  column-gap: 0.22em;
+  margin: 0;
+  font-family: 'Ballet', 'Great Vibes', cursive;
+  font-size: clamp(34px, 3.8vw, 52px);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0;
+  color: #fffaf0;
+  text-shadow:
+    0 2px 4px rgb(0 0 0 / 0.3),
+    0 4px 22px rgb(0 0 0 / 0.55);
+}
+.couple-amp {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 0.62em;
+  font-style: italic;
+  font-weight: 500;
+  color: #f2c75c;
+}
+.couple-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.couple-meta {
+  margin: 0;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #efe8d6;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+/*
+ * Đếm ngược kiểu thiệp: đặt ngay bên trái khối chữ trên nền tối của ảnh; "CÒN" / "NGÀY NỮA" chữ serif nhỏ in hoa giãn rộng,
+ * số ngày còn lại serif nét dày nghiêng màu trắng ngà, đường chỉ vàng mảnh dọc ngăn với khối tên. Màn hẹp: ẩn, số ngày ghi ở
+ * dòng ngày cưới (.couple-meta-left).
+ */
+.couple-calendar {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  right: calc(clamp(8px, 4vw, 64px) + min(34%, 420px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px clamp(14px, 1.8vw, 26px);
+  border-right: 1px solid rgb(232 205 140 / 0.55);
+  transform: translateY(-50%);
+}
+.couple-calendar-head,
+.couple-calendar-foot {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #ead8a8;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 0.5);
+}
+.couple-calendar-num {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(60px, 6vw, 88px);
+  font-style: italic;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+  color: rgb(255 253 247 / 0.94);
+  text-shadow:
+    0 2px 4px rgb(0 0 0 / 0.25),
+    0 4px 22px rgb(0 0 0 / 0.5);
+}
+.couple-meta-left {
+  display: none;
+}
+@media (max-width: 760px) {
+  .couple-calendar {
+    display: none;
+  }
+  .couple-meta-left {
+    display: inline;
+  }
+}
+/* Nút viền trên ảnh tối: kính mờ sáng, chữ kem */
+.couple-card .couple-ghost {
+  border-color: rgb(255 255 255 / 0.5);
+  background: rgb(255 255 255 / 0.12);
+  color: #fbf6e9;
+  backdrop-filter: blur(6px);
+}
+.couple-card .couple-ghost:hover {
+  background: rgb(255 255 255 / 0.24);
+}
+
+/*
+ * Thẻ số (StatGrid / StatCard và dải số tiền trong khung Mức chia), theo ảnh tham khảo "aesthetics in the village":
+ * dải nền ô liu, mỗi số trong một ô giấy kem như tấm ảnh, nhãn là chú thích chữ serif màu kem bên dưới.
+ * Ô giấy luôn sáng nên tự đặt lại bộ màu chữ tối (đọc rõ cả ở chế độ tối).
+ */
+.olive-band {
+  padding: 18px;
+  border-radius: 22px;
+  background-color: #8a8e56;
+  background-image: var(--paper-grain);
+  box-shadow: 0 16px 34px -26px rgb(50 55 20 / 0.7);
+}
+.olive-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.olive-tile {
+  --ink: #2b2620;
+  --muted: #6b6352;
+  --warn: #b0502c;
+  --sage: #4c7a5c;
+  --line: #e4dcc6;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 18px 14px;
+  border-radius: 6px;
+  text-align: center;
+  color: var(--ink);
+  background: #fbf8ee;
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.8) inset,
+    0 8px 18px -10px rgb(30 35 10 / 0.55);
+}
+.olive-value {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.olive-value--sm {
+  font-size: 21px;
+}
+.olive-caption {
+  text-align: center;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 14px;
+  line-height: 1.35;
+  color: #fbf6e6;
+}
+.olive-caption button {
+  color: inherit;
+}
+
+/* Tổng quan: thẻ số bấm được (Ngân sách, Khách mời) nhấc nhẹ khi rê chuột; thanh tiến độ mảnh màu ô liu */
+.olive-link {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+}
+.olive-link .olive-tile {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.olive-link:hover .olive-tile {
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.8) inset,
+    0 14px 24px -12px rgb(30 35 10 / 0.6);
+}
+.overview-bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, #8a8e56 18%, transparent);
+}
+.overview-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #6f7444;
+}

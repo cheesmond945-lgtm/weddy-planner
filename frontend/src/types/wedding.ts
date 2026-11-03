@@ -280,30 +280,41 @@ export interface BudgetVendor {
 
 export type BudgetCostSource = 'PLANNED' | 'ORDER' | 'DEPOSITED'
 
-/** Nhãn của gói gợi ý: vượt phần chia (vẫn trong trần cứng) hoặc vượt X đồng */
-export type BudgetSuggestionLabel = { code: 'OVER_ALLOCATION' } | { code: 'OVER_BY'; amount: number }
+/** Nhãn của gói gợi ý: không có gói trong giới hạn, gợi ý gói rẻ nhất, vượt X đồng */
+export type BudgetSuggestionLabel = { code: 'OVER_BY'; amount: number }
+
+/** Gói hợp lệ của hạng mục trong nhóm chia (client chọn gói gợi ý ngay khi tỷ lệ đổi, cùng hàm pickPackage với backend) */
+export interface BudgetCandidatePackage {
+  id: string
+  cost: number
+  place: number
+  rating: number | null
+  reviewCount: number
+  overlap: number
+  vendorId: string
+  vendorName: string
+  name: string
+  chargedTables: number | null
+  unit: 'TABLE' | 'PACKAGE' | null
+}
 
 export interface BudgetCategory {
   categoryId: string
   slug: string
   name: string
   kind: 'VENUE' | 'SERVICE'
-  /** CHOSEN đã chọn; SUGGESTED có gói gợi ý; NO_VENDOR chưa có NCC; OWN_VENUE tự lo tiệc */
-  status: 'CHOSEN' | 'SUGGESTED' | 'NO_VENDOR' | 'OWN_VENUE'
+  /** CHOSEN đã chọn; SUGGESTED trong nhóm chia / tiệc đề xuất; NO_VENDOR chưa có gói hợp lệ; OWN_VENUE tự lo tiệc; EXCLUDED bỏ khỏi phần chia */
+  status: 'CHOSEN' | 'SUGGESTED' | 'NO_VENDOR' | 'OWN_VENUE' | 'EXCLUDED'
   /** Chi phí đang tính: đã chọn, tự lo, hoặc gói gợi ý */
   cost: number
-  /** Trọng số (%) dùng khi duyệt thuật toán (dịch vụ chưa chọn); không hiển thị */
-  weight: number | null
-  /** Tỷ lệ (%) của hạng mục trong mức chia hiện tại; null với tiệc */
-  share: number | null
-  /** Giới hạn riêng của hạng mục ("Gợi ý: X"); null với tiệc (dùng limit = Mục tiêu) */
-  shareLimit: number | null
-  allocation: number | null
-  cap: number | null
-  /** "Gợi ý: X" (giá trị dẫn xuất, không sửa tay) */
+  /** Tỷ lệ trong nhóm chia (số nguyên theo 0,01%, tổng 10000); null nếu ngoài nhóm */
+  ratio: number | null
+  /** Ngân sách hạng mục (đồng, chính xác): tiền phân bổ / giới hạn gợi ý / giới hạn gói tiệc */
   limit: number | null
   minPrice: number | null
   medianPrice: number | null
+  /** Giá gói đắt nhất trong các gói hợp lệ */
+  maxPackagePrice: number | null
   message: string | null
   suggestion: {
     packageId: string
@@ -315,7 +326,50 @@ export interface BudgetCategory {
     unit: 'TABLE' | 'PACKAGE' | null
     label: BudgetSuggestionLabel | null
   } | null
+  /** Gói hợp lệ (chỉ hạng mục trong nhóm chia) */
+  packages: BudgetCandidatePackage[]
   vendors: BudgetVendor[]
+}
+
+/** Quỹ dịch vụ (mục 3): chi tiết sau ⓘ và dòng Tiệc chỉ đọc */
+export interface BudgetFund {
+  totalBudget: number
+  selectedCost: number
+  /** Phần của tiệc đã chọn trong selectedCost */
+  venueSelectedCost: number
+  lostDeposit: number
+  selfVenueCost: number
+  externalCost: number
+  remaining: number
+  venue: { status: 'CHOSEN' | 'OWN' | 'SUGGESTED' | 'NO_PACKAGE' | 'NONE'; amount: number | null; overBy: number | null }
+  /** Quỹ trước khi chặn ở 0 (có thể âm) */
+  serviceBudgetRaw: number
+  serviceBudget: number
+}
+
+export type BaseMode = Exclude<BudgetPreset, 'CUSTOM'>
+
+/** Cấu hình Tùy chỉnh đã lưu (tỷ lệ số nguyên theo 0,01%) */
+export interface BudgetSplitConfig {
+  version: number
+  baseMode: BaseMode
+  excluded: string[]
+  capAmount: number | null
+  items: { categoryId: string; ratio: number; locked: boolean }[]
+}
+
+/** Body PUT budget/split */
+export type BudgetSplitBody = BudgetSplitConfig
+
+export interface BudgetSplitInfo {
+  mode: BudgetPreset
+  baseMode: BaseMode
+  /** Cấu hình Tùy chỉnh đang dùng (đã áp nhóm hiện tại); null khi dùng phương án có sẵn */
+  config: BudgetSplitConfig | null
+  /** Dịch vụ chưa chọn có gói hợp lệ (gồm cả hạng mục đã bỏ khỏi phần chia) */
+  eligible: { categoryId: string; slug: string; median: number }[]
+  /** Hạng mục tự mở khóa khi nhóm đổi */
+  notices: string[]
 }
 
 export interface ExtraCost {
@@ -336,14 +390,12 @@ export interface Budget {
   version: string
   preset: BudgetPreset
   presetLabel: string
-  /** Tỷ lệ % của các dịch vụ chưa cọc (đã chọn hoặc chưa), khởi tạo thanh kéo Tùy chỉnh, tổng 100 */
-  presetWeights: Record<string, number>
-  /** Tiền chia cho các dịch vụ chưa cọc: số tiền ở thanh kéo = sliderPool × % */
-  sliderPool: number
   ownVenue: boolean
   ownVenueCost: number | null
   guestCount: number
   tables: { count: number; auto: number; override: number | null }
+  fund: BudgetFund
+  split: BudgetSplitInfo
   categories: BudgetCategory[]
   totals: {
     total: number
@@ -362,7 +414,7 @@ export interface Budget {
     remaining: number
     /** Tổng chi phí các gói gợi ý cho hạng mục chưa chọn */
     suggestedTotal: number
-    /** Còn dư sau khi trừ cả gói gợi ý */
+    /** "Còn dư" của phần chia (nhóm rỗng, hoặc chênh lệch với giá trần) */
     leftover: number
   }
   status: 'OK' | 'OVER_BUDGET'
@@ -370,14 +422,12 @@ export interface Budget {
   overBudget: { level: 'soft' | 'strong'; amount: number; message: string } | null
   /** Kiểm tra khả thi (chỉ cảnh báo) */
   feasibility: { ok: boolean; minNeed: number; shortfall: number; message: string | null; options: string[] }
-  leftoverMessage: string | null
   extraCosts: ExtraCost[]
   warnings: BudgetWarning[]
 }
 
 export interface BudgetSettings {
   budgetPreset?: BudgetPreset
-  customWeights?: Record<string, number>
   ownVenue?: boolean
   ownVenueCost?: number | null
 }

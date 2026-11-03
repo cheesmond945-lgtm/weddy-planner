@@ -1,5 +1,5 @@
-import { AlertTriangle, Download, FileSpreadsheet, Info, Lock, Pencil, SlidersHorizontal, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { AlertTriangle, Download, FileSpreadsheet, Info, Pencil, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { EmptyState } from '@/components/EmptyState'
@@ -10,18 +10,24 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { weddingsApi } from '@/api/weddings'
-import { costSourceText, suggestionLabelText } from '@/features/weddings/budgetView'
+import { costSourceText } from '@/features/weddings/budgetView'
 import { BudgetPackagePicker } from '@/features/weddings/components/BudgetPackagePicker'
-import { BudgetPresetPicker } from '@/features/weddings/components/BudgetPresetPicker'
+import { BudgetSplitPanel } from '@/features/weddings/components/BudgetSplitPanel'
 import { StatCard, StatGrid } from '@/features/weddings/components/StatCard'
+import { BudgetSuggestionPicker, ChooseAllSuggestions, type ShownSuggestion } from '@/features/weddings/components/BudgetSuggestionPicker'
 import { useBudget, useBudgetMutations, usePatchWedding, usePlan } from '@/features/weddings/hooks'
 import { ImportDialog } from '@/features/weddings/import/ImportDialog'
-import { amountFromPercent, percentFromAmount, percentText, PRESET_LABEL, rebalanceWeights } from '@/features/weddings/presets'
+import { displayMoney } from '@/features/weddings/budgetSplit'
+import { fundChangeReason, fundSnapshot, presetsLocked, splitView, type SplitView } from '@/features/weddings/budgetSplitView'
+import { useBudgetSplit } from '@/features/weddings/useBudgetSplit'
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { Budget, BudgetCategory, PlanItem } from '@/types/wedding'
+
+/** Tiền phân bổ hiển thị làm tròn 10.000đ (backend giữ số chính xác) */
+const money = (x: number) => formatMoney(displayMoney(x))
 
 /** Popup sửa nhanh tổng ngân sách (cùng trường với "Chỉnh sửa thông tin"), kèm Hoàn tác. */
 function TotalBudgetDialog({ total, open, onOpenChange }: { total: number; open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -86,219 +92,6 @@ function TotalBudgetDialog({ total, open, onOpenChange }: { total: number; open:
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-/**
- * Mức chia và tiệc tự lo. Mức chia chỉ chia phần còn lại cho các dịch vụ chưa chọn; hạng mục đã chọn giữ nguyên giá.
- * "Tùy chỉnh": thanh kéo tỷ lệ cho các dịch vụ chưa cọc (đã chọn hoặc chưa), tổng luôn 100%; dịch vụ đã cọc hiện khóa.
- * Với dịch vụ đã chọn, số đặt ở đây là "Giới hạn gợi ý" của hạng mục; gói đã chọn giữ nguyên.
- */
-function AllocationSettings({ b, openSignal }: { b: Budget; openSignal: number }) {
-  const { settings } = useBudgetMutations()
-  const [custom, setCustom] = useState<Record<string, number> | null>(null)
-  const panelRef = useRef<HTMLDivElement>(null)
-  const [cost, setCost] = useState<number | null>(null)
-  // Dịch vụ chưa cọc, đã chọn hoặc chưa (presetWeights chỉ gồm các hạng mục này, tổng 100)
-  const services = b.categories.filter((c) => c.kind === 'SERVICE' && c.slug in b.presetWeights)
-  const allChosen = !b.categories.some((c) => c.kind === 'SERVICE' && c.status === 'SUGGESTED')
-  // Dịch vụ đã cọc: hiện trong bảng thanh kéo nhưng khóa (giá đã chốt theo đơn, không chia lại)
-  const deposited = b.categories.filter((c) => c.kind === 'SERVICE' && c.vendors.some((v) => v.costSource === 'DEPOSITED'))
-  const openKey = services.map((c) => c.slug).join(',')
-  const hasVenue = b.categories.some((c) => c.kind === 'VENUE')
-  // Khách chọn / bỏ một hạng mục: đóng bảng thanh kéo đang mở, mở lại sẽ lấy danh sách mới (đã chuẩn hóa 100%)
-  useEffect(() => setCustom(null), [openKey])
-  // Bấm "Chỉnh tỷ lệ / số tiền" ở bảng: mở bảng thanh kéo và cuộn tới
-  useEffect(() => {
-    if (!openSignal) return
-    setCustom({ ...b.presetWeights })
-    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
-  }, [openSignal])
-
-  return (
-    <section className="mb-5 flex flex-col gap-4 rounded-lg border border-line bg-surface px-[22px] py-5">
-      {services.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Tất cả dịch vụ đã cọc, không còn gì để chia.</p>
-      ) : (
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <BudgetPresetPicker
-              value={b.preset}
-              disabled={settings.isPending}
-              hint={false}
-              onChange={(budgetPreset) => {
-                setCustom(null)
-                settings.mutate(
-                  { budgetPreset },
-                  {
-                    onSuccess: () => toast(`Đã chuyển sang mức chia ${PRESET_LABEL[budgetPreset]}`),
-                  },
-                )
-              }}
-            />
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              {allChosen ? 'Tất cả hạng mục đã được chọn. ' : ''}Mức chia đặt giới hạn gợi ý cho từng dịch vụ chưa cọc; gói đã chọn giữ nguyên giá, dịch vụ đã cọc bị khóa.
-            </p>
-          </div>
-          {services.length > 0 && (
-            <Button variant={b.preset === 'CUSTOM' ? 'default' : 'outline'} size="sm" onClick={() => setCustom(custom ? null : { ...b.presetWeights })}>
-              <SlidersHorizontal />
-              Tùy chỉnh{b.preset === 'CUSTOM' ? ' (đang dùng)' : ''}
-            </Button>
-          )}
-        </div>
-      )}
-
-      {custom && services.length > 0 && (
-        <div ref={panelRef} className="flex flex-col gap-3 rounded-md border border-line bg-surface-2 p-4">
-          <p className="text-[13px] text-muted-foreground">
-            {services.length > 1
-              ? `Kéo thanh, gõ % hoặc gõ số tiền; các hạng mục khác tự co giãn để tổng bằng ${formatMoney(b.sliderPool)} (tổng ngân sách trừ tiệc, các khoản đã cọc và chi phí khác).`
-              : `Chỉ còn 1 dịch vụ chưa cọc. Đặt số tiền (hoặc %) cho dịch vụ này trên ${formatMoney(b.sliderPool)}; phần không đặt sẽ không giao cho hạng mục nào.`}
-          </p>
-          {services.map((c) => (
-            <WeightRow
-              key={c.slug}
-              name={c.name}
-              percent={custom[c.slug] ?? 0}
-              pool={b.sliderPool}
-              // Một hạng mục duy nhất: đặt số tiền tuyệt đối (không co giãn), phần còn lại không giao
-              onPercent={(p) => setCustom(services.length > 1 ? rebalanceWeights(custom, c.slug, p) : { [c.slug]: Math.min(100, Math.max(0, p)) })}
-            />
-          ))}
-          {deposited.map((c) => (
-            <WeightRow key={c.slug} name={c.name} percent={0} pool={b.sliderPool} lockedAmount={c.cost} />
-          ))}
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setCustom(null)}>
-              Hủy
-            </Button>
-            <Button
-              size="sm"
-              disabled={settings.isPending || !Object.values(custom).some((v) => v > 0)}
-              onClick={() =>
-                settings.mutate(
-                  { budgetPreset: 'CUSTOM', customWeights: custom },
-                  {
-                    onSuccess: () => (setCustom(null), toast('Đã lưu tỷ lệ Tùy chỉnh')),
-                  },
-                )
-              }
-            >
-              Lưu tỷ lệ
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {hasVenue && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3.5 text-sm">
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={b.ownVenue}
-              disabled={settings.isPending}
-              onChange={(e) => settings.mutate({ ownVenue: e.target.checked })}
-              className="size-4 accent-[var(--gold-700)]"
-            />
-            Tự lo tiệc ngoài nền tảng
-          </label>
-          {b.ownVenue && (
-            <label className="inline-flex items-center gap-2 text-muted-foreground">
-              Chi phí tự lo (không bắt buộc)
-              <MoneyInput
-                aria-label="Chi phí tiệc tự lo"
-                value={cost ?? b.ownVenueCost ?? 0}
-                onChange={setCost}
-                onBlur={() => {
-                  if (cost !== null && cost !== (b.ownVenueCost ?? 0)) settings.mutate({ ownVenueCost: cost || null })
-                  setCost(null)
-                }}
-                className="w-[160px] px-2.5 py-1.5 text-right text-sm text-ink"
-              />
-            </label>
-          )}
-        </div>
-      )}
-    </section>
-  )
-}
-
-/**
- * Một dòng của bảng Tùy chỉnh: thanh kéo % và ô số tiền (= tiền đang chia × %). Gõ số tiền rồi Enter / rời ô thì đổi ra %,
- * cập nhật thanh kéo; các hạng mục khác co giãn để tổng vẫn 100%. `lockedAmount`: hạng mục đã cọc, khóa cả hai.
- */
-function WeightRow({
-  name,
-  percent,
-  pool,
-  onPercent,
-  lockedAmount,
-}: {
-  name: string
-  percent: number
-  pool: number
-  onPercent?: (p: number) => void
-  lockedAmount?: number
-}) {
-  const [draft, setDraft] = useState<number | null>(null)
-  const [pctDraft, setPctDraft] = useState<string | null>(null)
-  const locked = lockedAmount !== undefined
-  const readOnly = locked || !onPercent
-  const commit = () => {
-    if (draft !== null && onPercent) onPercent(percentFromAmount(draft, pool))
-    setDraft(null)
-  }
-  const commitPct = () => {
-    const n = Number((pctDraft ?? '').replace(',', '.'))
-    if (pctDraft !== null && pctDraft.trim() && Number.isFinite(n) && onPercent) onPercent(Math.min(100, Math.max(0, n)))
-    setPctDraft(null)
-  }
-  const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && (e.preventDefault(), e.currentTarget.blur())
-  return (
-    <div className="grid grid-cols-[150px_1fr_84px_150px] items-center gap-3 text-sm max-[700px]:grid-cols-[1fr_84px_130px]">
-      <span className={cn('inline-flex items-center gap-1.5 max-[700px]:col-span-3', locked && 'text-muted-foreground')}>
-        {locked && <Lock className="size-3.5" aria-hidden />}
-        {name}
-      </span>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={0.1}
-        value={percent}
-        disabled={readOnly}
-        onChange={(e) => onPercent?.(Number(e.target.value))}
-        aria-label={`Tỷ lệ ${name}`}
-        className="accent-[var(--gold-700)] disabled:cursor-not-allowed disabled:opacity-50"
-      />
-      {locked ? (
-        <span className="text-right text-muted-foreground">Đã cọc</span>
-      ) : (
-        <label className="flex items-center gap-1 rounded-sm border border-input bg-surface px-2 py-1.5 focus-within:border-ring">
-          <input
-            inputMode="decimal"
-            aria-label={`Tỷ lệ % ${name}`}
-            value={pctDraft ?? percentText(percent).replace('%', '')}
-            disabled={readOnly}
-            onChange={(e) => setPctDraft(e.target.value.replace(/[^d.,]/g, ''))}
-            onBlur={commitPct}
-            onKeyDown={blurOnEnter}
-            className="w-full min-w-0 border-0 bg-transparent text-right text-sm outline-none disabled:text-muted-foreground"
-          />
-          <span className="text-muted-foreground">%</span>
-        </label>
-      )}
-      <MoneyInput
-        aria-label={`Số tiền ${name}`}
-        value={locked ? lockedAmount : (draft ?? amountFromPercent(percent, pool))}
-        disabled={readOnly}
-        onChange={setDraft}
-        onBlur={commit}
-        onKeyDown={blurOnEnter}
-        className="px-2.5 py-1.5 text-right text-sm disabled:opacity-60"
-      />
-    </div>
   )
 }
 
@@ -378,56 +171,66 @@ function ExtraCostRow({ e }: { e: Budget['extraCosts'][number] }) {
 }
 
 /**
- * Cột "Gợi ý" (giá trị dẫn xuất, không sửa tay). Hạng mục chưa chọn: giới hạn riêng của hạng mục (dịch vụ) hoặc Mục tiêu (tiệc),
- * kèm tỷ lệ trong mức chia; gói gợi ý vượt giới hạn thì có nhãn. Hạng mục đã chọn: "Đã chọn", kèm giới hạn và nhãn vượt nếu có.
+ * Cột "Gợi ý" (giá trị dẫn xuất, không sửa tay; tính lại ngay khi kéo thanh): chỉ số tiền, không chữ giải thích.
+ * Hạng mục trong nhóm chia: tiền tiêu được (phân bổ lớn hơn gói đắt nhất thì là giá gói đắt nhất). Đã chọn / có đơn chưa cọc:
+ * giới hạn gợi ý (tỷ lệ ảo). Đã cọc, đã bỏ khỏi phần chia: "—". Vượt thì có nhãn "Vượt Y".
  */
-function SuggestCell({ c, onEditWeights }: { c: BudgetCategory; onEditWeights: () => void }) {
-  const limit = c.shareLimit ?? c.limit
-  const shareLine = c.share !== null && <span className="text-[12px] text-muted-foreground">Tỷ lệ {c.share.toLocaleString('vi-VN')}%</span>
-  if (c.status === 'CHOSEN') {
-    const over = c.shareLimit !== null && c.cost > c.shareLimit ? c.cost - c.shareLimit : 0
-    return (
-      <div className="flex flex-col gap-0.5">
-        <span className="text-[12px] text-muted-foreground">Đã chọn</span>
-        {c.shareLimit !== null && <span className="text-[12px] text-muted-foreground">Giới hạn gợi ý: {formatMoney(c.shareLimit)}</span>}
-        {over > 0 && (
-          <span className="self-start">
-            <Badge tone="warn">Vượt {formatMoney(over)}</Badge>
-          </span>
-        )}
-        {c.shareLimit !== null && (
-          <button type="button" onClick={onEditWeights} className="self-start text-[12px] font-medium text-gold-700 underline underline-offset-[3px]">
-            Chỉnh tỷ lệ / số tiền
-          </button>
-        )}
-      </div>
-    )
+function SuggestCell({ c, view }: { c: BudgetCategory; view: SplitView }) {
+  const r = view.rows.find((x) => x.item.id === c.categoryId)
+  let amount: number | null = null
+  let over = 0
+  if (r) {
+    amount = r.warn && c.maxPackagePrice !== null ? c.maxPackagePrice : r.amount
+    over = r.suggestion?.over ?? 0
+  } else if (c.status === 'CHOSEN' && !view.excluded.some((x) => x.categoryId === c.categoryId)) {
+    const limit = view.limits[c.categoryId]
+    if (limit !== undefined) {
+      amount = limit
+      over = Math.max(0, c.cost - limit)
+    }
+  } else if (c.kind === 'VENUE' && c.status === 'SUGGESTED' && c.limit !== null) {
+    amount = c.limit
   }
-  if (c.status !== 'SUGGESTED' || limit === null) return <span className="text-muted-foreground">—</span>
-  // Gói gợi ý lớn hơn số hiển thị: luôn có nhãn (nhãn của thuật toán nếu có, không thì "Vượt X")
-  const cost = c.suggestion?.cost ?? 0
-  const label = c.suggestion && cost > limit ? (suggestionLabelText(c.suggestion.label) ?? `Vượt ${formatMoney(cost - limit)}`) : null
+  if (amount === null) return <span className="text-muted-foreground">—</span>
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-medium tabular-nums">Gợi ý: {formatMoney(limit)}</span>
-      {shareLine}
-      {c.kind === 'VENUE' && <span className="text-[12px] text-muted-foreground">Mục tiêu cho tiệc</span>}
-      {c.kind === 'SERVICE' && (
-        <button type="button" onClick={onEditWeights} className="self-start text-[12px] font-medium text-gold-700 underline underline-offset-[3px]">
-          Chỉnh tỷ lệ / số tiền
-        </button>
-      )}
-      {label && (
+      <span className="font-medium tabular-nums">{money(amount)}</span>
+      {over > 0 && (
         <span className="self-start">
-          <Badge tone="warn">{label}</Badge>
+          <Badge tone="warn">Vượt {money(over)}</Badge>
         </span>
       )}
     </div>
   )
 }
 
-/** Cột "Dịch vụ / gói": đã chọn thì tên + trạng thái + ô chọn gói; chưa chọn thì gói gợi ý (kèm nhãn vượt) */
-function ServiceCell({ c, b, items }: { c: BudgetCategory; b: Budget; items: PlanItem[] }) {
+/** Gói gợi ý của hạng mục chưa chọn: trong nhóm chia lấy theo bảng chia ở client, tiệc lấy theo backend */
+function suggestionOf(c: BudgetCategory, view: SplitView): ShownSuggestion | null {
+  const r = view.rows.find((x) => x.item.id === c.categoryId)
+  if (r)
+    return (
+      r.suggestion && {
+        packageId: r.suggestion.pkg.id,
+        vendorId: r.suggestion.pkg.vendorId,
+        vendorName: r.suggestion.pkg.vendorName,
+        packageName: r.suggestion.pkg.name,
+        chargedTables: r.suggestion.pkg.chargedTables,
+        cost: r.suggestion.pkg.cost,
+      }
+    )
+  return c.kind === 'VENUE' && c.status === 'SUGGESTED' ? c.suggestion : null
+}
+
+/** Gợi ý của mọi hạng mục chưa có dịch vụ (không tính hạng mục tự lo): dùng cho "Chọn tất cả gợi ý" */
+function suggestionsToChoose(b: Budget, view: SplitView) {
+  return b.categories.flatMap((c) => {
+    if (c.vendors.length || c.status === 'OWN_VENUE' || c.status === 'NO_VENDOR' || view.excluded.some((x) => x.categoryId === c.categoryId)) return []
+    return suggestionOf(c, view) ?? []
+  })
+}
+
+/** Cột "Dịch vụ / gói": đã chọn thì tên + trạng thái + ô chọn gói; chưa chọn thì gói gợi ý */
+function ServiceCell({ c, b, view, items }: { c: BudgetCategory; b: Budget; view: SplitView; items: PlanItem[] }) {
   const withTables = c.kind === 'VENUE' || c.vendors.some((v) => v.package.unit === 'TABLE')
   if (c.vendors.length) {
     return (
@@ -440,18 +243,14 @@ function ServiceCell({ c, b, items }: { c: BudgetCategory; b: Budget; items: Pla
               </Link>
               {v.status && <Badge tone={PLAN_STATUS[v.status].tone}>{PLAN_STATUS[v.status].label}</Badge>}
             </div>
-            <BudgetPackagePicker vendor={v} item={items.find((i) => i.id === v.id)} budget={b} withTables={withTables} />
+            <BudgetPackagePicker
+              vendor={v}
+              item={items.find((i) => i.id === v.id)}
+              budget={b}
+              withTables={withTables}
+              changeVendorSlug={c.kind === 'SERVICE' ? c.slug : undefined}
+            />
             {v.overCapacity && <span className="text-[12px] text-warn">Không còn phù hợp: vượt sức chứa. Hãy đổi trung tâm tiệc.</span>}
-            {/* Tiệc đã cọc: số khách thay đổi thì gửi yêu cầu điều chỉnh đơn (NCC xác nhận, cọc bổ sung) ở thẻ đơn */}
-            {c.kind === 'VENUE' && v.costSource === 'DEPOSITED' && (
-              <span className="text-[12px] text-muted-foreground">
-                Tiệc đã cọc: đổi số khách bằng nút "Đổi số khách" ở thẻ đơn trong{' '}
-                <Link to={paths.planTab.services} className="font-medium text-gold-700 underline underline-offset-[3px]">
-                  Dịch vụ
-                </Link>{' '}
-                (trước ngày tổ chức 7 ngày).
-              </span>
-            )}
           </div>
         ))}
       </div>
@@ -459,40 +258,76 @@ function ServiceCell({ c, b, items }: { c: BudgetCategory; b: Budget; items: Pla
   }
   if (c.status === 'OWN_VENUE') return <span className="text-muted-foreground">Tự lo tiệc ngoài nền tảng</span>
   if (c.status === 'NO_VENDOR') return <span className="text-muted-foreground">{c.message}</span>
-  // Nhãn vượt nằm ở cột Gợi ý (so với số đang hiển thị), không lặp ở đây
-  const s = c.suggestion
+  if (view.excluded.some((x) => x.categoryId === c.categoryId)) return <span className="text-muted-foreground">Tự lo</span>
   return (
-    <div className="flex flex-col gap-1">
-      {s && (
-        <span>
-          <span className="text-muted-foreground">Gợi ý: </span>
-          <Link to={paths.serviceDetail(s.vendorId)} className="font-medium hover:underline">
-            {s.vendorName}
-          </Link>
-          <span className="text-muted-foreground"> · {s.packageName}</span>
-          {s.chargedTables !== null && <span className="text-muted-foreground"> · {s.chargedTables} bàn</span>}
-        </span>
-      )}
-      <Link to={`${paths.services}?category=${c.slug}&ai=1`} className="self-start text-[13px] font-medium text-gold-700 underline underline-offset-[3px]">
-        Xem gợi ý khác
-      </Link>
+    <div className="flex flex-col gap-1.5">
+      <BudgetSuggestionPicker
+        slug={c.slug}
+        suggestion={suggestionOf(c, view)}
+        packages={c.packages}
+        limit={view.rows.find((x) => x.item.id === c.categoryId)?.amount ?? c.limit ?? 0}
+      />
       {withTables && <BudgetPackagePicker budget={b} withTables />}
     </div>
   )
 }
 
 /**
- * Subtab Ngân sách (docs/api/weddings.md mục 7). Phân bổ là giá trị dẫn xuất do backend tính (allocation.ts), không sửa tay:
- * hạng mục đã chọn trừ trước, phần còn lại chia cho trung tâm tiệc (Mục tiêu / Trần cứng) rồi các dịch vụ theo mức chia.
+ * Bốn thẻ số đầu trang (StatCard: ô giấy kem trên dải ô liu); nút sửa tổng ngân sách nằm cạnh nhãn.
+ * Số ước tính (Dự kiến chưa chốt, Còn lại) làm tròn 10.000đ như quỹ dịch vụ; Tổng ngân sách, Đã cọc là số thật nên giữ nguyên.
+ */
+function BudgetStats({ b, onEditTotal }: { b: Budget; onEditTotal: () => void }) {
+  const t = b.totals
+  const over = t.remaining < 0
+  return (
+    <StatGrid>
+      <StatCard
+        label={
+          <span className="inline-flex items-center gap-1.5">
+            Tổng ngân sách
+            <button
+              type="button"
+              aria-label="Sửa tổng ngân sách"
+              title="Sửa tổng ngân sách"
+              onClick={onEditTotal}
+              className="grid size-7 place-items-center rounded-full transition-colors hover:bg-white/20"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          </span>
+        }
+        value={formatMoney(t.total)}
+        sub={
+          b.status === 'OVER_BUDGET' ? (
+            <span className="font-medium text-warn">Vượt ngân sách</span>
+          ) : (
+            `${b.guestCount.toLocaleString('vi-VN')} khách · ${b.tables.count} bàn`
+          )
+        }
+      />
+      <StatCard label="Đã cọc" value={formatMoney(t.deposited)} sub={`Còn phải trả NCC ${formatMoney(t.owed)}`} />
+      <StatCard label="Dự kiến chưa chốt" value={formatMoney(displayMoney(t.plannedTotal))} sub="Dịch vụ đã chọn, chưa có đơn" />
+      <StatCard
+        label={over ? 'Vượt ngân sách' : 'Còn lại'}
+        value={formatMoney(displayMoney(Math.abs(t.remaining)))}
+        tone={over ? 'warn' : 'good'}
+        sub="Cho các hạng mục chưa chọn"
+      />
+    </StatGrid>
+  )
+}
+
+/** Thông báo "Quỹ dịch vụ vừa thay đổi vì …" hiện trong khoảng này (cờ hành vi, mục 9) */
+const FUND_NOTICE_MS = 8000
+
+/**
+ * Subtab Ngân sách (docs/api/weddings.md mục 7; tài liệu "Luồng Tùy chỉnh ngân sách" v1.2). Quỹ dịch vụ và phân bổ do backend tính
+ * (allocation.ts); phần chia các dịch vụ chưa chọn tính lại ngay ở client bằng cùng thuật toán (budgetSplit.ts) khi khách kéo, rồi tự lưu.
  * Ngân sách là ràng buộc mềm: khách tự chọn gói vượt thì được, kèm cảnh báo; không có thao tác nào bị chặn theo ngân sách.
  */
 export default function PlanBudgetPage() {
   const budget = useBudget()
   const planItems = usePlan().data?.items ?? []
-  const [importing, setImporting] = useState(false)
-  const [editingTotal, setEditingTotal] = useState(false)
-  // Tăng lên mỗi lần bấm "Chỉnh tỷ lệ / số tiền" trong bảng để mở bảng thanh kéo
-  const [editWeights, setEditWeights] = useState(0)
 
   if (budget.isPending) return <div className="h-[420px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải ngân sách" />
   if (budget.isError) {
@@ -508,46 +343,35 @@ export default function PlanBudgetPage() {
       />
     )
   }
+  return <BudgetContent b={budget.data} planItems={planItems} />
+}
 
-  const b = budget.data
+function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
+  const [importing, setImporting] = useState(false)
+  const [editingTotal, setEditingTotal] = useState(false)
+  const split = useBudgetSplit(b)
+  // Quỹ đủ cho gói đắt nhất của mọi dịch vụ ở cả 3 mức (có biên chống nhấp nháy): mức chia không còn ý nghĩa, ẩn ba mức và Tùy chỉnh
+  const surplusRef = useRef(false)
+  const surplus = presetsLocked(b, surplusRef.current)
+  surplusRef.current = surplus
+  const view = splitView(b, split.draft, surplus)
   const t = b.totals
 
+  // "Quỹ dịch vụ vừa thay đổi vì …": quỹ đổi do đầu vào khác (số bàn, gói, chi phí ngoài…), không phải do khách kéo thanh
+  const [fundNotice, setFundNotice] = useState<string | null>(null)
+  const prevFund = useRef(fundSnapshot(b))
+  useEffect(() => {
+    const reason = fundChangeReason(prevFund.current, fundSnapshot(b))
+    prevFund.current = fundSnapshot(b)
+    if (!reason) return
+    setFundNotice(reason)
+    const timer = setTimeout(() => setFundNotice(null), FUND_NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [b])
+
   return (
-    <>
-      <StatGrid className="mb-3">
-        <StatCard
-          label={
-            <span className="flex items-center justify-between gap-2">
-              Tổng ngân sách
-              <button
-                type="button"
-                aria-label="Sửa tổng ngân sách"
-                title="Sửa tổng ngân sách"
-                onClick={() => setEditingTotal(true)}
-                className="-my-1 grid size-7 place-items-center rounded-full text-gold-700 transition-colors hover:bg-accent-soft"
-              >
-                <Pencil className="size-3.5" />
-              </button>
-            </span>
-          }
-          value={formatMoney(t.total)}
-          sub={
-            b.status === 'OVER_BUDGET' ? (
-              <span className="font-medium text-warn">Vượt ngân sách</span>
-            ) : (
-              `${b.guestCount.toLocaleString('vi-VN')} khách · ${b.tables.count} bàn`
-            )
-          }
-        />
-        <StatCard label="Đã cọc" value={formatMoney(t.deposited)} sub={`Còn phải trả NCC ${formatMoney(t.owed)}`} />
-        <StatCard label="Dự kiến chưa chốt" value={formatMoney(t.plannedTotal)} sub="Dịch vụ đã chọn, chưa có đơn" />
-        <StatCard
-          label={t.remaining < 0 ? 'Vượt ngân sách' : 'Còn lại'}
-          value={formatMoney(Math.abs(t.remaining))}
-          tone={t.remaining < 0 ? 'warn' : 'good'}
-          sub="Cho các hạng mục chưa chọn"
-        />
-      </StatGrid>
+    <div className="plan-theme budget-theme budget-page">
+      <BudgetStats b={b} onEditTotal={() => setEditingTotal(true)} />
 
       <TotalBudgetDialog total={t.total} open={editingTotal} onOpenChange={setEditingTotal} />
 
@@ -562,13 +386,13 @@ export default function PlanBudgetPage() {
       )}
       {b.overBudget && <OverBudgetNote over={b.overBudget} />}
 
-      <AllocationSettings b={b} openSignal={editWeights} />
+      <BudgetSplitPanel b={b} split={split} view={view} surplus={surplus} fundNotice={fundNotice} onTouch={() => setFundNotice(null)} />
 
       <section className="mb-5 rounded-lg border border-line bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-2.5 px-[22px] pt-5 pb-3">
-          <h2 className="text-lg">
-            Theo hạng mục <span className="text-sm font-normal text-muted-foreground">· Mức chia {b.presetLabel}</span>
-          </h2>
+          <h2 className="text-lg">Theo hạng mục</h2>
+          <span className="ml-auto" />
+          <ChooseAllSuggestions list={suggestionsToChoose(b, view)} />
           <Button variant="outline" size="sm" onClick={() => weddingsApi.downloadExport('budget').catch((e: Error) => toast(e.message))}>
             <Download />
             Tải về
@@ -580,39 +404,42 @@ export default function PlanBudgetPage() {
               <thead className="text-[13px] text-muted-foreground">
                 <tr className="border-t border-line">
                   <th className="px-[22px] py-2.5 font-medium">Hạng mục</th>
-                  <th className="px-3 py-2.5 font-medium">
-                    Gợi ý<span className="block text-[12px] font-normal">Chỉ gợi ý cho hạng mục chưa chọn</span>
-                  </th>
+                  <th className="px-3 py-2.5 font-medium">Gợi ý</th>
                   <th className="px-3 py-2.5 font-medium">Dịch vụ / gói</th>
                   <th className="px-[22px] py-2.5 text-right font-medium">Chi phí</th>
                 </tr>
               </thead>
               <tbody>
-                {b.categories.map((c) => (
-                  <tr key={c.categoryId} className="border-t border-line align-top">
-                    <td className="px-[22px] py-3 font-medium">{c.name}</td>
-                    <td className="px-3 py-3">
-                      <SuggestCell c={c} onEditWeights={() => setEditWeights((n) => n + 1)} />
-                    </td>
-                    <td className="px-3 py-3 text-[13px]">
-                      <ServiceCell c={c} b={b} items={planItems} />
-                    </td>
-                    <td className="px-[22px] py-3 text-right tabular-nums">
-                      {c.status === 'NO_VENDOR' ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        <span className={cn(c.status === 'SUGGESTED' && 'text-muted-foreground')}>{formatMoney(c.cost)}</span>
-                      )}
-                      {/* Nhãn nguồn dưới số: "Dự kiến" / "Theo đơn" / "Đã cọc {x}" */}
-                      {c.vendors.map((v) => (
-                        <div key={v.id} className="text-[12px] text-muted-foreground">
-                          {costSourceText(v.costSource, v.deposited)}
-                        </div>
-                      ))}
-                      {c.status === 'SUGGESTED' && <div className="text-[12px] text-muted-foreground">Theo gói gợi ý</div>}
-                    </td>
-                  </tr>
-                ))}
+                {b.categories.map((c) => {
+                  const s = c.vendors.length ? null : suggestionOf(c, view)
+                  const excluded = view.excluded.some((x) => x.categoryId === c.categoryId)
+                  return (
+                    <tr key={c.categoryId} className="border-t border-line align-top">
+                      <td className="px-[22px] py-3 font-medium">{c.name}</td>
+                      <td className="px-3 py-3">
+                        <SuggestCell c={c} view={view} />
+                      </td>
+                      <td className="px-3 py-3 text-[13px]">
+                        <ServiceCell c={c} b={b} view={view} items={planItems} />
+                      </td>
+                      <td className="px-[22px] py-3 text-right tabular-nums">
+                        {c.vendors.length || c.status === 'OWN_VENUE' ? (
+                          <span>{formatMoney(c.cost)}</span>
+                        ) : s && !excluded ? (
+                          <span className="text-muted-foreground">{formatMoney(s.cost)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                        {/* Nhãn nguồn dưới số: "Dự kiến" / "Theo đơn" / "Đã cọc {x}" */}
+                        {c.vendors.map((v) => (
+                          <div key={v.id} className="text-[12px] text-muted-foreground">
+                            {costSourceText(v.costSource, v.deposited)}
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -620,15 +447,11 @@ export default function PlanBudgetPage() {
           <p className="px-[22px] pb-5 text-sm text-muted-foreground">Chưa có hạng mục nào. Chọn dịch vụ muốn dùng ở phần Chỉnh sửa thông tin.</p>
         )}
         {b.categories.length > 0 && <BudgetSummary b={b} />}
-        <p className="border-t border-line px-[22px] py-3 text-[13px] text-muted-foreground">
-          Chi phí dự kiến tính theo gói đang chọn, giá thật theo đơn của nhà cung cấp. Số "Gợi ý" tự tính lại khi bạn đổi tổng ngân sách, số khách, mức chia
-          hoặc chọn dịch vụ.
-        </p>
       </section>
 
       <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface px-[22px] py-5">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <h2 className="text-lg">Chi phí khác ngoài WebPlan</h2>
+          <h2 className="text-lg">Chi phí khác ngoài Forever</h2>
           <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
             <FileSpreadsheet />
             Nhập từ Excel
@@ -645,13 +468,13 @@ export default function PlanBudgetPage() {
             </li>
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">Chưa có khoản chi nào ngoài các dịch vụ trên WebPlan.</p>
+          <p className="text-sm text-muted-foreground">Chưa có khoản chi nào ngoài các dịch vụ trên Forever.</p>
         )}
         <AddExtraCostForm />
       </section>
 
       <ImportDialog type="expenses" open={importing} onOpenChange={setImporting} version={b.version} />
-    </>
+    </div>
   )
 }
 
@@ -677,24 +500,29 @@ function OverBudgetNote({ over }: { over: NonNullable<Budget['overBudget']> }) {
 }
 
 /**
- * Tổng cuối bảng: Tổng ngân sách; Đã cọc; Còn phải trả cho NCC; Dự kiến chưa chốt;
- * Còn lại = tổng − giá đơn đã chốt − dự kiến chưa chốt (không cộng thêm số đã cọc vì đã nằm trong giá đơn); Còn dư (nếu có).
+ * Tổng cuối bảng viết rõ thành phép trừ: Tổng ngân sách − Đã chốt với NCC (giá đơn = đã cọc + còn phải trả) − Dự kiến chưa chốt
+ * − các khoản khác (cọc đơn đã hủy, tiệc tự lo, chi phí khác) = Còn lại. Dòng bằng 0 không hiện. Còn dư (nếu có) ghi chú riêng.
  */
 function BudgetSummary({ b }: { b: Budget }) {
   const t = b.totals
-  const rows: [string, number, string?][] = [
-    ['Tổng ngân sách', t.total],
-    ['Đã cọc', t.deposited],
-    ['Còn phải trả cho nhà cung cấp', t.owed, 'Giá đơn trừ số đã cọc'],
-    ['Dự kiến chưa chốt', t.plannedTotal, 'Dịch vụ đã chọn, chưa có đơn'],
-    ...(t.lostDeposits ? ([['Cọc của đơn đã hủy', t.lostDeposits, 'Không hoàn, vẫn trừ vào tổng']] as [string, number, string][]) : []),
-    ...(t.ownVenueCost ? ([['Tiệc tự lo', t.ownVenueCost]] as [string, number][]) : []),
-    ...(t.extraCosts ? ([['Chi phí khác', t.extraCosts]] as [string, number][]) : []),
-  ]
+  const rows: [string, number, string?][] = (
+    [
+      ['Đã chốt với nhà cung cấp', t.deposited + t.owed, t.deposited ? `đã cọc ${formatMoney(t.deposited)}, còn trả ${formatMoney(t.owed)}` : undefined],
+      ['Dự kiến chưa chốt', t.plannedTotal],
+      ['Cọc của đơn đã hủy', t.lostDeposits, 'không hoàn'],
+      ['Tiệc tự lo', t.ownVenueCost],
+      ['Chi phí khác', t.extraCosts],
+    ] as [string, number, string?][]
+  ).filter(([, value]) => value > 0)
   return (
-    <dl className="grid gap-x-6 gap-y-2 border-t border-line px-[22px] py-4 text-sm sm:grid-cols-[1fr_auto]">
+    <dl className="grid grid-cols-[auto_1fr_auto] gap-x-3 gap-y-2 border-t border-line px-[22px] py-4 text-sm">
+      <dt className="col-span-2 text-muted-foreground">Tổng ngân sách</dt>
+      <dd className="text-right tabular-nums">{formatMoney(t.total)}</dd>
       {rows.map(([label, value, hint]) => (
         <div key={label} className="contents">
+          <span className="text-muted-foreground" aria-hidden>
+            −
+          </span>
           <dt className="text-muted-foreground">
             {label}
             {hint && <span className="ml-1.5 text-[12px]">({hint})</span>}
@@ -703,15 +531,18 @@ function BudgetSummary({ b }: { b: Budget }) {
         </div>
       ))}
       <div className="contents">
+        <span className="border-t border-line pt-2 font-semibold" aria-hidden>
+          =
+        </span>
         <dt className="border-t border-line pt-2 font-semibold">{t.remaining < 0 ? 'Vượt ngân sách' : 'Còn lại'}</dt>
         <dd className={cn('border-t border-line pt-2 text-right font-semibold tabular-nums', t.remaining < 0 ? 'text-warn' : 'text-sage')}>
           {formatMoney(Math.abs(t.remaining))}
         </dd>
       </div>
-      {b.leftoverMessage && (
+      {t.leftover > 0 && (
         <p className="col-span-full flex items-center gap-2 rounded-md bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
           <Info className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          {b.leftoverMessage}
+          Còn dư {money(t.leftover)}: phần quỹ dịch vụ chưa giao cho hạng mục nào.
         </p>
       )}
     </dl>

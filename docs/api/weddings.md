@@ -39,7 +39,7 @@ Chưa thiết lập đám cưới: các endpoint (trừ `GET`/`PUT /weddings/me`
 | `ward` | "Nơi tổ chức": một phường/xã của Hà Nội từ 01/07/2025 (Nghị quyết 1656/NQ-UBTVQH15: 51 phường, 75 xã), **có tiền tố**: `"Phường Cầu Giấy"`, `"Xã Đông Anh"`. Danh sách: `backend/src/modules/weddings/wards.ts`. Form bắt buộc chọn; API nhận `null`/không gửi (không gửi thì giữ nguyên khi sửa). Giá trị khác danh sách: lỗi "Nơi tổ chức phải là một phường/xã của Hà Nội." `null` ở response là đám cưới cũ chưa chọn. Chưa chạy `prisma/manual/2026-11-01-01-wedding-ward.sql` thì trường bị bỏ qua khi lưu |
 | `guestCount` | "Số khách dự kiến", bắt buộc, số nguyên ≥ 1 |
 | `budget` | Đồng, bắt buộc, > 0 |
-| `budgetPreset` | Mức chia ngân sách (mục 7): `BALANCED` (mặc định), `SPACE`, `VISUAL`; `CUSTOM` chỉ đặt ở tab Ngân sách (`PATCH …/budget/settings`), form gửi `CUSTOM` thì lỗi. Không bắt buộc; sửa đám cưới mà không gửi thì giữ nguyên. Thay `spendingTier` (bỏ 02/11/2026) |
+| `budgetPreset` | Mức chia ngân sách (mục 7): `BALANCED` (mặc định), `SPACE`, `VISUAL`; `CUSTOM` chỉ đặt ở tab Ngân sách (`PATCH …/budget/settings`, `PUT …/budget/split`), form gửi `CUSTOM` thì lỗi. Không bắt buộc; sửa đám cưới mà không gửi thì giữ nguyên. Thay `spendingTier` (bỏ 02/11/2026) |
 | `tableCountOverride` | **Chỉ có ở response** của `GET/PUT`; đổi bằng `PATCH /weddings/me`. `null`: số bàn tự tính ⌈số khách / 10⌉ |
 | `version` | **Chỉ có ở response**: `weddings.updated_date`, gửi kèm khi ghi để phát hiện ghi đồng thời (mục 7) |
 
@@ -270,104 +270,143 @@ Một endpoint cho toàn bộ subtab Tổng quan. Cặp đôi luôn nhận đủ
 
 ## 7. Ngân sách, gợi ý phân bổ và chi phí khác
 
-Thuật toán backend, **không gọi AI**: hàm thuần `backend/src/modules/weddings/allocation.ts` (test: `backend/test/allocation.test.cjs`, 19 tình huống của đặc tả), hằng số trong `allocation.config.ts`. FE không tự tính lại. Thay cho cách tính theo phân vị và mức Tiết kiệm / Cân đối / Cao cấp (bỏ 02/11/2026).
+Thuật toán, **không gọi AI**. Đặc tả gốc của luồng Tùy chỉnh: tài liệu triển khai "Luồng Tùy chỉnh ngân sách" v1.2 (03/11/2026).
+
+- Quỹ dịch vụ, tiệc, gói gợi ý: hàm thuần `backend/src/modules/weddings/allocation.ts` (test `backend/test/allocation.test.cjs`).
+- Tỷ lệ số nguyên, tự cân bằng, khóa, nhóm chia thay đổi, giới hạn gợi ý: `budget-split.ts`. Bản sao giống hệt ở `frontend/src/features/weddings/budgetSplit.ts` để kéo thanh là tính ngay; `budgetSplit.test.ts` chạy bộ test mục 8 (T01–T63) trên **cả hai** bản.
+- Thay cách chia theo B3 (dồn phần dư, trần cứng) và tỷ lệ % số thực (bỏ 03/11/2026).
 
 **Nguyên tắc**
 
-1. Dữ liệu gốc chỉ gồm: tổng ngân sách, số khách, mức chia, các dịch vụ khách đã chọn (kèm gói hoặc đơn), giá gói trong DB. Phân bổ cho từng hạng mục là **giá trị dẫn xuất**, tính lại mỗi lần đọc; **không** có cột số tiền phân bổ (bảng `wedding_category_budgets` cũ không còn được đọc hay ghi).
+1. Dữ liệu gốc: tổng ngân sách, số khách, mức chia, dịch vụ đã chọn (kèm gói hoặc đơn), giá gói trong DB, cấu hình Tùy chỉnh. Số tiền phân bổ là **giá trị dẫn xuất**, tính lại mỗi lần đọc, không lưu. Chỉ lưu tỷ lệ, trạng thái khóa, danh sách dịch vụ bỏ khỏi phần chia và giá trần.
 2. Hạng mục đã chọn luôn được trừ trước, nên kết quả không phụ thuộc thứ tự khách chọn.
-3. Ngân sách là ràng buộc **mềm**: gợi ý không bao giờ vượt (nhờ trần cứng); khách tự chọn thì được vượt, kèm cảnh báo hệ quả và trạng thái `OVER_BUDGET`. Không chặn theo ngân sách ở bất kỳ hạng mục nào. Chỉ chặn theo điều kiện kỹ thuật: gói tiệc vượt sức chứa.
+3. Ngân sách là ràng buộc **mềm**: không có gói trong giới hạn thì gợi ý gói rẻ nhất kèm nhãn "Vượt Y"; khách tự chọn thì được vượt, kèm cảnh báo. Chỉ chặn gói tiệc vượt sức chứa.
 
 **Chi phí**
 
 - Số bàn = `tableCountOverride` nếu có, ngược lại ⌈số khách / `GUESTS_PER_TABLE` (10)⌉.
-- Gói tiệc (Trung tâm tổ chức sự kiện): đơn giá/bàn × max(số bàn, `min_tables`); chỉ xét gói có sức chứa ≥ số khách. Ví dụ 5,8tr/bàn, tối thiểu 40 bàn, kế hoạch 30 bàn = **232tr** (không phải 174tr). Gói khác: giá trọn gói.
+- Gói tiệc: đơn giá/bàn × max(số bàn, `min_tables`); chỉ xét gói có sức chứa ≥ số khách. Ví dụ 5,8tr/bàn, tối thiểu 40 bàn, kế hoạch 30 bàn = **232tr**. Gói khác: giá trọn gói.
 - Chỉ tính gói đang hiển thị: gói `Approved`, NCC `Approved` (không ẩn), tài khoản `Active`.
-- Hạng mục đã chọn: có đơn còn hiệu lực thì giá đơn (`ORDER` "Theo đơn"; đơn `Deposited`/`Completed` là `DEPOSITED` "Đã cọc {x}"); chưa có đơn thì gói khách chọn, mặc định gói rẻ nhất (`PLANNED` "Dự kiến").
-- NCC có đơn đã hủy và không còn đơn hiệu lực: hạng mục trở về **chưa chọn**. Cọc của đơn hủy theo yêu cầu của khách (`cancel_reason = CUSTOMER_REQUEST`, đã nộp cọc) là khoản mất, vẫn trừ vào tổng (`totals.lostDeposits`); NCC không thực hiện được (`VENDOR_UNABLE`) thì hoàn cọc ngoài hệ thống, không tính.
-- Tiệc tự lo (`ownVenue`): bỏ trung tâm tiệc khỏi phép tính; `ownVenueCost` (tùy chọn) trừ vào tổng như khoản đã chọn. Chi phí khác ngoài WebPlan cũng trừ như khoản đã chọn.
+- Hạng mục đã chọn: có đơn còn hiệu lực thì giá đơn (`ORDER` "Theo đơn"; `Deposited`/`Completed` là `DEPOSITED` "Đã cọc {x}"); chưa có đơn thì gói khách chọn, mặc định gói rẻ nhất (`PLANNED` "Dự kiến").
+- NCC có đơn đã hủy, không còn đơn hiệu lực: hạng mục trở về **chưa chọn**. Cọc của đơn hủy theo yêu cầu khách (`CUSTOMER_REQUEST`, đã nộp) là tiền cọc đã mất, vẫn trừ vào tổng.
+- Tiệc tự lo (`ownVenue`): bỏ trung tâm tiệc khỏi phép tính; `ownVenueCost` trừ vào tổng. Chi phí ngoài nền tảng cũng trừ vào tổng.
 
-**Mặt bằng giá**: giá rẻ nhất và trung vị (kiểu `PERCENTILE_CONT(0.5)`) của từng hạng mục, tính trong code từ các gói đang hiển thị đã tải. Tiệc tính theo từng kế hoạch (số bàn, sức chứa), **không** lọc theo khu vực. Hạng mục chưa có gói: `status = NO_VENDOR`, "Hiện chưa có NCC cho hạng mục X" (tiệc: "Chưa có trung tâm tiệc đủ sức chứa cho N khách").
+**Mặt bằng giá**: giá rẻ nhất, trung vị (kiểu `PERCENTILE_CONT(0.5)`), đắt nhất (`maxPackagePrice`) của từng hạng mục, từ các gói hợp lệ. Tiệc tính theo số bàn và sức chứa, không lọc khu vực. Hạng mục không có gói hợp lệ: `NO_VENDOR` ("Chưa có gói dịch vụ phù hợp"; tiệc: "Chưa có gói tiệc phù hợp").
 
-**Mức chia** (`budgetPreset`, enum trong code): trọng số w_i = trung vị_i × h_i / Σ(trung vị_j × h_j), chỉ trên các dịch vụ chưa chọn (tiệc không nằm trong mức chia). h là tham số thiết kế, chỉnh ở `PRESET_H`:
+**Quỹ dịch vụ** (`fund`)
+
+- Còn lại = tổng − mọi hạng mục đã chọn (kể cả tiệc, đơn đã cọc) − cọc mất − tiệc tự lo − chi phí ngoài nền tảng.
+- Tiệc chưa chọn, không tự lo, có gói hợp lệ: trừ gói tiệc tốt nhất trong giới hạn (giới hạn = còn lại − Σ trung vị các dịch vụ trong nhóm chia); đều vượt thì gói rẻ nhất, `venue.overBy` = "Vượt Y". Không có gói hợp lệ: chưa trừ tiệc, `venue.status = NO_PACKAGE`, cảnh báo "Chưa có gói tiệc phù hợp, tiền tiệc chưa được trừ".
+- Kế hoạch không có hạng mục trung tâm tiệc: `venue.status = NONE`, quỹ không trừ tiệc; tab Ngân sách nhắc "Kế hoạch chưa có trung tâm tiệc nên quỹ dịch vụ đang gồm cả phần thường dành cho tiệc" kèm hai lối tắt "Thêm trung tâm tiệc" (thêm vào Dịch vụ muốn sử dụng) và "Tự lo tiệc". Tự lo tiệc tính cả khi không có hạng mục tiệc (`venue.status = OWN`).
+- Gói tiệc đề xuất chỉ lấy sảnh **còn trống ngày cưới** (từ 03/11/2026): bỏ sảnh có đơn đã cọc / hoàn thành của khách khác hoặc NCC đánh dấu bận ngày đó ([LICH_BAN_SANH.md](../LICH_BAN_SANH.md)); đơn của chính đám cưới không tính. Chưa có ngày cưới thì không lọc.
+- `serviceBudgetRaw` = còn lại − gói tiệc đề xuất (có thể âm); `serviceBudget` = max(raw, 0). ≤ 0: "Ngân sách hiện tại chưa đủ cho phần dịch vụ còn lại", tắt ô nhập số tiền, tỷ lệ vẫn chỉnh được.
+
+**Nhóm chia**: các dịch vụ (không phải tiệc) **chưa chọn**, có gói hợp lệ, chưa bị bỏ khỏi phần chia. Hạng mục đã chọn, có đơn, đã cọc, bị bỏ và tiệc nằm ngoài nhóm.
+
+- Tỷ lệ (`ratio`) là số nguyên theo 0,01%, tổng nhóm đúng 10000. Mọi phép chia qua `distribute` (BigInt, làm tròn xuống rồi cộng phần thiếu cho phần lẻ lớn nhất, hòa theo thứ tự Trang trí, Chụp ảnh, Trang phục, Trang điểm, Hoa cưới).
+- Phương án có sẵn: tỷ lệ = trung vị × h (h nhân 10: `H10`), khởi tạo lại mỗi lần đọc.
 
 | Mức | h |
 |---|---|
 | `BALANCED` Cân bằng (mặc định) | 1 cho mọi dịch vụ |
 | `SPACE` Ưu tiên không gian | trang trí 1,3 |
 | `VISUAL` Ưu tiên hình ảnh | chụp ảnh 1,5; trang phục 1,3; trang điểm 1,2 |
-| `CUSTOM` Tùy chỉnh | tỷ lệ % khách kéo, lưu ở `weddings.custom_weights` |
+| `CUSTOM` Tùy chỉnh | cấu hình đã lưu (bên dưới) |
 
-**Thuật toán** (chạy lại từ đầu mỗi lần đọc)
+- Tiền hạng mục = quỹ × tỷ lệ / 10000 (`limit`, chính xác tới đồng). Nhóm một hạng mục: min(giá trần, quỹ), phần chênh là "Còn dư". Nhóm rỗng: cả quỹ là "Còn dư" (`totals.leftover`).
+- Gói gợi ý: gói tốt nhất có chi phí ≤ tiền hạng mục (cùng phường/xã trước, gần giới hạn, đánh giá, số lượt, phong cách trùng); không có thì gói rẻ nhất kèm `label = { code: 'OVER_BY', amount }`.
+- Cảnh báo giá gói cao nhất (chỉ ở client, không chặn, không lưu): vạch ở `floor(maxPackagePrice × 10000 / quỹ)`; tiền > giá gói cao nhất thì "Gói cao nhất của {dịch vụ} là X, phần còn lại khoảng Y sẽ không dùng hết", nút "Về mức gói cao nhất".
 
-- B0. Khả thi (chỉ cảnh báo): tối thiểu cần = các khoản đã chọn + giá rẻ nhất của mọi hạng mục chưa chọn (tiệc theo số bàn và sức chứa). Thiếu thì `feasibility.message` "Ngân sách chưa đủ cho số khách này, cần tối thiểu X" kèm 3 hướng: giảm số khách, tăng ngân sách, đổi gói rẻ hơn.
-- B1. Còn lại = tổng − Σ chi phí hạng mục đã chọn − cọc mất − tiệc tự lo − chi phí khác.
-- B2. Tiệc chưa chọn: Mục tiêu = còn lại − Σ trung vị dịch vụ chưa chọn; Trần cứng = còn lại − Σ giá rẻ nhất dịch vụ chưa chọn. Gợi ý gói tốt nhất ≤ Mục tiêu; không có thì gói rẻ nhất ≤ Trần cứng, nhãn `OVER_ALLOCATION` "Vượt phân bổ"; không có gói nào ≤ Trần cứng thì gói rẻ nhất, nhãn `OVER_BY` "Vượt X". Còn lại −= chi phí gói gợi ý.
-- B3. Dịch vụ chưa chọn theo trọng số giảm dần: Phân bổ = còn lại × w / tổng w các hạng mục chưa xử lý; Trần cứng = còn lại − Σ giá rẻ nhất các hạng mục phía sau; Giới hạn = min(Phân bổ, Trần cứng). Chọn gói như B2. Tiền dư tự chuyển sang hạng mục sau.
-- B4. Còn lại > 0: "Còn dư X: bạn có thể nâng gói hoặc thêm hạng mục".
-- "Gói tốt nhất": cùng phường/xã với nơi tổ chức trước; rồi `BUDGET_FIT_DIRECTION` (`closest`: gần giới hạn nhất; `cheapest`); rồi điểm đánh giá, số lượt giảm dần; rồi số phong cách trùng.
-- `limit` = Giới hạn ở bước B3 (dùng để chọn gói gợi ý). Hạng mục cuối của vòng duyệt nhận cả phần còn lại nên `limit` **không** dùng để hiển thị.
-- **Tỷ lệ** (`share`, %) và **giới hạn riêng** (`shareLimit`) của từng dịch vụ **chưa cọc** (đã chọn hoặc chưa), để hiển thị "Gợi ý: X" / "Giới hạn gợi ý: X" và làm ngân sách hạng mục cho "Gợi ý cho bạn" (mục 4) và So sánh ([compare.md](compare.md)). `sliderPool` = tổng − tiệc (đã chọn hoặc gợi ý) − dịch vụ đã cọc − cọc mất − tiệc tự lo − chi phí khác; `shareLimit` = `sliderPool` × `share`. Cân bằng / Ưu tiên…: `share` = trung vị × h chuẩn hóa; Tùy chỉnh: tỷ lệ khách đặt (hạng mục chưa có tỷ lệ đã lưu nhận trung bình các tỷ lệ đã lưu), chuẩn hóa. Dịch vụ đã cọc: `share`, `shareLimit` = null (khóa). Tiệc: null, hiển thị Mục tiêu (`limit`). Gói đã chọn và gói gợi ý của hạng mục chưa chọn (B3) không đổi theo các số này.
-- `presetWeights`: tỷ lệ % (8 chữ số thập phân) của các dịch vụ chưa cọc, tổng 100, để khởi tạo thanh kéo Tùy chỉnh; FE cho kéo thanh, gõ % hoặc gõ số tiền (= `sliderPool` × %). Dịch vụ đã cọc hiện khóa.
-- Khách tự chọn gói (dropdown, chỉ khi chưa có đơn): mỗi gói kèm `consequence`, ví dụ "Chọn gói này, 5 dịch vụ còn lại còn tối đa X so với gói rẻ nhất cần Y, thiếu Z."; gói tiệc vượt sức chứa có `fits = false` (FE vô hiệu). Tiệc đã chọn mà số khách tăng vượt sức chứa: `overCapacity = true`, "Không còn phù hợp: vượt sức chứa".
-- Vượt ngân sách (`overBudget`, cảnh báo mềm): "Vượt ngân sách X"; `level = strong` khi giá đơn thật (cộng cọc mất, chi phí khác, tiệc tự lo) đã vượt, `soft` khi vượt do số dự kiến.
-- Đổi số khách khi tiệc đã cọc: yêu cầu điều chỉnh đơn (NCC xác nhận, cọc bổ sung 10% phần tăng, hạn 7 ngày trước ngày tổ chức), xem [orders.md](orders.md). Tab Ngân sách nhắc khách dùng nút "Đổi số khách" ở thẻ đơn.
-- **Đã chốt (02/11/2026):**
-  - Thanh kéo Tùy chỉnh gồm mọi dịch vụ **chưa cọc** (đã chọn hoặc chưa); dịch vụ đã cọc hiện khóa. Với dịch vụ đã chọn, số đặt ở thanh kéo là "Giới hạn gợi ý" (không đổi gói đã chọn).
-  - Chỉ còn 1 dịch vụ chưa cọc: được đặt số tiền tuyệt đối (tỷ lệ < 100%), phần còn lại không giao cho hạng mục nào. Từ 2 dịch vụ trở lên: tổng 100%.
-  - Giới hạn riêng (`shareLimit`) và số tiền ở thanh kéo làm tròn tới 1.000đ.
-  - Giữ ô sửa số bàn (`tableCountOverride`) và khoản chi ngoài nền tảng (trừ như khoản đã chọn).
+**Giới hạn gợi ý** của hạng mục đã chọn / có đơn **chưa cọc** (dịch vụ): tỷ lệ ảo = w_i / (Σ w nhóm + w_i), w = trung vị × h của phương án nền; giới hạn = max(0, `serviceBudgetRaw` + giá đang chọn của i) × tỷ lệ ảo. Không phụ thuộc gói đang chọn của chính i. Hạng mục đã cọc không có. Một số duy nhất (`limit`) dùng chung cho tab Ngân sách, "Gợi ý cho bạn" (mục 4) và So sánh ([compare.md](compare.md)); `shareLimit` ở `allocation.ts` là tên cũ của cùng số.
+
+**Tùy chỉnh** (`CUSTOM`)
+
+- Cấu hình lưu ở `weddings.custom_weights` (jsonb, không cần SQL mới): `{ format: 2, version, baseMode, excluded: [categoryId], capAmount, items: [{ categoryId, slug, ratio, locked, updatedAt }], updatedAt }`. Dạng cũ (slug → %) coi như chưa có cấu hình. `version` là số phiên bản riêng của cấu hình (không đổi `weddings.updated_date`).
+- Vào Tùy chỉnh lần đầu: khởi tạo từ phương án đang dùng (`baseMode`), mọi hạng mục mở khóa. Đổi sang phương án có sẵn không xóa cấu hình; quay lại Tùy chỉnh thì dùng lại.
+- Tự cân bằng: hạng mục k (mở khóa) đặt p, kẹp về [0, 10000 − L] (L = tổng các mục khóa), các mục mở khóa khác chia 10000 − L − p theo tương quan hiện tại (đều 0 thì chia đều). Mục mở khóa duy nhất luôn bằng 10000 − L. Nhập %: tối đa 2 chữ số thập phân. Nhập số tiền: floor(số tiền × 10000 / quỹ).
+- Khóa: không khóa được mục mở khóa cuối cùng; khóa mục 0% thì nhắc kèm lối tắt "Bỏ khỏi phần chia".
+- Nhóm chia đổi (đọc lại khi khách chọn gói, có đơn, hủy đơn, bỏ / thêm lại): mục rời nhóm thì phần của nó chia cho các mục mở khóa; nếu mọi mục còn lại đều khóa thì mở khóa đúng mục lớn nhất và báo. Mục quay lại nhận tỷ lệ khởi đầu theo trọng số phương án nền. Sau mỗi thay đổi nhóm, giá trần bị xóa. Backend áp các thay đổi này khi đọc `GET /budget` và lưu lại (`split.notices` chứa thông báo mở khóa).
+- "Đặt lại theo phương án nền": khởi tạo lại tỷ lệ, mở khóa tất cả, xóa giá trần, giữ danh sách đã bỏ.
+- Tự lưu (FE `useBudgetSplit.ts`): kéo / nhập chỉ tính ở client; lưu khi nhả thanh, rời ô, khóa, bỏ / thêm lại, đổi giá trần, đặt lại; debounce 800ms; lỗi mạng thử lại 2 lần (1 giây, 2 giây); 422 hoặc vẫn lỗi thì trả về cấu hình đã lưu; 409 nhận bản mới nhất ("Tỷ lệ đã được cập nhật ở nơi khác."); rời trang thì gửi ngay (keepalive).
+
+**Hiển thị**: mọi số tiền phân bổ làm tròn gần nhất tới 10.000đ (`DISPLAY_ROUND_UNIT`, 5.000đ làm tròn lên); backend giữ số chính xác; dòng tổng ghi "≈". Mỗi thanh ghi "% quỹ" kèm số tiền. "Quỹ dịch vụ: X" kèm ⓘ chi tiết; dòng "Tiệc" chỉ đọc kèm % tổng ngân sách; quỹ đổi mà khách không chạm thanh thì "Quỹ dịch vụ vừa thay đổi vì {lý do}" (8 giây). Dưới quỹ luôn có "Dự kiến chi tối đa: X · Còn dư: Y" (mỗi hạng mục tiêu tối đa tới giá gói đắt nhất). Khóa ba mức có sẵn (chỉ hiển thị, không đổi cấu hình đã lưu) khi ở **cả 3 mức**, **mọi** dịch vụ trong nhóm đều được chia ≥ giá gói đắt nhất (quỹ × ratio_i(mức) ≥ maxPackagePrice_i); bật cần dư 5% (`PRESET_LOCK_MARGIN`), tắt khi không còn đủ, để quỹ dao động quanh ngưỡng không làm giao diện nhảy. Khi khóa: thẻ đang chọn giữ nguyên, hai thẻ còn lại nhạt; ẩn thanh xem trước, thay bằng mức chi tối đa từng dịch vụ; hộp thông báo "Các mức chia có sẵn không ảnh hưởng gợi ý. Muốn giới hạn chi cho từng dịch vụ, dùng Tùy chỉnh."; Tùy chỉnh vẫn dùng được với thanh kéo và vạch giá gói như thường. Tùy chỉnh mà mọi dịch vụ đều vượt gói đắt nhất: một dòng chung thay cho cảnh báo từng dòng. Cột "Gợi ý" của hạng mục có phân bổ lớn hơn gói đắt nhất hiện giá gói đắt nhất, phân bổ ghi nhỏ bên dưới.
+
+**Khác**
+
+- B0 khả thi (chỉ cảnh báo): tối thiểu cần = các khoản đã chọn + giá rẻ nhất của mọi hạng mục chưa chọn trong nhóm và tiệc. Thiếu thì "Ngân sách chưa đủ cho số khách này, cần tối thiểu X" kèm 3 hướng.
+- Khách tự chọn gói (dropdown, chỉ khi chưa có đơn): mỗi gói kèm `consequence`; gói tiệc vượt sức chứa `fits = false`. Tiệc đã chọn mà số khách vượt sức chứa: `overCapacity = true`.
+- Vượt ngân sách (`overBudget`, cảnh báo mềm): `strong` khi giá đơn thật đã vượt, `soft` khi do số dự kiến.
+- Đổi số khách khi tiệc đã cọc: yêu cầu điều chỉnh đơn, xem [orders.md](orders.md).
 
 `Budget`
 
 ```json
 {
-  "version": "2026-11-02T08:15:02.123Z",
-  "preset": "BALANCED",
-  "presetLabel": "Cân bằng",
-  "presetWeights": { "decor": 38, "chup-anh": 32, "trang-phuc": 16, "trang-diem": 6, "hoa-cuoi": 8 },
+  "version": "2026-11-03T08:15:02.123Z",
+  "preset": "CUSTOM",
+  "presetLabel": "Tùy chỉnh",
   "ownVenue": false,
   "ownVenueCost": null,
   "guestCount": 300,
   "tables": { "count": 30, "auto": 30, "override": null },
+  "fund": {
+    "totalBudget": 350000000, "selectedCost": 40000000, "venueSelectedCost": 0, "lostDeposit": 0, "selfVenueCost": 0, "externalCost": 2000000,
+    "remaining": 308000000, "venue": { "status": "SUGGESTED", "amount": 150000000, "overBy": null },
+    "serviceBudgetRaw": 158000000, "serviceBudget": 158000000
+  },
+  "split": {
+    "mode": "CUSTOM",
+    "baseMode": "BALANCED",
+    "config": { "version": 4, "baseMode": "BALANCED", "excluded": ["…"], "capAmount": null, "items": [{ "categoryId": "…", "ratio": 6400, "locked": false }, { "categoryId": "…", "ratio": 3600, "locked": true }] },
+    "eligible": [{ "categoryId": "…", "slug": "chup-anh", "median": 16000000 }],
+    "notices": []
+  },
   "categories": [{
-    "categoryId": "…", "slug": "nha-hang", "name": "Trung tâm tổ chức sự kiện", "kind": "VENUE",
-    "status": "SUGGESTED", "cost": 150000000, "weight": null,
-    "allocation": 150000000, "cap": 173000000, "limit": 150000000, "minPrice": 90000000, "medianPrice": 135000000, "message": null,
-    "suggestion": { "packageId": "…", "packageName": "Sảnh Ngọc", "vendorId": "…", "vendorName": "Mipec Place", "cost": 150000000, "chargedTables": 30, "unit": "TABLE", "label": null },
+    "categoryId": "…", "slug": "chup-anh", "name": "Chụp ảnh", "kind": "SERVICE", "status": "SUGGESTED", "cost": 30000000,
+    "ratio": 6400, "limit": 101120000, "minPrice": 8000000, "medianPrice": 16000000, "maxPackagePrice": 30000000, "message": null,
+    "suggestion": { "packageId": "…", "packageName": "Trọn ngày", "vendorId": "…", "vendorName": "Mộc Studio", "cost": 30000000, "chargedTables": null, "unit": "PACKAGE", "label": null },
+    "packages": [{ "id": "…", "cost": 30000000, "place": 0, "rating": 4.8, "reviewCount": 12, "overlap": 1, "vendorId": "…", "vendorName": "Mộc Studio", "name": "Trọn ngày", "chargedTables": null, "unit": "PACKAGE" }],
     "vendors": []
   }, {
-    "categoryId": "…", "slug": "decor", "name": "Trang trí", "kind": "SERVICE", "status": "CHOSEN", "cost": 23000000,
-    "weight": null, "allocation": null, "cap": null, "limit": null, "minPrice": 10000000, "medianPrice": 19000000, "message": null, "suggestion": null,
-    "vendors": [{
-      "id": "…", "name": "Lala Wedding House", "status": "PLANNED", "cost": 23000000, "hasOrder": false, "costSource": "PLANNED", "deposited": 0, "overCapacity": false,
-      "package": { "id": "…", "name": "Chandelier", "source": "SELECTED", "unavailable": false, "unit": "PACKAGE", "minTables": null, "chargedTables": null },
-      "options": [{ "id": "…", "name": "Chandelier", "price": 23000000, "unit": "PACKAGE", "minTables": null, "capacity": null, "cost": 23000000, "chargedTables": null, "fits": true, "consequence": null }]
-    }]
+    "categoryId": "…", "slug": "decor", "name": "Trang trí", "kind": "SERVICE", "status": "CHOSEN", "cost": 35000000,
+    "ratio": null, "limit": 41800000, "minPrice": 10000000, "medianPrice": 19000000, "maxPackagePrice": 35000000, "message": null, "suggestion": null, "packages": [],
+    "vendors": [{ "id": "…", "name": "Lala Wedding House", "status": "PLANNED", "cost": 35000000, "hasOrder": false, "costSource": "PLANNED", "deposited": 0, "overCapacity": false,
+      "package": { "id": "…", "name": "Chandelier", "source": "SELECTED", "unavailable": false, "unit": "PACKAGE", "minTables": null, "chargedTables": null }, "options": [] }]
   }],
-  "totals": { "total": 200000000, "ordersTotal": 0, "deposited": 0, "owed": 0, "plannedTotal": 23000000, "lostDeposits": 0, "extraCosts": 0, "ownVenueCost": 0, "remaining": 177000000, "suggestedTotal": 172000000, "leftover": 5000000 },
+  "totals": { "total": 350000000, "ordersTotal": 0, "deposited": 0, "owed": 0, "plannedTotal": 40000000, "lostDeposits": 0, "extraCosts": 2000000, "ownVenueCost": 0, "remaining": 308000000, "suggestedTotal": 180000000, "leftover": 0 },
   "status": "OK",
   "overBudget": null,
-  "feasibility": { "ok": true, "minNeed": 117000000, "shortfall": 0, "message": null, "options": [] },
-  "leftoverMessage": "Còn dư 5.000.000đ: bạn có thể nâng gói hoặc thêm hạng mục.",
-  "extraCosts": [{ "id": "…", "name": "Thiệp cưới", "amount": 3000000, "createdDate": "…" }],
+  "feasibility": { "ok": true, "minNeed": 167000000, "shortfall": 0, "message": null, "options": [] },
+  "extraCosts": [{ "id": "…", "name": "Thiệp cưới", "amount": 2000000, "createdDate": "…" }],
   "warnings": []
 }
 ```
 
-- `categories`: hạng mục khách chọn ở "Dịch vụ muốn sử dụng" và hạng mục của mọi NCC đã có trong kế hoạch. `status`: `CHOSEN`, `SUGGESTED`, `NO_VENDOR`, `OWN_VENUE`. `weight` (%) chỉ có ở dịch vụ chưa chọn.
-- `totals.remaining` = tổng − giá đơn đã chốt − dự kiến chưa chốt (− cọc mất, tiệc tự lo, chi phí khác); **không** trừ thêm số đã cọc vì đã nằm trong giá đơn. `owed` = `ordersTotal − deposited`. `leftover` = còn dư sau khi trừ cả các gói gợi ý.
-- `warnings[].code`: `PACKAGE_UNAVAILABLE` (gói khách chọn đã ngừng bán, kèm `vendorId`).
+- `categories[].status`: `CHOSEN`, `SUGGESTED` (trong nhóm chia, hoặc tiệc được đề xuất), `NO_VENDOR`, `OWN_VENUE`, `EXCLUDED` (bỏ khỏi phần chia: không tỷ lệ, không ngân sách, không gợi ý gói). `packages` chỉ có ở hạng mục trong nhóm chia và hạng mục đã bỏ.
+- `totals.remaining` = tổng − giá đơn đã chốt − dự kiến chưa chốt (− cọc mất, tiệc tự lo, chi phí khác); không trừ thêm số đã cọc. `owed` = `ordersTotal − deposited`.
+- `warnings[].code`: `PACKAGE_UNAVAILABLE`.
 
-**Ghi đồng thời.** Mọi thao tác ghi ở mục này, `PATCH /weddings/me` và `PATCH …/plan-vendors/:vendorId` phải gửi `version` (lấy từ `Budget.version` hoặc `Wedding.version`, cùng là `weddings.updated_date`). Bản trong DB đã đổi thì 409 `STALE_DATA` ("Đã có thay đổi, hãy tải lại."), không ghi đè. Thiếu `version`: 400 `VERSION_REQUIRED`. Ghi thành công thì `version` mới nằm trong response.
+**Ghi đồng thời.** Các thao tác ghi đám cưới (`PATCH /weddings/me`, `…/budget/settings`, chi phí khác, `…/plan-vendors/:vendorId`) gửi `version` (`weddings.updated_date`); lệch thì 409 `STALE_DATA`, thiếu thì 400 `VERSION_REQUIRED`. Cấu hình Tùy chỉnh dùng `split.config.version` riêng (xem `PUT …/budget/split`).
 
 ### GET /weddings/me/budget
-Response 200: `{ "data": Budget }`
+Response 200: `{ "data": Budget }`. Đang Tùy chỉnh mà nhóm chia đã đổi từ lần lưu trước: backend áp onGroupChange, lưu lại (version + 1) rồi trả về.
 
 ### PATCH /weddings/me/budget/settings
-Mức chia, tỷ lệ Tùy chỉnh, tiệc tự lo. Body: một hoặc nhiều trường `budgetPreset` (`BALANCED` | `SPACE` | `VISUAL` | `CUSTOM`), `customWeights` (`{ "<slug>": 0..100 }`, tổng 100, sai số 0,5), `ownVenue` (boolean), `ownVenueCost` (số nguyên ≥ 0 hoặc null), kèm `version`. Chọn `CUSTOM` lần đầu phải gửi kèm `customWeights`. Response 200: `Budget`. Lỗi: 400 `VALIDATION_ERROR` (`details` theo trường), 409 `STALE_DATA`, 503 `DB_MIGRATION_PENDING` (chưa chạy `prisma/manual/2026-11-02-01-budget-allocation.sql`).
+Mức chia, tiệc tự lo. Body: một hoặc nhiều trường `budgetPreset` (`BALANCED` | `SPACE` | `VISUAL` | `CUSTOM`), `ownVenue` (boolean), `ownVenueCost` (số nguyên ≥ 0 hoặc null), kèm `version`. Chọn `CUSTOM` lần đầu thì khởi tạo cấu hình từ phương án đang dùng. Response 200: `Budget`. Lỗi: 400 `VALIDATION_ERROR`, 409 `STALE_DATA`, 503 `DB_MIGRATION_PENDING`.
 
-Các đường dẫn ô sửa tay cũ (`PUT/DELETE …/budget/categories/:id`, `POST …/budget/reset`, `POST …/budget/rebalance`) đã bỏ (404).
+### PUT /weddings/me/budget/split
+Tự lưu toàn bộ cấu hình Tùy chỉnh. Body `{ "version": 4, "baseMode": "BALANCED", "excluded": ["<categoryId>"], "capAmount": null, "items": [{ "categoryId": "…", "ratio": 6400, "locked": false }] }`.
+
+Backend kiểm tra rồi mới ghi; sai bất kỳ điều kiện nào thì 422 `BUDGET_SPLIT_INVALID` và giữ cấu hình cũ:
+- tổng `ratio` đúng 10000, mỗi `ratio` nguyên 0..10000;
+- `items` đúng các hạng mục trong nhóm chia hiện tại;
+- nhóm từ 2 hạng mục còn ít nhất một mục mở khóa;
+- `capAmount` null hoặc nguyên ≥ 0, chỉ khác null khi nhóm có đúng một hạng mục;
+- `excluded` chỉ gồm dịch vụ chưa chọn.
+
+`version` lệch thì 409 `BUDGET_SPLIT_CONFLICT`, `details.budget` là ngân sách mới nhất. Response 200: `Budget` (`split.config.version` + 1). Lưu cũng đặt `budgetPreset = CUSTOM`.
+
+Các đường dẫn cũ (`PUT/DELETE …/budget/categories/:id`, `POST …/budget/reset`, `POST …/budget/rebalance`) đã bỏ (404). `customWeights` ở `…/budget/settings` đã bỏ (03/11/2026).
 
 ### POST /weddings/me/extra-costs
 Chi phí khác ngoài WebPlan. Body `{ "name": "Thiệp cưới", "amount": 3000000, "version": "…" }` (tên tối đa 100 ký tự, số tiền nguyên dương). Response 201: `Budget`. Lỗi: 400 `VALIDATION_ERROR` (`details.name`, `details.amount`), 409 `EXTRA_COST_LIMIT` (tối đa 200 khoản).

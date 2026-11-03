@@ -38,8 +38,8 @@ test('hòa chi phí: không gắn nhãn, không có câu rẻ hơn', () => {
 test('một cùng khu vực, một khác: tóm tắt có câu vị trí; chưa chọn nơi tổ chức thì ẩn dòng Vị trí', () => {
   const items = [item('A', [pkg('a', 10 * M)], { ward: 'Phường Cầu Giấy' }), item('B', [pkg('b', 12 * M)], { ward: 'Phường Đống Đa' })];
   const r = c.compareServices(items, { slug: 'decor', guestCount: 300, tables: 30, budget: 20 * M, weddingWard: 'Phường Cầu Giấy' });
-  assert.equal(r.columns[0].location.text, 'Cùng Cầu Giấy với địa điểm tổ chức');
-  assert.equal(r.columns[1].location.text, 'Khác khu vực (Đống Đa)');
+  assert.equal(r.columns[0].location.text, 'Cầu Giấy, cùng khu vực nơi tổ chức');
+  assert.equal(r.columns[1].location.text, 'Đống Đa');
   assert.ok(r.summary.includes('A cùng khu vực với địa điểm tổ chức.'));
   const none = c.compareServices(items, { slug: 'decor', guestCount: 300, tables: 30, budget: 20 * M, weddingWard: null });
   assert.equal(none.rows.location, false);
@@ -61,18 +61,18 @@ test('đổi gói: tổng, so với ngân sách và tóm tắt cập nhật', ()
   const ctx = { slug: 'decor', guestCount: 300, tables: 30, budget: 25 * M, weddingWard: null };
   const before = c.compareServices(items, ctx);
   assert.equal(before.columns[0].package.id, 'a1');
-  assert.equal(before.columns[0].budget.text, 'Còn dư 7.000.000đ');
+  assert.equal(before.columns[0].budget.text, 'Thấp hơn mức gợi ý 7.000.000đ');
   assert.deepEqual(before.summary, ['A rẻ hơn B 4.000.000đ.']);
   const after = c.compareServices(items, ctx, { A: 'a2' });
   assert.equal(after.columns[0].total, 30 * M);
-  assert.equal(after.columns[0].budget.text, 'Vượt 5.000.000đ');
-  assert.deepEqual(after.summary, ['B rẻ hơn A 8.000.000đ.', 'A vượt ngân sách hạng mục 5.000.000đ.']);
+  assert.equal(after.columns[0].budget.text, 'Cao hơn mức gợi ý 5.000.000đ');
+  assert.deepEqual(after.summary, ['B rẻ hơn A 8.000.000đ.']);
 });
 
-test('gói mặc định: rẻ nhất trong ngân sách, không có thì rẻ nhất; vừa đủ ghi "Vừa đủ (còn 0đ)"', () => {
+test('gói mặc định: rẻ nhất trong ngân sách, không có thì rẻ nhất; bằng mức gợi ý ghi "Bằng mức gợi ý"', () => {
   const r = c.compareServices([item('A', [pkg('a1', 40 * M), pkg('a2', 25 * M)]), item('B', [pkg('b1', 30 * M)])], { slug: 'decor', guestCount: 1, tables: 1, budget: 25 * M, weddingWard: null });
   assert.equal(r.columns[0].package.id, 'a2');
-  assert.equal(r.columns[0].budget.text, 'Vừa đủ (còn 0đ)');
+  assert.equal(r.columns[0].budget.text, 'Bằng mức gợi ý');
   assert.equal(r.columns[1].package.id, 'b1');
 });
 
@@ -112,4 +112,69 @@ test('dòng Bao gồm: thẻ của gói trước, rồi cụm ngắn từ mô t�
   assert.equal(r[0], 'Phong cách truyền thống');
   assert.ok(r.includes('Cổng hoa nhiều sắc màu dẫn vào không gian tiệc'));
   assert.ok(r.length <= 4 && r.every((x) => x.length <= 60 && !/giá|Ha Vy/.test(x)));
+});
+
+test('lịch ngày cưới: bên đã kín làm mờ, không so giá, khóa nút; gói mặc định bỏ qua sảnh đã kín', () => {
+  const items = [
+    item('Trống Đồng', [pkg('t1', 5 * M, { capacity: 400 })], { availability: { t1: 'FULL' } }),
+    item('Mipec', [pkg('m1', 6 * M, { capacity: 400 }), pkg('m2', 4 * M, { capacity: 400 })], { availability: { m1: 'FREE', m2: 'FULL' } }),
+  ];
+  const r = c.compareServices(items, venueCtx({ weddingDate: '2026-11-28' }));
+  assert.equal(r.columns[0].availability.text, 'Đã kín ngày 28/11');
+  assert.equal(r.columns[0].canAdd, false);
+  assert.equal(r.columns[0].blockReason, 'Trống Đồng đã kín ngày 28/11.');
+  // Mipec: gói rẻ hơn (m2) đã kín nên mặc định lấy m1 còn trống
+  assert.equal(r.columns[1].package.id, 'm1');
+  assert.equal(r.columns[1].availability.text, 'Còn trống ngày 28/11');
+  assert.deepEqual(r.summary, ['Trống Đồng đã kín ngày 28/11.']);
+  assert.ok(r.columns.every((x) => !x.labels.cheapest));
+  assert.equal(r.rows.availability, true);
+  // Không có ngày cưới: ẩn dòng lịch
+  assert.equal(c.compareServices(items, venueCtx()).rows.availability, false);
+});
+
+const conseq = (budgetTotal, openCount = 4) => (cost, switching) => ({
+  openCount,
+  parts: [
+    { label: 'Tổng ngân sách', amount: budgetTotal, sign: 1 },
+    { label: 'hạng mục này', amount: cost, sign: -1 },
+    ...(switching ? [{ label: 'cọc có thể mất', amount: 2 * M, sign: -1 }] : []),
+    { label: 'chi phí khác', amount: 333333, sign: -1 },
+  ],
+});
+
+test('đã cọc một NCC: lịch "Đã giữ … cho bạn", khóa ô chọn gói ở gói trong đơn, NCC khác khóa nút và tính "Nếu đổi sang" kèm tiền cọc có thể mất', () => {
+  const items = [
+    item('Trống Đồng', [pkg('t0', 4 * M), pkg('t1', 5.5 * M)], { order: { total: 6.5 * M, deposited: true, packageId: 't1' }, availability: { t0: 'FREE', t1: 'MINE' } }),
+    item('Mipec', [pkg('m1', 5 * M)], { availability: { m1: 'FREE' } }),
+  ];
+  const r = c.compareServices(items, venueCtx({ weddingDate: '2026-11-28', lockedBy: 'Trống Đồng', lockedDeposit: 2 * M, consequence: conseq(50 * M) }));
+  const [t, m] = r.columns;
+  assert.equal(t.package.id, 't1');
+  assert.equal(t.locked, true);
+  assert.equal(t.availability.text, 'Đã giữ ngày 28/11 cho bạn');
+  assert.equal(t.total, 6.5 * M);
+  assert.equal(t.formula, 'Theo đơn đã cọc của bạn');
+  assert.equal(t.consequence.text, 'Hiện tại còn 43.170.000đ cho 4 dịch vụ chưa chọn');
+  assert.equal(m.canAdd, false);
+  assert.equal(m.blockReason, 'Bạn đã cọc Trống Đồng. Muốn đổi, hãy nhắn Trống Đồng hoặc hủy đơn ở tab Dịch vụ.');
+  // Mipec 5tr × 30 bàn = 150tr; 50 − 150 − 2 (cọc) − 0,33 (làm tròn 0,33) = −102,33tr
+  assert.equal(m.consequence.text, 'Vượt tổng ngân sách 102.330.000đ');
+  assert.equal(m.consequence.detail, 'Tổng ngân sách 50.000.000đ − hạng mục này 150.000.000đ − cọc có thể mất 2.000.000đ − chi phí khác 330.000đ = −102.330.000đ');
+  assert.equal(r.consequenceLabel, 'Nếu đổi nhà cung cấp');
+  // Một bên là giá đơn thật: không so "rẻ hơn", không gắn "Chi phí thấp nhất"
+  assert.ok(r.columns.every((x) => !x.labels.cheapest));
+  assert.deepEqual(r.summary, []);
+  assert.equal(r.lockNote, 'Bạn đã cọc Trống Đồng ngày 28/11, nên chưa thêm được nhà cung cấp khác ở đây. Đổi sang nhà cung cấp khác có thể mất tiền cọc 2.000.000đ (tùy chính sách nhà cung cấp; dòng "Nếu đổi nhà cung cấp" đã tính khoản này). Muốn đổi, hãy nhắn Trống Đồng hoặc hủy đơn ở tab Dịch vụ.');
+});
+
+test('mọi bên cao hơn mức gợi ý: một dòng chung; hệ quả "Chọn gói này thì còn X" làm tròn 10.000đ; dòng giống nhau được gộp', () => {
+  const items = [item('A', [pkg('a', 6 * M, { capacity: 400 })]), item('B', [pkg('b', 7 * M, { capacity: 400 })])];
+  const r = c.compareServices(items, venueCtx({ budget: 100 * M + 4999, consequence: conseq(300 * M) }));
+  assert.equal(r.budgetNote, 'Cả 2 bên đều cao hơn mức gợi ý 100.000.000đ: A cao hơn 80.000.000đ, B cao hơn 110.000.000đ.');
+  assert.equal(r.columns[0].consequence.text, 'Chọn gói này thì còn 119.670.000đ cho 4 dịch vụ chưa chọn');
+  assert.equal(r.sameNote, 'Giống nhau: 30 bàn, đủ cho 300 khách');
+  assert.equal(r.rows.tables, false);
+  assert.equal(r.rows.capacity, false);
+  assert.equal(r.consequenceLabel, 'Nếu chọn gói này');
 });

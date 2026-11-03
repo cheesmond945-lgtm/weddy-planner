@@ -1,13 +1,28 @@
 /**
  * Phân bổ ngân sách và gợi ý gói theo thuật toán (không DB, không Nest, không gọi AI). Unit test: backend/test/allocation.test.cjs.
- * Đặc tả: docs/api/weddings.md mục 7. Hằng số: allocation.config.ts.
+ * Đặc tả: docs/api/weddings.md mục 7 và tài liệu triển khai "Luồng Tùy chỉnh ngân sách" v1.2 (mục 3, 5).
+ * Thuật toán tỷ lệ (chia số nguyên, tự cân bằng, nhóm chia thay đổi): budget-split.ts, bản sao ở frontend.
  *
- * Phân bổ của từng hạng mục là giá trị dẫn xuất: chạy lại hàm này từ đầu mỗi khi đầu vào đổi, không lưu DB.
- * Hạng mục đã chọn luôn được trừ trước nên kết quả không phụ thuộc thứ tự khách chọn.
- * Ngân sách là ràng buộc mềm: gợi ý không bao giờ vượt (nhờ trần cứng), khách tự chọn thì được vượt kèm cảnh báo.
+ * Phân bổ của từng hạng mục là giá trị dẫn xuất: chạy lại hàm này từ đầu mỗi khi đầu vào đổi, không lưu số tiền.
+ * Quỹ dịch vụ = tổng − mọi khoản đã chọn − cọc mất − tiệc tự lo − chi phí ngoài − gói tiệc đề xuất (khi tiệc chưa chọn).
+ * Nhóm chia = các dịch vụ (không phải tiệc) chưa chọn, có gói hợp lệ, chưa bị khách bỏ khỏi phần chia (chỉ ở mức Tùy chỉnh).
+ * Tiền hạng mục trong nhóm = quỹ × tỷ lệ; hạng mục đã chọn / có đơn chưa cọc có giới hạn gợi ý theo tỷ lệ ảo.
+ * Ngân sách là ràng buộc mềm: không có gói trong giới hạn thì gợi ý gói rẻ nhất kèm nhãn "Vượt", không chặn.
  */
-import { BUDGET_FIT_DIRECTION, PRESET_H, VENUE_SLUG, type BudgetPreset } from './allocation.config';
+import { VENUE_SLUG, type BudgetPreset } from './allocation.config';
 import { fitsGuests, packageCost, plannedPackage, tableCount, type EnginePackage, type EnginePlanVendor } from './budget-engine';
+import {
+  initFromMode,
+  pickPackage,
+  reconcile,
+  splitAmounts,
+  suggestedLimit,
+  TOTAL,
+  type BaseMode,
+  type GroupMember,
+  type SplitPackage,
+  type SplitState,
+} from './budget-split';
 import { normalizePlace } from './suggest-rules';
 
 export interface AllocPackage extends EnginePackage {
@@ -38,11 +53,11 @@ export interface AllocInput {
   guestCount: number;
   tableOverride?: number | null;
   preset: BudgetPreset;
-  /** Tỷ lệ % mức Tùy chỉnh theo slug */
-  customWeights?: Record<string, number> | null;
+  /** Cấu hình Tùy chỉnh đã lưu (tỷ lệ, khóa, bỏ khỏi phần chia, giá trần); chỉ dùng khi preset = CUSTOM */
+  split?: SplitState | null;
   ownVenue: boolean;
   ownVenueCost?: number | null;
-  /** Chi phí khác ngoài WebPlan: trừ như khoản đã chọn */
+  /** Chi phí khác ngoài Forever: trừ như khoản đã chọn */
   extraCosts?: number;
   /** Tiền cọc của các đơn đã hủy (không hoàn): khoản đã chi, vẫn trừ vào tổng */
   lostDeposits?: number;
@@ -75,7 +90,7 @@ export interface ChosenItem {
   overCapacity: boolean;
 }
 
-export type AllocLabel = { code: 'OVER_ALLOCATION' } | { code: 'OVER_BY'; amount: number };
+export type AllocLabel = { code: 'OVER_BY'; amount: number };
 
 export interface Suggestion {
   package: AllocPackage;
@@ -84,38 +99,47 @@ export interface Suggestion {
   label: AllocLabel | null;
 }
 
+/** Gói của hạng mục trong nhóm chia, gửi cho client để chọn gói gợi ý ngay khi kéo thanh (cùng hàm pickPackage) */
+export interface CandidatePackage extends SplitPackage {
+  vendorId: string;
+  vendorName: string;
+  name: string;
+  chargedTables: number | null;
+  unit: EnginePackage['unit'];
+}
+
 export interface AllocRow {
   categoryId: string;
   slug: string;
   name: string;
   kind: 'VENUE' | 'SERVICE';
-  /** CHOSEN đã chọn; SUGGESTED được gợi ý; NO_VENDOR chưa có NCC / không gói tiệc nào đủ sức chứa; OWN_VENUE tự lo tiệc */
-  status: 'CHOSEN' | 'SUGGESTED' | 'NO_VENDOR' | 'OWN_VENUE';
+  /**
+   * CHOSEN đã chọn; SUGGESTED trong nhóm chia / tiệc được đề xuất; NO_VENDOR chưa có gói hợp lệ; OWN_VENUE tự lo tiệc;
+   * EXCLUDED khách bỏ khỏi phần chia (Tùy chỉnh): không tỷ lệ, không ngân sách, không gợi ý gói
+   */
+  status: 'CHOSEN' | 'SUGGESTED' | 'NO_VENDOR' | 'OWN_VENUE' | 'EXCLUDED';
   chosen: ChosenItem[];
   /** Chi phí đang tính cho hạng mục: tổng đã chọn, chi phí tự lo, hoặc chi phí gói gợi ý */
   cost: number;
-  /** Trọng số đã chuẩn hóa (chỉ dịch vụ chưa chọn) */
-  weight: number | null;
-  /**
-   * Tỷ lệ của hạng mục trong mức chia hiện tại (chỉ dịch vụ chưa cọc, 0..1): Cân bằng / Ưu tiên … theo trung vị × h,
-   * Tùy chỉnh theo tỷ lệ khách đặt. Gồm cả dịch vụ đã chọn chưa cọc. Khác `weight` (chỉ dùng để duyệt B3).
-   */
+  /** Tỷ lệ trong nhóm chia, số nguyên theo 0,01% (tổng nhóm = 10000); null nếu ngoài nhóm */
+  ratio: number | null;
+  /** ratio / 10000 (0..1) */
   share: number | null;
   /**
-   * Giới hạn riêng của hạng mục (để hiển thị và làm ngân sách hạng mục): `sliderPool` × `share`.
-   * Không dồn phần dư của cả quỹ vào hạng mục cuối như `limit` ở bước B3.
+   * Ngân sách của hạng mục (đồng): trong nhóm = quỹ × tỷ lệ (một hạng mục: min(giá trần, quỹ)); đã chọn / có đơn chưa cọc =
+   * giới hạn gợi ý theo tỷ lệ ảo; tiệc chưa chọn = giới hạn chọn gói tiệc. Một số duy nhất cho Ngân sách, Gợi ý cho bạn, So sánh.
    */
-  shareLimit: number | null;
-  /** Phần chia (dịch vụ) hoặc Mục tiêu (tiệc) */
-  allocation: number | null;
-  /** Trần cứng: còn lại − Σ giá rẻ nhất các hạng mục chưa xử lý phía sau */
-  cap: number | null;
-  /** "Gợi ý: X" = min(phần chia, trần cứng); là ngân sách hạng mục cho gợi ý ở trang Dịch vụ */
   limit: number | null;
+  /** Như `limit` (tên cũ, trang Dịch vụ / So sánh đọc trường này) */
+  shareLimit: number | null;
   suggestion: Suggestion | null;
   /** Mặt bằng giá của hạng mục (tiệc: theo số bàn và sức chứa của kế hoạch) */
   minPrice: number | null;
   medianPrice: number | null;
+  /** Giá gói đắt nhất trong các gói hợp lệ (vạch và cảnh báo trên thanh, mục 5.1) */
+  maxPackagePrice: number | null;
+  /** Gói hợp lệ của hạng mục trong nhóm chia (client tự chọn gói gợi ý khi tỷ lệ đổi) */
+  packages: CandidatePackage[];
   message: string | null;
 }
 
@@ -123,8 +147,6 @@ const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
 const vnd = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
 /** Mọi số tiền làm tròn tới đồng */
 const round = (n: number) => Math.round(n);
-/** Giới hạn hiển thị (giới hạn riêng) làm tròn tới 1.000đ cho dễ đọc */
-const roundThousand = (n: number) => Math.round(n / 1000) * 1000;
 
 /** Trung vị kiểu PERCENTILE_CONT(0.5): nội suy tuyến tính giữa hai phần tử giữa */
 export function median(values: number[]) {
@@ -149,12 +171,12 @@ function candidates(c: AllocCategory, guestCount: number, tables: number) {
 }
 
 /**
- * Mặt bằng giá: giá rẻ nhất và trung vị. Dịch vụ: theo giá gói. Tiệc: theo chi phí gói tiệc của kế hoạch (số bàn, sức chứa),
+ * Mặt bằng giá: giá rẻ nhất, trung vị, đắt nhất. Dịch vụ: theo giá gói. Tiệc: theo chi phí gói tiệc của kế hoạch (số bàn, sức chứa),
  * không lọc theo khu vực.
  */
 export function priceLevels(c: AllocCategory, guestCount: number, tables: number) {
   const costs = candidates(c, guestCount, tables).map((x) => x.cost);
-  return { min: costs.length ? Math.min(...costs) : null, median: median(costs), count: costs.length };
+  return { min: costs.length ? Math.min(...costs) : null, median: median(costs), max: costs.length ? Math.max(...costs) : null, count: costs.length };
 }
 
 /** Chi phí của một NCC đã chọn: đơn (giá đơn) > gói khách chọn > gói dự kiến (rẻ nhất, đủ sức chứa) */
@@ -182,63 +204,28 @@ export function chosenItem(v: AllocPlanVendor, guestCount: number, tables: numbe
   return { ...base, packageSource: selected ? 'SELECTED' : 'PLANNED', cost: est?.cost ?? 0, costSource: 'PLANNED', deposited: 0 };
 }
 
-const validPct = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
-
-/**
- * Trọng số chưa chuẩn hóa của một dịch vụ theo mức chia. Tùy chỉnh: hạng mục chưa có tỷ lệ đã lưu (khách vừa bỏ chọn)
- * nhận `fallback` (trung bình các tỷ lệ đã lưu), rồi chuẩn hóa lại cùng các hạng mục khác.
- */
-function rawWeight(slug: string, medianPrice: number, preset: BudgetPreset, custom: Record<string, number> | null | undefined, fallback = 1) {
-  if (preset === 'CUSTOM') {
-    const pct = custom?.[slug];
-    return validPct(pct) ? pct : fallback;
-  }
-  return medianPrice * (PRESET_H[preset][slug] ?? 1);
-}
-
-/** Chuẩn hóa trọng số về tổng 1 (tất cả bằng 0 thì chia đều) */
-export function normalizeWeights<T extends { raw: number }>(items: T[]): (T & { weight: number })[] {
-  const total = sum(items.map((i) => i.raw));
-  return items.map((i) => ({ ...i, weight: total > 0 ? i.raw / total : 1 / items.length }));
-}
-
-/**
- * Xếp hạng "gói tốt nhất" trong tập thỏa điều kiện: cùng khu vực với nơi tổ chức trước; rồi theo BUDGET_FIT_DIRECTION;
- * rồi điểm đánh giá giảm dần, số lượt giảm dần; rồi số phong cách trùng.
- */
-export function rankPackages<T extends { p: AllocPackage; cost: number }>(list: T[], limit: number, ward?: string | null, styles: string[] = [], direction = BUDGET_FIT_DIRECTION): T[] {
-  const place = (x: T) => (ward ? (x.p.ward && normalizePlace(x.p.ward) === normalizePlace(ward) ? 0 : 1) : 0);
+/** Gói kèm tiêu chí xếp hạng của pickPackage: cùng phường/xã với nơi tổ chức, phong cách trùng */
+function toCandidates(c: AllocCategory, guestCount: number, tables: number, ward?: string | null, styles: string[] = []): (CandidatePackage & { p: AllocPackage })[] {
   const want = new Set(styles.map(normalizePlace));
-  const overlap = (x: T) => x.p.styles.filter((s) => want.has(normalizePlace(s))).length;
-  const fit = (x: T) => (direction === 'closest' ? limit - x.cost : x.cost);
-  return [...list].sort(
-    (a, b) =>
-      place(a) - place(b) ||
-      fit(a) - fit(b) ||
-      (b.p.rating ?? -1) - (a.p.rating ?? -1) ||
-      b.p.reviewCount - a.p.reviewCount ||
-      overlap(b) - overlap(a) ||
-      a.cost - b.cost ||
-      a.p.id.localeCompare(b.p.id),
-  );
+  return candidates(c, guestCount, tables).map(({ p, cost, chargedTables }) => ({
+    p,
+    id: p.id,
+    cost,
+    chargedTables,
+    unit: p.unit,
+    vendorId: p.vendorId,
+    vendorName: p.vendorName,
+    name: p.name,
+    place: ward ? (p.ward && normalizePlace(p.ward) === normalizePlace(ward) ? 0 : 1) : 0,
+    rating: p.rating,
+    reviewCount: p.reviewCount,
+    overlap: p.styles.filter((s) => want.has(normalizePlace(s))).length,
+  }));
 }
 
-/**
- * Chọn gói cho một hạng mục: tốt nhất có chi phí ≤ giới hạn; không có thì gói rẻ nhất ≤ trần cứng (nhãn "vượt phân bổ");
- * không có gói nào ≤ trần cứng thì gói rẻ nhất kèm nhãn "vượt X đ" (không chặn, không để trống).
- */
-function pick(pool: { p: AllocPackage; cost: number; chargedTables: number | null }[], limit: number, cap: number, ward?: string | null, styles?: string[]): Suggestion | null {
-  if (!pool.length) return null;
-  const within = pool.filter((x) => x.cost <= limit);
-  if (within.length) {
-    const best = rankPackages(within, limit, ward, styles)[0];
-    return { package: best.p, cost: best.cost, chargedTables: best.chargedTables, label: null };
-  }
-  const cheapest = [...pool].sort((a, b) => a.cost - b.cost || a.p.id.localeCompare(b.p.id));
-  const underCap = cheapest.find((x) => x.cost <= cap);
-  if (underCap) return { package: underCap.p, cost: underCap.cost, chargedTables: underCap.chargedTables, label: { code: 'OVER_ALLOCATION' } };
-  const c = cheapest[0];
-  return { package: c.p, cost: c.cost, chargedTables: c.chargedTables, label: { code: 'OVER_BY', amount: round(c.cost - Math.max(cap, 0)) } };
+function suggestionOf(pool: ReturnType<typeof toCandidates>, limit: number): Suggestion | null {
+  const r = pickPackage(pool, limit);
+  return r && { package: r.pkg.p, cost: r.pkg.cost, chargedTables: r.pkg.chargedTables, label: r.over === null ? null : { code: 'OVER_BY', amount: r.over } };
 }
 
 export interface Feasibility {
@@ -250,10 +237,13 @@ export interface Feasibility {
   options: string[];
 }
 
+/** Tiệc trong quỹ: CHOSEN đã chọn, OWN tự lo, SUGGESTED gói đề xuất, NO_PACKAGE chưa có gói hợp lệ, NONE không dùng tiệc */
+export type VenueFundStatus = 'CHOSEN' | 'OWN' | 'SUGGESTED' | 'NO_PACKAGE' | 'NONE';
+
 export function allocate(input: AllocInput) {
   const tables = tableCount(input.guestCount, input.tableOverride ?? null);
   const guests = input.guestCount;
-  const venueCat = input.categories.find((c) => c.slug === VENUE_SLUG);
+  const custom = input.preset === 'CUSTOM';
 
   // Hạng mục đã chọn: NCC trong kế hoạch, trừ NCC có đơn mới nhất đã hủy
   const chosenBy = new Map<string, ChosenItem[]>();
@@ -265,19 +255,28 @@ export function allocate(input: AllocInput) {
 
   const levels = new Map(input.categories.map((c) => [c.id, priceLevels(c, guests, tables)]));
   const ownVenueCost = input.ownVenue ? Math.max(0, input.ownVenueCost ?? 0) : 0;
-  const committedChosen = sum([...chosenBy.values()].flat().map((i) => i.cost));
+  const selectedCost = sum([...chosenBy.values()].flat().map((i) => i.cost));
+  const venueCat = input.categories.find((c) => c.slug === VENUE_SLUG) ?? null;
+  const venueSelectedCost = venueCat ? sum((chosenBy.get(venueCat.id) ?? []).map((i) => i.cost)) : 0;
   const lost = input.lostDeposits ?? 0;
   const extra = input.extraCosts ?? 0;
-  const committed = committedChosen + lost + ownVenueCost + extra;
+  const committed = selectedCost + lost + ownVenueCost + extra;
+  // Mục 3: tiền cọc nằm trong giá đơn nên không trừ thêm
+  const remaining = input.total - committed;
 
-  // Hạng mục chưa chọn, có gói (tiệc: có gói đủ sức chứa)
+  // Hạng mục chưa chọn, có gói hợp lệ (tiệc: có gói đủ sức chứa)
   const open = input.categories.filter((c) => !chosenBy.has(c.id) && !(input.ownVenue && c.slug === VENUE_SLUG));
-  const openWithVendors = open.filter((c) => (levels.get(c.id)?.count ?? 0) > 0);
-  const openServices = openWithVendors.filter((c) => c.slug !== VENUE_SLUG);
-  const venueOpen = openWithVendors.find((c) => c.slug === VENUE_SLUG) ?? null;
+  const hasPackages = (c: AllocCategory) => (levels.get(c.id)?.count ?? 0) > 0;
+  const openServices = open.filter((c) => c.slug !== VENUE_SLUG && hasPackages(c));
+  const venueOpen = open.find((c) => c.slug === VENUE_SLUG) ?? null;
+  // Bỏ khỏi phần chia: chỉ ở mức Tùy chỉnh, chỉ hạng mục chưa chọn
+  const excluded = new Set(custom ? (input.split?.excluded ?? []).filter((id) => open.some((c) => c.id === id && c.slug !== VENUE_SLUG)) : []);
+  const groupCats = openServices.filter((c) => !excluded.has(c.id));
+  const members: GroupMember[] = groupCats.map((c) => ({ id: c.id, slug: c.slug, median: levels.get(c.id)!.median! }));
 
   // B0. Kiểm tra khả thi (chỉ cảnh báo)
-  const minNeed = committed + sum(openWithVendors.map((c) => levels.get(c.id)!.min!));
+  const openForMin = [...groupCats, ...(venueOpen && hasPackages(venueOpen) ? [venueOpen] : [])];
+  const minNeed = committed + sum(openForMin.map((c) => levels.get(c.id)!.min!));
   const shortfall = Math.max(0, minNeed - input.total);
   const feasibility: Feasibility = {
     ok: shortfall === 0,
@@ -287,30 +286,28 @@ export function allocate(input: AllocInput) {
     options: shortfall > 0 ? ['Giảm số khách', `Tăng ngân sách thêm ${vnd(shortfall)}`, 'Đổi sang gói rẻ hơn'] : [],
   };
 
-  // B1. Còn lại sau các khoản đã chọn
-  let remaining = input.total - committed;
   const rows = new Map<string, AllocRow>();
-  const baseRow = (c: AllocCategory): AllocRow => ({
-    categoryId: c.id,
-    slug: c.slug,
-    name: c.name,
-    kind: c.slug === VENUE_SLUG ? 'VENUE' : 'SERVICE',
-    status: 'SUGGESTED',
-    chosen: [],
-    cost: 0,
-    weight: null,
-    share: null,
-    shareLimit: null,
-    allocation: null,
-    cap: null,
-    limit: null,
-    suggestion: null,
-    minPrice: levels.get(c.id)?.min ?? null,
-    medianPrice: levels.get(c.id)?.median ?? null,
-    message: null,
-  });
   for (const c of input.categories) {
-    const row = baseRow(c);
+    const lv = levels.get(c.id);
+    const row: AllocRow = {
+      categoryId: c.id,
+      slug: c.slug,
+      name: c.name,
+      kind: c.slug === VENUE_SLUG ? 'VENUE' : 'SERVICE',
+      status: 'SUGGESTED',
+      chosen: [],
+      cost: 0,
+      ratio: null,
+      share: null,
+      limit: null,
+      shareLimit: null,
+      suggestion: null,
+      minPrice: lv?.min ?? null,
+      medianPrice: lv?.median ?? null,
+      maxPackagePrice: lv?.max ?? null,
+      packages: [],
+      message: null,
+    };
     const chosen = chosenBy.get(c.id);
     if (chosen) {
       row.status = 'CHOSEN';
@@ -321,87 +318,85 @@ export function allocate(input: AllocInput) {
       row.status = 'OWN_VENUE';
       row.cost = ownVenueCost;
       row.message = 'Tự lo tiệc ngoài nền tảng';
-    } else if (!levels.get(c.id)?.count) {
+    } else if (!lv?.count) {
       row.status = 'NO_VENDOR';
-      row.message =
-        c.slug === VENUE_SLUG && c.packages.length ? `Chưa có trung tâm tiệc đủ sức chứa cho ${guests} khách` : `Hiện chưa có NCC cho hạng mục ${c.name}`;
+      row.message = c.slug === VENUE_SLUG ? (c.packages.length ? `Chưa có gói tiệc phù hợp cho ${guests} khách` : 'Chưa có gói tiệc phù hợp') : 'Chưa có gói dịch vụ phù hợp';
+    } else if (excluded.has(c.id)) {
+      row.status = 'EXCLUDED';
+      row.message = 'Đã bỏ khỏi phần chia';
     }
     rows.set(c.id, row);
   }
 
-  // Trọng số trên các dịch vụ chưa chọn (tiệc không nằm trong mức chia)
-  const stored = openServices.map((c) => input.customWeights?.[c.slug]).filter(validPct);
-  const customFallback = stored.length ? sum(stored) / stored.length : 1;
-  const weighted = normalizeWeights(
-    openServices.map((c) => ({ c, raw: rawWeight(c.slug, levels.get(c.id)!.median!, input.preset, input.customWeights, customFallback) })),
-  );
-  for (const w of weighted) rows.get(w.c.id)!.weight = w.weight;
-
-  // B2. Trung tâm tiệc chưa chọn (và không tự lo)
-  if (venueOpen) {
+  // Mục 3. Tiệc chưa chọn, không tự lo: trừ gói tiệc tốt nhất trong giới hạn (giới hạn = còn lại − trung vị các dịch vụ trong nhóm);
+  // đều vượt thì gói rẻ nhất kèm "Vượt Y"; không có gói hợp lệ thì chưa trừ tiệc (kèm cảnh báo)
+  // Tự lo tiệc tính cả khi kế hoạch không có hạng mục trung tâm tiệc
+  let venueStatus: VenueFundStatus = venueCat && chosenBy.has(venueCat.id) ? 'CHOSEN' : input.ownVenue ? 'OWN' : venueCat ? 'NO_PACKAGE' : 'NONE';
+  let suggestedVenueCost = 0;
+  if (venueOpen && hasPackages(venueOpen)) {
     const row = rows.get(venueOpen.id)!;
-    const target = remaining - sum(openServices.map((c) => levels.get(c.id)!.median!));
-    const cap = remaining - sum(openServices.map((c) => levels.get(c.id)!.min!));
-    row.allocation = round(target);
-    row.cap = round(cap);
-    row.limit = round(Math.max(0, Math.min(target, cap)));
-    row.suggestion = pick(candidates(venueOpen, guests, tables), target, cap, input.ward, input.styles);
+    const limit = remaining - sum(members.map((m) => m.median));
+    row.limit = row.shareLimit = round(Math.max(0, limit));
+    row.suggestion = suggestionOf(toCandidates(venueOpen, guests, tables, input.ward, input.styles), limit);
+    row.cost = suggestedVenueCost = row.suggestion?.cost ?? 0;
+    venueStatus = 'SUGGESTED';
+  }
+  const serviceBudgetRaw = remaining - suggestedVenueCost;
+  const serviceBudget = Math.max(0, serviceBudgetRaw);
+
+  // Tỷ lệ của nhóm chia: phương án có sẵn khởi tạo lại mỗi lần đọc; Tùy chỉnh dùng cấu hình đã lưu, áp nhóm hiện tại (mục 4.5)
+  let state: SplitState | null = null;
+  let changed = false;
+  let unlocked: string[] = [];
+  if (custom) {
+    if (input.split) {
+      const r = reconcile({ ...input.split, excluded: [...excluded] }, members);
+      state = r.state;
+      unlocked = r.unlocked;
+      // Danh sách bỏ khỏi phần chia đổi (hạng mục đã bỏ vừa được chọn gói) cũng cần lưu lại
+      changed = r.changed || excluded.size !== input.split.excluded.length;
+    } else {
+      // Chưa có cấu hình (dữ liệu cũ): khởi tạo theo Cân bằng và lưu
+      state = { baseMode: 'BALANCED', excluded: [], capAmount: null, items: initFromMode(members, 'BALANCED') };
+      changed = true;
+    }
+  }
+  const baseMode: BaseMode = state ? state.baseMode : (input.preset as BaseMode);
+  const items = state ? state.items : initFromMode(members, baseMode);
+  const { amounts, leftover } = splitAmounts(items, serviceBudget, state?.capAmount ?? null);
+
+  for (const it of items) {
+    const row = rows.get(it.id)!;
+    const amount = amounts[it.id];
+    const cat = groupCats.find((c) => c.id === it.id)!;
+    const pool = toCandidates(cat, guests, tables, input.ward, input.styles);
+    row.ratio = it.ratio;
+    row.share = it.ratio / TOTAL;
+    row.limit = row.shareLimit = round(amount);
+    row.packages = pool.map(({ p: _p, ...x }) => x);
+    row.suggestion = suggestionOf(pool, amount);
     row.cost = row.suggestion?.cost ?? 0;
-    remaining -= row.cost;
   }
 
-  // B3. Dịch vụ chưa chọn theo trọng số giảm dần; tiền dư tự chuyển sang hạng mục sau
-  const order = [...weighted].sort((a, b) => b.weight - a.weight || a.c.slug.localeCompare(b.c.slug));
-  for (let i = 0; i < order.length; i++) {
-    const { c, weight } = order[i];
-    const rest = order.slice(i);
-    const later = order.slice(i + 1);
-    const allocation = remaining * (weight / (sum(rest.map((r) => r.weight)) || 1));
-    const cap = remaining - sum(later.map((r) => levels.get(r.c.id)!.min!));
-    const limit = Math.min(allocation, cap);
-    const row = rows.get(c.id)!;
-    row.allocation = round(allocation);
-    row.cap = round(cap);
-    row.limit = round(Math.max(0, limit));
-    // Không có gói ≤ phần chia: pick lấy gói rẻ nhất ≤ trần cứng ("vượt phân bổ")
-    row.suggestion = pick(candidates(c, guests, tables), limit, cap, input.ward, input.styles);
-    row.cost = row.suggestion?.cost ?? 0;
-    remaining -= row.cost;
+  // Hạng mục đã bỏ khỏi phần chia: vẫn gửi gói để client tính ngay khi khách bấm "Thêm lại"
+  for (const c of openServices.filter((c) => excluded.has(c.id))) {
+    rows.get(c.id)!.packages = toCandidates(c, guests, tables, input.ward, input.styles).map(({ p: _p, ...x }) => x);
+  }
+
+  // Mục 5. Hạng mục đã chọn hoặc có đơn chưa cọc (dịch vụ, không phải tiệc): giới hạn gợi ý theo tỷ lệ ảo; đã cọc thì không có
+  for (const row of rows.values()) {
+    if (row.status !== 'CHOSEN' || row.kind !== 'SERVICE' || row.medianPrice === null) continue;
+    if (row.chosen.some((i) => i.costSource === 'DEPOSITED')) continue;
+    row.limit = row.shareLimit = suggestedLimit({ slug: row.slug, median: row.medianPrice }, members, baseMode, serviceBudgetRaw, row.cost);
   }
 
   const list = input.categories.map((c) => rows.get(c.id)!);
-
-  // Tỷ lệ và giới hạn riêng của từng dịch vụ chưa cọc (chỉ để hiển thị / làm ngân sách hạng mục, không đổi gói gợi ý ở trên).
-  // Dịch vụ đã cọc: giá đã chốt, khóa khỏi phần chia.
-  const isDeposited = (r: AllocRow) => r.chosen.some((i) => i.costSource === 'DEPOSITED');
-  const services = list.filter((r) => r.kind === 'SERVICE' && r.medianPrice !== null && (r.status === 'CHOSEN' || r.status === 'SUGGESTED') && !isDeposited(r));
-  const venueCost = sum(list.filter((r) => r.kind === 'VENUE' && (r.status === 'CHOSEN' || r.status === 'SUGGESTED')).map((r) => r.cost));
-  const depositedServices = sum(list.filter((r) => r.kind === 'SERVICE' && isDeposited(r)).map((r) => r.cost));
-  // Tiền chia cho các dịch vụ chưa cọc = tổng − tiệc (đã chọn hoặc gợi ý) − dịch vụ đã cọc − cọc mất − tiệc tự lo − chi phí khác
-  const sliderPool = Math.max(0, input.total - venueCost - depositedServices - lost - extra - ownVenueCost);
-  const savedPct = services.map((r) => input.customWeights?.[r.slug]).filter(validPct);
-  const pctFallback = savedPct.length ? sum(savedPct) / savedPct.length : 1;
-  const raws = services.map((r) => ({
-    r,
-    raw:
-      input.preset === 'CUSTOM'
-        ? (validPct(input.customWeights?.[r.slug]) ? input.customWeights![r.slug] : pctFallback)
-        : r.medianPrice! * (PRESET_H[input.preset as Exclude<BudgetPreset, 'CUSTOM'>][r.slug] ?? 1),
-  }));
-  // Tùy chỉnh, mọi hạng mục đều có tỷ lệ đã lưu và tổng < 100% (khách đặt số tiền tuyệt đối khi chỉ còn ít hạng mục):
-  // giữ đúng tỷ lệ đã đặt, phần còn lại không giao cho hạng mục nào. Các trường hợp khác chuẩn hóa về 100%.
-  const rawTotal = sum(raws.map((x) => x.raw));
-  const absolute = input.preset === 'CUSTOM' && savedPct.length === services.length && rawTotal > 0 && rawTotal < 100;
-  const shares = absolute ? raws.map((x) => ({ ...x, weight: x.raw / 100 })) : normalizeWeights(raws);
-  for (const x of shares) {
-    x.r.share = x.weight;
-    x.r.shareLimit = roundThousand(sliderPool * x.weight);
-  }
   const suggestedTotal = sum(list.filter((r) => r.status === 'SUGGESTED').map((r) => r.cost));
   // Vượt ngân sách (cảnh báo mềm): rõ khi giá đơn thật đã vượt, nhẹ khi vượt do số dự kiến
   const firm = sum([...chosenBy.values()].flat().filter((i) => i.costSource !== 'PLANNED').map((i) => i.cost)) + lost + extra + ownVenueCost;
   const over = committed - input.total;
   const overBudget = over > 0 ? { level: firm > input.total ? ('strong' as const) : ('soft' as const), amount: round(over), message: `Vượt ngân sách ${vnd(over)}` } : null;
+  const venueRow = venueCat ? rows.get(venueCat.id)! : null;
 
   return {
     tables,
@@ -410,14 +405,33 @@ export function allocate(input: AllocInput) {
     lostDeposits: lost,
     ownVenueCost,
     suggestedTotal: round(suggestedTotal),
-    /** Tiền chia cho các dịch vụ chưa cọc (cơ sở đổi số tiền ↔ % ở thanh kéo Tùy chỉnh): giới hạn riêng = sliderPool × share */
-    sliderPool: round(sliderPool),
-    /** B4. Còn lại sau khi trừ các khoản đã chọn và các gói gợi ý */
-    remaining: round(remaining),
-    leftover: remaining > 0 ? { amount: round(remaining), message: `Còn dư ${vnd(remaining)}: bạn có thể nâng gói hoặc thêm hạng mục.` } : null,
+    /** Còn lại sau khi trừ các khoản đã chọn và các gói gợi ý */
+    remaining: round(input.total - committed - suggestedTotal),
+    /** "Còn dư": phần quỹ không phân bổ cho hạng mục nào (nhóm rỗng, hoặc chênh lệch với giá trần) */
+    leftover: leftover > 0 ? { amount: round(leftover), message: `Còn dư ${vnd(leftover)}` } : null,
     feasibility,
     overBudget,
     status: overBudget ? ('OVER_BUDGET' as const) : ('OK' as const),
+    /** Mục 3: quỹ dịch vụ và chi tiết (ⓘ) */
+    fund: {
+      totalBudget: input.total,
+      selectedCost: round(selectedCost),
+      venueSelectedCost: round(venueSelectedCost),
+      lostDeposit: lost,
+      selfVenueCost: ownVenueCost,
+      externalCost: extra,
+      remaining: round(remaining),
+      venue: {
+        status: venueStatus,
+        amount:
+          venueStatus === 'CHOSEN' ? round(venueSelectedCost) : venueStatus === 'OWN' ? ownVenueCost : venueStatus === 'SUGGESTED' ? suggestedVenueCost : null,
+        overBy: venueStatus === 'SUGGESTED' ? (venueRow?.suggestion?.label?.amount ?? null) : null,
+      },
+      serviceBudgetRaw: round(serviceBudgetRaw),
+      serviceBudget: round(serviceBudget),
+    },
+    /** Nhóm chia: phương án, cấu hình Tùy chỉnh (đã áp nhóm hiện tại) và các hạng mục tự mở khóa */
+    split: { mode: input.preset, baseMode, state, changed, unlocked, members },
   };
 }
 

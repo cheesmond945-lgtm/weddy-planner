@@ -14,12 +14,16 @@ type Props = { title: string; description: string; children: ReactNode } & Omit<
 
 /**
  * Khung "lá thư giấy xé tay" dùng chung cho hộp thiết lập / chỉnh sửa thông tin đám cưới và hộp Đăng ký hợp tác (các hộp chỉ khác tiêu đề và nội dung form):
- * tờ giấy kem mép gồ ghề (lọc SVG làm lệch mép), bên trong là ảnh nền cô dâu chú rể, form bên trái, tem thư ảnh nhỏ kèm dấu bưu điện WebPlan ở góc phải.
+ * tờ giấy kem mép gồ ghề (lọc SVG làm lệch mép), bên trong là ảnh nền cô dâu chú rể, form bên trái, tem thư ảnh nhỏ kèm dấu bưu điện Forever ở góc phải.
  * Khung ngoài trong suốt, không cuộn để mép giấy và bóng đổ không bị cắt; phần trong tờ giấy mới cuộn.
  */
 export function LetterDialogContent({ title, description, children, className, ...props }: Props) {
   return (
-    <DialogContent showCloseButton={false} className={cn('max-w-[800px] overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none', className)} {...props}>
+    <DialogContent
+      showCloseButton={false}
+      className={cn('max-w-[800px] overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none', className)}
+      {...props}
+    >
       <svg aria-hidden className="absolute size-0">
         <filter id="wedding-deckle-edge">
           <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="7" />
@@ -74,19 +78,22 @@ function PhotoBackground() {
     <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
       <div className="absolute inset-0 scale-110 bg-cover bg-[center_25%] blur-[14px]" style={{ backgroundImage: photoUrl }} />
       <div className="absolute inset-0 bg-[linear-gradient(color-mix(in_srgb,var(--bg)_86%,transparent),color-mix(in_srgb,var(--bg)_78%,transparent))] md:bg-[linear-gradient(to_right,color-mix(in_srgb,var(--bg)_90%,transparent)_0%,color-mix(in_srgb,var(--bg)_84%,transparent)_40%,color-mix(in_srgb,var(--bg)_40%,transparent)_65%,color-mix(in_srgb,var(--bg)_10%,transparent)_100%)]" />
-      <div
-        className="absolute inset-y-0 right-0 hidden w-[58%] [mask-image:linear-gradient(to_right,transparent_0%,rgb(0_0_0/0.4)_25%,#000_58%)] md:block"
-      >
+      <div className="absolute inset-y-0 right-0 hidden w-[58%] [mask-image:linear-gradient(to_right,transparent_0%,rgb(0_0_0/0.4)_25%,#000_58%)] md:block">
         <div className="size-full bg-[length:auto_118%] bg-[center_top] bg-no-repeat" style={{ backgroundImage: photoUrl }} />
       </div>
     </div>
   )
 }
 
-/** Tem thư: mép răng cưa (mask đục lỗ tròn quanh viền), trong là ảnh cô dâu chú rể bên hồ lúc hoàng hôn */
-function Stamp() {
+/** Tem thư: mép răng cưa (mask đục lỗ tròn quanh viền), trong là ảnh cô dâu chú rể bên hồ lúc hoàng hôn. Dùng lại ở đầu trang Kế hoạch (cỡ lớn hơn qua className). */
+export function Stamp({ className }: { className?: string }) {
   return (
-    <div className="relative h-[110px] w-[90px] rotate-[4deg] bg-white p-[5px] drop-shadow-[0_3px_5px_rgb(60_40_10/0.25)] [mask:linear-gradient(#000_0_0)_content-box,radial-gradient(circle_3px,#0000_95%,#000)_-4px_-4px/8px_8px]">
+    <div
+      className={cn(
+        'relative h-[110px] w-[90px] rotate-[4deg] bg-white p-[5px] drop-shadow-[0_3px_5px_rgb(60_40_10/0.25)] [mask:linear-gradient(#000_0_0)_content-box,radial-gradient(circle_3px,#0000_95%,#000)_-4px_-4px/8px_8px]',
+        className,
+      )}
+    >
       <div className="relative size-full border border-gold-500/40 bg-cover bg-[center_40%]" style={{ backgroundImage: `url(${stampPhoto})` }}>
         <span className="absolute right-1 bottom-0.5 font-serif text-[10px] font-semibold text-white [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">♥</span>
       </div>
@@ -94,14 +101,19 @@ function Stamp() {
   )
 }
 
-/** Dấu bưu điện WebPlan: vòng tròn kép kèm các đường lượn sóng, màu mực nâu; viền sáng mờ để đọc được trên ảnh */
-function Postmark({ className }: { className?: string }) {
+/** Dấu bưu điện Forever: vòng tròn kép kèm các đường lượn sóng, màu mực nâu; viền sáng mờ để đọc được trên ảnh */
+export function Postmark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 120 64" fill="none" stroke="currentColor" className={cn('relative z-[1] h-16 w-[120px] rotate-[-10deg] text-gold-800/80 drop-shadow-[0_0_2px_rgb(255_250_235/0.9)]', className)}>
+    <svg
+      viewBox="0 0 120 64"
+      fill="none"
+      stroke="currentColor"
+      className={cn('relative z-[1] h-16 w-[120px] rotate-[-10deg] text-gold-800/80 drop-shadow-[0_0_2px_rgb(255_250_235/0.9)]', className)}
+    >
       <circle cx="32" cy="32" r="26" strokeWidth="1.6" />
       <circle cx="32" cy="32" r="20" strokeWidth="0.8" />
       <text x="32" y="30" textAnchor="middle" fontSize="8" fill="currentColor" stroke="none" fontWeight="600" letterSpacing="1">
-        WEBPLAN
+        FOREVER
       </text>
       <text x="32" y="41" textAnchor="middle" fontSize="7" fill="currentColor" stroke="none">
         ♥ {new Date().getFullYear()} ♥

@@ -42,15 +42,24 @@ export class PlanTabsController {
   }
 
   /**
-   * Cài đặt phân bổ: mức chia, tỷ lệ Tùy chỉnh, tiệc tự lo. Body { budgetPreset?, customWeights?, ownVenue?, ownVenueCost?, version }.
-   * Không có ô sửa số tiền theo hạng mục: phân bổ là giá trị dẫn xuất (allocation.ts).
+   * Cài đặt phân bổ: mức chia, tiệc tự lo. Body { budgetPreset?, ownVenue?, ownVenueCost?, version }.
+   * Chọn CUSTOM lần đầu thì khởi tạo cấu hình Tùy chỉnh từ phương án đang dùng.
    */
   @Patch('budget/settings')
   budgetSettings(@Req() req: any, @Body() body: Record<string, unknown>) {
     return this.budget.updateSettings(req.user.sub, body ?? {});
   }
 
-  // ---------- Chi phí khác ngoài WebPlan ----------
+  /**
+   * Tự lưu cấu hình Tùy chỉnh (toàn bộ): Body { version (số nguyên của cấu hình), baseMode, excluded, capAmount, items: [{ categoryId, ratio, locked }] }.
+   * 200 kèm ngân sách mới (version + 1); 422 khi không hợp lệ (giữ cấu hình cũ); 409 khi version lệch (details.budget là bản mới nhất).
+   */
+  @Put('budget/split')
+  saveBudgetSplit(@Req() req: any, @Body() body: Record<string, unknown>) {
+    return this.budget.saveSplit(req.user.sub, body ?? {});
+  }
+
+  // ---------- Chi phí khác ngoài Forever ----------
 
   @Post('extra-costs')
   addExtraCost(@Req() req: any, @Body() body: { name?: unknown; amount?: unknown; version?: unknown }) {

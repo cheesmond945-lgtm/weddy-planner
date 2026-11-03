@@ -4,6 +4,7 @@
 @import './vendor.css';
 @import './theme.css';
 @import './plan-theme.css';
+@import './budget-theme.css';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 

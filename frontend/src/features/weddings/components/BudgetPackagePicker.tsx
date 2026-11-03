@@ -1,9 +1,11 @@
-import { ChevronDown, Lock } from 'lucide-react'
+import { ArrowRight, ChevronDown, Lock } from 'lucide-react'
+import { Link } from 'react-router'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
+import { paths } from '@/routes/paths'
 import type { Budget, BudgetVendor, PlanItem } from '@/types/wedding'
 import { chargedTables } from '@/features/catalog/price'
 import { packageLabel, packageOptionText } from '../budgetView'
@@ -12,9 +14,21 @@ import { useChoosePackage, usePatchWedding } from '../hooks'
 /**
  * Ô "Gói" trên một dòng của bảng Ngân sách: bấm để đổi gói (cùng danh sách gói với tab Dịch vụ).
  * `withTables` (nhà hàng, gói tính theo bàn): số bàn hiện trong ô và sửa được ở đầu danh sách gói.
- * Đã có đơn thì khóa. Gói tiệc vượt sức chứa bị vô hiệu; gói khác chọn được kể cả vượt ngân sách, kèm hệ quả ngay dưới gói.
+ * `changeVendorSlug`: cuối danh sách gói có link "Đổi sang nhà cung cấp khác" (Dịch vụ cưới của hạng mục). Đã có đơn thì khóa. Gói tiệc vượt sức chứa bị vô hiệu; gói khác chọn được kể cả vượt ngân sách, kèm hệ quả ngay dưới gói.
  */
-export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vendor?: BudgetVendor; item?: PlanItem; budget: Budget; withTables: boolean }) {
+export function BudgetPackagePicker({
+  vendor,
+  item,
+  budget,
+  withTables,
+  changeVendorSlug,
+}: {
+  vendor?: BudgetVendor
+  item?: PlanItem
+  budget: Budget
+  withTables: boolean
+  changeVendorSlug?: string
+}) {
   const choose = useChoosePackage()
   const patch = usePatchWedding()
   const [open, setOpen] = useState(false)
@@ -24,7 +38,9 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
   const locked = pkg?.source === 'ORDER'
   const { count, auto, override } = budget.tables
   // Danh sách gói từ tab Ngân sách (kèm hệ quả, sức chứa); không có thì lấy từ kế hoạch
-  const options = vendor?.options.length ? vendor.options : (item?.packages ?? []).map((p) => ({ ...p, chargedTables: null, consequence: null as string | null }))
+  const options = vendor?.options.length
+    ? vendor.options
+    : (item?.packages ?? []).map((p) => ({ ...p, chargedTables: null, consequence: null as string | null }))
 
   useEffect(() => {
     if (!open) return
@@ -89,11 +105,11 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
   if (!canOpen) {
     return (
       <div className="text-[13px]">
-        <span className="inline-flex items-start gap-1.5">
-          {locked && <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />}
+        {/* Có đơn: khóa đổi gói, giá theo đơn (ghi ở chú thích khi rê chuột vào biểu tượng khóa, không thêm dòng chữ) */}
+        <span className="inline-flex items-start gap-1.5" title={locked ? 'Giá theo đơn nhà cung cấp gửi' : undefined}>
+          {locked && <Lock className="mt-0.5 size-3.5 shrink-0" aria-label="Giá theo đơn nhà cung cấp gửi" />}
           {text}
         </span>
-        {locked && <div className="text-muted-foreground">Giá theo đơn nhà cung cấp gửi.</div>}
         {minimumNote}
         {consequence}
         {unavailable}
@@ -117,7 +133,11 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
         <span>{text}</span>
         <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden />
       </button>
-      {withTables && <div className="mt-1 text-[12px] text-muted-foreground">{override === null ? `Số bàn tự tính từ ${budget.guestCount} khách` : `Bạn đã sửa số bàn, tự tính là ${auto}`}</div>}
+      {withTables && (
+        <div className="mt-1 text-[12px] text-muted-foreground">
+          {override === null ? `Số bàn tự tính từ ${budget.guestCount} khách` : `Bạn đã sửa số bàn, tự tính là ${auto}`}
+        </div>
+      )}
       {minimumNote}
       {consequence}
       {unavailable}
@@ -132,7 +152,15 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
             <form onSubmit={submitTables} className="flex flex-col gap-2 border-b border-line p-3">
               <label className="flex items-center gap-2 text-[13px] font-medium">
                 Số bàn
-                <Input type="number" min={1} max={500} value={tables} onChange={(e) => setTables(e.target.value)} className="w-24 px-2.5 py-1.5 text-sm" autoFocus />
+                <Input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={tables}
+                  onChange={(e) => setTables(e.target.value)}
+                  className="w-24 px-2.5 py-1.5 text-sm"
+                  autoFocus
+                />
                 <Button type="submit" size="sm" disabled={patch.isPending}>
                   Lưu
                 </Button>
@@ -171,7 +199,11 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
                       // Gói tiệc vượt sức chứa: vô hiệu (điều kiện kỹ thuật); không chặn theo ngân sách
                       disabled={!p.fits}
                       onClick={() => select(p.id)}
-                      className={cn('block w-full px-3.5 py-2 text-left text-sm hover:bg-accent-soft disabled:cursor-not-allowed disabled:hover:bg-transparent', active && 'font-semibold text-gold-700', !p.fits && 'text-muted-foreground')}
+                      className={cn(
+                        'block w-full px-3.5 py-2 text-left text-sm hover:bg-accent-soft disabled:cursor-not-allowed disabled:hover:bg-transparent',
+                        active && 'font-semibold text-gold-700',
+                        !p.fits && 'text-muted-foreground',
+                      )}
                     >
                       {packageOptionText(p, budget.guestCount, item?.tables ?? count)}
                       {p.fits && p.consequence && <span className="mt-0.5 block text-[12px] font-normal text-warn">{p.consequence}</span>}
@@ -180,6 +212,15 @@ export function BudgetPackagePicker({ vendor, item, budget, withTables }: { vend
                 )
               })}
             </ul>
+          )}
+          {changeVendorSlug && (
+            <Link
+              to={`${paths.services}?category=${changeVendorSlug}&ai=1`}
+              className="flex items-center gap-1 border-t border-line px-3.5 py-2 text-[13px] font-medium text-gold-700 hover:bg-accent-soft"
+            >
+              Đổi sang nhà cung cấp khác
+              <ArrowRight className="size-3.5" aria-hidden />
+            </Link>
           )}
         </div>
       )}

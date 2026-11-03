@@ -11,7 +11,7 @@ import { withTimeout, type AiContext } from './search-rules';
 export function buildAiPrompt(text: string, ctx: AiContext) {
   const low = +(1 - PRICE_TOLERANCE).toFixed(2);
   const high = +(1 + PRICE_TOLERANCE).toFixed(2);
-  const system = `Bạn là bộ phận hiểu câu tìm kiếm của nền tảng dịch vụ cưới WebPlan. Nhiệm vụ DUY NHẤT: chuyển câu người dùng thành bộ lọc JSON. Bạn không chọn, không gợi ý, không mô tả nhà cung cấp nào.
+  const system = `Bạn là bộ phận hiểu câu tìm kiếm của nền tảng dịch vụ cưới Forever. Nhiệm vụ DUY NHẤT: chuyển câu người dùng thành bộ lọc JSON. Bạn không chọn, không gợi ý, không mô tả nhà cung cấp nào.
 
 DANH SÁCH GIÁ TRỊ HỢP LỆ
 - Hạng mục: ${ctx.categories.map((c) => c.name).join(', ')}

@@ -124,7 +124,7 @@ export class ImportExportService {
     return this.report(results, values.length);
   }
 
-  /** Chi phí khác ngoài WebPlan (bảng wedding_extra_costs). */
+  /** Chi phí khác ngoài Forever (bảng wedding_extra_costs). */
   async importExpenses(userId: string, body: ExtraCostImportBody) {
     requireDbFeature('budgetTiers');
     const w = await this.weddings.requireWedding(userId);

@@ -1,4 +1,4 @@
-import { TriangleAlert } from 'lucide-react'
+import { CalendarCheck, CalendarX, CalendarClock, TriangleAlert } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -26,24 +26,67 @@ function RowBadge({ children }: { children: ReactNode }) {
 }
 
 const Muted = ({ children }: { children: ReactNode }) => <span className="text-muted-foreground">{children}</span>
-const Small = ({ children, className }: { children: ReactNode; className?: string }) => <div className={cn('mt-1 text-[13px] text-muted-foreground', className)}>{children}</div>
+const Small = ({ children, className }: { children: ReactNode; className?: string }) => (
+  <div className={cn('mt-1 text-[13px] text-muted-foreground', className)}>{children}</div>
+)
 
-type Row = { label: string; cell: (c: CompareColumn, s: ServiceDetail) => ReactNode }
+/** Lịch ngày cưới ngay dưới tên NCC: Còn trống (xanh), Đã kín (đỏ), Chưa xác nhận (xám) */
+const DAY_STYLE = {
+  FREE: { icon: CalendarCheck, cls: 'bg-sage-soft text-sage' },
+  FULL: { icon: CalendarX, cls: 'bg-warn-soft text-warn' },
+  UNCONFIRMED: { icon: CalendarClock, cls: 'bg-line text-muted-foreground' },
+  MINE: { icon: CalendarCheck, cls: 'bg-sage text-white' },
+} as const
+
+function DayBadge({ a }: { a: NonNullable<CompareColumn['availability']> }) {
+  const { icon: Icon, cls } = DAY_STYLE[a.status]
+  return (
+    <span className={cn('mt-1.5 inline-flex items-center gap-1.5 rounded-pill px-2.5 py-[3px] text-xs font-semibold', cls)}>
+      <Icon className="size-3.5" aria-hidden />
+      {a.text}
+    </span>
+  )
+}
+
+/** Dòng thường: mỗi cột một ô; dòng gộp (span): một ô trải hết các cột */
+type Row =
+  { label: string; hint?: string | null; cell: (c: CompareColumn, s: ServiceDetail) => ReactNode } | { label: string; hint?: string | null; span: ReactNode }
 
 /**
- * Bảng so sánh 2–3 dịch vụ cùng hạng mục (3.4). Thứ tự dòng: Chọn gói; Tổng chi phí ước tính; So với ngân sách hạng mục;
- * Số bàn tính phí (tiệc); Vị trí; Sức chứa (tiệc); Đánh giá; Bao gồm; Nút. Không có đề xuất, chỉ nhãn theo dòng.
+ * Bảng so sánh 2–3 dịch vụ cùng hạng mục (3.4). Hàng đầu cố định khi cuộn: tên NCC, lịch ngày cưới, nút.
+ * Thứ tự dòng: Chọn gói (đã cọc: khóa); Tổng chi phí ước tính; So với mức gợi ý; Nếu chọn gói này / Nếu đổi nhà cung cấp; Giống nhau (dòng gộp); Số bàn tính phí (tiệc);
+ * Vị trí; Sức chứa (tiệc); Đánh giá; Điểm nổi bật. NCC đã kín ngày cưới thì làm mờ cột. Không có đề xuất, chỉ nhãn theo dòng.
  */
 export function CompareTable({ result, onPick, updating, renderAdd, renderQuote }: CompareTableProps) {
-  const { columns, rows: show } = result.comparison
+  const { columns, rows: show, budgetNote, sameNote, consequenceLabel, locationNote } = result.comparison
   const services = result.items
   const pairs = columns.map((c) => ({ c, s: services.find((x) => x.id === c.id)! }))
+  const faded = (c: CompareColumn) => c.availability?.status === 'FULL'
 
   const rows: Row[] = [
     {
       label: 'Chọn gói',
       cell: (c) =>
-        c.package ? (
+        c.package && c.locked ? (
+          // Đã cọc: khóa ở gói trong đơn, chỉ cách đổi (không để khách vào ngõ cụt)
+          <>
+            <select
+              aria-label={`Gói của ${c.name}`}
+              value={c.package.id}
+              disabled
+              className="w-full max-w-[240px] rounded-md border border-line bg-line/40 px-3 py-2 text-ink"
+            >
+              <option value={c.package.id}>{c.package.name}</option>
+            </select>
+            <Small>
+              Đã cọc gói này. Muốn đổi gói, nhắn nhà cung cấp; muốn đổi nhà cung cấp, hủy đơn ở{' '}
+              <Link to={paths.planTab.services} className="font-medium text-gold-700 underline underline-offset-[3px]">
+                tab Dịch vụ
+              </Link>
+              .
+            </Small>
+          </>
+        ) : c.package ? (
           <select
             aria-label={`Chọn gói của ${c.name}`}
             value={c.package.id}
@@ -79,24 +122,48 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
         )
       },
     },
+    // Mọi bên đều cao hơn mức gợi ý: một dòng chung thay cho chữ đỏ lặp lại ở từng cột
     ...(show.budget
       ? [
+          budgetNote
+            ? {
+                label: 'So với mức gợi ý',
+                span: (
+                  <span className="inline-flex items-start gap-1.5 text-warn">
+                    <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                    {budgetNote}
+                  </span>
+                ),
+              }
+            : {
+                label: 'So với mức gợi ý',
+                cell: (c: CompareColumn) =>
+                  !c.budget ? (
+                    <Muted>—</Muted>
+                  ) : (
+                    <span className={c.budget.kind === 'OVER' ? 'text-warn' : c.budget.kind === 'LEFT' ? 'text-sage' : 'text-ink'}>{c.budget.text}</span>
+                  ),
+              },
+        ]
+      : []),
+    ...(show.consequence
+      ? [
           {
-            label: 'So với ngân sách hạng mục',
+            label: consequenceLabel,
             cell: (c: CompareColumn) =>
-              !c.budget ? (
+              !c.consequence ? (
                 <Muted>—</Muted>
-              ) : c.budget.kind === 'OVER' ? (
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-warn-soft px-2 py-1 text-xs font-medium text-warn">
-                  <TriangleAlert className="size-3.5" aria-hidden />
-                  {c.budget.text}
-                </span>
               ) : (
-                <span className={c.budget.kind === 'LEFT' ? 'text-sage' : 'text-ink'}>{c.budget.text}</span>
+                <>
+                  <span className={cn('font-medium')}>{c.consequence.text}</span>
+                  {/* Phép tính đầy đủ (làm tròn 10.000đ như tab Ngân sách) để con số minh bạch */}
+                  <Small className="text-[12px]">{c.consequence.detail}</Small>
+                </>
               ),
           },
         ]
       : []),
+    ...(sameNote ? [{ label: 'Giống nhau', span: <span>{sameNote.replace(/^Giống nhau: /, '')}</span> }] : []),
     ...(show.tables
       ? [
           {
@@ -113,7 +180,7 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
           },
         ]
       : []),
-    ...(show.location ? [{ label: 'Vị trí', cell: (c: CompareColumn) => c.location?.text ?? <Muted>Chưa rõ khu vực</Muted> }] : []),
+    ...(show.location ? [{ label: 'Vị trí', hint: locationNote, cell: (c: CompareColumn) => c.location?.text ?? <Muted>Chưa rõ khu vực</Muted> }] : []),
     ...(show.capacity
       ? [
           {
@@ -148,43 +215,72 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
       ),
     },
     {
-      label: 'Bao gồm',
-      cell: (c) => (
-        <>
-          {c.includes.length ? (
-            <ul className="list-disc space-y-0.5 pl-4">
-              {c.includes.map((x) => (
-                <li key={x}>{x}</li>
-              ))}
-            </ul>
-          ) : (
-            <Muted>—</Muted>
-          )}
-          <Link to={paths.serviceDetail(c.id)} className="mt-1.5 inline-block text-[13px] font-medium text-gold-700 underline underline-offset-[3px]">
-            Xem chi tiết
-          </Link>
-        </>
-      ),
+      label: 'Điểm nổi bật',
+      cell: (c) =>
+        c.includes.length ? (
+          <ul className="list-disc space-y-0.5 pl-4">
+            {c.includes.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        ) : (
+          <Muted>—</Muted>
+        ),
     },
   ]
 
   const cell = 'border-b border-line px-4 py-[13px] align-top'
 
   return (
-    <div className={cn('overflow-x-auto rounded-lg border border-line bg-surface transition-opacity', updating && 'opacity-60')} aria-busy={updating || undefined}>
+    // Màn rộng không cuộn ngang trong bảng để hàng đầu (tên NCC, lịch, nút) dính được khi cuộn trang
+    <div
+      className={cn('overflow-x-auto rounded-lg border border-line bg-surface transition-opacity lg:overflow-visible', updating && 'opacity-60')}
+      aria-busy={updating || undefined}
+    >
       <table className="w-full min-w-[620px] border-collapse text-[14px]">
-        <thead>
+        <thead className="sticky top-[76px] z-10 bg-surface shadow-[0_6px_10px_-8px_rgb(var(--shadow-rgb)/0.25)]">
           <tr>
-            <th className="w-[150px] border-b border-line px-4 py-[13px]">
+            <th className="w-[160px] px-4 pt-[13px] pb-2.5">
               <span className="sr-only">Tiêu chí</span>
             </th>
             {pairs.map(({ c, s }) => (
-              <th key={c.id} scope="col" className="border-b border-line px-4 py-[13px] text-left align-top">
-                <span className="font-serif text-[17px] font-semibold">{c.name}</span>
-                <div className="mt-0.5 text-[13px] font-medium text-muted-foreground">
-                  {s.category.name} · {s.location}
+              <th key={c.id} scope="col" className="px-4 pt-[13px] pb-2.5 text-left align-top font-normal">
+                <div className={cn(faded(c) && 'opacity-55')}>
+                  <span className="font-serif text-[17px] font-semibold">{c.name}</span>
+                  <div className="mt-0.5 text-[13px] font-medium text-muted-foreground">{s.location}</div>
                 </div>
+                {c.availability && (
+                  <div>
+                    <DayBadge a={c.availability} />
+                  </div>
+                )}
               </th>
+            ))}
+          </tr>
+          {/* Hàng nút riêng để mọi cột thẳng hàng (tên NCC dài ngắn khác nhau); nút vàng, cùng cỡ.
+              Lý do khóa riêng của từng cột (đã kín, không đủ chỗ) ghi nhỏ dưới nút; đã cọc NCC khác thì chỉ có một cảnh báo chung ở đầu trang. */}
+          <tr>
+            <th className="border-b border-line px-4 pb-3">
+              <span className="sr-only">Thao tác</span>
+            </th>
+            {pairs.map(({ c, s }) => (
+              <td key={c.id} className="border-b border-line px-4 pb-3 align-top">
+                <div className="flex flex-wrap items-center gap-2">
+                  {!s.packages.length ? (
+                    renderQuote?.(s)
+                  ) : c.canAdd ? (
+                    renderAdd(s)
+                  ) : (
+                    <Button size="sm" disabled title={c.blockReason ?? undefined}>
+                      Thêm vào kế hoạch
+                    </Button>
+                  )}
+                  <Button asChild variant="outline" size="sm" className="border-gold-500 text-gold-800 hover:bg-gold-100">
+                    <Link to={paths.serviceDetail(c.id)}>Xem chi tiết</Link>
+                  </Button>
+                </div>
+                {!c.canAdd && c.blockReason && c.blockKind !== 'LOCKED' && <Small className="max-w-[300px]">{c.blockReason}</Small>}
+              </td>
             ))}
           </tr>
         </thead>
@@ -193,39 +289,21 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
             <tr key={r.label}>
               <th scope="row" className={cn(cell, 'text-left font-medium text-muted-foreground')}>
                 {r.label}
+                {r.hint && <span className="mt-0.5 block text-[12px] font-normal">{r.hint}</span>}
               </th>
-              {pairs.map(({ c, s }) => (
-                <td key={c.id} className={cell}>
-                  {r.cell(c, s)}
+              {'span' in r ? (
+                <td colSpan={pairs.length} className={cn(cell, 'bg-surface-2/60')}>
+                  {r.span}
                 </td>
-              ))}
+              ) : (
+                pairs.map(({ c, s }) => (
+                  <td key={c.id} className={cn(cell, faded(c) && 'opacity-55')}>
+                    {r.cell(c, s)}
+                  </td>
+                ))
+              )}
             </tr>
           ))}
-          <tr>
-            <th scope="row" className="px-4 py-[13px]">
-              <span className="sr-only">Thao tác</span>
-            </th>
-            {pairs.map(({ c, s }) => (
-              <td key={c.id} className="px-4 py-[13px] align-top">
-                {/* Cùng kiểu nút cho mọi cột */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {!s.packages.length ? (
-                    renderQuote?.(s)
-                  ) : c.canAdd ? (
-                    renderAdd(s)
-                  ) : (
-                    <Button variant="outline" size="sm" disabled title={c.blockReason ?? undefined}>
-                      Thêm vào kế hoạch
-                    </Button>
-                  )}
-                  <Button asChild variant="outline" size="sm">
-                    <Link to={paths.serviceDetail(c.id)}>Xem chi tiết</Link>
-                  </Button>
-                </div>
-                {!c.canAdd && c.blockReason && <Small className="text-warn">{c.blockReason}</Small>}
-              </td>
-            ))}
-          </tr>
         </tbody>
       </table>
     </div>

@@ -8,8 +8,7 @@ import { costSourceText, packageLabel, packageOptionText, parseMoneyInput, sugge
 
 describe('bảng ngân sách', () => {
   it('nhãn gói gợi ý: vượt phân bổ, vượt X đ, không nhãn', () => {
-    assert.equal(suggestionLabelText({ code: 'OVER_ALLOCATION' }), 'Vượt phân bổ')
-    assert.equal(suggestionLabelText({ code: 'OVER_BY', amount: 17_000_000 }), 'Vượt 17.000.000đ')
+    assert.equal(suggestionLabelText({ code: 'OVER_BY', amount: 17_004_999 }), 'Vượt 17.000.000đ')
     assert.equal(suggestionLabelText(null), null)
   })
 

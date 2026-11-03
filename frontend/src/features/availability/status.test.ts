@@ -34,7 +34,7 @@ describe('lịch khả dụng', () => {
   it('tin soạn sẵn có ngày tổ chức, gói đang xem và trạng thái đang hiện', () => {
     const t = availabilityRequestText({ vendorName: 'Grand Lotus', packageName: 'Gold', date: '2026-11-28', status: 'AVAILABLE', guestCount: 300 })
     assert.match(t, /gói "Gold" vào ngày 28\/11\/2026 \(thứ bảy\), khoảng 300 khách\./)
-    assert.match(t, /Lịch trên WebPlan đang hiển thị: Còn trống\./)
+    assert.match(t, /Lịch trên Forever đang hiển thị: Còn trống\./)
     assert.match(availabilityRequestText({ vendorName: 'A', packageName: 'B', date: null, status: null }), /chưa chốt ngày/)
   })
 })

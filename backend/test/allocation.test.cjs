@@ -34,7 +34,7 @@ const venue = () => cat('nha-hang', [V1, V2, V3, V4]);
 const decor = () => cat('decor', [10, 15, 23, 35].map((t) => pkg(t)));
 const photo = () => cat('chup-anh', [8, 12, 20, 30].map((t) => pkg(t)));
 const dress = () => cat('trang-phuc', [5, 8, 15].map((t) => pkg(t)));
-const makeup = () => cat('trang-diem', [2, 3, 5].map((t) => pkg(t)));
+const makeup = () => cat('makeup', [2, 3, 5].map((t) => pkg(t)));
 const flower = () => cat('hoa-cuoi', [2, 4, 6].map((t) => pkg(t)));
 const all6 = () => [venue(), decor(), photo(), dress(), makeup(), flower()];
 
@@ -56,46 +56,52 @@ const chosen = (category, packages, over = {}) => ({
 const row = (r, slug) => r.rows.find((x) => x.slug === slug);
 const plannedTotal = (r) => r.committed + r.suggestedTotal;
 
-test('1. 200tr, 300 khách, Cân bằng, chưa chọn gì: tổng gợi ý ≤ 200tr', () => {
+test('1. 200tr, 300 khách, Cân bằng, chưa chọn gì: tiệc trừ trước, quỹ dịch vụ chia theo trung vị, không gói nào vượt', () => {
   const r = a.allocate(input());
-  assert.ok(plannedTotal(r) <= 200 * M, `tổng ${plannedTotal(r)}`);
-  assert.ok(r.rows.every((x) => x.status === 'SUGGESTED' && x.suggestion));
-  assert.ok(r.rows.every((x) => x.suggestion.label === null));
+  // Giới hạn tiệc = 200 − Σ trung vị dịch vụ (19 + 16 + 8 + 3 + 4 = 50) = 150 → gói 150tr; quỹ dịch vụ 50tr
   assert.equal(row(r, 'nha-hang').cost, 150 * M);
+  assert.equal(r.fund.serviceBudget, 50 * M);
+  assert.deepEqual(
+    ['decor', 'chup-anh', 'trang-phuc', 'makeup', 'hoa-cuoi'].map((s) => row(r, s).ratio),
+    [3800, 3200, 1600, 600, 800],
+  );
+  assert.equal(row(r, 'decor').limit, 19 * M);
+  assert.equal(row(r, 'decor').cost, 15 * M);
+  assert.ok(plannedTotal(r) <= 200 * M);
+  assert.ok(r.rows.every((x) => x.status === 'SUGGESTED' && x.suggestion && x.suggestion.label === null));
   assert.ok(r.feasibility.ok);
 });
 
-test('2. đã chọn tiệc, đổi sang Ưu tiên hình ảnh: tiệc giữ nguyên, chỉ 5 dịch vụ chia lại', () => {
+test('2. đã chọn tiệc, đổi sang Ưu tiên hình ảnh: tiệc giữ nguyên, chỉ dịch vụ chia lại', () => {
   const v = venue();
   const pv = [chosen(v, [V3])];
   const r1 = a.allocate(input({ categories: [v, decor(), photo(), dress(), makeup(), flower()], planVendors: pv }));
   const r2 = a.allocate(input({ categories: [v, decor(), photo(), dress(), makeup(), flower()], planVendors: pv, preset: 'VISUAL' }));
   assert.equal(row(r1, 'nha-hang').status, 'CHOSEN');
   assert.equal(row(r1, 'nha-hang').cost, row(r2, 'nha-hang').cost);
-  assert.equal(row(r2, 'nha-hang').weight, null);
-  assert.ok(row(r2, 'chup-anh').weight > row(r1, 'chup-anh').weight);
-  assert.ok(plannedTotal(r2) <= 200 * M);
+  assert.equal(row(r2, 'nha-hang').ratio, null);
+  assert.ok(row(r2, 'chup-anh').ratio > row(r1, 'chup-anh').ratio);
+  assert.equal(r2.fund.venue.status, 'CHOSEN');
 });
 
-test('3. chọn trước trang trí 23tr và trang điểm 2tr: tiệc gợi ý theo Mục tiêu / Trần cứng mới, tổng ≤ 200tr', () => {
+test('3. chọn trước trang trí 23tr và trang điểm 2tr: giới hạn tiệc = còn lại − trung vị nhóm chia', () => {
   const d = decor();
   const m = makeup();
   const r = a.allocate(input({ categories: [venue(), d, photo(), dress(), m, flower()], planVendors: [chosen(d, [d.packages[2]]), chosen(m, [m.packages[0]])] }));
   const v = row(r, 'nha-hang');
-  // Còn lại 175; trung vị chụp ảnh 16 + trang phục 8 + hoa 4 = 28 → mục tiêu 147; giá rẻ nhất 8 + 5 + 2 = 15 → trần 160
-  assert.equal(v.allocation, 147 * M);
-  assert.equal(v.cap, 160 * M);
+  // Còn lại 175; trung vị chụp ảnh 16 + trang phục 8 + hoa 4 = 28 → giới hạn 147 → gói 120tr
+  assert.equal(v.limit, 147 * M);
   assert.equal(v.cost, 120 * M);
-  assert.ok(plannedTotal(r) <= 200 * M);
+  assert.equal(r.fund.serviceBudget, 55 * M);
 });
 
-test('4. hạng mục không có gói ≤ phần chia: lấy gói rẻ nhất ≤ trần cứng, nhãn "vượt phân bổ", tổng vẫn ≤ ngân sách', () => {
+test('4. hạng mục không có gói trong giới hạn: gói rẻ nhất kèm nhãn "Vượt Y", không chặn', () => {
   const r = a.allocate(input({ total: 60 * M, categories: [cat('chup-anh', [pkg(37), pkg(38)]), cat('decor', [pkg(10), pkg(65)])] }));
   const p = row(r, 'chup-anh');
-  assert.equal(p.allocation, 30 * M);
-  assert.deepEqual(p.suggestion.label, { code: 'OVER_ALLOCATION' });
+  assert.equal(p.limit, 30 * M);
   assert.equal(p.cost, 37 * M);
-  assert.ok(plannedTotal(r) <= 60 * M);
+  assert.deepEqual(p.suggestion.label, { code: 'OVER_BY', amount: 7 * M });
+  assert.equal(row(r, 'decor').cost, 10 * M);
 });
 
 test('5. ngân sách không đủ tối thiểu: cảnh báo kèm 3 hướng, vẫn có gợi ý để đi tiếp', () => {
@@ -118,18 +124,17 @@ test('6. giảm tổng xuống dưới tổng hạng mục đã chọn: "Vượt
   assert.equal(r.overBudget.level, 'soft');
 });
 
-test('7. bỏ một hạng mục: trọng số chuẩn hóa về 100%', () => {
+test('7. bỏ một hạng mục khỏi kế hoạch: tỷ lệ nhóm vẫn tổng 10000', () => {
   const r = a.allocate(input({ categories: [venue(), decor(), photo(), dress(), makeup()] }));
-  const ws = r.rows.filter((x) => x.weight !== null).map((x) => x.weight);
-  assert.equal(ws.length, 4);
-  assert.ok(Math.abs(ws.reduce((s, w) => s + w, 0) - 1) < 1e-9);
+  const rs = r.rows.filter((x) => x.ratio !== null).map((x) => x.ratio);
+  assert.equal(rs.length, 4);
+  assert.equal(rs.reduce((s, x) => s + x, 0), 10000);
 });
 
 test('8. tiệc đang tư vấn, tăng 30 → 35 bàn: báo thiếu đúng số kèm 3 hướng', () => {
   const v = venue();
   const r = a.allocate(input({ guestCount: 350, categories: [v, decor(), photo(), dress(), makeup(), flower()], planVendors: [chosen(v, [V3])] }));
   assert.equal(row(r, 'nha-hang').cost, 175 * M);
-  // 175 + giá rẻ nhất 5 dịch vụ 27 = 202 → thiếu 2tr
   assert.equal(r.feasibility.shortfall, 2 * M);
   assert.equal(r.feasibility.options.length, 3);
 });
@@ -142,33 +147,13 @@ test('9. tăng số khách vượt sức chứa trung tâm: đánh dấu "vượ
   assert.match(vr.message, /vượt sức chứa/);
 });
 
-test('10. gói rẻ nhất của một hạng mục bị ẩn: giá rẻ nhất cập nhật, tổng gợi ý vẫn ≤ ngân sách', () => {
-  const d = decor();
-  const before = a.allocate(input());
-  const after = a.allocate(input({ categories: [venue(), cat('decor', d.packages.slice(1)), photo(), dress(), makeup(), flower()] }));
-  assert.equal(row(before, 'decor').minPrice, 10 * M);
-  assert.equal(row(after, 'decor').minPrice, 15 * M);
-  assert.ok(plannedTotal(after) <= 200 * M);
-});
-
-test('11. NCC thêm nhiều gói đắt: trung vị tăng, hạng mục đã chọn giữ nguyên', () => {
-  const v = venue();
-  const pv = [chosen(v, [V3])];
-  const r1 = a.allocate(input({ categories: [v, decor(), photo(), dress(), makeup(), flower()], planVendors: pv }));
-  const pricey = cat('chup-anh', [8, 12, 20, 30, 60, 70, 80].map((t) => pkg(t)));
-  const r2 = a.allocate(input({ categories: [v, decor(), pricey, dress(), makeup(), flower()], planVendors: pv }));
-  assert.ok(row(r2, 'chup-anh').medianPrice > row(r1, 'chup-anh').medianPrice);
-  assert.deepEqual(row(r2, 'nha-hang'), row(r1, 'nha-hang'));
-  assert.ok(plannedTotal(r2) <= 200 * M);
-});
-
-test('12. hủy gói chụp ảnh đã cọc 1tr: không hoàn, 1tr vẫn trừ vào tổng, chụp ảnh trở về chưa chọn', () => {
+test('12. hủy gói chụp ảnh đã cọc 1tr: không hoàn, 1tr vẫn trừ vào tổng, chụp ảnh quay lại nhóm chia', () => {
   const p = photo();
   const r = a.allocate(input({ categories: [venue(), decor(), p, dress(), makeup(), flower()], planVendors: [chosen(p, [p.packages[1]], { cancelled: true, orderTotal: 12 * M, orderDeposited: 1 * M })], lostDeposits: 1 * M }));
   assert.equal(row(r, 'chup-anh').status, 'SUGGESTED');
+  assert.ok(row(r, 'chup-anh').ratio > 0);
   assert.equal(r.committed, 1 * M);
-  assert.equal(r.lostDeposits, 1 * M);
-  assert.ok(plannedTotal(r) <= 200 * M);
+  assert.equal(r.fund.lostDeposit, 1 * M);
 });
 
 test('13. gói tiệc 5,8tr/bàn, tối thiểu 40 bàn, kế hoạch 30 bàn: chi phí 232tr (không phải 174tr)', () => {
@@ -196,18 +181,19 @@ test('14. chọn 4 dịch vụ đắt rồi chọn tiệc: không chặn, có h�
   assert.match(c.message, /^Chọn gói này, 1 dịch vụ còn lại còn tối đa .* thiếu /);
 });
 
-test('15. không còn gói tiệc nào ≤ trần cứng: gợi ý gói rẻ nhất kèm nhãn "vượt X đ"', () => {
+test('15. không gói tiệc nào trong giới hạn: gói rẻ nhất kèm "Vượt Y", quỹ dịch vụ trừ theo gói đó', () => {
   const r = a.allocate(input({ total: 100 * M }));
   const v = row(r, 'nha-hang');
-  // Trần cứng = 100 − 27 = 73, gói rẻ nhất 90
+  // Giới hạn = 100 − 50 = 50, gói rẻ nhất 90
   assert.equal(v.cost, 90 * M);
-  assert.deepEqual(v.suggestion.label, { code: 'OVER_BY', amount: 17 * M });
+  assert.deepEqual(v.suggestion.label, { code: 'OVER_BY', amount: 40 * M });
+  assert.equal(r.fund.venue.overBy, 40 * M);
+  assert.equal(r.fund.serviceBudget, 10 * M);
 });
 
 test('16. gói tiệc vượt sức chứa bị loại, các gói khác không bị chặn theo ngân sách', () => {
   const r = a.allocate(input({ guestCount: 380, total: 50 * M }));
   const v = row(r, 'nha-hang');
-  // 38 bàn: V1 = 114 (sức chứa 400), V2 sức chứa 350 bị loại
   assert.equal(v.minPrice, 114 * M);
   assert.notEqual(v.suggestion.package.id, V2.id);
   assert.ok(r.rows.every((x) => x.suggestion));
@@ -219,25 +205,17 @@ test('17. OwnVenue: tiệc bị bỏ khỏi phép tính, chi phí tự lo trừ 
   assert.equal(v.status, 'OWN_VENUE');
   assert.equal(v.suggestion, null);
   assert.equal(r.committed, 120 * M);
-  assert.ok(plannedTotal(r) <= 200 * M);
+  assert.equal(r.fund.venue.status, 'OWN');
+  assert.equal(r.fund.serviceBudget, 80 * M);
   assert.equal(a.allocate(input({ ownVenue: true })).committed, 0);
-});
-
-test('18. ngân sách rất lớn: còn dư hiển thị đúng, không hạng mục nào bị vượt', () => {
-  const r = a.allocate(input({ total: 10_000 * M }));
-  assert.ok(r.leftover.amount > 0);
-  assert.equal(r.leftover.amount, 10_000 * M - plannedTotal(r));
-  assert.match(r.leftover.message, /^Còn dư /);
-  assert.ok(r.rows.every((x) => x.suggestion.label === null));
 });
 
 test('19. giá rẻ nhất của tiệc không phụ thuộc khu vực, phụ thuộc sức chứa và số bàn', () => {
   const near = { ...V3, id: 'near', ward: 'Phường Cầu Giấy' };
-  const cats = (g) => [cat('nha-hang', [V1, V2, near, V4]), decor()];
+  const cats = () => [cat('nha-hang', [V1, V2, near, V4]), decor()];
   const plain = a.allocate(input({ categories: cats() }));
   const withWard = a.allocate(input({ categories: cats(), ward: 'Phường Cầu Giấy' }));
   assert.equal(row(plain, 'nha-hang').minPrice, row(withWard, 'nha-hang').minPrice);
-  // 450 khách = 45 bàn: V1 (400 chỗ), V2 (350 chỗ) bị loại → 5tr × 45 = 225tr
   const more = a.allocate(input({ categories: cats(), guestCount: 450 }));
   assert.equal(row(plain, 'nha-hang').minPrice, 90 * M);
   assert.equal(row(more, 'nha-hang').minPrice, 225 * M);
@@ -249,49 +227,150 @@ test('trung vị kiểu PERCENTILE_CONT(0.5)', () => {
   assert.equal(a.median([]), null);
 });
 
-test('giới hạn riêng: chỉ còn Hoa cưới chưa chọn thì không nhận cả phần còn lại; tỷ lệ theo mức chia, không phải 100%', () => {
-  const [v, d, p, dr, m, f] = all6();
-  const pv = [chosen(v, [V3]), chosen(d, [d.packages[0]]), chosen(p, [p.packages[0]]), chosen(dr, [dr.packages[0]]), chosen(m, [m.packages[0]])];
-  const r = a.allocate(input({ total: 350 * M, categories: [v, d, p, dr, m, f], planVendors: pv }));
-  const fl = row(r, 'hoa-cuoi');
-  // B3 vẫn dồn phần còn lại vào hạng mục cuối (thuật toán không đổi)
-  assert.equal(fl.limit, r.remaining + fl.cost);
-  assert.equal(fl.weight, 1);
-  // Tỷ lệ theo mức chia trên mọi dịch vụ: trung vị hoa 4 / (19 + 16 + 8 + 3 + 4) = 8%
-  assert.equal(Math.round(fl.share * 1000) / 10, 8);
-  // Giới hạn riêng = (350 − 150 tiệc) × 8% = 16tr, khác phần còn lại của cả quỹ
-  assert.equal(fl.shareLimit, 16 * M);
-  assert.ok(fl.shareLimit < fl.limit);
-  assert.ok(fl.shareLimit >= fl.cost);
-  // Dịch vụ đã chọn cũng có giới hạn riêng (để so với chi phí đã chọn)
-  assert.ok(row(r, 'decor').shareLimit > 0);
+// ---------- Tài liệu triển khai Tùy chỉnh v1.2, mục 8.5 và 8.8 ----------
+
+/** T27: tổng 350, đã chọn 40, ngoài nền tảng 2, tiệc chưa chọn với gói đề xuất 150 */
+const t27 = (extra = 2 * M) => {
+  const d = decor();
+  const m = makeup();
+  return input({
+    total: 350 * M,
+    extraCosts: extra,
+    categories: [cat('nha-hang', [V3]), d, photo(), dress(), m, flower()],
+    planVendors: [chosen(d, [d.packages[3]]), chosen(m, [m.packages[2]])],
+  });
+};
+
+test('T27 quỹ dịch vụ = còn lại − gói tiệc đề xuất; T63 chi tiết quỹ; T62 dòng Tiệc', () => {
+  const r = a.allocate(t27());
+  assert.equal(r.fund.remaining, 308 * M);
+  assert.equal(r.fund.serviceBudget, 158 * M);
+  assert.deepEqual(
+    { total: r.fund.totalBudget, selected: r.fund.selectedCost, lost: r.fund.lostDeposit, external: r.fund.externalCost },
+    { total: 350 * M, selected: 40 * M, lost: 0, external: 2 * M },
+  );
+  assert.deepEqual(r.fund.venue, { status: 'SUGGESTED', amount: 150 * M, overBy: null });
 });
 
-test('thanh kéo Tùy chỉnh: gồm cả dịch vụ đã chọn chưa cọc; đã cọc thì khóa (không có tỷ lệ), tiền chia trừ phần đã cọc', () => {
-  const [v, d, p, dr, m, f] = all6();
-  // Trang trí đã chọn (chưa cọc), trang phục đã cọc 15tr; đã lưu tỷ lệ cho chụp ảnh và hoa cưới
-  const pv = [chosen(v, [V3]), chosen(d, [d.packages[0]]), chosen(dr, [dr.packages[2]], { orderTotal: 15 * M, orderDeposited: 3 * M })];
-  const r = a.allocate(input({ categories: [v, d, p, dr, m, f], planVendors: pv, preset: 'CUSTOM', customWeights: { 'chup-anh': 80, 'hoa-cuoi': 20 } }));
-  // Hạng mục chưa có tỷ lệ đã lưu (trang trí, trang điểm) nhận trung bình 50 rồi chuẩn hóa: 80 + 20 + 50 + 50 = 200
-  assert.equal(row(r, 'decor').share, 0.25);
-  assert.equal(row(r, 'chup-anh').share, 0.4);
-  assert.equal(row(r, 'trang-phuc').share, null);
-  const shares = ['decor', 'chup-anh', 'trang-diem', 'hoa-cuoi'].map((s) => row(r, s).share);
-  assert.ok(Math.abs(shares.reduce((x, y) => x + y, 0) - 1) < 1e-9);
-  // Tiền chia = 200 − tiệc 150 − trang phục đã cọc 15 = 35tr; giới hạn riêng = 35 × tỷ lệ
-  assert.equal(r.sliderPool, 35 * M);
-  assert.equal(row(r, 'chup-anh').shareLimit, 14 * M);
+test('T28 tiệc tự lo 100tr, ngoài nền tảng 2tr: quỹ 248tr', () => {
+  const r = a.allocate(input({ total: 350 * M, ownVenue: true, ownVenueCost: 100 * M, extraCosts: 2 * M }));
+  assert.equal(r.fund.serviceBudget, 248 * M);
 });
 
-test('Tùy chỉnh khi chỉ còn 1 hạng mục: đặt số tiền tuyệt đối (tỷ lệ < 100%), phần còn lại không giao; giới hạn làm tròn 1.000đ', () => {
+test('T29 tiệc chưa chọn, không gói hợp lệ: quỹ = còn lại, tiệc chưa trừ', () => {
+  const r = a.allocate(input({ guestCount: 900, total: 300 * M }));
+  assert.equal(r.fund.venue.status, 'NO_PACKAGE');
+  assert.equal(r.fund.venue.amount, null);
+  assert.equal(r.fund.serviceBudget, 300 * M);
+  assert.equal(row(r, 'nha-hang').message, 'Chưa có gói tiệc phù hợp cho 900 khách');
+});
+
+test('T30, T46 giới hạn gợi ý của hạng mục đã chọn không phụ thuộc gói đang chọn; T48 đã cọc thì không có', () => {
+  const d = cat('decor', [pkg(10), pkg(20), pkg(30)]);
+  const cats = () => [d, cat('chup-anh', [pkg(30)]), cat('makeup', [pkg(20)]), cat('hoa-cuoi', [pkg(20)])];
+  const at = (p, over) => a.allocate(input({ total: 110 * M, categories: cats(), planVendors: [chosen(d, [p], over)] }));
+  const r20 = at(d.packages[1]);
+  assert.equal(r20.fund.serviceBudget, 90 * M);
+  assert.equal(row(r20, 'decor').limit, 24_444_444);
+  const r30 = at(d.packages[2]);
+  assert.equal(r30.fund.serviceBudget, 80 * M);
+  assert.equal(row(r30, 'decor').limit, 24_444_444);
+  assert.equal(row(r30, 'decor').cost - row(r30, 'decor').limit, 5_555_556);
+  assert.equal(row(at(d.packages[2], { orderTotal: 30 * M, orderDeposited: 9 * M }), 'decor').limit, null);
+});
+
+test('T31, T54 đổi tổng ngân sách / chi phí ngoài nền tảng: tỷ lệ giữ nguyên, tiền tính lại', () => {
+  const a2 = a.allocate(t27(2 * M));
+  const a12 = a.allocate(t27(12 * M));
+  assert.equal(a12.fund.serviceBudget, 148 * M);
+  assert.deepEqual(a12.rows.map((x) => x.ratio), a2.rows.map((x) => x.ratio));
+  const ca = row(a12, 'chup-anh');
+  assert.equal(ca.limit, Math.round((148 * M * ca.ratio) / 10000));
+});
+
+test('T55 chi phí ngoài nền tảng làm quỹ âm: quỹ 0, tỷ lệ vẫn tổng 100', () => {
+  const r = a.allocate(t27(250 * M));
+  assert.equal(r.fund.serviceBudgetRaw, -90 * M);
+  assert.equal(r.fund.serviceBudget, 0);
+  assert.equal(r.rows.filter((x) => x.ratio !== null).reduce((s, x) => s + x.ratio, 0), 10000);
+  assert.ok(r.rows.filter((x) => x.ratio !== null).every((x) => x.limit === 0));
+});
+
+test('T61 tăng chi phí ngoài nền tảng làm gói tiệc đề xuất đổi: quỹ đổi theo gói mới', () => {
+  const r0 = a.allocate(input());
+  const r30 = a.allocate(input({ extraCosts: 30 * M }));
+  assert.equal(r0.fund.venue.amount, 150 * M);
+  assert.equal(r30.fund.venue.amount, 120 * M);
+  assert.equal(r30.fund.serviceBudget, 50 * M);
+});
+
+// ---------- Tùy chỉnh: cấu hình đã lưu ----------
+
+const split = (items, over = {}) => ({ baseMode: 'BALANCED', excluded: [], capAmount: null, items, ...over });
+const it = (category, ratio, locked = false) => ({ id: category.id, slug: category.slug, ratio, locked });
+
+test('Tùy chỉnh: dùng tỷ lệ đã lưu, bỏ khỏi phần chia thì không có tỷ lệ, ngân sách hay gợi ý gói', () => {
   const [v, d, p, dr, m, f] = all6();
-  const pv = [chosen(v, [V3], { orderTotal: 150 * M, orderDeposited: 45 * M }), ...[d, p, dr, m].map((c) => chosen(c, [c.packages[0]], { orderTotal: c.packages[0].price, orderDeposited: 1 * M }))];
-  // Chỉ còn hoa cưới chưa cọc; tiền chia = 200 − 150 − (10 + 8 + 5 + 2) = 25tr; đặt 20% = 5tr
-  const r = a.allocate(input({ categories: [v, d, p, dr, m, f], planVendors: pv, preset: 'CUSTOM', customWeights: { 'hoa-cuoi': 20 } }));
-  assert.equal(r.sliderPool, 25 * M);
-  assert.equal(row(r, 'hoa-cuoi').share, 0.2);
-  assert.equal(row(r, 'hoa-cuoi').shareLimit, 5 * M);
-  // Làm tròn tới 1.000đ: 1/3 của 25tr
-  const third = a.allocate(input({ categories: [v, d, p, dr, m, f], planVendors: pv, preset: 'CUSTOM', customWeights: { 'hoa-cuoi': 100 / 3 } }));
-  assert.equal(third.rows.find((x) => x.slug === 'hoa-cuoi').shareLimit, 8_333_000);
+  const saved = split([it(d, 4000), it(dr, 2000, true), it(m, 1000), it(f, 3000)], { excluded: [p.id] });
+  const r = a.allocate(input({ categories: [v, d, p, dr, m, f], preset: 'CUSTOM', split: saved }));
+  assert.equal(r.split.changed, false);
+  assert.equal(row(r, 'chup-anh').status, 'EXCLUDED');
+  assert.equal(row(r, 'chup-anh').limit, null);
+  assert.equal(row(r, 'chup-anh').suggestion, null);
+  assert.equal(row(r, 'decor').ratio, 4000);
+  assert.equal(row(r, 'decor').limit, Math.round((r.fund.serviceBudget * 4000) / 10000));
+  // Hạng mục bị bỏ không tính vào trung vị của giới hạn tiệc: 200 − (19 + 8 + 3 + 4) = 166 → gói 150
+  assert.equal(row(r, 'nha-hang').limit, 166 * M);
+});
+
+test('Tùy chỉnh: hạng mục mở khóa cuối được chọn gói thì mở khóa hạng mục lớn nhất (T22), cấu hình cần lưu lại', () => {
+  const [v, d, p, dr, m, f] = all6();
+  const saved = split([it(d, 3000, true), it(p, 2500, true), it(dr, 2000, true), it(m, 1500, true), it(f, 1000)]);
+  const r = a.allocate(input({ categories: [v, d, p, dr, m, f], preset: 'CUSTOM', split: saved, planVendors: [chosen(f, [f.packages[0]])] }));
+  assert.equal(r.split.changed, true);
+  assert.deepEqual(r.split.unlocked, [d.id]);
+  assert.equal(row(r, 'decor').ratio, 4000);
+  assert.equal(r.split.state.items.find((x) => x.id === d.id).locked, false);
+});
+
+test('Tùy chỉnh: hạng mục đã bỏ được chọn gói thì rời danh sách bỏ khỏi phần chia', () => {
+  const [v, d, p, dr, m, f] = all6();
+  const saved = split([it(d, 4000), it(dr, 2000), it(m, 1000), it(f, 3000)], { excluded: [p.id] });
+  const r = a.allocate(input({ categories: [v, d, p, dr, m, f], preset: 'CUSTOM', split: saved, planVendors: [chosen(p, [p.packages[0]])] }));
+  assert.equal(row(r, 'chup-anh').status, 'CHOSEN');
+  assert.deepEqual(r.split.state.excluded, []);
+  assert.equal(r.split.changed, true);
+});
+
+test('T42 nhóm còn một hạng mục, giá trần 15tr trên quỹ 20tr: Còn dư 5tr', () => {
+  const [d, p, dr, m, f] = [decor(), photo(), dress(), makeup(), cat('hoa-cuoi', [pkg(6)])];
+  const pv = [d, p, dr, m].map((c) => chosen(c, [c.packages[0]]));
+  // Đã chọn 10 + 8 + 5 + 2 = 25 → quỹ 20 khi tổng 45
+  const r = a.allocate(input({ total: 45 * M, categories: [d, p, dr, m, f], planVendors: pv, preset: 'CUSTOM', split: split([it(f, 10000)], { capAmount: 15 * M }) }));
+  assert.equal(r.fund.serviceBudget, 20 * M);
+  assert.equal(row(r, 'hoa-cuoi').limit, 15 * M);
+  assert.equal(r.leftover.amount, 5 * M);
+});
+
+test('nhóm rỗng: cả quỹ là "Còn dư"', () => {
+  const [d, p] = [decor(), photo()];
+  const r = a.allocate(input({ total: 100 * M, categories: [d, p], planVendors: [chosen(d, [d.packages[0]]), chosen(p, [p.packages[0]])] }));
+  assert.equal(r.leftover.amount, 82 * M);
+  assert.match(r.leftover.message, /^Còn dư /);
+});
+
+test('Tùy chỉnh chưa có cấu hình (dữ liệu cũ): khởi tạo theo Cân bằng và đánh dấu cần lưu', () => {
+  const r = a.allocate(input({ preset: 'CUSTOM' }));
+  assert.equal(r.split.changed, true);
+  assert.equal(r.split.baseMode, 'BALANCED');
+  assert.equal(row(r, 'decor').ratio, 3800);
+});
+
+test('kế hoạch không có trung tâm tiệc: quỹ không trừ tiệc (NONE); tự lo tiệc thì vẫn trừ và hiện OWN', () => {
+  const none = a.allocate(input({ categories: [decor(), photo()] }));
+  assert.equal(none.fund.venue.status, 'NONE');
+  assert.equal(none.fund.serviceBudget, 200 * M);
+  const own = a.allocate(input({ categories: [decor(), photo()], ownVenue: true, ownVenueCost: 120 * M }));
+  assert.deepEqual(own.fund.venue, { status: 'OWN', amount: 120 * M, overBy: null });
+  assert.equal(own.fund.serviceBudget, 80 * M);
 });

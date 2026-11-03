@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router'
 import { compareApi } from '@/api/compare'
@@ -61,6 +62,18 @@ export default function ComparePage() {
   return (
     <>
       <PageTitle title="So sánh dịch vụ" description={`${d.category.name}, ${d.items.length} nhà cung cấp`} actions={back} />
+      {/* Đã cọc một NCC của hạng mục: một cảnh báo đỏ duy nhất ở đầu trang (thay cho lý do lặp lại dưới từng cột) */}
+      {d.comparison.lockNote && (
+        <p role="alert" className="mb-3 flex items-start gap-2 rounded-lg border border-warn/40 bg-warn-soft px-4 py-3 text-[14px] text-warn">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            {d.comparison.lockNote}{' '}
+            <Link to={paths.planTab.services} className="font-semibold underline underline-offset-[3px]">
+              Mở tab Dịch vụ
+            </Link>
+          </span>
+        </p>
+      )}
       {/* Dòng tóm tắt do BE ghép: chỉ nêu khác biệt, không khuyên chọn bên nào; không có khác biệt thì ẩn */}
       {summary.length > 0 && (
         <p className="mb-3 rounded-lg border border-line bg-surface px-4 py-3 text-[14px]" aria-live="polite">
@@ -69,14 +82,14 @@ export default function ComparePage() {
       )}
       {d.budget !== null && (
         <p className="mb-3 text-[14px] text-muted-foreground">
-          Ngân sách {d.category.name.toLowerCase()} trong kế hoạch: <b className="font-semibold text-ink">{formatMoney(d.budget)}</b>
+          Mức gợi ý cho {d.category.name.toLowerCase()} trong ngân sách của bạn: <b className="font-semibold text-ink">{formatMoney(d.budget)}</b>
         </p>
       )}
       <CompareTable
         result={d}
         updating={result.isFetching}
         onPick={(serviceId, packageId) => setPicked((m) => ({ ...m, [serviceId]: packageId }))}
-        renderAdd={(s) => <AddToPlanButton service={s} />}
+        renderAdd={(s) => <AddToPlanButton service={s} primary />}
         renderQuote={(s) => <OpenChatButton service={s} />}
       />
     </>
