@@ -4,7 +4,8 @@
  *
  * Việc chi tiết của đơn lấy từ package_tasks của gói gắn với đơn (NCC khai), sinh lúc cọc:
  *   task_code 'PKG:<package_tasks.id>:<8 ký tự đầu của order_id>' mỗi việc của gói (hậu tố để hai đơn dùng cùng gói không trùng mã trong một đám cưới;
- *   dạng cũ 'PKG:<id>' vẫn đọc được); 'PAY:<orderId>' việc thanh toán phần còn lại (mỗi đơn một việc).
+ *   dạng cũ 'PKG:<id>' vẫn đọc được); 'PAY:<orderId>' việc thanh toán phần còn lại (mỗi đơn một việc);
+ *   'ORD:<C|V|B>:<8 ký tự ngẫu nhiên>:<8 ký tự đầu của order_id>' việc RIÊNG của một đơn do NCC thêm (không thuộc gói; chữ cái là chủ việc).
  */
 import { planFrame, planPackageTasks } from './timeline-schedule.ts';
 import { isFrameKind, type ServiceKey, type TimelineTemplate } from './timeline-templates.ts';
@@ -36,7 +37,19 @@ export const PKG_PREFIX = 'PKG:';
 export const PAY_PREFIX = 'PAY:';
 /** 'PKG:' + 36 + ':' + 8 = 49 ký tự (cột task_code tối đa 50). */
 export const pkgCode = (packageTaskId: string, orderId: string) => `${PKG_PREFIX}${packageTaskId}:${orderId.slice(0, 8)}`;
-export const payCode = (orderId: string) => `${PAY_PREFIX}${orderId}`;
+export const payCode = (orderId: string) => `${PAY_PREFIX}${orderId}`
+export const ORD_PREFIX = 'ORD:'
+const ORD_LETTER: Record<PackageTaskOwner, string> = { CUSTOMER: 'C', VENDOR: 'V', BOTH: 'B' }
+const ORD_OWNER: Record<string, PackageTaskOwner> = { C: 'CUSTOMER', V: 'VENDOR', B: 'BOTH' }
+/** 'ORD:' + chủ + ':' + 8 ký tự ngẫu nhiên + ':' + 8 ký tự đầu order_id = 23 ký tự (cột task_code tối đa 50). `rand` do nơi gọi sinh (hàm này thuần). */
+export const ordCode = (owner: PackageTaskOwner, orderId: string, rand: string) => `${ORD_PREFIX}${ORD_LETTER[owner]}:${rand}:${orderId.slice(0, 8)}`
+/** Việc riêng của đơn do NCC thêm ('ORD:...') */
+export const isCustomOrderTaskCode = (code: string | null | undefined) => !!code && /^ORD:[CVB]:/.test(code)
+/** Chủ việc đọc từ mã 'ORD:<C|V|B>:...'; null nếu không phải mã việc riêng */
+export const ordOwnerOf = (code: string | null | undefined): PackageTaskOwner | null => (isCustomOrderTaskCode(code) ? ORD_OWNER[code!.charAt(PREFIX_LEN)] : null)
+/** Đổi chủ việc riêng: giữ phần còn lại của mã */
+export const ordCodeWithOwner = (code: string, owner: PackageTaskOwner) => `${code.slice(0, PREFIX_LEN)}${ORD_LETTER[owner]}${code.slice(PREFIX_LEN + 1)}`
+const PREFIX_LEN = ORD_PREFIX.length;
 /** Id việc của gói trong task_code, hoặc null nếu không phải việc của gói. */
 export const pkgTaskIdOf = (code: string | null | undefined) => (code?.startsWith(PKG_PREFIX) ? code.slice(PKG_PREFIX.length).split(':')[0] : null);
 export const isOrderTaskCode = (code: string | null | undefined) => !!code && (code.startsWith(PKG_PREFIX) || code.startsWith(PAY_PREFIX));
@@ -101,11 +114,15 @@ export function orderTaskRows(input: {
   existingCodes?: ReadonlySet<string>;
 }): { rows: TaskRow[]; vendorProcessMissing: boolean } {
   const have = input.existingCodes ?? new Set<string>();
-  const plan = planPackageTasks({ D: input.ctx.deposit, E: input.ctx.event, I: input.ctx.today, tasks: input.tasks.map((t) => ({ id: t.id, offsetDays: t.offsetDays })) });
+  // Đơn đã có BẤT KỲ việc nào gắn đơn (kể cả 'PAY:', việc không xóa được nên luôn còn khi đơn đã được sinh / tùy chỉnh): KHÔNG sinh gì nữa,
+  // kẻo việc của gói mà NCC đã bỏ hiện lại. Chỉ sinh cho đơn hoàn toàn chưa có việc.
+  if (have.size > 0) return { rows: [], vendorProcessMissing: false };
+  const tasks = input.tasks;
+  const plan = planPackageTasks({ D: input.ctx.deposit, E: input.ctx.event, I: input.ctx.today, tasks: tasks.map((t) => ({ id: t.id, offsetDays: t.offsetDays })) });
   const dateOf = new Map(plan.tasks.map((p) => [p.id, p.date]));
   const base = { wedding_id: input.weddingId, category_id: input.categoryId, order_id: input.orderId, task_type: 'Detail' as const };
 
-  const rows: TaskRow[] = input.tasks.map((t, i) => ({
+  const rows: TaskRow[] = tasks.map((t, i) => ({
     ...base,
     title: taskTitle(t.title, t.note),
     scheduled_date: asDate(dateOf.get(t.id)!),

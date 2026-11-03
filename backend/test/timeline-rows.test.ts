@@ -86,8 +86,14 @@ describe('orderTaskRows: việc chi tiết của đơn từ gói', () => {
     const first = rowsOf([task('a', -7), task('b', 0)]).rows;
     const again = rowsOf([task('a', -7), task('b', 0)], undefined, new Set(first.map((r) => r.task_code)));
     assert.equal(again.rows.length, 0);
+    // Đã có bất kỳ việc nào gắn đơn: không sinh thêm gì (việc 'b' có thể do NCC đã bỏ)
     const partial = rowsOf([task('a', -7), task('b', 0)], undefined, new Set([pkgCode('a', ORDER)]));
-    assert.deepEqual(partial.rows.map((r) => r.task_code), [pkgCode('b', ORDER), payCode(ORDER)]);
+    assert.deepEqual(partial.rows, []);
+    // Chỉ còn việc thanh toán (NCC đã bỏ hết việc gói): cũng không sinh lại
+    const payOnly = rowsOf([task('a', -7), task('b', 0)], undefined, new Set([payCode(ORDER)]));
+    assert.deepEqual(payOnly.rows, []);
+    assert.equal(payOnly.vendorProcessMissing, false);
+    assert.equal(partial.vendorProcessMissing, false);
   });
 });
 

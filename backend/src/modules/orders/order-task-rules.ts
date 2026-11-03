@@ -2,7 +2,7 @@
  * Luật đổi trạng thái / ngày của việc chi tiết gắn đơn (docs/TIMELINE.md, "Hướng mới 11/2026"). Hàm thuần: không đụng CSDL, không đọc đồng hồ.
  * NCC tự chủ việc chi tiết của đơn mình (mọi việc, kể cả việc của khách); khách chỉ xem.
  */
-import { initialStatus, type TaskStatus } from '../weddings/timeline-rows.ts';
+import { initialStatus, isCustomOrderTaskCode, PAY_PREFIX, PKG_PREFIX, type TaskStatus } from '../weddings/timeline-rows.ts';
 import type { TaskOwner } from '../weddings/task-owner.ts';
 
 export const TASK_STATUSES: readonly TaskStatus[] = ['Todo', 'Waiting', 'Done'];
@@ -63,4 +63,83 @@ export function dateStatusOf(confirmedDate: Date | null | undefined, confirmedAt
     confirmedAt: confirmedAt ? confirmedAt.toISOString() : null,
     needsRecheck: !!confirmedDate && !!ctx.event && !!ctx.isPackageBefore && ctx.due > ctx.event,
   };
+}
+
+// ---------- Việc riêng của đơn (NCC thêm / sửa / bỏ việc cho TỪNG đơn đã cọc) ----------
+
+const OWNERS: readonly TaskOwner[] = ['CUSTOMER', 'VENDOR', 'BOTH'];
+export const ORDER_TASK_TITLE_MAX = 200;
+export const ORDER_TASK_NOTE_MAX = 500;
+
+const invalid = (message: string): RuleError => ({ code: 'VALIDATION_ERROR', message, status: 400 });
+
+function textOf(v: unknown, max: number, label: string, required: boolean): string | null | RuleError {
+  if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) return required ? invalid(`${label} không được để trống.`) : null;
+  if (typeof v !== 'string') return invalid(`${label} không hợp lệ.`);
+  return v.trim().length > max ? invalid(`${label} tối đa ${max} ký tự.`) : v.trim();
+}
+
+export interface NewOrderTask {
+  title: string;
+  note: string | null;
+  owner: TaskOwner;
+  date: string;
+  addToPackage: boolean;
+}
+
+/** Body POST /vendors/me/orders/:id/tasks: { title, note?, owner, date, addToPackage? }. Ngày từ hôm nay đến E + 120. */
+export function parseNewOrderTask(body: Record<string, unknown> | null | undefined, ctx: { today: string; event: string }): NewOrderTask | RuleError {
+  const b = body ?? {};
+  const title = textOf(b.title, ORDER_TASK_TITLE_MAX, 'Tên việc', true);
+  if (typeof title !== 'string') return title ?? invalid('Tên việc không được để trống.');
+  const note = textOf(b.note, ORDER_TASK_NOTE_MAX, 'Ghi chú', false);
+  if (note !== null && typeof note !== 'string') return note;
+  if (!OWNERS.includes(b.owner as TaskOwner)) return invalid('Chọn ai phụ trách: CUSTOMER, VENDOR hoặc BOTH.');
+  const issue = scheduleDateIssue(b.date, ctx);
+  if (issue) return issue;
+  if (b.addToPackage !== undefined && typeof b.addToPackage !== 'boolean') return invalid('addToPackage phải là true hoặc false.');
+  return { title, note, owner: b.owner as TaskOwner, date: b.date as string, addToPackage: b.addToPackage === true };
+}
+
+export interface OrderTaskPatch {
+  title?: string;
+  note?: string | null;
+  owner?: TaskOwner;
+}
+
+/** Body PATCH sửa việc riêng: { title?, note?, owner? } (ít nhất một trường). */
+export function parseOrderTaskPatch(body: Record<string, unknown> | null | undefined): OrderTaskPatch | RuleError {
+  const b = body ?? {};
+  const out: OrderTaskPatch = {};
+  if (b.title !== undefined) {
+    const t = textOf(b.title, ORDER_TASK_TITLE_MAX, 'Tên việc', true);
+    if (typeof t !== 'string') return t ?? invalid('Tên việc không được để trống.');
+    out.title = t;
+  }
+  if (b.note !== undefined) {
+    const n = textOf(b.note, ORDER_TASK_NOTE_MAX, 'Ghi chú', false);
+    if (n !== null && typeof n !== 'string') return n;
+    out.note = n;
+  }
+  if (b.owner !== undefined) {
+    if (!OWNERS.includes(b.owner as TaskOwner)) return invalid('Chọn ai phụ trách: CUSTOMER, VENDOR hoặc BOTH.');
+    out.owner = b.owner as TaskOwner;
+  }
+  return Object.keys(out).length ? out : invalid('Không có gì để sửa (title, note hoặc owner).');
+}
+
+/** Sửa tên / ghi chú / chủ: chỉ việc riêng 'ORD:' và chưa xong. */
+export function editOrderTaskIssue(task: { task_code: string | null; status: string | null }): RuleError | null {
+  if (!isCustomOrderTaskCode(task.task_code)) return { code: 'TASK_NOT_EDITABLE', message: 'Chỉ sửa được việc riêng của đơn. Việc của gói hãy đổi trong gói dịch vụ.', status: 409 };
+  if (task.status === 'Done') return { code: 'TASK_ALREADY_DONE', message: 'Việc đã xong, không sửa được.', status: 409 };
+  return null;
+}
+
+/** "Bỏ việc khỏi đơn": việc của gói ('PKG:') hoặc việc riêng ('ORD:'), chưa xong. Không bỏ việc thanh toán ('PAY:') và việc chi tiết cũ. */
+export function removeOrderTaskIssue(task: { task_code: string | null; status: string | null }): RuleError | null {
+  const code = task.task_code ?? '';
+  if (code.startsWith(PAY_PREFIX)) return { code: 'TASK_NOT_REMOVABLE', message: 'Không bỏ được việc thanh toán của đơn.', status: 409 };
+  if (!code.startsWith(PKG_PREFIX) && !isCustomOrderTaskCode(code)) return { code: 'TASK_NOT_REMOVABLE', message: 'Việc này không bỏ khỏi đơn được.', status: 409 };
+  if (task.status === 'Done') return { code: 'TASK_ALREADY_DONE', message: 'Việc đã xong, không bỏ được.', status: 409 };
+  return null;
 }

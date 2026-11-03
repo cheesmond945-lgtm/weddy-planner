@@ -3,6 +3,7 @@
  * theo ngày. Hàm thuần: không đụng CSDL, không đọc đồng hồ. Ngày là chuỗi "YYYY-MM-DD".
  */
 import { ownerOf, type TaskOwner } from './task-owner.ts';
+import { isCustomOrderTaskCode } from './timeline-rows.ts';
 
 /** Số ngày tối đa một lần hỏi lịch (đủ một lưới tháng 6 tuần). */
 export const CALENDAR_MAX_DAYS = 100;
@@ -36,7 +37,7 @@ export type CalendarItem =
   /** Ngày thực hiện của một đơn (chờ cọc, chờ chỉnh sửa, đã cọc, hoàn thành) */
   | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: string; isDone: boolean }
   /** Việc chi tiết của đơn đã cọc */
-  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isDone: boolean; status: 'Todo' | 'Waiting' | 'Done'; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean };
+  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isRestPayment: boolean; isPackageTask: boolean; isCustomOrderTask: boolean; isDone: boolean; status: 'Todo' | 'Waiting' | 'Done'; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean };
 
 const ORDER_STATUSES = ['Pending', 'NeedRevision', 'Deposited', 'Completed'];
 
@@ -74,6 +75,9 @@ export function calendarItems(input: { orders: readonly CalendarOrder[]; tasks: 
       title: t.title,
       date: t.due,
       eventDate: t.order.eventDate,
+      isRestPayment: !!t.code?.startsWith('PAY:'),
+      isPackageTask: !!t.code?.startsWith('PKG:'),
+      isCustomOrderTask: isCustomOrderTaskCode(t.code),
       isDone: t.done,
       status: t.done ? 'Done' : t.status === 'Waiting' ? 'Waiting' : 'Todo',
       dateStatus: t.confirmed ? 'CONFIRMED' : 'PLANNED',

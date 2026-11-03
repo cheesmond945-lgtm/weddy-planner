@@ -109,16 +109,31 @@ export class VendorOrdersController {
     return this.tasks.list(req.user.sub, id);
   }
 
-  /** NCC đổi trạng thái một việc chi tiết của đơn (mọi việc, kể cả việc của khách): { status: 'Todo' | 'Waiting' | 'Done' }; vẫn nhận { isDone } của FE cũ. */
+  /** Thêm việc RIÊNG cho đơn đã cọc: { title, note?, owner, date, addToPackage? }. Đã chốt ngày; addToPackage thêm luôn vào gói (chỉ áp cho đơn sau). */
+  @Post(':id/tasks')
+  taskAdd(@Req() req: any, @Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.tasks.addTask(req.user.sub, id, body ?? {});
+  }
+
+  /**
+   * Một việc chi tiết của đơn: đổi trạng thái ({ status: 'Todo' | 'Waiting' | 'Done' }, mọi việc, vẫn nhận { isDone } của FE cũ)
+   * hoặc sửa việc riêng 'ORD:' ({ title?, note?, owner? }).
+   */
   @Patch(':id/tasks/:taskId')
-  taskStatus(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: { status?: unknown; isDone?: unknown }) {
-    return this.tasks.setStatus(req.user.sub, id, taskId, body ?? {});
+  taskStatus(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: Record<string, unknown>) {
+    return this.tasks.patchTask(req.user.sub, id, taskId, body ?? {});
+  }
+
+  /** "Bỏ việc khỏi đơn": việc 'PKG:' hoặc 'ORD:' chưa xong; không đụng gói và đơn khác, không bỏ được thanh toán. */
+  @Delete(':id/tasks/:taskId')
+  taskRemove(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string) {
+    return this.tasks.removeTask(req.user.sub, id, taskId);
   }
 
   /** "Chốt ngày này" (không gửi date) hoặc "Đổi ngày" ({ date: 'YYYY-MM-DD' }) của một việc. */
   @Patch(':id/tasks/:taskId/schedule')
-  taskSchedule(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: { date?: unknown }) {
-    return this.tasks.confirmSchedule(req.user.sub, id, taskId, body?.date);
+  taskSchedule(@Req() req: any, @Param('id') id: string, @Param('taskId') taskId: string, @Body() body: { date?: unknown; undo?: unknown; confirmed?: unknown }) {
+    return this.tasks.confirmSchedule(req.user.sub, id, taskId, body?.date, { undo: body?.undo === true, confirmed: typeof body?.confirmed === 'boolean' ? body.confirmed : undefined });
   }
 
   /** "Bỏ chốt": xóa xác nhận ngày, giữ nguyên ngày. */
@@ -181,10 +196,24 @@ export class VendorOrdersController {
     return this.orders.cancel(req.user.sub, id, body ?? {});
   }
 
+  /** Hoàn tất đơn. Chưa ghi nhận đã nhận tiền mặt phần còn lại: gửi { restReceived: true } để ghi nhận cùng lúc, không thì 409 REST_PAYMENT_NOT_RECORDED. */
   @HttpCode(200)
   @Post(':id/complete')
-  complete(@Req() req: any, @Param('id') id: string) {
-    return this.orders.complete(req.user.sub, id);
+  complete(@Req() req: any, @Param('id') id: string, @Body() body: { restReceived?: unknown }) {
+    return this.orders.complete(req.user.sub, id, body ?? {});
+  }
+
+  /** Ghi nhận đã nhận đủ tiền mặt phần còn lại (đợt 2). */
+  @HttpCode(200)
+  @Post(':id/rest-payment')
+  recordRestPayment(@Req() req: any, @Param('id') id: string) {
+    return this.orders.recordRestPayment(req.user.sub, id);
+  }
+
+  /** Bỏ ghi nhận đợt 2. */
+  @Delete(':id/rest-payment')
+  clearRestPayment(@Req() req: any, @Param('id') id: string) {
+    return this.orders.clearRestPayment(req.user.sub, id);
   }
 
   @HttpCode(200)

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import type { PackageTaskOwner } from '@/types/vendorPackage'
 import { MAX_AFTER, MAX_BEFORE, MAX_NOTE, MAX_TITLE, newKey, offsetKindOf, validateTask, type OffsetKind, type TaskDraft } from '../packageTasks'
 
-const OWNER_CHOICES: { value: PackageTaskOwner; title: string; hint: string }[] = [
+export const OWNER_CHOICES: { value: PackageTaskOwner; title: string; hint: string }[] = [
   { value: 'VENDOR', title: 'Nhà cung cấp', hint: 'Bạn làm' },
   { value: 'CUSTOMER', title: 'Khách hàng', hint: 'Khách làm' },
   { value: 'BOTH', title: 'Cả hai', hint: 'Làm cùng nhau' },
@@ -38,6 +38,33 @@ export function TaskDialog({ open, task, onClose, onSave }: TaskDialogProps) {
         {open && <TaskForm key={task?.key ?? 'new'} task={task} onClose={onClose} onSave={onSave} />}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Ba thẻ "Ai phụ trách" (NCC / khách / cả hai), dùng chung cho việc của gói và việc riêng của đơn. */
+export function OwnerPicker({ value, onChange }: { value: PackageTaskOwner; onChange: (v: PackageTaskOwner) => void }) {
+  return (
+    <fieldset className="grid gap-1.5">
+      <legend className="mb-1.5 text-[13px] font-medium">Ai phụ trách</legend>
+      <div role="radiogroup" className="grid grid-cols-3 gap-2 max-sm:grid-cols-1">
+        {OWNER_CHOICES.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            role="radio"
+            aria-checked={value === c.value}
+            onClick={() => onChange(c.value)}
+            className={cn(
+              'rounded-sm border px-3 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold',
+              value === c.value ? 'border-gold bg-gold-soft' : 'border-line-strong bg-surface hover:bg-surface-2',
+            )}
+          >
+            <span className="block text-[13.5px] font-semibold">{c.title}</span>
+            <span className="block text-xs text-muted-foreground">{c.hint}</span>
+          </button>
+        ))}
+      </div>
+    </fieldset>
   )
 }
 
@@ -73,27 +100,7 @@ function TaskForm({ task, onClose, onSave }: Omit<TaskDialogProps, 'open'>) {
         />
       </Field>
 
-      <fieldset className="grid gap-1.5">
-        <legend className="mb-1.5 text-[13px] font-medium">Ai phụ trách</legend>
-        <div role="radiogroup" className="grid grid-cols-3 gap-2 max-sm:grid-cols-1">
-          {OWNER_CHOICES.map((c) => (
-            <button
-              key={c.value}
-              type="button"
-              role="radio"
-              aria-checked={owner === c.value}
-              onClick={() => setOwner(c.value)}
-              className={cn(
-                'rounded-sm border px-3 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold',
-                owner === c.value ? 'border-gold bg-gold-soft' : 'border-line-strong bg-surface hover:bg-surface-2',
-              )}
-            >
-              <span className="block text-[13.5px] font-semibold">{c.title}</span>
-              <span className="block text-xs text-muted-foreground">{c.hint}</span>
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      <OwnerPicker value={owner} onChange={setOwner} />
 
       <fieldset className="grid gap-1.5">
         <legend className="mb-1.5 text-[13px] font-medium">Mốc thời gian *</legend>

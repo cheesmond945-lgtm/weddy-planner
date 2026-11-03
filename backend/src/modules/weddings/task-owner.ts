@@ -2,7 +2,7 @@
  * Chủ của việc chi tiết gắn đơn (docs/TIMELINE.md mục 8) và luật nhắc hạn. Hàm thuần: không đụng CSDL, không đọc đồng hồ.
  * Ngày là chuỗi "YYYY-MM-DD"; "hôm nay" do nơi gọi truyền vào.
  */
-import { PAY_PREFIX, pkgTaskIdOf } from './timeline-rows.ts';
+import { ordOwnerOf, PAY_PREFIX, pkgTaskIdOf } from './timeline-rows.ts';
 
 /** CUSTOMER chỉ khách làm; VENDOR chỉ NCC làm; BOTH hai bên cùng làm, bên nào xong trước thì tick. */
 export type TaskOwner = 'CUSTOMER' | 'VENDOR' | 'BOTH';
@@ -56,12 +56,15 @@ export const LEGACY_OWNER: Readonly<Record<string, TaskOwner>> = {
 /**
  * Chủ của một việc theo mã:
  * - 'PKG:<id>': owner NCC khai trong package_tasks (tra trong `pkgOwners`: package_tasks.id -> owner, nạp theo lô, gồm cả việc đã xóa mềm); thiếu thì hai bên;
+ * - 'ORD:<C|V|B>:...': việc riêng NCC thêm cho đơn, chủ đọc từ chính mã;
  * - 'PAY:<orderId>': khách (thanh toán phần còn lại);
  * - mã việc chi tiết cũ: LEGACY_OWNER; mã khung, mã lạ, việc khách tự thêm: hai bên.
  * Chủ chỉ để hiển thị và nhắc: NCC đổi được trạng thái mọi việc chi tiết của đơn mình, khách chỉ xem.
  */
 export function ownerOf(code: string | null | undefined, pkgOwners?: ReadonlyMap<string, TaskOwner>): TaskOwner {
   if (!code) return 'BOTH';
+  const own = ordOwnerOf(code);
+  if (own) return own;
   const pid = pkgTaskIdOf(code);
   if (pid) return pkgOwners?.get(pid) ?? 'BOTH';
   if (code.startsWith(PAY_PREFIX)) return 'CUSTOMER';
@@ -118,11 +121,11 @@ export function remindersFor(t: ReminderTask, stage: ReminderStage): Reminder[] 
   const out: Reminder[] = [];
   if (stage === 'DUE_SOON') {
     if (t.status === 'Todo') out.push({ to: 'VENDOR', type: 'TaskDueSoon', title: 'Việc sắp đến hạn', content: `Việc ${ref} hạn ${due}.` });
-    else out.push({ to: 'COUPLE', type: 'TaskDueSoon', title: 'Nhà cung cấp đang chờ bạn', content: `${vendor} đang chờ bạn: "${t.title}" (đơn ${t.orderCode}, hạn ${due}).` });
+    else out.push({ to: 'COUPLE', type: 'TaskDueSoon', title: 'Bạn cần làm một việc', content: `Bạn cần làm: "${t.title}" (đơn ${t.orderCode}, ${vendor}, hạn ${due}).` });
     return out;
   }
   out.push({ to: 'VENDOR', type: 'TaskOverdue', title: 'Việc đã quá hạn', content: `Việc ${ref} đã quá hạn ${due}. Hãy hoàn thành và cập nhật trạng thái.` });
-  if (t.status === 'Waiting') out.push({ to: 'COUPLE', type: 'TaskOverdue', title: 'Việc đã quá hạn', content: `${vendor} đang chờ bạn: "${t.title}" (đơn ${t.orderCode}) đã quá hạn ${due}.` });
+  if (t.status === 'Waiting') out.push({ to: 'COUPLE', type: 'TaskOverdue', title: 'Việc đã quá hạn', content: `Bạn cần làm: "${t.title}" (đơn ${t.orderCode}, ${vendor}) đã quá hạn ${due}.` });
   else if (t.owner === 'VENDOR') out.push({ to: 'COUPLE', type: 'TaskOverdue', title: 'Nhà cung cấp chưa cập nhật việc', content: `${vendor} chưa cập nhật việc ${ref} (hạn ${due}). Bạn nhắn nhà cung cấp trong chat để hỏi tiến độ.` });
   return out;
 }
