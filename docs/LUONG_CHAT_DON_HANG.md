@@ -15,7 +15,7 @@
 > | Hoa hồng | API `lines`/`pay` kiểu cũ, nộp ngay ở chế độ thử | API của `main`: `GET /vendors/me/commissions` (+ `/:id`), nộp qua VNPay; hạn nộp: backend dùng **ngày 25** tháng sau ([commissions.service.ts](../backend/src/modules/commissions/commissions.service.ts), [order-lifecycle.ts](../backend/src/modules/orders/order-lifecycle.ts)) nhưng hằng số FE `COMMISSION_DUE_DAY` ([constants.ts](../frontend/src/features/commissions/constants.ts)) và chú thích kiểu ghi **ngày 20**: **lệch, hỏi nhóm**; bảng kê đã thanh toán thì hoa hồng đơn hoàn thành sau đó **dồn sang tháng sau** ([order-lifecycle.ts](../backend/src/modules/orders/order-lifecycle.ts) `addCommission`) |
 > | Tự hoàn thành đơn | Job của `Chanh` ([order-jobs.service.ts](../backend/src/modules/orders/order-jobs.service.ts), mặc định tắt) | Giữ job của `Chanh`. Job của `main` (`OrderAutoCompleteService`, chạy mỗi giờ, **nhắc NCC trước 2 ngày**) **không được đưa vào**: nhắc trước 2 ngày hiện **chưa có** |
 > | Schema | Cột bắt buộc | `schema.prisma` của `main` (đã `db pull` lại): hầu hết cột thành nullable; thêm `snapshot`, `min_tables`; code `Chanh` dùng `!` / `?? ''` cho các cột này |
-> | Giá theo mâm (Trung tâm tổ chức sự kiện) | không có | Có: `priceUnit`, `minTables`, [catalog/price.ts](../frontend/src/features/catalog/price.ts) |
+> | Giá theo mâm (Trung tâm tiệc cưới) | không có | Có: `priceUnit`, `minTables`, [catalog/price.ts](../frontend/src/features/catalog/price.ts) |
 > | Số dòng trong file này | đúng lúc viết | **Lệch** ở orders.service.ts (thêm ~120 dòng VNPay), chat.service.ts, order-lifecycle.ts |
 
 ---

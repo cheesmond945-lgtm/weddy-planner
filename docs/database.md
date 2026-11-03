@@ -605,7 +605,7 @@
   ------------------------------------------------------------------------------------------------------------
   **Name**                    **Mô tả**                                                   **CommissionRate**
   --------------------------- ----------------------------------------------------------- --------------------
-  Trung tâm tổ chức sự kiện   Sảnh tiệc, thực đơn, cỗ cưới (gộp từ Nhà hàng và Cỗ cưới)   5%
+  Trung tâm tiệc cưới   Sảnh tiệc, thực đơn, cỗ cưới (gộp từ Nhà hàng và Cỗ cưới)   5%
 
   Decor                       Trang trí tiệc cưới                                         7%
 
@@ -2757,7 +2757,7 @@ Commissions.OrderAmount và Commissions.Rate là bản chụp tại thời đi�
   --------------------------------------------------------------------------------------------------------
   Name                        Description                                                 CommissionRate
   --------------------------- ----------------------------------------------------------- ----------------
-  Trung tâm tổ chức sự kiện   Sảnh tiệc, thực đơn, cỗ cưới (gộp từ Nhà hàng và Cỗ cưới)   5.00
+  Trung tâm tiệc cưới   Sảnh tiệc, thực đơn, cỗ cưới (gộp từ Nhà hàng và Cỗ cưới)   5.00
 
   Decor                       Trang trí tiệc cưới                                         7.00
 
@@ -2774,7 +2774,7 @@ Commissions.OrderAmount và Commissions.Rate là bản chụp tại thời đi�
 
 (Lưu ý: tài liệu gốc của người dùng chỉ liệt kê 6 loại do sót \"Quay phóng sự\". Dùng đủ 7 loại.)
 
-Dữ liệu mẫu ví dụ minh họa cho mẫu timeline (chưa phải danh sách thật), loại \"Trung tâm tổ chức sự kiện\": VENUE_TASTING (thử món, cần liên hệ), VENUE_SURVEY (khảo sát, cần liên hệ), VENUE_CONFIRM (chốt trung tâm, là việc chốt), VENUE_MENU_ADJUST (điều chỉnh khẩu vị, sau cọc, cần liên hệ), VENUE_TABLE_LAYOUT (nghĩ bố cục bàn, sau cọc, không cần liên hệ), VENUE_FINAL_GUEST (chốt số khách lần cuối, sau cọc, cần liên hệ). Các mẫu này nằm trong code backend, không tạo bảng.
+Dữ liệu mẫu ví dụ minh họa cho mẫu timeline (chưa phải danh sách thật), loại \"Trung tâm tiệc cưới\": VENUE_TASTING (thử món, cần liên hệ), VENUE_SURVEY (khảo sát, cần liên hệ), VENUE_CONFIRM (chốt trung tâm, là việc chốt), VENUE_MENU_ADJUST (điều chỉnh khẩu vị, sau cọc, cần liên hệ), VENUE_TABLE_LAYOUT (nghĩ bố cục bàn, sau cọc, không cần liên hệ), VENUE_FINAL_GUEST (chốt số khách lần cuối, sau cọc, cần liên hệ). Các mẫu này nằm trong code backend, không tạo bảng.
 
 12\. Supabase Storage
 
@@ -2846,7 +2846,7 @@ Dữ liệu mẫu ví dụ minh họa cho mẫu timeline (chưa phải danh sác
 
 3.  Danh mục mẫu timeline (mã, tên, thời điểm sinh, số ngày trước cưới, cờ liên hệ, việc chốt) cho cả 7 loại dịch vụ: chưa có.
 
-4.  Tỷ lệ hoa hồng 7 loại là tạm chấp nhận (đặc biệt \"Trung tâm tổ chức sự kiện\" 5%).
+4.  Tỷ lệ hoa hồng 7 loại là tạm chấp nhận (đặc biệt \"Trung tâm tiệc cưới\" 5%).
 
 5.  Quy tắc làm tròn tiền cọc đến 100.000đ: chưa nói rõ làm tròn lên, xuống hay gần nhất.
 

@@ -1,8 +1,8 @@
-# Lịch bận theo sảnh (Trung tâm tổ chức sự kiện)
+# Lịch bận theo sảnh (Trung tâm tiệc cưới)
 
 Vấn đề: khách chọn một gói (sảnh) của trung tâm tiệc cưới rồi nhắn hỏi, trao đổi xong mới biết hôm đó sảnh đã kín. Mục tiêu: khách thấy sẵn ngày nào sảnh bận ngay trước khi nhắn; hệ thống chặn hai khách đặt cùng sảnh, cùng ngày.
 
-Phạm vi: **chỉ Trung tâm tổ chức sự kiện** (slug `nha-hang`), tính **theo ngày**. Các dịch vụ khác (chụp ảnh, trang điểm, trang phục, trang trí, hoa cưới) có nhiều ekip nên chưa có lịch bận. Mỗi **gói** của trung tâm là **một sảnh**.
+Phạm vi: **chỉ Trung tâm tiệc cưới** (slug `nha-hang`), tính **theo ngày**. Các dịch vụ khác (chụp ảnh, trang điểm, trang phục, trang trí, hoa cưới) có nhiều ekip nên chưa có lịch bận. Mỗi **gói** của trung tâm là **một sảnh**.
 
 ## 1. Khi nào sảnh bận
 
