@@ -13,6 +13,7 @@ import { OrderDaySlotPanel } from './OrderDaySlotPanel'
 import { OrderProgressPanel } from './OrderProgressPanel'
 import type { OrderFormMode } from './OrderFormDialog'
 import { PanelDialog } from './PanelDialog'
+import { PaymentLines } from './PaymentLines'
 import { PaymentScheduleTable } from './PaymentScheduleTable'
 
 const INVOICE_LABEL: Record<InvoiceType, string> = { DepositReceipt: 'Giấy xác nhận cọc', FinalInvoice: 'Hóa đơn cuối' }
@@ -134,6 +135,9 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
           <Item label="Số điện thoại">{o.customerPhone || '—'}</Item>
           <Item label="Ngày thực hiện">{formatDate(o.eventDate)}</Item>
           {o.package && <Item label="Sảnh">{o.package.name}</Item>}
+          <Item label="Thanh toán" full>
+            <PaymentLines order={o} />
+          </Item>
           {o.status === 'Pending' && o.depositDueDate && <Item label="Hạn đặt cọc">{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</Item>}
           {o.completedDate && <Item label="Ngày hoàn thành">{formatDay(o.completedDate)}</Item>}
           {o.cancelledDate && <Item label="Ngày hủy">{formatDay(o.cancelledDate)}</Item>}
@@ -150,7 +154,7 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
         <>
           <OrderDaySlotPanel orderId={o.id} frame={(c) => <Section title="Giờ có mặt ngày cưới">{c}</Section>} />
           <Section title="Tiến độ đơn">
-            <OrderProgressPanel orderId={o.id} readOnly={o.status !== 'Deposited'} />
+            <OrderProgressPanel orderId={o.id} customerName={o.customerName} readOnly={o.status !== 'Deposited'} />
           </Section>
         </>
       )}

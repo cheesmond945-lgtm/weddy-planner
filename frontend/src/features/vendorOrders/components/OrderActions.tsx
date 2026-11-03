@@ -28,7 +28,8 @@ export function OrderActions({ order: o, onOpenForm, onView, onViewInvoice }: Or
             size="sm"
             variant={a.primary ? 'default' : 'outline'}
             className={a.primary ? '' : a.danger ? 'border-warn/60 text-warn hover:bg-warn-soft hover:text-warn' : 'border-line-strong'}
-            disabled={busy && (a.key === 'complete' || a.key === 'invoice')}
+            disabled={!!a.disabledReason || (busy && (a.key === 'complete' || a.key === 'invoice' || a.key === 'receiveRest' || a.key === 'unreceiveRest'))}
+            title={a.disabledReason}
             onClick={() => run(a.key, o)}
           >
             {a.label}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
 import { canRequestRevision, depositDeadline, formatDayTime } from '@/features/vendorOrders/calc'
+import { REST_TONE_CLASS, restLabel } from '@/features/vendorOrders/restPayment'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
 import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
 import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
@@ -101,6 +102,7 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
       )}
       {row(`Đặt cọc (${Math.round(o.depositPercent * 100) / 100}%)`, <span className="text-gold-700">{formatMoney(o.depositAmount)}</span>)}
       {row('Còn lại', formatMoney(o.totalAmount - o.depositAmount))}
+      {o.restPayment && o.restPayment.status !== 'NotApplicable' && row('Đợt 2 (tiền mặt)', <span className={REST_TONE_CLASS[restLabel(o, 'COUPLE').tone]}>{restLabel(o, 'COUPLE').text}</span>)}
       {o.status === 'Pending' && o.depositDueDate && row('Hạn đặt cọc', <span className={cn(urgent && 'text-warn')}>{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</span>)}
       {paidDate && (
         <div className="mt-2.5 text-[13px] font-semibold text-sage">

@@ -5,13 +5,18 @@ import { canCancel, eventPassed, openRevision } from './calc'
 import type { OrderFormMode } from './components/OrderFormDialog'
 import { CancelOrderDialog } from './components/CancelOrderDialog'
 import { RejectRevisionDialog } from './components/RejectRevisionDialog'
+import { formatMoney } from '@/lib/format'
+import { RestReceivedDialog } from './components/RestReceivedDialog'
 import { useCancelOrder, useCompleteOrder, useIssueFinalInvoice, useRejectRevision } from './hooks'
+import { useRestAction } from './taskActions'
 
-export type ActionKey = 'view' | 'continue' | 'resend' | 'edit' | 'reject' | 'again' | 'complete' | 'invoice' | 'viewInvoice' | 'cancel'
+export type ActionKey = 'view' | 'continue' | 'resend' | 'edit' | 'reject' | 'again' | 'complete' | 'invoice' | 'viewInvoice' | 'cancel' | 'receiveRest' | 'unreceiveRest'
 
 export interface OrderAction {
   key: ActionKey
   label: string
+  /** Có thì nút bị mờ, lý do hiện ở tooltip */
+  disabledReason?: string
   /** Nút chính (tô vàng) */
   primary: boolean
   /** Hủy đơn: viền đỏ */
@@ -38,7 +43,15 @@ export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAct
   if (requested) out.push({ key: 'reject', label: 'Từ chối yêu cầu', primary: false })
   if (o.status === 'Deposited' && eventPassed(o)) out.push({ key: 'complete', label: 'Hoàn tất', primary: true })
   if (o.status === 'Deposited' || o.status === 'Completed') {
-    out.push(hasFinal ? { key: 'viewInvoice', label: 'Xem hóa đơn', primary: false } : { key: 'invoice', label: 'Xuất hóa đơn', primary: false })
+    const rest = o.restPayment?.status
+    // Đợt 2 (tiền mặt phần còn lại): NCC ghi nhận đã nhận; hóa đơn cuối chỉ xuất sau khi đã ghi nhận
+    if (rest === 'Pending') out.push({ key: 'receiveRest', label: 'Ghi nhận đã nhận tiền mặt', primary: false })
+    if (rest === 'Received') out.push({ key: 'unreceiveRest', label: 'Bỏ ghi nhận tiền mặt', primary: false })
+    out.push(
+      hasFinal
+        ? { key: 'viewInvoice', label: 'Xem hóa đơn', primary: false }
+        : { key: 'invoice', label: 'Xuất hóa đơn', primary: false, ...(rest !== 'Received' && { disabledReason: 'Ghi nhận đã nhận tiền mặt trước' }) },
+    )
   }
   if (canCancel(o)) out.push({ key: 'cancel', label: 'Hủy đơn', primary: false, danger: true })
   return out
@@ -72,8 +85,9 @@ export function useOrderActionRunner({ onOpenForm, onView, onViewInvoice }: Runn
   const invoice = useIssueFinalInvoice()
   const cancel = useCancelOrder()
   const reject = useRejectRevision()
+  const restAction = useRestAction()
   const [confirm, setConfirm] = useState<{
-    type: 'complete' | 'invoice' | 'again' | 'cancel' | 'reject'
+    type: 'complete' | 'invoice' | 'again' | 'cancel' | 'reject' | 'receiveRest' | 'unreceiveRest'
     order: Order
   } | null>(null)
 
@@ -94,7 +108,11 @@ export function useOrderActionRunner({ onOpenForm, onView, onViewInvoice }: Runn
       case 'complete':
         return setConfirm({ type: 'complete', order: o })
       case 'invoice':
-        return setConfirm({ type: 'invoice', order: o })
+        return o.restPayment?.status === 'Received' ? setConfirm({ type: 'invoice', order: o }) : undefined
+      case 'receiveRest':
+        return setConfirm({ type: 'receiveRest', order: o })
+      case 'unreceiveRest':
+        return setConfirm({ type: 'unreceiveRest', order: o })
       case 'viewInvoice':
         return onViewInvoice(o, 'FinalInvoice')
       case 'cancel':
@@ -106,8 +124,25 @@ export function useOrderActionRunner({ onOpenForm, onView, onViewInvoice }: Runn
   const close = (open: boolean) => !open && setConfirm(null)
   const dialogs = (
     <>
-      <ConfirmDialog open={confirm?.type === 'complete'} onOpenChange={close} title="Hoàn tất đơn?" confirmLabel="Hoàn tất" onConfirm={() => o && complete.mutate(o.id)}>
+      {/* Hoàn tất: đã ghi nhận tiền mặt thì xác nhận thường; chưa thì hỏi đã nhận đủ chưa */}
+      <ConfirmDialog open={confirm?.type === 'complete' && o?.restPayment?.status === 'Received'} onOpenChange={close} title="Hoàn tất đơn?" confirmLabel="Hoàn tất" onConfirm={() => o && complete.mutate({ orderId: o.id })}>
         <p>Xác nhận đơn {o && <b>{o.orderCode}</b>} đã hoàn tất? Hoa hồng của đơn sẽ được tính.</p>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirm?.type === 'complete' && o?.restPayment?.status !== 'Received'}
+        onOpenChange={close}
+        title="Đã nhận tiền mặt?"
+        confirmLabel="Đã nhận, hoàn tất"
+        cancelLabel="Chưa, để sau"
+        onConfirm={() => o && complete.mutate({ orderId: o.id, restReceived: true })}
+      >
+        <p>
+          Bạn đã nhận đủ <b>{o ? formatMoney(o.restPayment?.amount ?? o.totalAmount - o.depositAmount) : ''}</b> tiền mặt phần còn lại chưa? Bấm "Đã nhận, hoàn tất" để ghi nhận và hoàn tất đơn {o && <b>{o.orderCode}</b>}.
+        </p>
+      </ConfirmDialog>
+      <RestReceivedDialog open={confirm?.type === 'receiveRest'} amount={o?.restPayment?.amount} onOpenChange={close} onConfirm={() => o && void restAction(o.id, true, o.orderCode)} />
+      <ConfirmDialog open={confirm?.type === 'unreceiveRest'} onOpenChange={close} title="Bỏ ghi nhận tiền mặt?" confirmLabel="Bỏ ghi nhận" onConfirm={() => o && void restAction(o.id, false, o.orderCode)}>
+        <p>Đơn {o && <b>{o.orderCode}</b>} sẽ quay về trạng thái chưa nhận tiền mặt phần còn lại.</p>
       </ConfirmDialog>
       <ConfirmDialog open={confirm?.type === 'invoice'} onOpenChange={close} title="Xuất hóa đơn?" confirmLabel="Xuất hóa đơn" onConfirm={() => o && invoice.mutate(o.id)}>
         {o && (

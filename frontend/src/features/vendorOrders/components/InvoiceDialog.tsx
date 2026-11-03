@@ -77,7 +77,10 @@ export function InvoiceDialog({ order: o, type, onClose, vendorName: vendorNameP
           `${formatMoney(o.depositAmount)}${o.payment?.paidDate ? ` · ${formatDay(o.payment.paidDate)}` : ''}`,
         )}
         {o.payment?.transactionCode && info('Mã giao dịch', o.payment.transactionCode)}
-        {info(type === 'DepositReceipt' ? 'Còn lại, trả tiền mặt trực tiếp cho NCC' : 'Đã thanh toán tiền mặt', formatMoney(rest))}
+        {info(
+          type === 'DepositReceipt' ? 'Còn lại, trả tiền mặt trực tiếp cho NCC' : 'Đã thanh toán tiền mặt',
+          `${formatMoney(rest)}${type === 'FinalInvoice' && o.restPayment?.receivedDate ? ` · ngày ${formatDay(o.restPayment.receivedDate)}` : ''}`,
+        )}
       </div>
       <p className="mt-3 text-[12.5px] text-muted-foreground">
         {type === 'DepositReceipt'
