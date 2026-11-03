@@ -226,6 +226,10 @@ model orders {
   created_date     DateTime?         @default(now()) @db.Timestamptz(6)
   /// Gói / sảnh của đơn (Trung tâm tổ chức sự kiện): sảnh bận vào event_date khi đơn Deposited hoặc Completed (prisma/sql/2026-10-31-package-busy-dates.sql)
   package_id       String?           @db.Uuid
+  /// Ngày cưới: giờ NCC có mặt / xong việc đã chốt với khách; dayof_confirmed_at NULL là chưa chốt (prisma/sql/2026-11-02-wedding-day-schedule.sql)
+  dayof_start_at     DateTime?         @db.Timestamptz(6)
+  dayof_end_at       DateTime?         @db.Timestamptz(6)
+  dayof_confirmed_at DateTime?         @db.Timestamptz(6)
   commissions      commissions?
   invoices         invoices[]
   messages         messages[]
@@ -357,6 +361,11 @@ model service_packages {
   min_tables            Int?
   /// "mâm" hoặc "gói" (backend/prisma/manual/2026-10-30-01-budget-tiers.sql)
   unit                  String                  @default("gói") @db.VarChar(10)
+  /// Ngày cưới: có mặt trước giờ chính bao nhiêu phút, làm trong bao nhiêu phút; NULL dùng mặc định theo lĩnh vực (prisma/sql/2026-11-02-wedding-day-schedule.sql)
+  dayof_lead_minutes     Int?
+  dayof_duration_minutes Int?
+  /// Sảnh: giờ sớm nhất đơn vị khác được vào setup trong ngày cưới (giờ VN)
+  setup_open_time        DateTime?               @db.Time(6)
   order_items           order_items[]
   orders                orders[]
   package_albums        package_albums[]
@@ -560,6 +569,8 @@ model weddings {
   /// Tự lo tiệc ngoài nền tảng
   own_venue                Boolean                    @default(false)
   own_venue_cost           Decimal?                   @db.Decimal(18, 2)
+  /// Giờ chính của ngày cưới (đón khách / làm lễ), giờ VN (prisma/sql/2026-11-02-wedding-day-schedule.sql)
+  main_time                DateTime?                  @db.Time(6)
   orders                   orders[]
   plan_vendors             plan_vendors[]
   timeline_tasks           timeline_tasks[]

@@ -52,6 +52,8 @@ export function TimeCombobox({ label, value, onChange, placeholder, error, disab
           onFocus={() => !disabled && setOpen(true)}
           onClick={() => !disabled && setOpen(true)}
           onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
+          // Tab sang ô khác thì đóng danh sách (bấm mốc giờ không làm ô mất focus vì nút chặn mousedown)
+          onBlur={() => setOpen(false)}
           onChange={(e) => onChange(e.target.value)}
           className={cn(controlClass, 'pr-9', disabled && 'bg-surface-2')}
         />

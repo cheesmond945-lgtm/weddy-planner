@@ -52,7 +52,7 @@ Lời báo: NCC thấy nguồn ("đơn DH… đã đặt cọc", "bạn đã đ�
 - Thẻ đơn, chi tiết đơn, hóa đơn hiện tên sảnh.
 
 **Khách**
-- Trang chi tiết trung tâm sự kiện: bấm một gói (sảnh) → khung chi tiết gói có **Lịch của sảnh**: lịch tháng hai trạng thái **Bận / Còn trống**; đã có ngày cưới thì đánh dấu và báo "Sảnh này bận / còn trống vào ngày cưới của bạn". Ngày chính khách đã đặt cọc sảnh đó hiện **"Của bạn"** ("Bạn đã đặt cọc sảnh này cho ngày cưới"), không hiện "Bận".
+- Trang chi tiết trung tâm sự kiện: bấm một gói (sảnh) → khung chi tiết gói có **Lịch của sảnh**, mặc định **thu gọn** (tiêu đề kèm nhãn "Trống ngày cưới" / "Bận ngày cưới" / "Bạn đã đặt"), bấm **Xem lịch** thì trượt mở (lúc đó mới tải lịch tháng): lịch tháng hai trạng thái **Bận / Còn trống**; đã có ngày cưới thì đánh dấu và báo "Sảnh này bận / còn trống vào ngày cưới của bạn". Ngày chính khách đã đặt cọc sảnh đó hiện **"Của bạn"** ("Bạn đã đặt cọc sảnh này cho ngày cưới"), không hiện "Bận".
 - Khung giá: "Ngày cưới của bạn (dd/mm/yyyy): Còn N/M sảnh trống" hoặc "Tất cả sảnh đã bận".
 - Danh sách dịch vụ: thẻ trung tâm sự kiện có nhãn "Còn N sảnh trống ngày cưới" / "Hết sảnh ngày cưới".
 - Không lộ tên khách hay chi tiết đơn khác ở bất cứ đâu.

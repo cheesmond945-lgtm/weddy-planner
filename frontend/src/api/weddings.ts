@@ -3,6 +3,7 @@ import type {
   Budget,
   BudgetSettings,
   DateChangePreview,
+  DaySchedule,
   GuestInput,
   GuestList,
   GuestSide,
@@ -37,6 +38,8 @@ export const weddingsApi = {
   getTimeline: (): Promise<Timeline> => (http.get('/weddings/me/timeline')),
   addTask: (body: NewTask): Promise<Timeline> =>
     http.post('/weddings/me/timeline/tasks', body),
+  /** Lịch trình ngày cưới theo giờ: giờ có mặt của từng NCC làm đúng ngày cưới */
+  getDaySchedule: (): Promise<DaySchedule> => http.get('/weddings/me/day-schedule'),
   /** Xem trước khi đổi ngày cưới: việc đổi hạn (cũ → mới) và cảnh báo đơn lệch ngày. Không ghi gì. */
   previewDateChange: (weddingDate: string): Promise<DateChangePreview> =>
     http.post('/weddings/me/timeline/regenerate-preview', { weddingDate }),

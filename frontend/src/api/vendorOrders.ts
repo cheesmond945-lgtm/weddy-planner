@@ -1,5 +1,5 @@
 import type { Paginated } from '@/types/api'
-import type { BoardTask, CalendarItem, CancelReason, Order, OrderContent, OrderListQuery, OrderProgress, OrderStatus, OrderTasks, TaskStatus } from '@/types/vendorOrder'
+import type { BoardTask, CalendarItem, CancelReason, Order, OrderContent, OrderDaySlot, OrderListQuery, OrderProgress, OrderStatus, OrderTasks, TaskStatus } from '@/types/vendorOrder'
 import { http, requestRaw } from './client'
 
 /** Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp). */
@@ -42,6 +42,13 @@ export const vendorOrdersApi = {
   /** "Bỏ chốt": xóa xác nhận ngày, giữ nguyên ngày */
   unconfirmTaskDate: (orderId: string, taskId: string): Promise<OrderTasks> =>
     http.delete(`/vendors/me/orders/${orderId}/tasks/${taskId}/schedule`),
+
+  /** Giờ có mặt ngày cưới của đơn (docs/LICH_TRINH_NGAY_CUOI.md) */
+  daySlot: (orderId: string): Promise<OrderDaySlot> => http.get(`/vendors/me/orders/${orderId}/day-slot`),
+  /** Chốt giờ có mặt: start, end giờ VN "YYYY-MM-DDTHH:mm" (có thể từ tối hôm trước); khách được báo */
+  confirmDaySlot: (orderId: string, body: { start: string; end: string }): Promise<OrderDaySlot> => http.put(`/vendors/me/orders/${orderId}/day-slot`, body),
+  /** Bỏ chốt giờ có mặt: về giờ dự kiến */
+  clearDaySlot: (orderId: string): Promise<OrderDaySlot> => http.delete(`/vendors/me/orders/${orderId}/day-slot`),
 
   /** Lịch làm việc trong khoảng [from, to] (YYYY-MM-DD, tối đa 100 ngày): ngày thực hiện của đơn và việc chi tiết của đơn đã cọc. */
   calendar: async (from: string, to: string): Promise<CalendarItem[]> => {

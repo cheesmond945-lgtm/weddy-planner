@@ -6,6 +6,7 @@ import { MultiSelect } from '@/components/MultiSelect'
 import { SearchSelect, type SearchSelectGroup } from '@/components/SearchSelect'
 import { Button } from '@/components/ui/button'
 import { useCategories, useAreas } from '@/features/catalog/hooks'
+import { TimeCombobox } from '@/features/vendors/components/TimeCombobox'
 import { addDays, toISODate, today } from '@/lib/date'
 import type { BudgetPreset, Wedding, WeddingInput } from '@/types/wedding'
 import { validateWeddingForm, type WeddingFormErrors } from '../weddingFormRules'
@@ -21,7 +22,8 @@ interface WeddingFormProps {
   secondaryAction?: ReactNode
 }
 
-type Errors = WeddingFormErrors
+// Lỗi từng trường; giờ chính kiểm tra riêng (không bắt buộc)
+type Errors = WeddingFormErrors & { mainTime?: string }
 
 /** Form thông tin đám cưới (4.1), như wedForm trong prototype. Dùng chung cho tạo mới và chỉnh sửa: cùng thứ tự trường, cùng validate. */
 export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, secondaryAction }: WeddingFormProps) {
@@ -32,6 +34,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
   const [brideName, setBrideName] = useState(initial?.brideName ?? '')
   const [date, setDate] = useState(initial?.date ?? '')
   const [ward, setWard] = useState(initial?.ward ?? '')
+  const [mainTime, setMainTime] = useState(initial?.mainTime ?? '')
   const [guestCount, setGuestCount] = useState(initial?.guestCount ? String(initial.guestCount) : '')
   const [budget, setBudget] = useState(initial?.budget ?? 0)
   // Tùy chỉnh chỉ đặt ở tab Ngân sách; form chỉ gửi khi khách chọn một trong ba mức
@@ -45,9 +48,10 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
     e.preventDefault()
     const errs = validateWeddingForm({ brideName, groomName, date, ward, guestCount, budget, services: serviceValue }, toISODate(today()))
     const guests = guestCount ? Number(guestCount) : null
+    if (mainTime.trim() && !/^([01]\d|2[0-3]):[0-5]\d$/.test(mainTime.trim())) (errs as Errors).mainTime = 'Nhập giờ dạng HH:mm, ví dụ 11:00.'
     setErrors(errs)
     if (Object.keys(errs).length) return
-    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, ward, guestCount: guests, budget, ...(budgetPreset !== 'CUSTOM' && { budgetPreset }), categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
+    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, mainTime: mainTime.trim() || null, ward, guestCount: guests, budget, ...(budgetPreset !== 'CUSTOM' && { budgetPreset }), categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
   }
 
   return (
@@ -113,6 +117,20 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
           hint="Nên nhập số khách tối đa dự kiến"
           className={FIELD}
         />
+      </div>
+
+      <div className="grid items-start gap-3.5 sm:grid-cols-2">
+        <TimeCombobox
+          label="Giờ đón khách / làm lễ (không bắt buộc)"
+          placeholder="Ví dụ 11:00"
+          value={mainTime}
+          onChange={(v) => {
+            setMainTime(v)
+            setErrors((x) => ({ ...x, mainTime: undefined }))
+          }}
+          error={errors.mainTime}
+        />
+        <p className="text-[13px] text-muted-foreground sm:mt-7">Mốc để xếp giờ có mặt cho trang trí, makeup, hoa, chụp ảnh… trong ngày cưới. Nhập sau cũng được.</p>
       </div>
 
       <WardField

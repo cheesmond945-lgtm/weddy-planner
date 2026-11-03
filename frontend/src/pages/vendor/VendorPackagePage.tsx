@@ -8,6 +8,7 @@ import { hasEditableUpdate, isEditablePackage, packageCategoryOf } from '@/featu
 import { PackageDetails } from '@/features/vendorPackages/components/PackageDetails'
 import { PackageEditor } from '@/features/vendorPackages/components/PackageEditor'
 import { PackageHeader } from '@/features/vendorPackages/components/PackageHeader'
+import { PackageDayPlanCard } from '@/features/vendorPackages/components/PackageDayPlanCard'
 import { PackageTasksTab } from '@/features/vendorPackages/components/PackageTasksTab'
 import { usePackage, usePackageTasksDraft } from '@/features/vendorPackages/hooks'
 import { useVendorProfile } from '@/features/vendors/hooks'
@@ -79,7 +80,14 @@ export default function VendorPackagePage() {
   const p = pkg.data
   const showEditor = !p || isEditablePackage(p.status) || hasEditableUpdate(p) || (p.status === 'PUBLISHED' && editingAt === p.updatedAt && !p.pendingUpdate)
 
-  const extras = { tasks, tab, onTabChange: setTab, tasksPanel: <PackageTasksTab draft={tasks} /> }
+  // Gói đã có (đã lưu) thì tab Công việc có thêm "Thời gian trong ngày cưới" ở trên danh sách việc
+  const tasksPanel = (
+    <>
+      {p?.dayPlan && <PackageDayPlanCard key={p.id} packageId={p.id} plan={p.dayPlan} />}
+      <PackageTasksTab draft={tasks} />
+    </>
+  )
+  const extras = { tasks, tab, onTabChange: setTab, tasksPanel }
   const tabs = [
     { id: 'info' as const, label: 'Thông tin gói' },
     { id: 'tasks' as const, label: 'Công việc', count: tasks.rows.length },

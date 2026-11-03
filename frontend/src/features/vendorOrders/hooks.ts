@@ -217,6 +217,28 @@ export function useConfirmTaskDate(orderId: string) {
   })
 }
 
+/** Giờ có mặt ngày cưới của đơn; khóa nằm dưới việc của đơn nên tải lại cùng (realtime `task`, khách đổi giờ chính). */
+const daySlotKey = (uid: string | undefined, orderId: string) => [...vendorKeys.orderTasks(uid, orderId), 'day-slot'] as const
+
+export function useDaySlot(orderId: string) {
+  const uid = useVendorId()
+  return useQuery({ queryKey: daySlotKey(uid, orderId), queryFn: () => vendorOrdersApi.daySlot(orderId), enabled: !!uid })
+}
+
+/** Chốt giờ có mặt ({ start, end }) hoặc bỏ chốt (null); khách được báo khi chốt. */
+export function useSetDaySlot(orderId: string) {
+  const uid = useVendorId()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { start: string; end: string } | null) => (v ? vendorOrdersApi.confirmDaySlot(orderId, v) : vendorOrdersApi.clearDaySlot(orderId)),
+    onSuccess: (data, v) => {
+      qc.setQueryData(daySlotKey(uid, orderId), data)
+      toast(v ? 'Đã chốt giờ có mặt, khách đã được báo.' : 'Đã bỏ chốt, quay về giờ dự kiến.')
+    },
+    onError: (e: unknown) => toast(e instanceof Error ? e.message : 'Không lưu được giờ có mặt.'),
+  })
+}
+
 /** "Đổi ngày…" từ Bảng việc / Lịch (đơn khác nhau nên đơn nằm trong tham số). */
 export function useRescheduleTask() {
   const uid = useVendorId()
