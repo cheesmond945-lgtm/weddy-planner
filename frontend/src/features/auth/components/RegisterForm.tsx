@@ -1,31 +1,50 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { FormError, FormField } from '@/components/FormField'
-import { Button } from '@/components/ui/button'
+import { FormError } from '@/components/FormField'
 import type { OtpSent, Session } from '@/types/auth'
 import { useRegister } from '../hooks'
 import { MIN_PASSWORD, registerSchema, validate, type FieldErrors } from '../schemas'
+import { AuthField, AuthSubmit } from './AuthField'
 import { OtpStep } from './OtpStep'
 
 interface RegisterFormProps {
   onSuccess: (session: Session) => void
-  onCancel?: () => void
-  /** Báo cho modal biết đang ở bước nào để đổi tiêu đề. */
+  /** Báo cho modal / trang biết đang ở bước nào để đổi tiêu đề, ẩn tab. */
   onStepChange?: (step: 'info' | 'otp') => void
 }
 
-type Values = { name: string; phone: string; email: string; password: string; confirmPassword: string }
-const EMPTY: Values = { name: '', phone: '', email: '', password: '', confirmPassword: '' }
+type Values = { name: string; email: string; password: string; confirmPassword: string }
+const EMPTY: Values = { name: '', email: '', password: '', confirmPassword: '' }
+const ALL_TOUCHED: Touched = { name: true, email: true, password: true, confirmPassword: true }
+type Touched = Partial<Record<keyof Values, boolean>>
 
-/** Đăng ký (1.1): bước 1 nhập thông tin, bước 2 nhập OTP gửi về email. */
-export function RegisterForm({ onSuccess, onCancel, onStepChange }: RegisterFormProps) {
+/** Lỗi của từng ô. Tự so khớp mật khẩu vì refine của schema chỉ chạy khi các ô khác đã hợp lệ. */
+function fieldErrors(values: Values): FieldErrors<Values> {
+  const { errors } = validate(registerSchema, values)
+  if (values.confirmPassword && values.password !== values.confirmPassword) {
+    errors.confirmPassword ??= 'Mật khẩu nhập lại chưa khớp.'
+  }
+  return errors
+}
+
+/** Đăng ký (1.1): bước 1 nhập họ tên, email, mật khẩu; bước 2 nhập OTP gửi về email. Không còn ô số điện thoại. */
+export function RegisterForm({ onSuccess, onStepChange }: RegisterFormProps) {
   const [values, setValues] = useState<Values>(EMPTY)
-  const [errors, setErrors] = useState<FieldErrors<Values>>({})
+  // Ô nào đã nhập rồi rời đi (hoặc đã bấm Đăng ký) mới hiện lỗi; từ đó lỗi cập nhật ngay khi gõ
+  const [touched, setTouched] = useState<Touched>({})
   const [sent, setSent] = useState<OtpSent | null>(null)
   const register = useRegister()
 
+  const allErrors = fieldErrors(values)
+  const errors: FieldErrors<Values> = {}
+  for (const key of Object.keys(allErrors) as (keyof Values)[]) {
+    if (touched[key]) errors[key] = allErrors[key]
+  }
+
   const change = (key: keyof Values) => (e: ChangeEvent<HTMLInputElement>) => {
     setValues((v) => ({ ...v, [key]: e.target.value }))
-    setErrors((er) => ({ ...er, [key]: undefined }))
+  }
+  const blur = (key: keyof Values) => () => {
+    if (values[key]) setTouched((t) => ({ ...t, [key]: true }))
   }
 
   function goTo(next: OtpSent | null) {
@@ -35,8 +54,8 @@ export function RegisterForm({ onSuccess, onCancel, onStepChange }: RegisterForm
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    const { data, errors } = validate(registerSchema, values)
-    setErrors(errors)
+    setTouched(ALL_TOUCHED)
+    const { data } = validate(registerSchema, values)
     if (!data) return
     const { confirmPassword: _c, ...body } = data
     register.mutate(body, { onSuccess: goTo })
@@ -47,59 +66,50 @@ export function RegisterForm({ onSuccess, onCancel, onStepChange }: RegisterForm
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      <FormField label="Họ và tên" autoComplete="name" value={values.name} onChange={change('name')} error={errors.name} autoFocus />
-      <div className="grid gap-3.5 sm:grid-cols-2">
-        <FormField
-          label="Số điện thoại"
-          type="tel"
-          inputMode="numeric"
-          autoComplete="tel"
-          value={values.phone}
-          onChange={change('phone')}
-          error={errors.phone}
-        />
-        <FormField
-          label="Email"
-          type="email"
-          autoComplete="email"
-          value={values.email}
-          onChange={change('email')}
-          error={errors.email}
-          hint="Mã OTP sẽ gửi về email này"
-        />
-      </div>
-      <div className="grid gap-3.5 sm:grid-cols-2">
-        <FormField
-          label="Mật khẩu"
-          type="password"
-          autoComplete="new-password"
-          value={values.password}
-          onChange={change('password')}
-          error={errors.password}
-          hint={`Tối thiểu ${MIN_PASSWORD} ký tự`}
-        />
-        <FormField
-          label="Nhập lại mật khẩu"
-          type="password"
-          autoComplete="new-password"
-          value={values.confirmPassword}
-          onChange={change('confirmPassword')}
-          error={errors.confirmPassword}
-        />
-      </div>
+    <form onSubmit={submit} noValidate className="flex flex-col gap-4 [@media(max-height:820px)]:gap-3">
+      <AuthField
+        label="Họ và tên"
+        autoComplete="name"
+        placeholder="Nhập họ và tên..."
+        value={values.name}
+        onChange={change('name')}
+        onBlur={blur('name')}
+        error={errors.name}
+        autoFocus
+      />
+      <AuthField
+        label="Email"
+        type="email"
+        autoComplete="email"
+        placeholder="Nhập email của bạn..."
+        value={values.email}
+        onChange={change('email')}
+        onBlur={blur('email')}
+        error={errors.email}
+        hint="Mã OTP sẽ gửi về email này"
+      />
+      <AuthField
+        label="Mật khẩu"
+        type="password"
+        autoComplete="new-password"
+        placeholder={`Tối thiểu ${MIN_PASSWORD} ký tự`}
+        value={values.password}
+        onChange={change('password')}
+        onBlur={blur('password')}
+        error={errors.password}
+      />
+      <AuthField
+        label="Nhập lại mật khẩu"
+        type="password"
+        autoComplete="new-password"
+        placeholder="Nhập lại mật khẩu..."
+        value={values.confirmPassword}
+        onChange={change('confirmPassword')}
+        onBlur={blur('confirmPassword')}
+        error={errors.confirmPassword}
+      />
       <FormError message={register.error?.message} />
-
-      <div className="mt-1 flex flex-wrap justify-end gap-2.5">
-        {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Hủy
-          </Button>
-        )}
-        <Button type="submit" disabled={register.isPending}>
-          {register.isPending ? 'Đang gửi mã…' : 'Gửi mã OTP'}
-        </Button>
-      </div>
+      <AuthSubmit disabled={register.isPending}>{register.isPending ? 'Đang gửi mã…' : 'Đăng ký'}</AuthSubmit>
     </form>
   )
 }

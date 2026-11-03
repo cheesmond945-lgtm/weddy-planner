@@ -93,7 +93,7 @@ Body: một hoặc nhiều trường `{ "title"?, "dueDate"?, "isDone"? }`, ch�
 ### DELETE /weddings/me/timeline/tasks/:itemId
 Chỉ việc `isCustom`. Response 200: timeline mới.
 
-Lỗi chung của 3 endpoint trên: 400 `VALIDATION_ERROR`, 400 `DUE_DATE_OUT_OF_RANGE` (hạn phải từ hôm nay đến trước ngày cưới), 400 `TIMELINE_ITEM_READONLY`, 404 `TIMELINE_ITEM_NOT_FOUND`, 409 `TASK_NOT_CUSTOM`, 409 `WEDDING_NOT_SET`
+Lỗi chung của 3 endpoint trên: 400 `VALIDATION_ERROR`, 400 `DUE_DATE_OUT_OF_RANGE` (hạn nằm ngoài khoảng của loại việc, xem [TIMELINE.md](../TIMELINE.md) mục 7: việc tự thêm, khung, chi tiết trước sự kiện từ hôm nay đến **ngày cưới (gồm ngày cưới)**; việc neo ngày thực hiện đến ngày thực hiện của đơn; việc sau sự kiện từ mốc của nó, tối đa +365 ngày), 400 `DUE_DATE_ORDER` (việc Chọn NCC phải trước hoặc cùng ngày mốc Chốt của hạng mục), 400 `TIMELINE_ITEM_READONLY` (kể cả đổi hạn việc "Ngày thực hiện", do đơn quyết định), 403 `TIMELINE_ITEM_READONLY` (việc do NCC thực hiện, `owner` = `VENDOR`: khách chỉ xem, xem [TIMELINE.md](../TIMELINE.md) mục 8), 404 `TIMELINE_ITEM_NOT_FOUND`, 409 `TASK_NOT_CUSTOM`, 409 `WEDDING_NOT_SET`
 
 ---
 

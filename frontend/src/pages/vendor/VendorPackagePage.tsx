@@ -7,8 +7,11 @@ import { hasEditableUpdate, isEditablePackage, packageCategoryOf } from '@/featu
 import { PackageDetails } from '@/features/vendorPackages/components/PackageDetails'
 import { PackageEditor } from '@/features/vendorPackages/components/PackageEditor'
 import { PackageHeader } from '@/features/vendorPackages/components/PackageHeader'
-import { usePackage } from '@/features/vendorPackages/hooks'
+import { PackageDayPlanCard } from '@/features/vendorPackages/components/PackageDayPlanCard'
+import { PackageTasksTab } from '@/features/vendorPackages/components/PackageTasksTab'
+import { usePackage, usePackageTasksDraft } from '@/features/vendorPackages/hooks'
 import { useVendorProfile } from '@/features/vendors/hooks'
+import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 
 /** Thêm gói (/vendor/catalog/new) hoặc xem/sửa một gói (/vendor/catalog/:packageId). */
@@ -16,6 +19,9 @@ export default function VendorPackagePage() {
   const { packageId } = useParams()
   const profile = useVendorProfile()
   const pkg = usePackage(packageId)
+  // Công việc của gói và tab đang mở: giữ ở trang để không mất khi form gói nạp lại hoặc khi gói mới vừa tạo đổi sang trang của nó
+  const tasks = usePackageTasksDraft(packageId)
+  const [tab, setTab] = useState<'info' | 'tasks'>('info')
   // Gói đã đăng, chưa có bản cập nhật: bấm "Cập nhật" thì mở form sửa. Nhớ theo updatedAt để gói đổi (vd vừa được duyệt) thì về chế độ xem
   const [editingAt, setEditingAt] = useState<string | null>(null)
 
@@ -73,13 +79,45 @@ export default function VendorPackagePage() {
   const p = pkg.data
   const showEditor = !p || isEditablePackage(p.status) || hasEditableUpdate(p) || (p.status === 'PUBLISHED' && editingAt === p.updatedAt && !p.pendingUpdate)
 
+  // Gói đã có (đã lưu) thì tab Công việc có thêm "Thời gian trong ngày cưới" ở trên danh sách việc
+  const tasksPanel = (
+    <>
+      {p?.dayPlan && <PackageDayPlanCard key={p.id} packageId={p.id} plan={p.dayPlan} />}
+      <PackageTasksTab draft={tasks} />
+    </>
+  )
+  const extras = { tasks, tab, onTabChange: setTab, tasksPanel }
+  const tabs = [
+    { id: 'info' as const, label: 'Thông tin gói' },
+    { id: 'tasks' as const, label: 'Công việc', count: tasks.rows.length },
+  ]
+
   return (
     <div className="mx-auto max-w-[980px]">
       <PackageHeader pkg={p} profile={profile.data} category={category} />
+      <div role="tablist" aria-label="Nội dung gói" className="mb-5 flex gap-1 border-b border-line">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            id={`package-tab-${t.id}`}
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              '-mb-px inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-[14px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold',
+              tab === t.id ? 'border-gold text-ink' : 'border-transparent text-muted-foreground hover:text-ink',
+            )}
+          >
+            {t.label}
+            {t.count !== undefined && <span className="rounded-pill bg-surface-2 px-2 text-xs tabular-nums">{t.count}</span>}
+          </button>
+        ))}
+      </div>
       {showEditor ? (
-        <PackageEditor key={p?.updatedAt ?? 'new'} pkg={p} profile={profile.data} category={category} onExitUpdate={() => setEditingAt(null)} />
+        <PackageEditor key={p?.updatedAt ?? 'new'} pkg={p} profile={profile.data} category={category} onExitUpdate={() => setEditingAt(null)} {...extras} />
       ) : (
-        <PackageDetails pkg={p} profile={profile.data} category={category} onEdit={() => setEditingAt(p.updatedAt)} />
+        <PackageDetails pkg={p} profile={profile.data} category={category} onEdit={() => setEditingAt(p.updatedAt)} editorExtras={extras} />
       )}
     </div>
   )

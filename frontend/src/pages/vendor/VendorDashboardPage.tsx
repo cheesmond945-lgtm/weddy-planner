@@ -7,16 +7,18 @@ import { ProfileCard } from '@/features/vendorDashboard/components/ProfileCard'
 import { ProfileReminder } from '@/features/vendorDashboard/components/ProfileReminder'
 import { TodoList } from '@/features/vendorDashboard/components/TodoList'
 import { useVendorDashboard } from '@/features/vendorDashboard/hooks'
+import { useNow } from '@/lib/clock'
 import { useAuth } from '@/store/auth'
 
-const today = () => new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+const dateText = (at: Date) => new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(at)
 
 /** Tổng quan: lời chào, số liệu chính, việc cần làm, đơn sắp diễn ra, đơn gửi gần đây. */
 export default function VendorDashboardPage() {
   const { user } = useAuth()
   const d = useVendorDashboard()
   const name = d.profile?.businessName ?? user?.name ?? ''
-  const date = today()
+  // Câu chào theo đồng hồ giả lập (tua giờ thì ngày chào đổi theo)
+  const date = dateText(useNow())
 
   return (
     <>

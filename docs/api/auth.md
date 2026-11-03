@@ -36,7 +36,7 @@ Chưa có: NCC đặt mật khẩu lần đầu, quên mật khẩu (làm khi t�
 | Trường | Quy tắc |
 |---|---|
 | `name` | Bắt buộc, cắt khoảng trắng hai đầu |
-| `phone` | 10 số, bắt đầu bằng `0` (`^0\d{9}$`). Duy nhất |
+| `phone` | **Không bắt buộc**, không có ở form đăng ký (cặp đôi bổ sung ở Thông tin cá nhân). Nếu có: 10 số, bắt đầu bằng `0` (`^0\d{9}$`), duy nhất |
 | `email` | Email hợp lệ, lưu chữ thường. Duy nhất |
 | `password` | Tối thiểu 6 ký tự. BE lưu dạng băm, không bao giờ trả về |
 | `otp` | 6 chữ số. Hiệu lực 5 phút, sai tối đa 5 lần, gửi lại sau 60 giây |
@@ -52,8 +52,10 @@ Gọi lại với cùng `email` khi đang chờ OTP: thay thông tin đăng ký 
 Request
 
 ```json
-{ "name": "Trần Bảo Ngọc", "phone": "0987654321", "email": "ngoc@example.com", "password": "abcdef" }
+{ "name": "Trần Bảo Ngọc", "email": "ngoc@example.com", "password": "abcdef" }
 ```
+
+`phone` không còn trong form đăng ký. BE vẫn nhận nếu được gửi (kiểm tra định dạng và trùng như PATCH /auth/me), không gửi thì lưu `null`.
 
 Response 200
 
@@ -93,12 +95,49 @@ Response 200
 {
   "data": {
     "accessToken": "eyJhbGciOi…",
-    "user": { "id": "…", "name": "Trần Bảo Ngọc", "email": "ngoc@example.com", "phone": "0987654321", "role": "COUPLE" }
+    "user": { "id": "…", "name": "Trần Bảo Ngọc", "email": "ngoc@example.com", "phone": null, "role": "COUPLE" }
   }
 }
 ```
 
 Lỗi: 400 `OTP_INVALID`, 400 `OTP_EXPIRED`, 404 `REGISTRATION_NOT_FOUND`, 429 `OTP_TOO_MANY_ATTEMPTS`
+
+### POST /auth/forgot-password
+Role: Public
+
+Quên mật khẩu bước 1: gửi OTP (6 số, hiệu lực 5 phút) về email đã đăng ký.
+
+Request
+
+```json
+{ "email": "ngoc@example.com" }
+```
+
+Response 200: `{ "data": OtpSent }`
+
+Lỗi: 400 `VALIDATION_ERROR`, 404 `EMAIL_NOT_FOUND`, 403 `ACCOUNT_DISABLED`, 429 `OTP_RESEND_TOO_SOON`
+
+### POST /auth/forgot-password/resend-otp
+Role: Public
+
+Request `{ "email": "ngoc@example.com" }`. Response 200: `{ "data": OtpSent }`. Mã cũ hết hiệu lực, đặt lại số lần nhập sai.
+
+Lỗi: 404 `RESET_NOT_FOUND`, 429 `OTP_RESEND_TOO_SOON`
+
+### POST /auth/reset-password
+Role: Public
+
+Quên mật khẩu bước 2: OTP đúng thì đổi mật khẩu và đăng nhập luôn.
+
+Request
+
+```json
+{ "email": "ngoc@example.com", "otp": "123456", "password": "matkhaumoi" }
+```
+
+Response 200: `{ "data": Session }`
+
+Lỗi: 400 `VALIDATION_ERROR`, 400 `OTP_INVALID`, 400 `OTP_EXPIRED`, 404 `RESET_NOT_FOUND`, 429 `OTP_TOO_MANY_ATTEMPTS`
 
 ### POST /auth/login
 Role: Public

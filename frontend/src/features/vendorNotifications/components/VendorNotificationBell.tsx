@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, Package, Wallet, type LucideIcon } from 'lucide-react'
+import { AlarmClock, ClipboardCheck, ClipboardList, Package, Wallet, type LucideIcon } from 'lucide-react'
 import { NotificationBell } from '@/components/NotificationBell'
 import { paths } from '@/routes/paths'
 import type { VendorNotification } from '@/types/vendor'
@@ -17,6 +17,9 @@ const ICON: Record<string, LucideIcon> = {
   OrderCompleted: ClipboardList,
   OrderAutoCompleteSoon: ClipboardList,
   OrderRevisionRequested: ClipboardList,
+  WeddingDateChanged: ClipboardList,
+  TaskDueSoon: AlarmClock,
+  TaskOverdue: AlarmClock,
 }
 
 /** Trang xử lý mà thông báo dẫn tới. */
@@ -24,7 +27,7 @@ function targetOf(n: VendorNotification) {
   if (n.type.startsWith('Vendor')) return paths.vendor.profile
   if (n.type.startsWith('Package')) return n.refId ? paths.vendor.package(n.refId) : paths.vendor.catalog
   if (n.type.startsWith('Commission')) return paths.vendor.commissions
-  if (n.type.startsWith('Order')) return paths.vendor.orders
+  if (n.type.startsWith('Order') || n.type === 'WeddingDateChanged' || n.type.startsWith('Task')) return paths.vendor.orders
   return paths.vendor.dashboard
 }
 

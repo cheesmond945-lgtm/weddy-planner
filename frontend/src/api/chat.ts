@@ -10,4 +10,6 @@ export const chatApi = {
     http.get(`/conversations/${conversationId}/messages`),
   send: (conversationId: string, text: string): Promise<Message> =>
     http.post(`/conversations/${conversationId}/messages`, { text }),
+  /** Khách đã xem hội thoại: các tin của NCC thành đã đọc (badge số tin chưa đọc giảm theo). */
+  markRead: (conversationId: string): Promise<null> => http.post(`/conversations/${conversationId}/read`),
 }

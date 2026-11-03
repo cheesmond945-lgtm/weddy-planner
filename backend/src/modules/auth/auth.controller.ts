@@ -30,7 +30,23 @@ export class AuthController {
     return this.auth.verifyOtp(body?.email ?? '', body?.otp ?? '');
   }
 
-  // GET /api/auth/me  (header Authorization: Bearer <token>)
+  // Quên mật khẩu: bước 1 gửi OTP về email, bước 2 nhập OTP + mật khẩu mới
+  @Post('forgot-password')
+  forgotPassword(@Body() body: { email?: string }) {
+    return this.auth.forgotPassword(body?.email ?? '');
+  }
+
+  @Post('forgot-password/resend-otp')
+  resendResetOtp(@Body() body: { email?: string }) {
+    return this.auth.resendResetOtp(body?.email ?? '');
+  }
+
+  @Post('reset-password')
+  resetPassword(@Body() body: { email?: string; otp?: string; password?: string }) {
+    return this.auth.resetPassword(body ?? {});
+  }
+
+  // GET /api/auth/me (header Authorization: Bearer <token>)
   @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@Req() req: any) {

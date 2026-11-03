@@ -22,8 +22,8 @@ export function useAfterAuth() {
       return
     }
 
-    // Đang ở trang /login, /register riêng thì phải rời trang để thấy giao diện cặp đôi
-    const onAuthPage = [paths.login, paths.register].includes(window.location.pathname as never)
+    // Đang ở trang /login, /register, /forgot-password riêng thì phải rời trang để thấy giao diện cặp đôi
+    const onAuthPage = [paths.login, paths.register, paths.forgotPassword].includes(window.location.pathname as never)
     if (redirectTo) navigate(redirectTo)
     else if (onAuthPage) navigate(paths.services, { replace: true })
 

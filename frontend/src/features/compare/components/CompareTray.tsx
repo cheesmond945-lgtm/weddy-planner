@@ -49,7 +49,7 @@ export function CompareTray() {
       </ul>
       <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
         {n < 2 && <span className="text-[13px] text-muted-foreground">Cần ít nhất 2 dịch vụ {items[0].categoryName.toLowerCase()}</span>}
-        <button type="button" onClick={() => compareStore.clear()} className="text-sm font-medium text-primary underline underline-offset-[3px]">
+        <button type="button" onClick={() => compareStore.clear()} className="text-sm font-medium text-gold-700 underline underline-offset-[3px]">
           Bỏ chọn
         </button>
         <Button disabled={n < 2} onClick={() => navigate(compareUrl(items.map((i) => i.id)))}>

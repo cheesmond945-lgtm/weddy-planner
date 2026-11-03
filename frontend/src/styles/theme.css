@@ -16,6 +16,14 @@
   --color-header: var(--header-bg);
   --color-overlay: var(--overlay);
   --color-gold: var(--gold);
+  --color-gold-500: var(--gold-500);
+  --color-gold-700: var(--gold-700);
+  --color-gold-800: var(--gold-800);
+  --color-gold-100: var(--gold-100);
+  --color-moss-700: var(--moss-700);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-primary-hover: var(--accent-hover);
   --color-nav: var(--nav-ink);
   --color-accent-soft: var(--accent-soft);
   --color-sage: var(--sage);
@@ -52,11 +60,12 @@
   --color-destructive-foreground: var(--surface);
   --color-border: var(--line);
   --color-input: var(--line);
-  --color-ring: var(--accent);
+  --color-ring: var(--gold-700);
 
   /* Font */
   --font-sans: var(--sans);
   --font-serif: var(--serif);
+  --font-script: var(--script);
 
   /* Bo góc theo prototype: nút/ô nhập 8, thẻ 12, modal 16, khối lớn 22, header 28 */
   --radius-sm: 8px;
@@ -77,9 +86,12 @@
   --shadow-tray: 0 12px 34px rgb(var(--shadow-rgb) / 0.2);
   --shadow-bubble: 0 2px 8px rgb(var(--shadow-rgb) / 0.06);
   --shadow-fab-hover: 0 7px 18px rgb(var(--shadow-rgb) / 0.22);
+  /* Đổ bóng nhẹ dùng cho header, thẻ khi rê chuột, ô tìm kiếm */
+  --shadow-sm: 0 1px 2px rgb(60 45 20 / 0.06);
+  --shadow-md: 0 6px 20px rgb(60 45 20 / 0.08);
 
   /* Chiều rộng vùng nội dung phía cặp đôi */
-  --container-content: 1240px;
+  --container-content: 1200px;
 
   /*
    * Phía NCC (giá trị trong vendor.css, chỉ có khi <html data-portal="vendor">).

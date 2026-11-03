@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { controlClass } from '@/features/vendors/components/FormParts'
 import { cn } from '@/lib/utils'
-import { PanelDialog } from '@/features/serviceOrders/components/PanelDialog'
+import { PanelDialog } from '@/features/vendorOrders/components/PanelDialog'
 import type { ConsultationRequest } from '@/types/admin'
 import { useUpdateConsultation } from '../hooks'
 

@@ -2,6 +2,7 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../integrations/storage/storage.service';
 import { Paginated } from '../../common/utils/pagination';
+import { categoryKindOf } from './category-kind';
 
 export interface ServiceQuery {
   q?: string;
@@ -13,23 +14,11 @@ export interface ServiceQuery {
   pageSize?: number;
 }
 
-/** Tên danh mục trong CSDL -> slug mà frontend dùng cho URL và icon. */
-const CATEGORY_SLUGS: Record<string, string> = {
-  'Chụp ảnh': 'chup-anh',
-  'Hoa cưới': 'hoa-cuoi',
-  'Trang điểm': 'makeup',
-  Makeup: 'makeup',
-  'Trang phục': 'trang-phuc',
-  'Trang trí': 'decor',
-  'Trung tâm tiệc cưới': 'nha-hang',
-  // Tên cũ, giữ để backend chạy trên DB chưa đổi tên vẫn ra đúng slug
-  'Trung tâm tổ chức sự kiện': 'nha-hang',
-};
-
 const slugify = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-export const categorySlug = (name: string | null) => (name ? (CATEGORY_SLUGS[name] ?? slugify(name)) : '');
+/** Slug mà frontend dùng cho URL và icon: loại hạng mục nhận diện theo từ khóa (category-kind.ts), tên lạ thì slugify tên. */
+export const categorySlug = (name: string | null) => (name ? (categoryKindOf(name) ?? slugify(name)) : '');
 
 /**
  * Trung tâm tiệc cưới báo giá theo mâm (menu cho 10 khách), đã gồm sảnh và dịch vụ đi kèm;
@@ -45,6 +34,23 @@ export const tablesFor = (guests: number | null | undefined, minTables: number |
 export const estimateCost = (slug: string, price: number, minTables: number | null | undefined, guests: number | null | undefined) =>
   priceUnitOf(slug) === 'TABLE' ? { total: price * tablesFor(guests, minTables), tables: tablesFor(guests, minTables) } : { total: price, tables: null };
 
+/** Bỏ dấu tiếng Việt và viết thường để so khớp từ khóa: "Cầu Giấy" -> "cau giay". */
+const foldText = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+
+/**
+ * Cách hiện mục "Gói dịch vụ" ở trang chi tiết: "tiles" = mỗi gói một ô ảnh (biến thể của cùng dịch vụ:
+ * chụp ảnh, váy cưới, trang điểm), "album" = card ảnh ghép theo album gói (mặc định).
+ * CSDL chưa có cột service_categories.package_layout / lựa chọn riêng của NCC nên tạm cấu hình theo danh mục ở đây.
+ */
+const TILE_CATEGORIES = new Set(['chup-anh', 'trang-phuc', 'trang-diem']);
+export const packageLayoutOf = (slug: string): 'tiles' | 'album' => (TILE_CATEGORIES.has(slug) ? 'tiles' : 'album');
+
 /** Thứ tự hiển thị danh mục (như prototype): các slug lạ xếp cuối. */
 export const CATEGORY_ORDER = ['nha-hang', 'decor', 'trang-phuc', 'makeup', 'chup-anh', 'co-cuoi', 'hoa-cuoi'];
 export const categoryRank = (slug: string) => {
@@ -55,7 +61,7 @@ export const categoryRank = (slug: string) => {
 /**
  * Frontend gọi "dịch vụ" = nhà cung cấp (vendor_profiles) đã duyệt có ít nhất một gói Approved.
  * "Gói" của dịch vụ = service_packages; mỗi gói là một album (package_albums).
- * Rating/reviewCount (điểm Google Maps) chưa có trong CSDL nên trả 0.
+ * Rating/reviewCount (điểm Google Maps) chưa có trong CSDL nên trả 0; FE hiện link googleMapsUrl để xem trên Google.
  */
 @Injectable()
 export class ServicesService {
@@ -88,6 +94,16 @@ export class ServicesService {
     return this.storage.publicAlbumUrl(path);
   }
 
+  /** Gói đã duyệt của một NCC (rẻ nhất trước) kèm ảnh bìa: dùng làm "thẻ gói" đầu hội thoại phía NCC. */
+  async packageCards(vendorId: string) {
+    const pkgs = await this.prisma.service_packages.findMany({
+      where: { vendor_id: vendorId, status: 'Approved' },
+      orderBy: [{ price: 'asc' }, { id: 'asc' }],
+      include: { package_albums: { orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }], take: 1 } },
+    });
+    return pkgs.map((p) => ({ id: p.id, name: p.name, price: Number(p.price), imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null }));
+  }
+
   private summarize(v: Awaited<ReturnType<ServicesService['loadVisible']>>[number]) {
     const prices = v.service_packages.map((p) => Number(p.price));
     const cover = v.service_packages.flatMap((p) => p.package_albums)[0];
@@ -97,7 +113,9 @@ export class ServicesService {
       name: v.business_name,
       category: { id: v.service_categories!.id, slug, name: v.service_categories!.name ?? '' },
       location: v.city,
+      address: [v.address, v.ward, v.city].filter(Boolean).join(', '),
       priceFrom: Math.min(...prices),
+      priceTo: Math.max(...prices),
       /** TABLE: giá mỗi mâm 10 khách, đã gồm sảnh; PACKAGE: giá trọn gói */
       priceUnit: priceUnitOf(slug),
       /** Số mâm tối thiểu của gói rẻ nhất (gói xếp theo giá tăng dần) */
@@ -105,6 +123,7 @@ export class ServicesService {
       rating: 0,
       reviewCount: 0,
       coverImageUrl: cover ? this.img(cover.url) : '',
+      googleMapsUrl: v.google_maps_url,
       /** NCC đang bị Admin ẩn (chỉ thấy được với cặp đôi đã có đơn): tạm ngừng nhận đơn mới */
       paused: v.status === 'Hidden',
     };
@@ -175,7 +194,8 @@ export class ServicesService {
   async list(query: ServiceQuery) {
     const page = Math.max(1, Math.trunc(query.page ?? 1) || 1);
     const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize ?? 20) || 20));
-    const q = query.q?.trim().toLowerCase();
+    // Từ khóa khớp tên dịch vụ / NCC, danh mục và địa chỉ (đường, phường, quận...), không phân biệt dấu và hoa thường
+    const q = foldText(query.q?.trim() ?? '');
 
     const items = (await this.loadVisible())
       .map((v) => this.summarize(v))
@@ -185,7 +205,7 @@ export class ServicesService {
           (!query.location || s.location === query.location) &&
           (query.priceMin === undefined || s.priceFrom >= query.priceMin) &&
           (query.priceMax === undefined || s.priceFrom < query.priceMax) &&
-          (!q || (s.name ?? '').toLowerCase().includes(q) || s.category.name.toLowerCase().includes(q)),
+          (!q || foldText(`${s.name} ${s.category.name} ${s.address}`).includes(q)),
       );
 
     const rows = items.slice((page - 1) * pageSize, page * pageSize);
@@ -206,16 +226,30 @@ export class ServicesService {
     return {
       ...this.summarize(v),
       priceTo: Math.max(...prices),
-      address: [v.address, v.ward, v.city].filter(Boolean).join(', '),
       description: v.description,
       highlights: [] as string[],
       capacity: capacities.length ? Math.max(...capacities) : null,
       styles: tags,
       workingHours: v.working_hours ?? '',
+      packageLayout: packageLayoutOf(categorySlug(v.service_categories?.name ?? null)),
+      // Số điện thoại NCC: dùng khi FE chọn nhắn qua Zalo (VITE_CHAT_MODE=zalo)
+      contactPhone: (await this.prisma.users.findUnique({ where: { id: v.user_id ?? undefined }, select: { phone_number: true } }))?.phone_number ?? null,
       isVerified: true,
       isGuaranteed: false,
       images: [...covers, ...others].slice(0, 60).map((a) => this.img(a.url)),
-      packages: v.service_packages.map((p) => ({ id: p.id, name: p.name, description: p.description, price: Number(p.price), capacity: p.capacity, minTables: p.min_tables })),
+      packages: v.service_packages.map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        price: Number(p.price),
+        capacity: p.capacity,
+        // CSDL chưa có cột đơn vị tính: đọc từ mô tả của NCC ("…4.500.000đ/mâm"), không có thì là gói
+        unit: priceUnitOf(categorySlug(v.service_categories?.name ?? null)) === 'TABLE' ? 'mâm' : ((p.description ?? '').match(/đ\s*\/\s*(mâm|bàn|khách|người|set|bộ)/i)?.[1].toLowerCase() ?? 'gói'),
+        // Ảnh bìa và thẻ phong cách của gói
+        imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null,
+        tags: p.package_tags.map((t) => t.tag),
+        minTables: p.min_tables,
+      })),
       albums: v.service_packages.map((p) => ({
         id: p.id,
         title: p.name,

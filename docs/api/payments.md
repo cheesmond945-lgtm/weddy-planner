@@ -4,7 +4,7 @@
 
 Cặp đôi đặt cọc cho đơn dịch vụ (mục 7.3) và NCC nộp hoa hồng dùng **chung một tài khoản nhận**, cấu hình trong `.env`: `VIETQR_BANK_BIN`, `VIETQR_ACCOUNT_NO`, `VIETQR_ACCOUNT_NAME`, `SEPAY_TOKEN`. Thiếu một biến thì các API thanh toán trả 501 `PAYMENT_NOT_CONFIGURED`.
 
-## Luồng
+## Chế độ thanh toán (biến `PAYMENT_MODE` trong `backend/.env`)
 
 1. FE (trang `/plan/deal/:orderId`, hoặc nút "Thanh toán" ở Tài chính & đối soát) gọi API tạo thanh toán. BE lấy **số tiền từ DB** (`orders.deposit_amount`, `commission_statements.total_amount`) và trả mã QR dựng bằng Quick Link `img.vietqr.io` cùng nội dung chuyển khoản.
 2. Nội dung chuyển khoản phân biệt hai luồng: **`EVERLY` + mã đơn** (cọc) và **`EVHH` + 8 ký tự hex đầu của id bảng kê, viết hoa** (hoa hồng). SePay (VietinBank) yêu cầu nội dung bắt đầu bằng **`SEVQR `**, nên đầy đủ là `SEVQR EVERLYDH26100001` và `SEVQR EVHH3F9A1C2B`; tối đa 25 ký tự, in hoa, không dấu. Mã `DS<MM><YYYY>` của bảng kê trùng giữa các NCC nên không dùng làm nội dung.
@@ -19,7 +19,7 @@ Admin xác nhận tay một bảng kê hoa hồng bằng `POST /admin/commission
 ### POST /payments
 Role: **COUPLE**, đơn của mình, đơn đang chờ cọc.
 
-Request
+Response 200: `{ "data": { "paymentId": "…", "paymentUrl": "/plan/deal/{orderId}?vnp_ResponseCode=00" } }`. FE chuyển tới `paymentUrl` rồi đọc lại `GET /orders/:id`: trạng thái `Deposited` mới là bằng chứng đã cọc (FE **không** coi `vnp_ResponseCode` trên URL là bằng chứng).
 
 ```json
 { "orderId": "od-1" }
@@ -31,7 +31,7 @@ Response 200
 { "data": { "paymentId": "pay-1", "qrUrl": "https://img.vietqr.io/image/970422-0123456789-compact2.png?amount=18440000&addInfo=SEVQR%20EVERLYDH26100001&accountName=...", "amount": 18440000, "content": "SEVQR EVERLYDH26100001", "bankBin": "970422", "accountNo": "0123456789", "accountName": "CONG TY EVERLY", "expiresAt": "2026-10-28T06:15:00.000Z" } }
 ```
 
-Lỗi: 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_PAYABLE`, 501 `PAYMENT_NOT_CONFIGURED`
+Lỗi: 404 `ORDER_NOT_FOUND`, 409 `ORDER_NOT_PAYABLE` (đơn không còn `Pending`, hoặc quá hạn cọc, hoặc tổng cọc 0đ), 409 `EVENT_DATE_AFTER_WEDDING` (ngày thực hiện sau ngày cưới), 409 `CATEGORY_ALREADY_DEPOSITED` (hạng mục đã có đơn `Deposited` khác của đám cưới này), 409 `HALL_BUSY` (sảnh đã bận ngày thực hiện, xem [LICH_BAN_SANH.md](../LICH_BAN_SANH.md)), 409 `VENDOR_HIDDEN` (NCC đang bị ẩn), 501 `PAYMENT_NOT_CONFIGURED`. Các điều kiện trên được kiểm trước khi hiện mã QR, để khách không chuyển tiền cho một đơn không ghi nhận được.
 
 ### POST /payments/check
 Role: **COUPLE**. Request `{ "orderId": "od-1" }`. Response 200 `{ "data": { "status": "PAID" | "PENDING" | "FAILED", "message": "..." } }`: `PAID` đã ghi nhận cọc (hoặc đơn đã cọc từ trước), `PENDING` chưa thấy tiền, `FAILED` đơn đổi trạng thái trong lúc thanh toán.

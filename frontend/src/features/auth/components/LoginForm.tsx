@@ -1,19 +1,25 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { FormError, FormField } from '@/components/FormField'
+import { Link } from 'react-router'
+import { FormError } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
+import { paths } from '@/routes/paths'
 import type { Session } from '@/types/auth'
 import { useLogin } from '../hooks'
 import { loginSchema, validate, type FieldErrors } from '../schemas'
+import { AuthField, AuthSubmit } from './AuthField'
 
 interface LoginFormProps {
   onSuccess: (session: Session) => void
+  /** Trang đang định vào trước khi bị chuyển sang đăng nhập; giữ lại khi sang trang quên mật khẩu */
+  from?: string
+  /** Có thì hiện nút Hủy (khi mở trong hộp thoại) */
   onCancel?: () => void
 }
 
 type Values = { identifier: string; password: string }
 
-/** Đăng nhập bằng email hoặc số điện thoại (1.2). */
-export function LoginForm({ onSuccess, onCancel }: LoginFormProps) {
+/** Đăng nhập bằng email (1.2). */
+export function LoginForm({ onSuccess, from, onCancel }: LoginFormProps) {
   const [values, setValues] = useState<Values>({ identifier: '', password: '' })
   const [errors, setErrors] = useState<FieldErrors<Values>>({})
   const login = useLogin()
@@ -32,35 +38,45 @@ export function LoginForm({ onSuccess, onCancel }: LoginFormProps) {
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      <FormField
+      <AuthField
         label="Email"
-        type="email"
-        autoComplete="email"
+        autoComplete="username"
+        inputMode="email"
+        placeholder="Nhập email của bạn..."
         value={values.identifier}
         onChange={change('identifier')}
         error={errors.identifier}
         autoFocus
       />
-      <FormField
-        label="Mật khẩu"
-        type="password"
-        autoComplete="current-password"
-        value={values.password}
-        onChange={change('password')}
-        error={errors.password}
-      />
+      <div>
+        <AuthField
+          label="Mật khẩu"
+          type="password"
+          autoComplete="current-password"
+          placeholder="Nhập mật khẩu..."
+          value={values.password}
+          onChange={change('password')}
+          error={errors.password}
+        />
+        {/* Mang email đã gõ (nếu có) sang trang quên mật khẩu để khỏi nhập lại */}
+        <div className="mt-2 text-right">
+          <Link
+            to={paths.forgotPassword}
+            state={{ email: values.identifier.includes('@') ? values.identifier.trim() : undefined, from }}
+            className="text-[13px] text-gold-700 hover:underline hover:underline-offset-[3px]"
+          >
+            Quên mật khẩu?
+          </Link>
+        </div>
+      </div>
       <FormError message={login.error?.message} />
 
-      <div className="mt-1 flex flex-wrap justify-end gap-2.5">
-        {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Hủy
-          </Button>
-        )}
-        <Button type="submit" disabled={login.isPending}>
-          {login.isPending ? 'Đang đăng nhập…' : 'Đăng nhập'}
+      <AuthSubmit disabled={login.isPending}>{login.isPending ? 'Đang đăng nhập…' : 'Đăng nhập'}</AuthSubmit>
+      {onCancel && (
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Hủy
         </Button>
-      </div>
+      )}
     </form>
   )
 }

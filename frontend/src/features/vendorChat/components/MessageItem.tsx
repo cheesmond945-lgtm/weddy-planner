@@ -1,186 +1,113 @@
-import { Ban, Check, CreditCard, MessageSquare, RefreshCw } from 'lucide-react'
+import { Receipt } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { currentVersion, formatStamp } from '@/features/serviceOrders/calc'
-import { AdjustmentCard, OrderCard } from '@/features/serviceOrders/components/OrderCard'
+import { Button } from '@/components/ui/button'
+import { effectiveSender } from '@/features/chat/messageSender'
+import { formatStamp } from '@/features/vendorOrders/calc'
+import { OrderCard } from '@/features/vendorOrders/components/OrderCard'
+import type { OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
 import { cn } from '@/lib/utils'
-import type { ServiceOrder } from '@/types/serviceOrder'
-import type { VendorMessage } from '@/types/vendorChat'
+import type { VendorMessage } from '@/types/vendorConversation'
+import type { InvoiceType, Order } from '@/types/vendorOrder'
 
-export interface MessageActions {
-  onViewOrder: (order: ServiceOrder, version: number) => void
-  onEditOrder: (order: ServiceOrder) => void
-  onViewAdjustment: (order: ServiceOrder, adjustmentId: string) => void
-}
-
-interface MessageItemProps extends MessageActions {
+interface MessageItemProps {
   message: VendorMessage
-  order: ServiceOrder | undefined
-  /** Đơn vừa gửi: làm nổi thẻ phiên bản mới nhất */
-  highlightOrderId: string | null
+  order: Order | undefined
+  /** Thẻ mới nhất của đơn (gửi lại thì các thẻ cũ thu gọn) */
+  isLatestCard: boolean
+  /** Đơn vừa gửi: làm nổi thẻ */
+  highlight: boolean
+  onOpenForm: (mode: OrderFormMode) => void
+  onViewOrder: (order: Order) => void
+  onViewInvoice: (order: Order, type: InvoiceType) => void
 }
 
 const Time = ({ at }: { at: string }) => <time className="mt-1 text-[11px] text-muted-foreground">{formatStamp(at)}</time>
 
-/** Khung tin: của NCC bên phải, của khách bên trái; thẻ đơn rộng tối đa 440px. */
+/** Khung tin: của NCC bên phải (kể cả hóa đơn cuối), của khách bên trái; tin hệ thống và giấy xác nhận cọc nằm giữa. */
 function Bubble({ mine, wide, at, children }: { mine: boolean; wide?: boolean; at: string; children: ReactNode }) {
   return (
-    <div className={cn('grid max-w-[72%] max-sm:max-w-[88%]', mine ? 'self-end justify-items-end' : 'self-start', wide && 'w-full max-w-[min(440px,92%)] max-sm:max-w-full')}>
+    <div className={cn('grid max-w-[78%] max-[640px]:max-w-[94%]', mine ? 'self-end justify-items-end' : 'self-start', wide && 'w-full max-w-[min(420px,92%)] max-[640px]:max-w-full')}>
       {children}
       <Time at={at} />
     </div>
   )
 }
 
-/** Ô yêu cầu của khách (req-card): viền đỏ khi còn chờ NCC xử lý. */
-function RequestCard({ active, title, text, note }: { active: boolean; title: ReactNode; text: string; note?: string }) {
-  return (
-    <div className={cn('grid gap-2 rounded-lg border border-l-[3px] border-line bg-surface px-3.5 py-3', active ? 'border-l-warn' : 'border-l-line-strong')}>
-      <p className={cn('flex items-center gap-1.5 text-[12.5px]', active ? 'text-warn' : 'text-muted-foreground')}>
-        <MessageSquare className="size-3.5" />
-        {title}
-      </p>
-      <p className="text-sm leading-relaxed whitespace-pre-wrap">{text}</p>
-      {note && <p className="text-[12.5px] text-muted-foreground">{note}</p>}
-    </div>
-  )
-}
-
-/** Sự kiện ở giữa khung chat (khách xác nhận, thanh toán…). */
-function Event({ tone, icon, children, at }: { tone: 'ok' | 'pay' | 'stop'; icon: ReactNode; children: ReactNode; at: string }) {
-  return (
-    <div
-      className={cn(
-        'flex max-w-[94%] flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center rounded-2xl border px-3.5 py-[7px] text-center text-[12.5px] [&>svg]:size-3.5',
-        tone === 'ok' ? 'border-transparent bg-sage-soft text-sage' : tone === 'stop' ? 'border-transparent bg-warn-soft text-warn' : 'border-line bg-surface text-sage',
-      )}
-    >
-      {icon}
-      <span>{children}</span>
-      <span className="text-[11.5px] text-muted-foreground">{formatStamp(at)}</span>
-    </div>
-  )
-}
-
-/** Một tin trong khung chat, theo loại (MessageView trong prototype NCC). */
-export function MessageItem({ message: m, order, highlightOrderId, onViewOrder, onEditOrder, onViewAdjustment }: MessageItemProps) {
-  const mine = m.sender === 'VENDOR'
-  const code = <b>{order?.code ?? ''}</b>
-
+/** Một tin trong khung chat, theo Messages.Type (Text, Order, DepositReceipt, FinalInvoice) và tin hệ thống (SenderId rỗng). */
+export function MessageItem({ message: m, order, isLatestCard, highlight, onOpenForm, onViewOrder, onViewInvoice }: MessageItemProps) {
   switch (m.type) {
-    case 'ORDER': {
-      if (!order || m.orderVersion === null) break
-      const latest = currentVersion(order)?.version === m.orderVersion
-      return (
-        <Bubble mine wide at={m.createdAt}>
-          <OrderCard
-            order={order}
-            version={m.orderVersion}
-            highlight={latest && highlightOrderId === order.id}
-            onView={(v) => onViewOrder(order, v)}
-            onEdit={() => onEditOrder(order)}
-            onViewAdjustment={(id) => onViewAdjustment(order, id)}
-          />
-        </Bubble>
-      )
-    }
-    case 'ADJUSTMENT_PROPOSED':
-      if (!order || !m.adjustmentId) break
-      return (
-        <Bubble mine wide at={m.createdAt}>
-          <AdjustmentCard order={order} adjustmentId={m.adjustmentId} onView={(id) => onViewAdjustment(order, id)} />
-        </Bubble>
-      )
-    case 'ORDER_REVISION_REQUESTED': {
-      const cur = order && currentVersion(order)
-      const active = !!order && order.status === 'REVISION_REQUESTED' && order.revisionRequest?.version === m.orderVersion && cur?.version === m.orderVersion
-      const resolvedBy = order?.versions.find((v) => v.version > (m.orderVersion ?? 0))?.version
-      return (
-        <Bubble mine={false} wide at={m.createdAt}>
-          <RequestCard
-            active={active}
-            title={
-              <>
-                Yêu cầu chỉnh sửa đơn {code} · v{m.orderVersion}
-              </>
-            }
-            text={m.text}
-            note={active ? 'Đang chờ bạn chỉnh sửa, dùng nút “Chỉnh sửa đơn” trên thẻ đơn.' : resolvedBy ? `Đã xử lý, gửi lại v${resolvedBy}` : cur ? `Đơn hiện ở v${cur.version}` : undefined}
-          />
-        </Bubble>
-      )
-    }
-    case 'ADJUSTMENT_REQUESTED':
-      return (
-        <Bubble mine={false} wide at={m.createdAt}>
-          <RequestCard
-            active={!!order?.adjustmentRequest}
-            title={<>Yêu cầu điều chỉnh đơn {code}</>}
-            text={m.text}
-            note={order?.adjustmentRequest ? 'Đơn hiện hành chưa thay đổi, lập phương án ở Quản lý đơn hàng.' : 'Đã lập phương án điều chỉnh.'}
-          />
-        </Bubble>
-      )
-    case 'ADJUSTMENT_REVISION_REQUESTED': {
-      const active = order?.adjustments.find((a) => a.id === m.adjustmentId)?.status === 'REVISION_REQUESTED'
-      return (
-        <Bubble mine={false} wide at={m.createdAt}>
-          <RequestCard active={active} title={<>Yêu cầu sửa phương án {code}</>} text={m.text} />
-        </Bubble>
-      )
-    }
-    case 'ORDER_CONFIRMED':
-      return (
-        <Event tone="ok" icon={<Check />} at={m.createdAt}>
-          Khách đã xác nhận đơn {code} · v{m.orderVersion}
-        </Event>
-      )
-    case 'ADJUSTMENT_ACCEPTED':
-      return (
-        <Event tone="ok" icon={<Check />} at={m.createdAt}>
-          Khách đồng ý điều chỉnh {code}, v{m.orderVersion} có hiệu lực
-        </Event>
-      )
-    case 'ORDER_CANCELLED':
-      return (
-        <Event tone="stop" icon={<Ban />} at={m.createdAt}>
-          Đã hủy đơn {code}
-          {m.text ? ` · Lý do: ${m.text}` : ''}
-        </Event>
-      )
-    case 'PAYMENT_RECORDED':
-      return (
-        <Event tone="pay" icon={<CreditCard />} at={m.createdAt}>
-          {m.text}
-        </Event>
-      )
-    case 'ORDER_RESENT':
-      return (
-        <div className="self-stretch rounded-lg bg-info-soft px-3.5 py-2.5 text-left text-[12.5px] text-ink">
-          <p className="flex flex-wrap items-center gap-1.5 text-info">
-            <RefreshCw className="size-3.5" />
-            Bạn đã cập nhật và gửi lại đơn {code} · v{m.orderVersion}
-            <span className="text-[11.5px] text-muted-foreground">{formatStamp(m.createdAt)}</span>
+    case 'Order': {
+      if (!order) break
+      // Gửi lại: các thẻ cũ của cùng đơn thu gọn thành một dòng
+      if (!isLatestCard) {
+        return (
+          <p className="self-center rounded-pill bg-bg px-3.5 py-1.5 text-center text-[12.5px] text-muted-foreground">
+            Đơn {order.orderCode} đã được cập nhật, xem bản mới nhất bên dưới <time className="ml-1 text-[11px]">{formatStamp(m.sentDate)}</time>
           </p>
-          {!!m.changes?.length && (
-            <ul className="mt-1.5 grid list-disc gap-0.5 pl-[22px] text-[13px]">
-              {m.changes.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          )}
-        </div>
+        )
+      }
+      return (
+        <Bubble mine wide at={m.sentDate}>
+          <OrderCard order={order} highlight={highlight} onOpenForm={onOpenForm} onView={onViewOrder} onViewInvoice={onViewInvoice} />
+        </Bubble>
       )
+    }
+    case 'DepositReceipt':
+    case 'FinalInvoice': {
+      // Suy theo loại tin (tin cũ có thể lưu sai sender): hóa đơn cuối do NCC xuất = bên PHẢI; giấy xác nhận cọc = tin hệ thống GIỮA khung
+      const viewButton = order && (
+        <Button size="sm" variant="outline" className="mt-2.5 border-line-strong" onClick={() => onViewInvoice(order, m.type as InvoiceType)}>
+          Xem
+        </Button>
+      )
+      if (effectiveSender(m) === 'SYSTEM') {
+        return (
+          <div className="grid w-full max-w-[min(420px,92%)] justify-items-center self-center max-[640px]:max-w-full">
+            <div className="w-full rounded-[22px] border border-sage/25 bg-sage-soft px-4 py-3">
+              <p className="mb-1 text-[11px] font-semibold tracking-[0.06em] text-sage uppercase">Forever xác nhận</p>
+              <div className="flex items-start gap-2.5 text-[13.5px] leading-relaxed">
+                <Receipt className="mt-0.5 size-4 flex-none text-sage" />
+                <span>{m.content}</span>
+              </div>
+              {viewButton}
+            </div>
+            <Time at={m.sentDate} />
+          </div>
+        )
+      }
+      return (
+        <Bubble mine wide at={m.sentDate}>
+          <div className="w-full rounded-[22px] rounded-br-[5px] border border-line bg-surface px-4 py-3 shadow-bubble">
+            <div className="flex items-start gap-2.5 text-[13.5px] leading-relaxed">
+              <Receipt className="mt-0.5 size-4 flex-none text-sage" />
+              <span>{m.content}</span>
+            </div>
+            {viewButton}
+          </div>
+        </Bubble>
+      )
+    }
   }
 
-  return (
-    <Bubble mine={mine} at={m.createdAt}>
-      <div
+  if (m.sender === 'SYSTEM') {
+    return (
+      <p
         className={cn(
-          'rounded-[14px] border px-[15px] py-[11px] text-[13.5px] leading-relaxed whitespace-pre-wrap',
-          mine ? 'rounded-br-[4px] border-side-border bg-(image:--side-grad) text-side-ink' : 'rounded-bl-[4px] border-line bg-surface',
+          'flex max-w-[94%] flex-wrap items-center justify-center gap-x-2 self-center rounded-[20px] px-[15px] py-[9px] text-center text-[13px]',
+          /hủy|hết hạn|yêu cầu chỉnh sửa/i.test(m.content) ? 'bg-warn-soft text-warn' : 'bg-sage-soft text-sage',
         )}
       >
-        {m.text}
+        {m.content}
+        <span className="text-[11.5px] text-muted-foreground">{formatStamp(m.sentDate)}</span>
+      </p>
+    )
+  }
+
+  const mine = m.sender === 'VENDOR'
+  return (
+    <Bubble mine={mine} at={m.sentDate}>
+      <div className={cn('rounded-[20px] px-[15px] py-[11px] text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]', mine ? 'rounded-br-[5px] bg-primary text-primary-foreground' : 'rounded-bl-[5px] bg-bg text-ink')}>
+        {m.content}
       </div>
     </Bubble>
   )

@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
 // Quy tắc và câu báo lỗi lấy theo prototype (doLogin, doRegister, saveProfile)
-export const PHONE_RE = /^0\d{9}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PHONE_RE = /^0\d{9}$/
 export const MIN_PASSWORD = 6
 
 export const loginSchema = z.object({
@@ -13,7 +13,6 @@ export const loginSchema = z.object({
 export const registerSchema = z
   .object({
     name: z.string().trim().min(1, 'Vui lòng nhập họ và tên.'),
-    phone: z.string().trim().regex(PHONE_RE, 'Số điện thoại cần 10 số, bắt đầu bằng 0.'),
     email: z.string().trim().regex(EMAIL_RE, 'Email chưa hợp lệ.'),
     password: z.string().min(MIN_PASSWORD, `Mật khẩu cần tối thiểu ${MIN_PASSWORD} ký tự.`),
     confirmPassword: z.string(),
@@ -26,6 +25,21 @@ export const registerSchema = z
 export const otpSchema = z.object({
   otp: z.string().trim().regex(/^\d{6}$/, 'Mã OTP gồm 6 chữ số.'),
 })
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().regex(EMAIL_RE, 'Email chưa hợp lệ.'),
+})
+
+export const resetPasswordSchema = z
+  .object({
+    otp: z.string().trim().regex(/^\d{6}$/, 'Mã OTP gồm 6 chữ số.'),
+    password: z.string().min(MIN_PASSWORD, `Mật khẩu cần tối thiểu ${MIN_PASSWORD} ký tự.`),
+    confirmPassword: z.string(),
+  })
+  .refine((v) => v.password === v.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'Mật khẩu nhập lại chưa khớp.',
+  })
 
 export const profileSchema = z.object({
   name: z.string().trim().min(1, 'Họ và tên không được để trống.'),

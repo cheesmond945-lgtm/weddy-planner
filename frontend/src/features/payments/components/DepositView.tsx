@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { paymentsApi } from '@/api/orders'
 import { DepositTermsDialog } from '@/features/orders/components/DepositTermsDialog'
 import { useCreateDeposit } from '@/features/orders/hooks'
+import { depositDeadline } from '@/features/vendorOrders/calc'
 import { useRefreshPlanning, useTimeline, useWedding } from '@/features/weddings/hooks'
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { formatDate } from '@/lib/date'
@@ -26,7 +27,8 @@ interface DepositViewProps {
 export function DepositView({ order, service, planStatus }: DepositViewProps) {
   const navigate = useNavigate()
   const backToChat = () => navigate(`${paths.chat}?c=${order.conversationId}`)
-  const paid = order.status === 'PAID'
+  const paid = order.status === 'Deposited' || order.status === 'Completed'
+  const overdue = order.status === 'Pending' && !!order.depositDueDate && new Date(order.depositDueDate).getTime() <= Date.now()
 
   const summary = (
     <aside className="rounded-lg border border-line bg-surface p-[22px]">
@@ -34,11 +36,13 @@ export function DepositView({ order, service, planStatus }: DepositViewProps) {
       <h3 className="mt-1 mb-3 text-xl">{service.name}</h3>
       {(
         [
-          ['Đơn dịch vụ', order.code],
-          ['Gói', order.packageName],
-          ['Ngày thực hiện', formatDate(order.serviceDate)],
+          ['Đơn dịch vụ', order.orderCode],
+          ['Nhà cung cấp', order.vendorName ?? service.name],
+          ['Hạng mục', order.items.length > 1 ? `${order.items[0]?.itemName} và ${order.items.length - 1} hạng mục khác` : (order.items[0]?.itemName ?? '—')],
+          ['Ngày thực hiện', formatDate(order.eventDate)],
           ['Tổng giá trị', formatMoney(order.totalAmount)],
-          ['Cần cọc trước', formatMoney(order.depositAmount)],
+          [`Cần cọc trước (${Math.round(order.depositPercent * 100) / 100}%)`, formatMoney(order.depositAmount)],
+          ...(order.status === 'Pending' && order.depositDueDate ? ([['Hạn đặt cọc', depositDeadline(order.depositDueDate).replace('Hạn cọc: ', '')]] as const) : []),
         ] as const
       ).map(([label, value]) => (
         <div key={label} className="flex justify-between gap-3 border-b border-line py-[9px]">
@@ -64,12 +68,18 @@ export function DepositView({ order, service, planStatus }: DepositViewProps) {
         <div className="rounded-lg border border-line bg-surface p-[22px]">
           {paid ? (
             <PaidBody order={order} service={service} onBackToChat={backToChat} />
-          ) : service.paused ? (
+          ) : order.status === 'Pending' && service.paused ? (
             <p>Nhà cung cấp tạm ngừng nhận đơn mới nên chưa đặt cọc được đơn này. Bạn có thể nhắn tin cho Forever để được hỗ trợ.</p>
-          ) : order.status !== 'SENT' ? (
-            <p>Đơn đang chờ nhà cung cấp chỉnh sửa, chưa thanh toán được. Quay lại tin nhắn để xem đơn mới nhất.</p>
+          ) : order.status === 'Pending' ? (
+            <PayForm order={order} service={service} overdue={overdue} onBackToChat={backToChat} />
           ) : (
-            <PayForm order={order} service={service} onBackToChat={backToChat} />
+            <p>
+              {order.status === 'NeedRevision'
+                ? 'Đơn đang chờ nhà cung cấp chỉnh sửa, chưa thanh toán được. Quay lại tin nhắn để xem đơn mới nhất.'
+                : order.status === 'Expired'
+                  ? 'Đơn đã hết hạn đặt cọc. Nhắn nhà cung cấp nếu bạn vẫn muốn đặt.'
+                  : 'Đơn này không còn thanh toán cọc được. Quay lại tin nhắn để xem đơn mới nhất.'}
+            </p>
           )}
         </div>
         {summary}
@@ -78,7 +88,7 @@ export function DepositView({ order, service, planStatus }: DepositViewProps) {
   )
 }
 
-function PayForm({ order, service, onBackToChat }: { order: Order; service: ServiceDetail; onBackToChat: () => void }) {
+function PayForm({ order, service, overdue, onBackToChat }: { order: Order; service: ServiceDetail; overdue: boolean; onBackToChat: () => void }) {
   const create = useCreateDeposit()
   const refresh = useRefreshPlanning()
   const [agreed, setAgreed] = useState(false)
@@ -89,6 +99,7 @@ function PayForm({ order, service, onBackToChat }: { order: Order; service: Serv
       <div className="rounded-md bg-sage-soft px-3.5 py-3 text-sm text-sage">
         Đơn dịch vụ do {service.name} gửi trong khung chat. Bạn kiểm tra lại thông tin bên phải trước khi thanh toán.
       </div>
+      {overdue && <div className="rounded-md bg-warn-soft px-4 py-3 font-medium text-warn">Đơn đã hết hạn đặt cọc.</div>}
       {create.isPending || create.data ? (
         <>
           <h2 className="text-base font-semibold">Chuyển khoản {formatMoney(order.depositAmount)} qua VietQR</h2>
@@ -110,7 +121,7 @@ function PayForm({ order, service, onBackToChat }: { order: Order; service: Serv
             </span>
           </label>
           {create.isError && <FormError message={create.error.message} />}
-          <Button className="w-full sm:w-fit" disabled={!agreed} onClick={() => create.mutate(order.id)}>
+          <Button className="w-full sm:w-fit" disabled={!agreed || overdue} onClick={() => create.mutate(order.id)}>
             Thanh toán cọc {formatMoney(order.depositAmount)}
           </Button>
         </>

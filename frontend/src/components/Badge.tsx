@@ -5,7 +5,7 @@ export type BadgeTone = 'neutral' | 'talk' | 'wait' | 'done' | 'warn' | 'info'
 
 const TONES: Record<BadgeTone, string> = {
   neutral: 'bg-line text-ink',
-  talk: 'bg-accent-soft text-primary',
+  talk: 'bg-accent-soft text-gold-700',
   wait: 'bg-[color-mix(in_srgb,var(--gold)_16%,var(--surface))] text-gold',
   done: 'bg-sage-soft text-sage',
   warn: 'bg-warn-soft text-warn',

@@ -29,11 +29,11 @@ export function FavoriteButton({ service, variant = 'float' }: FavoriteButtonPro
       }}
       className={cn(
         'grid place-items-center rounded-full transition-transform hover:scale-110',
-        variant === 'float' ? 'size-[29px] bg-surface text-heart shadow-fab' : 'size-11 border border-line bg-surface text-ink shadow-soft max-[700px]:size-10',
+        variant === 'float' ? 'size-10 bg-[rgb(255_253_248/0.92)] text-ink-2 shadow-sm' : 'size-11 border border-line bg-surface text-ink shadow-soft max-[700px]:size-10',
         on && 'text-heart',
       )}
     >
-      <Heart className={cn(variant === 'float' ? 'size-[17px]' : 'size-5', on && 'fill-heart')} aria-hidden />
+      <Heart className={cn('size-5', on && 'fill-heart')} strokeWidth={1.75} aria-hidden />
     </button>
   )
 }

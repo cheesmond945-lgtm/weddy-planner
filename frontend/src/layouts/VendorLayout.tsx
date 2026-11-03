@@ -1,11 +1,13 @@
 import type { LucideIcon } from 'lucide-react'
-import { Building2, ChevronRight, CircleUserRound, ClipboardList, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Wallet } from 'lucide-react'
+import { Building2, CalendarDays, ChevronRight, CircleUserRound, ClipboardList, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Wallet } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, matchPath, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
 import { applySavedTheme, ThemeToggle } from '@/components/ThemeToggle'
 import { toast } from '@/components/ui/toast'
+import { MessageToaster } from '@/features/notifications/components/MessageToaster'
 import { VendorNotificationBell } from '@/features/vendorNotifications/components/VendorNotificationBell'
 import { useUnreadCount } from '@/features/vendorChat/hooks'
+import { useIncomingMessageToasts } from '@/features/vendorChat/useIncomingMessageToasts'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
@@ -21,6 +23,7 @@ interface VendorNavItem {
 const NAV: VendorNavItem[] = [
   { to: paths.vendor.dashboard, label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: paths.vendor.orders, label: 'Quản lý đơn hàng', icon: ClipboardList },
+  { to: paths.vendor.calendar, label: 'Lịch làm việc', icon: CalendarDays },
   { to: paths.vendor.chat, label: 'Tin nhắn', icon: MessageSquare },
   { to: paths.vendor.catalog, label: 'Quản lý gói dịch vụ', icon: Package },
   { to: paths.vendor.commissions, label: 'Tài chính & đối soát', icon: Wallet },
@@ -38,6 +41,17 @@ function useVendorPortalTheme() {
       delete root.dataset.theme
     }
   }, [])
+}
+
+/** Tiêu đề tab: "(2) Tin nhắn · Forever" khi có tin chưa đọc. Trả lại tiêu đề cũ khi rời cổng NCC. */
+function useUnreadTabTitle(pageLabel: string, unread: number) {
+  useEffect(() => {
+    const before = document.title
+    document.title = `${unread > 0 ? `(${unread}) ` : ''}${pageLabel} · Forever`
+    return () => {
+      document.title = before
+    }
+  }, [pageLabel, unread])
 }
 
 /** Chữ viết tắt từ tên: chữ đầu của từ đầu và từ cuối. */
@@ -240,6 +254,10 @@ export function VendorLayout() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const unread = useUnreadCount()
+  const pageLabel = NAV.find(({ to, end }) => matchPath({ path: to, end: !!end }, pathname))?.label ?? 'Tổng quan'
+  useUnreadTabTitle(pageLabel, unread)
+  useIncomingMessageToasts()
 
   // Menu trượt đang mở: Esc để đóng
   useEffect(() => {
@@ -269,6 +287,7 @@ export function VendorLayout() {
           </div>
         </main>
       </div>
+      <MessageToaster />
       <ScrollRestoration />
     </div>
   )

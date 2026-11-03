@@ -1,4 +1,4 @@
-import { StatusBadge } from '@/features/serviceOrders/components/OrderBadges'
+import { StatusBadge } from '@/features/vendorOrders/components/OrderBadges'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'

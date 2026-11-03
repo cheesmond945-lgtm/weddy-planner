@@ -1,11 +1,14 @@
 import { ClipboardCheck } from 'lucide-react'
 import { Link } from 'react-router'
-import { formatDay } from '@/features/serviceOrders/calc'
-import { orderPageHref } from '@/features/serviceOrders/components/OrderCard'
+import { orderPageHref } from '@/features/vendorOrders/calc'
+import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { CommissionStatement, CommissionStatementSummary } from '@/types/commission'
 import { formatPeriod } from '../constants'
+
+/** "2026-12-20" -> "20/12/2026"; trống thì "—". */
+const formatDay = (s: string | null | undefined) => (s ? formatDate(s) : '—')
 
 const th = 'border-b border-line bg-surface-2 px-3 py-[11px] text-left text-[11.5px] font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase first:pl-5 last:pr-5'
 const td = 'border-b border-line px-3 py-[14px] align-middle text-[13.5px] first:pl-5 last:pr-5'
@@ -53,7 +56,7 @@ export function PeriodOrders({ summary, detail, loading }: { summary: Commission
               {lines.map((l) => (
                 <tr key={l.id} className="transition-colors hover:bg-surface-2">
                   <td className={td}>
-                    <Link to={orderPageHref({ id: l.orderId })} className="font-semibold text-gold-ink tabular-nums hover:underline">
+                    <Link to={orderPageHref(l.orderId)} className="font-semibold text-gold-ink tabular-nums hover:underline">
                       {l.orderCode}
                     </Link>
                     <span className="block text-[12.5px] text-muted-foreground">{l.customerName}</span>

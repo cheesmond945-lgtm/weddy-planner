@@ -9,20 +9,30 @@ interface ServiceResultsProps {
   query: ReturnType<typeof useServices>
   onClearFilters: () => void
   /** Cho module khác gắn nút vào thẻ (yêu thích, thêm vào kế hoạch) */
-  renderCardProps?: (s: ServiceSummary) => { imageAction?: ReactNode; extraActions?: ReactNode; badge?: ReactNode }
+  renderCardProps?: (s: ServiceSummary) => { imageAction?: ReactNode; extraActions?: ReactNode; badge?: ReactNode; showCategory?: boolean }
 }
 
-const grid = 'grid grid-cols-3 gap-4 max-md:grid-cols-2 max-[500px]:grid-cols-1'
+// Lưới tự chia cột (3 → 2 → 1 theo bề rộng khung), thẻ tối thiểu 300px
+const grid = 'grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] gap-6'
 
-/** Số kết quả + lưới thẻ + trạng thái trống/lỗi/đang tải + Xem thêm. */
+/** Lưới thẻ + trạng thái trống/lỗi/đang tải + Xem thêm (số kết quả nằm ở hàng bộ lọc). */
 export function ServiceResults({ query, onClearFilters, renderCardProps }: ServiceResultsProps) {
   const { data, isPending, isError, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage, isPlaceholderData } = query
 
   if (isPending) {
     return (
       <div className={grid} aria-busy="true" aria-label="Đang tải dịch vụ">
+        {/* Khung chờ cùng dáng thẻ thật: ảnh 4:3, tên, địa chỉ, giá, nút */}
         {Array.from({ length: 6 }, (_, i) => (
-          <div key={i} className="h-[300px] animate-pulse rounded-[15px] border border-line-soft bg-muted" />
+          <div key={i} className="animate-pulse overflow-hidden rounded-xl border border-line bg-surface">
+            <div className="aspect-[4/3] bg-muted" />
+            <div className="flex flex-col gap-3 p-5">
+              <div className="h-5 w-3/4 rounded-sm bg-muted" />
+              <div className="h-3.5 w-1/2 rounded-sm bg-muted" />
+              <div className="h-4 w-1/3 rounded-sm bg-muted" />
+              <div className="mt-2 h-11 rounded-md bg-muted" />
+            </div>
+          </div>
         ))}
       </div>
     )
@@ -43,17 +53,13 @@ export function ServiceResults({ query, onClearFilters, renderCardProps }: Servi
   }
 
   const services = data.pages.flatMap((p) => p.data)
-  const total = data.pages[0]?.meta.total ?? 0
 
   return (
     <div className={isPlaceholderData ? 'opacity-60 transition-opacity' : undefined}>
-      <p className="mb-3 text-[11px] text-muted-foreground" aria-live="polite">
-        {total} dịch vụ
-      </p>
       {services.length === 0 ? (
         <EmptyState
           title="Không tìm thấy dịch vụ phù hợp"
-          description="Thử bỏ bớt bộ lọc hoặc đổi từ khóa tìm kiếm."
+          description="Thử bỏ bớt bộ lọc."
           action={
             <Button variant="outline" onClick={onClearFilters}>
               Xóa bộ lọc

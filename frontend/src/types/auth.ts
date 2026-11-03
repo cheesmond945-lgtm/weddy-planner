@@ -35,9 +35,9 @@ export interface LoginRequest {
   password: string
 }
 
+/** Đăng ký không còn ô số điện thoại; cặp đôi bổ sung số ở Thông tin cá nhân nếu muốn. */
 export interface RegisterRequest {
   name: string
-  phone: string
   email: string
   password: string
 }
@@ -54,6 +54,13 @@ export interface OtpSent {
 export interface VerifyRegisterOtpRequest {
   email: string
   otp: string
+}
+
+/** Bước 2 quên mật khẩu: OTP gửi về email kèm mật khẩu mới. */
+export interface ResetPasswordRequest {
+  email: string
+  otp: string
+  password: string
 }
 
 /** Trường không gửi thì giữ nguyên. Email không đổi ở đây mà qua đổi email (mật khẩu + OTP) */

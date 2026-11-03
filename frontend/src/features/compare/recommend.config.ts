@@ -13,6 +13,13 @@ export const WEIGHTS_NO_WEDDING = { rating: 0.55, price: 0.45 } as const
 /** Trọng số khi có thông tin đám cưới (fit = mức phù hợp với đám cưới) */
 export const WEIGHTS_WITH_WEDDING = { rating: 0.4, price: 0.3, fit: 0.3 } as const
 
+/**
+ * Khi có phương án thiếu điểm Google (chưa có điểm hoặc lấy lỗi): bỏ hẳn yếu tố điểm cho cả nhóm,
+ * chỉ dùng giá và độ phù hợp (chia lại tỷ lệ của 0.30 giá + 0.30 phù hợp).
+ */
+export const WEIGHTS_NO_RATING = { price: 1 } as const
+export const WEIGHTS_NO_RATING_WITH_WEDDING = { price: 0.5, fit: 0.5 } as const
+
 /** Nhân điểm khi sức chứa không đủ cho số khách */
 export const CAPACITY_PENALTY = 0.7
 

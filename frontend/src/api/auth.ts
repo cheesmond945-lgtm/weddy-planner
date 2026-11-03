@@ -4,6 +4,7 @@ import type {
   LoginRequest,
   OtpSent,
   RegisterRequest,
+  ResetPasswordRequest,
   Session,
   SessionUser,
   UpdateProfileRequest,
@@ -24,6 +25,15 @@ export const authApi = {
 
   verifyRegisterOtp: (body: VerifyRegisterOtpRequest): Promise<Session> =>
     http.post('/auth/register/verify-otp', body),
+
+  forgotPassword: (email: string): Promise<OtpSent> =>
+    http.post('/auth/forgot-password', { email }),
+
+  resendResetOtp: (email: string): Promise<OtpSent> =>
+    http.post('/auth/forgot-password/resend-otp', { email }),
+
+  resetPassword: (body: ResetPasswordRequest): Promise<Session> =>
+    http.post('/auth/reset-password', body),
 
   me: (): Promise<SessionUser> =>
     http.get('/auth/me'),

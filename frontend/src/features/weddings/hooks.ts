@@ -18,7 +18,7 @@ export const planningKeys = {
 /** Gọi sau khi dữ liệu kế hoạch đổi: làm mới kế hoạch, timeline, hội thoại. */
 export function useRefreshPlanning() {
   const qc = useQueryClient()
-  return () => Promise.all(['plan', 'timeline', 'conversations', 'messages', 'order'].map((k) => qc.invalidateQueries({ queryKey: [k] })))
+  return () => Promise.all(['plan', 'timeline', 'conversations', 'messages', 'order', 'orders'].map((k) => qc.invalidateQueries({ queryKey: [k] })))
 }
 
 function useCoupleId() {
@@ -53,6 +53,12 @@ export function useTimeline(enabled: boolean) {
   return useQuery({ queryKey: planningKeys.timeline(uid), queryFn: weddingsApi.getTimeline, enabled: !!uid && enabled })
 }
 
+/** Lịch trình ngày cưới; khóa nằm dưới timeline nên tải lại cùng timeline (realtime `task`, NCC cập nhật, đổi thông tin đám cưới). */
+export function useDaySchedule(enabled: boolean) {
+  const uid = useCoupleId()
+  return useQuery({ queryKey: [...planningKeys.timeline(uid), 'day'], queryFn: weddingsApi.getDaySchedule, enabled: !!uid && enabled })
+}
+
 /** Thêm / sửa / xóa việc trên timeline. API trả timeline mới, ghi thẳng vào cache. */
 export function useTimelineMutations() {
   const uid = useCoupleId()
@@ -62,8 +68,21 @@ export function useTimelineMutations() {
     add: useMutation({ mutationFn: weddingsApi.addTask, onSuccess }),
     update: useMutation({
       mutationFn: ({ id, patch }: { id: string; patch: TimelineItemPatch }) => weddingsApi.updateTimelineItem(id, patch),
+      // Tick / bỏ tick hiện ngay trên giao diện, lỗi thì trả về như cũ
+      onMutate: async ({ id, patch }) => {
+        const key = planningKeys.timeline(uid)
+        await qc.cancelQueries({ queryKey: key })
+        const previous = qc.getQueryData<Timeline>(key)
+        if (previous && patch.isDone !== undefined) {
+          qc.setQueryData<Timeline>(key, { ...previous, items: previous.items.map((i) => (i.id === id ? { ...i, isDone: patch.isDone! } : i)) })
+        }
+        return { previous }
+      },
+      onError: (e, _vars, context) => {
+        if (context?.previous) qc.setQueryData(planningKeys.timeline(uid), context.previous)
+        toast(e.message)
+      },
       onSuccess,
-      onError: (e) => toast(e.message),
     }),
     remove: useMutation({ mutationFn: weddingsApi.deleteTask, onSuccess }),
   }

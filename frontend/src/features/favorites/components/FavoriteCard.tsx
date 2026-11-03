@@ -6,7 +6,7 @@ import { RatingMeta } from '@/features/catalog/components/RatingMeta'
 import { isTablePriced } from '@/features/catalog/price'
 import { ComparePill } from '@/features/compare/components/ComparePill'
 import { AddToPlanButton } from '@/features/weddings/planActions'
-import { formatMoney } from '@/lib/format'
+import { formatPriceRange } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { useCompareState } from '@/store/compare'
@@ -51,9 +51,9 @@ export const FavoriteCard = memo(function FavoriteCard({ service, onToggleCompar
       <div className="flex flex-1 flex-col gap-[7px] px-[15px] pt-[13px] pb-[15px]">
         <span className="text-[11px] font-medium text-gold">{service.category.name}</span>
         <h3 className="text-base leading-[1.3]">{service.name}</h3>
-        <RatingMeta location={service.location} rating={service.rating} reviewCount={service.reviewCount} />
+        <RatingMeta service={service} />
         <div className="text-xs text-muted-foreground">
-          Từ <b className="text-sm font-semibold text-ink">{formatMoney(service.priceFrom)}</b>
+          <b className="text-sm font-semibold text-ink">{formatPriceRange(service.priceFrom, service.priceTo)}</b>
           {isTablePriced(service) && '/mâm · đã gồm sảnh'}
         </div>
         <div className="mt-auto flex gap-[7px] pt-2">

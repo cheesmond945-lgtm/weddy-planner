@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { SavePackageBody, VendorPackagesService } from './vendor-packages.service';
@@ -23,6 +23,23 @@ export class VendorPackagesController {
   @Get(':id')
   get(@Req() req: any, @Param('id') id: string) {
     return this.packages.get(req.user.sub, id);
+  }
+
+  @Get(':id/tasks')
+  tasks(@Req() req: any, @Param('id') id: string) {
+    return this.packages.listTasks(req.user.sub, id);
+  }
+
+  /** Thay toàn bộ việc của gói (xóa mềm việc vắng mặt) */
+  @Put(':id/tasks')
+  saveTasks(@Req() req: any, @Param('id') id: string, @Body() body: { tasks?: unknown }) {
+    return this.packages.saveTasks(req.user.sub, id, body ?? {});
+  }
+
+  /** Thời gian trong ngày cưới của gói (không qua Admin duyệt): { leadMinutes, durationMinutes, setupOpenTime } */
+  @Put(':id/day-plan')
+  saveDayPlan(@Req() req: any, @Param('id') id: string, @Body() body: { leadMinutes?: unknown; durationMinutes?: unknown; setupOpenTime?: unknown }) {
+    return this.packages.saveDayPlan(req.user.sub, id, body ?? {});
   }
 
   @Post()

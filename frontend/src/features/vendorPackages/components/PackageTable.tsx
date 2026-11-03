@@ -64,7 +64,14 @@ export function PackageTable({ packages, startIndex = 0, showCapacity }: Package
             className="cursor-pointer transition-colors last:[&>td]:border-b-0 hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
           >
             <td className={cn(td, 'text-muted-foreground tabular-nums')}>{startIndex + i + 1}</td>
-            <td className={cn(td, 'max-w-[320px] min-w-[200px] font-semibold')}>{pkg.name}</td>
+            <td className={cn(td, 'max-w-[320px] min-w-[200px] font-semibold')}>
+              {pkg.name}
+              {(pkg.taskCount ?? 0) > 0 ? (
+                <span className="mt-1 block w-max text-xs font-medium text-muted-foreground">{pkg.taskCount} công việc</span>
+              ) : (
+                <span className="mt-1 block w-max rounded-pill bg-gold-soft px-2 py-px text-xs font-medium text-gold-ink">Chưa có công việc</span>
+              )}
+            </td>
             <td className={cn(td, 'text-right whitespace-nowrap tabular-nums')}>{formatMoney(pkg.price)}</td>
             <td className={td}>
               {pkg.tags.length ? (

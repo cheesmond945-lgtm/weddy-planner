@@ -3,19 +3,15 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
-import { AdjustmentView, OrderDetailDialog } from '@/features/serviceOrders/components/OrderDetailDialog'
-import { OrderFormDialog } from '@/features/serviceOrders/components/OrderFormDialog'
-import { PanelDialog } from '@/features/serviceOrders/components/PanelDialog'
+import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
+import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
+import { OrderFormDialog, type OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
+import { useConversationOrders } from '@/features/vendorOrders/hooks'
 import { cn } from '@/lib/utils'
-import type { ServiceOrder } from '@/types/serviceOrder'
+import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { useVendorConversations } from '../hooks'
 import { ChatThread } from './ChatThread'
 import { ConversationList } from './ConversationList'
-
-type Panel =
-  | { type: 'form'; order?: ServiceOrder }
-  | { type: 'detail'; order: ServiceOrder; version: number }
-  | { type: 'adjustment'; order: ServiceOrder; adjustmentId: string }
 
 /**
  * Trang Tin nhắn của NCC: danh sách hội thoại trái, khung chat phải; tạo, sửa, gửi lại đơn ngay trong chat.
@@ -24,12 +20,29 @@ type Panel =
 export function VendorChatView() {
   const { data: conversations, isPending, isError, error, refetch } = useVendorConversations()
   const [params, setParams] = useSearchParams()
-  const [panel, setPanel] = useState<Panel | null>(null)
+  const [form, setForm] = useState<OrderFormMode | null>(null)
+  // Xem chi tiết đơn, xem chứng từ: lưu mã đơn để luôn hiện dữ liệu mới nhất
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [invoice, setInvoice] = useState<{
+    orderId: string
+    type: InvoiceType
+  } | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
 
   const picked = params.get('c')
   const active = conversations?.find((c) => c.id === picked) ?? (picked ? undefined : conversations?.[0])
   const showChat = !!picked
+  const { data: orders = [] } = useConversationOrders(active?.id ?? null)
+  const detail = orders.find((o) => o.id === detailId)
+  const invoiceOrder = orders.find((o) => o.id === invoice?.orderId)
+
+  // Từ trang Quản lý đơn hàng: "+ Tạo đơn" chọn khách rồi sang đây (?c=…&create=1) mở sẵn form tạo đơn
+  const wantCreate = params.get('create') === '1'
+  useEffect(() => {
+    if (!wantCreate || !active) return
+    setForm({ kind: 'new' })
+    setParams({ c: active.id }, { replace: true })
+  }, [wantCreate, active, setParams])
 
   // Làm nổi thẻ đơn vừa gửi trong 2,4 giây (như prototype)
   useEffect(() => {
@@ -39,11 +52,14 @@ export function VendorChatView() {
   }, [highlight])
 
   const select = (id: string | null) => {
-    setPanel(null)
+    setForm(null)
+    setDetailId(null)
+    setInvoice(null)
     setParams(id ? { c: id } : {}, { replace: !id })
   }
 
-  const frame = 'grid h-[calc(100dvh-62px-150px)] min-h-[600px] overflow-hidden rounded-md border border-line bg-surface shadow-portal max-[900px]:min-h-[520px] max-sm:h-[calc(100dvh-62px-130px)]'
+  // 62px header + 90px đệm trên/dưới của VendorLayout (mobile 70px)
+  const frame = 'grid h-[calc(100dvh-152px)] max-h-[900px] min-h-[610px] overflow-hidden rounded-[26px] bg-surface shadow-panel max-[900px]:h-[calc(100dvh-132px)] max-[900px]:min-h-[520px]'
 
   if (isPending) return <div aria-busy="true" aria-label="Đang tải tin nhắn" className={cn(frame, 'animate-pulse bg-muted')} />
   if (isError) {
@@ -52,7 +68,7 @@ export function VendorChatView() {
 
   return (
     <>
-      <section className={cn(frame, 'grid-cols-[320px_minmax(0,1fr)] max-[900px]:grid-cols-1')}>
+      <section className={cn(frame, 'grid-cols-[340px_minmax(0,1fr)] max-[900px]:grid-cols-1')}>
         <div className={cn('flex min-h-0 flex-col', showChat && 'max-[900px]:hidden')}>
           <ConversationList conversations={conversations} selectedId={active?.id ?? null} onSelect={select} />
         </div>
@@ -63,10 +79,9 @@ export function VendorChatView() {
               conversation={active}
               highlightOrderId={highlight}
               onBack={() => select(null)}
-              onOpenForm={(order) => setPanel({ type: 'form', order })}
-              onEditOrder={(order) => setPanel({ type: 'form', order })}
-              onViewOrder={(order, version) => setPanel({ type: 'detail', order, version })}
-              onViewAdjustment={(order, adjustmentId) => setPanel({ type: 'adjustment', order, adjustmentId })}
+              onOpenForm={setForm}
+              onViewOrder={(o) => setDetailId(o.id)}
+              onViewInvoice={(o, type) => setInvoice({ orderId: o.id, type })}
             />
           ) : (
             <EmptyState
@@ -79,32 +94,20 @@ export function VendorChatView() {
         </div>
       </section>
 
-      {panel?.type === 'form' && active && (
+      {detail && <OrderDetailDialog order={detail} onClose={() => setDetailId(null)} onOpenForm={setForm} onViewInvoice={(o, type) => setInvoice({ orderId: o.id, type })} />}
+      {invoice && invoiceOrder && <InvoiceDialog order={invoiceOrder} type={invoice.type} onClose={() => setInvoice(null)} />}
+
+      {form && active && (
         <OrderFormDialog
+          // Key theo chế độ và đơn để form nạp lại giá trị khi mở đơn khác
+          key={`${form.kind}-${'order' in form ? form.order.id : 'from' in form ? form.from.id : 'new'}`}
           conversationId={active.id}
           customer={active.customer}
-          order={panel.order}
-          onClose={() => setPanel(null)}
-          onSent={(o) => setHighlight(o.id)}
+          mode={form}
+          onClose={() => setForm(null)}
+          onSent={(o: Order) => setHighlight(o.id)}
         />
       )}
-      {panel?.type === 'detail' && <OrderDetailDialog order={panel.order} version={panel.version} onClose={() => setPanel(null)} />}
-      {panel?.type === 'adjustment' &&
-        (() => {
-          const a = panel.order.adjustments.find((x) => x.id === panel.adjustmentId)
-          return (
-            <PanelDialog
-              open
-              size="md"
-              onRequestClose={() => setPanel(null)}
-              title={`Phương án điều chỉnh ${panel.order.code}`}
-              subtitle="Đơn hiện hành giữ nguyên tới khi khách đồng ý. Lập, sửa phương án ở Quản lý đơn hàng."
-              footer={<Button onClick={() => setPanel(null)}>Đóng</Button>}
-            >
-              {a ? <AdjustmentView adjustment={a} /> : <p className="text-muted-foreground">Không tìm thấy phương án.</p>}
-            </PanelDialog>
-          )
-        })()}
     </>
   )
 }

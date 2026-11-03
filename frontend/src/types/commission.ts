@@ -3,10 +3,11 @@
  * CHỜ ĐỐI CHIẾU docs/database.md và docs/state-diagrams.md: tên trường, trạng thái đang suy từ prototype NCC
  * (màn Tài chính & đối soát) và các quyết định của nhóm (tỷ lệ theo lĩnh vực, tính theo đơn hoàn thành).
  *
- * Bảng kê tính từ khoản đã thu thực tế của đơn (types/serviceOrder.ts: OrderPayment), không có dữ liệu đơn riêng.
+ * Bảng kê do backend tính từ các đơn đã hoàn thành.
  */
 import type { CategoryRef } from './catalog'
-import type { OrderPaymentMethod } from './serviceOrder'
+/** Cách thu của một khoản thanh toán trong đơn */
+type OrderPaymentMethod = 'VIETQR' | 'BANK_TRANSFER' | 'CASH'
 import type { VendorFile } from './vendor'
 
 /**

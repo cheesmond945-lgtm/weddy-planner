@@ -3,7 +3,7 @@
 > **Bản nháp để nhóm duyệt** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/compare.ts`).
 > Quy ước chung: [README.md](README.md). `ServiceDetail`: xem [catalog.md](catalog.md).
 > **Chờ đối chiếu `docs/database.md`** (đang trống). Theo quyết định của nhóm, đơn vị so sánh là **nhà cung cấp**; ở FE và tài liệu catalog đang gọi là "service" (`serviceId`). Khi database.md được chốt, đổi tên tham số theo (ví dụ `vendorIds`).
-> **TẠM:** `rating`, `reviewCount` là điểm Google Maps, thực tế lấy qua `PlaceId` của NCC.
+> Điểm Google (`rating`, `reviewCount`) **không** nằm trong `items`: BE lấy lúc gọi qua `PlaceId` (xem [vendors.md](vendors.md)); FE ở chế độ dữ liệu giả lấy qua `GET /vendors/{id}/google-rating?fields=summary` rồi tự tính đề xuất (`recommendation = null` trong response giả).
 
 Role: **COUPLE**.
 
@@ -42,7 +42,9 @@ BE phải tính **giống hệt** `frontend/src/features/compare/recommend.ts`; 
 
 **Trung lập:** chỉ dùng điểm Google Maps, giá và độ phù hợp với thông tin đám cưới. Không có yếu tố ưu tiên NCC trả phí, quảng cáo hay hoa hồng.
 
-Đầu vào cho mỗi phương án: `price` (= `priceFrom`), `rating`, `reviewCount`, `styles`, `city` (= `location`), `capacity`.
+Đầu vào cho mỗi phương án: `price` (= `priceFrom`), `rating`, `reviewCount` (từ Google, **có thể thiếu**: chưa có điểm, chưa có PlaceId hoặc Google lỗi), `styles`, `city` (= `location`), `capacity`.
+
+**Thiếu điểm:** nếu có ít nhất một phương án thiếu `rating`, bỏ yếu tố điểm cho **cả nhóm**: `điểm = P` khi không có `F`, `điểm = 0.5 × P + 0.5 × F` khi có `F`. Không nêu lý do về điểm Google; lý do dự phòng là `cân bằng tốt giữa giá và nhu cầu của bạn`.
 Thông tin đám cưới của người gọi (có thể chưa có): `budget`, `guestCount`, `city`, `styles`.
 
 Với mỗi phương án:
@@ -81,4 +83,4 @@ Tỷ lệ ngân sách theo hạng mục (**TẠM**, chưa có trong database.md)
 
 1. Tên tham số và trường theo database.md (`serviceIds` hay `vendorIds`, `location` hay `city`, `styles` hay `style`).
 2. Tỷ lệ ngân sách theo hạng mục lưu ở đâu (hằng số hay bảng cấu hình).
-3. Nguồn điểm Google Maps (nhập tay hay đồng bộ qua `PlaceId`).
+3. (Đã chốt) Điểm Google lấy lúc gọi qua `PlaceId`, không lưu database: xem vendors.md.

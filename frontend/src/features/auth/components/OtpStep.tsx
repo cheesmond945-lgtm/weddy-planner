@@ -79,7 +79,7 @@ export function OtpStep({ sent, onResent, onBack, onSuccess }: OtpStepProps) {
 
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
         <button type="button" onClick={onBack} className="text-muted-foreground underline underline-offset-[3px] hover:text-ink">
-          Sửa thông tin đăng ký
+          Đổi email
         </button>
         {resendLeft > 0 ? (
           <span className="text-muted-foreground">Gửi lại mã sau {resendLeft}s</span>
@@ -88,7 +88,7 @@ export function OtpStep({ sent, onResent, onBack, onSuccess }: OtpStepProps) {
             type="button"
             onClick={handleResend}
             disabled={resend.isPending}
-            className="font-medium text-primary underline underline-offset-[3px] disabled:opacity-50"
+            className="font-medium text-gold-700 underline underline-offset-[3px] disabled:opacity-50"
           >
             {resend.isPending ? 'Đang gửi…' : 'Gửi lại mã'}
           </button>

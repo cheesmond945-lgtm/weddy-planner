@@ -19,6 +19,7 @@ import AdminPaymentsPage from '@/pages/admin/AdminPaymentsPage'
 import AdminUsersPage from '@/pages/admin/AdminUsersPage'
 import AdminVendorDetailPage from '@/pages/admin/AdminVendorDetailPage'
 import AdminVendorsPage from '@/pages/admin/AdminVendorsPage'
+import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import SetPasswordPage from '@/pages/auth/SetPasswordPage'
@@ -34,6 +35,7 @@ import VendorCatalogPage from '@/pages/vendor/VendorCatalogPage'
 import VendorChatPage from '@/pages/vendor/VendorChatPage'
 import VendorCommissionsPage from '@/pages/vendor/VendorCommissionsPage'
 import VendorDashboardPage from '@/pages/vendor/VendorDashboardPage'
+import VendorCalendarPage from '@/pages/vendor/VendorCalendarPage'
 import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
 import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
 import VendorProfilePage from '@/pages/vendor/VendorProfilePage'
@@ -54,7 +56,7 @@ export const router = createBrowserRouter([
       { path: '/services/:serviceId', element: <ServiceDetailPage /> },
       // Cần đăng nhập với role cặp đôi
       {
-        element: <RequireRole roles={['COUPLE']} unauthenticated="dialog" />,
+        element: <RequireRole roles={['COUPLE']} />,
         children: [
           { path: paths.timeline, element: <TimelinePage /> },
           { path: paths.favorites, element: <FavoritesPage /> },
@@ -73,6 +75,7 @@ export const router = createBrowserRouter([
     children: [
       { path: paths.login, element: <LoginPage /> },
       { path: paths.register, element: <RegisterPage /> },
+      { path: paths.forgotPassword, element: <ForgotPasswordPage /> },
       { path: paths.setPassword, element: <SetPasswordPage /> },
     ],
   },
@@ -91,6 +94,7 @@ export const router = createBrowserRouter([
           { path: paths.vendor.packageNew, element: <VendorPackagePage /> },
           { path: '/vendor/catalog/:packageId', element: <VendorPackagePage /> },
           { path: paths.vendor.orders, element: <VendorOrdersPage /> },
+          { path: paths.vendor.calendar, element: <VendorCalendarPage /> },
           { path: paths.vendor.chat, element: <VendorChatPage /> },
           { path: paths.vendor.commissions, element: <VendorCommissionsPage /> },
         ],

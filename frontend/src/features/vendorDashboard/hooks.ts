@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
+import { useNow } from '@/lib/clock'
 import { useCommissionStatements } from '@/features/commissions/hooks'
-import { useOrders } from '@/features/serviceOrders/hooks'
 import { useVendorConversations } from '@/features/vendorChat/hooks'
+import { useOrders } from '@/features/vendorOrders/hooks'
 import { usePackages } from '@/features/vendorPackages/hooks'
 import { useVendorProfile } from '@/features/vendors/hooks'
 import { orderStats, recentOrders, todoItems, upcomingOrders } from './summary'
@@ -18,20 +19,22 @@ export function useVendorDashboard() {
   const orders = useOrders(ALL_ORDERS)
   const conversations = useVendorConversations(15_000)
   const packages = usePackages()
-  const statements = useCommissionStatements()
+  const commissions = useCommissionStatements()
+  // Việc cần làm, hạn cọc, số liệu theo ngày: tính lại mỗi 30 giây
+  const tick = Math.floor(useNow().getTime() / 30_000)
 
   const data = useMemo(() => {
-    const now = new Date()
     const o = orders.data?.data ?? []
-    const st = statements.data ?? []
+    const st = commissions.data ?? []
     return {
-      stats: orderStats(o, now),
+      stats: orderStats(o),
       currentCommission: st.find((s) => s.status === 'OPEN'),
-      todos: todoItems({ orders: o, conversations: conversations.data ?? [], packages: packages.data ?? [], statements: st, now }),
-      upcoming: upcomingOrders(o, now),
+      todos: todoItems({ orders: o, conversations: conversations.data ?? [], packages: packages.data ?? [], statements: st }),
+      upcoming: upcomingOrders(o),
       recent: recentOrders(o),
     }
-  }, [orders.data, conversations.data, packages.data, statements.data])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders.data, conversations.data, packages.data, commissions.data, tick])
 
   return {
     profile: profile.data,

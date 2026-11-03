@@ -9,7 +9,7 @@ import type { Role } from '@/types/auth'
 import type { AdminUser, SaveUserBody } from '@/types/admin'
 import { ROLE_LABEL } from '../constants'
 import { useSaveUser } from '../hooks'
-import { PanelDialog } from '@/features/serviceOrders/components/PanelDialog'
+import { PanelDialog } from '@/features/vendorOrders/components/PanelDialog'
 
 /** Giá trị điền sẵn khi tạo tài khoản NCC từ một yêu cầu hợp tác. */
 export interface UserPreset {

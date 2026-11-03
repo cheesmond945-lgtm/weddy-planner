@@ -8,6 +8,11 @@ export function formatMillions(amount: number) {
   return `${(amount / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} triệu`
 }
 
+/** Khoảng giá trên thẻ: "12.000.000đ – 16.000.000đ"; một mức giá hoặc thiếu giá cao nhất thì "Từ 12.000.000đ". */
+export function formatPriceRange(from: number, to?: number) {
+  return to && to > from ? `${formatMoney(from)} – ${formatMoney(to)}` : `Từ ${formatMoney(from)}`
+}
+
 /** 1824 -> "1.824" */
 export function formatNumber(n: number) {
   return n.toLocaleString('vi-VN')

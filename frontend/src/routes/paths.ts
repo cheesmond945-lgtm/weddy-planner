@@ -15,6 +15,7 @@ export const paths = {
   // Xác thực
   login: '/login',
   register: '/register',
+  forgotPassword: '/forgot-password',
   setPassword: '/set-password',
 
   // NCC
@@ -25,6 +26,7 @@ export const paths = {
     packageNew: '/vendor/catalog/new',
     package: (id: string) => `/vendor/catalog/${id}`,
     orders: '/vendor/orders',
+    calendar: '/vendor/calendar',
     chat: '/vendor/chat',
     commissions: '/vendor/commissions',
     account: '/vendor/account',

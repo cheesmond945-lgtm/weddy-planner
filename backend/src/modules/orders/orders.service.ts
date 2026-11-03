@@ -1,4 +1,5 @@
-import { HttpException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import type { Prisma } from '../../generated/prisma/client';
 import { buildPayInfo, depositContent, vietqrConfig } from '../../integrations/vietqr/vietqr';
 import { demoPaymentEnabled } from '../../integrations/vietqr/demo-mode';
 import { SepayService } from '../../integrations/vietqr/sepay.service';
@@ -6,215 +7,228 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
 import { Paginated } from '../../common/utils/pagination';
 import { notify, postMessage } from '../chat/chat-messages';
-import { onOrderDeposited } from '../weddings/timeline-hooks';
+import { hallBusyMessage } from '../halls/hall-busy';
+import { findHallConflict, lockHallDay, usesHalls } from '../halls/hall-store';
+import { onOrderCancelled, onOrderDeposited, onOrderEventDateChanged } from '../weddings/timeline-hooks';
+import { OrderJobsService } from './order-jobs.service';
+import { completeOrder, notifyRestReceived } from './order-lifecycle';
+import { runAfter } from '../../common/after-response';
+import { payCode } from '../weddings/timeline-rows';
+import { applyRestReceived, clearRestReceived, completeGate, finalInvoiceGate, restPaymentOf, type RestDb } from './rest-payment';
+import { ORDER_INCLUDE, OrderRow, toOrderDto, ymd, ymdVN } from './order-mapping';
+import { publish } from '../realtime/realtime.bus';
 import {
-  ORDER_INCLUDE,
-  OrderContentDto,
-  OrderRow,
-  contentChanges,
-  contentOf,
-  endOfDayVN,
-  paymentStatusOf,
-  serviceStatusOf,
-  toCoupleOrder,
-  toServiceOrder,
-  ymd,
-  ymdVN,
-} from './order-mapping';
-
-const fail = (code: string, message: string, status: number, details?: unknown): never => {
-  throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
-};
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PHONE = /^[0-9 +().-]{9,15}$/;
-const money = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
-/** NCC quên xác nhận thu đủ: bấy nhiêu ngày sau ngày sự kiện thì hệ thống tự hoàn thành đơn (cưới ngày 20 thì ngày 27). */
-export const AUTO_COMPLETE_DAYS = 7;
-
-export interface ContentBody {
-  customerName?: string;
-  customerPhone?: string;
-  eventDate?: string;
-  note?: string | null;
-  lines?: { name?: string; unit?: string; quantity?: number; unitPrice?: number }[];
-  installments?: { rate?: number | null; amount?: number; dueDate?: string }[];
-}
-
-interface ParsedContent {
-  customerName: string;
-  customerPhone: string;
-  eventDate: string;
-  note: string | null;
-  lines: { name: string; unit: string; quantity: number; unitPrice: number }[];
-  percent: number;
-  depositDue: string | null;
-  total: number;
-}
+  CANCEL_LABEL,
+  CategoryOrder,
+  CANCEL_REASONS,
+  CHANGE_LABEL,
+  CHANGE_TYPES,
+  CancelReason,
+  ChangeType,
+  ContentInput,
+  HOUR,
+  ORDER_STATUSES,
+  ParsedContent,
+  UUID,
+  categoryTakenMessage,
+  changeTypesBetween,
+  depositedConflict,
+  depositOf,
+  dmy,
+  endOfDayVn,
+  eventAfterWedding,
+  fail,
+  money,
+  orderedUuid,
+  parseContent,
+  sameContent,
+  wantsSend,
+  startOfDayVn,
+  todayVn,
+  ymdVn,
+} from './order-rules';
 
 export interface ListQuery {
   conversationId?: string;
   q?: string;
   status?: string;
-  paymentStatus?: string;
   from?: string;
   to?: string;
+  depositFrom?: string;
+  depositTo?: string;
   page?: number;
   pageSize?: number;
 }
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
 
-  constructor(private readonly prisma: PrismaService, private readonly sepay: SepayService, private readonly services: ServicesService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jobs: OrderJobsService,
+    private readonly sepay: SepayService,
+    private readonly services: ServicesService,
+  ) {}
 
-  // ---------- Tiện ích ----------
+  // ================= Tiện ích =================
 
   private async vendorOf(userId: string) {
     const v = await this.prisma.vendor_profiles.findUnique({ where: { user_id: userId }, select: { id: true, category_id: true, business_name: true, status: true } });
     return v ?? fail('VENDOR_PROFILE_NOT_FOUND', 'Tài khoản chưa có hồ sơ nhà cung cấp.', 404);
   }
 
-  private async conversationOf(o: OrderRow) {
-    const c = await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: o.weddings!.user_id!, vendor_id: o.vendor_profiles!.user_id! } } });
+  private async conversationOf(o: Pick<OrderRow, 'weddings' | 'vendor_profiles'>) {
+    const c = await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: o.weddings!.user_id!, vendor_id: o.vendor_profiles!.user_id! } }, select: { id: true } });
     return c?.id ?? '';
   }
 
-  private async cancelReason(orderId: string) {
-    const m = await this.prisma.messages.findFirst({ where: { order_id: orderId, sender_id: null, content: { startsWith: 'Đã hủy đơn' } }, orderBy: { sent_date: 'desc' } });
-    return m?.content?.includes('Lý do: ') ? m.content.split('Lý do: ').slice(1).join('Lý do: ') : null;
-  }
-
-  private async loadFull(id: string) {
+  private loadFull(id: string) {
     return this.prisma.orders.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
   }
 
-  private async serviceOrderOf(id: string) {
+  private async dtoOf(id: string) {
     const o = await this.loadFull(id);
-    return toServiceOrder(o, await this.conversationOf(o), o.status === 'Cancelled' ? await this.cancelReason(o.id) : null);
+    return toOrderDto(o, await this.conversationOf(o));
   }
 
+  /** Đơn của NCC; quét hết hạn / tự hoàn thành riêng đơn của NCC này trước khi đọc. */
   private async ownedByVendor(userId: string, id: string) {
-    const v = await this.vendorOf(userId);
-    const o = UUID.test(id) ? await this.prisma.orders.findFirst({ where: { id, vendor_id: v.id }, include: ORDER_INCLUDE }) : null;
-    return { vendor: v, order: o ?? fail('ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.', 404) };
+    const vendor = await this.vendorOf(userId);
+    await this.jobs.sweep({ vendorId: vendor.id });
+    const o = UUID.test(id) ? await this.prisma.orders.findFirst({ where: { id, vendor_id: vendor.id }, include: ORDER_INCLUDE }) : null;
+    return { vendor, order: o ?? fail('ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.', 404) };
   }
 
-  private async nextCode(prefix: string, field: 'order' | 'receipt' | 'final') {
-    const yymm = new Date(Date.now() + 7 * 3600_000).toISOString().slice(2, 7).replace('-', '');
-    const code = (n: number) => `${prefix}${yymm}${String(n).padStart(4, '0')}`;
+  /** Đơn của khách (không có bản nháp); quét riêng đơn của khách này trước khi đọc. */
+  private async ownedByCouple(userId: string, id: string) {
+    await this.jobs.sweep({ coupleId: userId });
+    const o = UUID.test(id) ? await this.prisma.orders.findFirst({ where: { id, weddings: { user_id: userId }, status: { not: 'Draft' } }, include: ORDER_INCLUDE }) : null;
+    return o ?? fail('ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.', 404);
+  }
+
+  /**
+   * Luật "mỗi hạng mục tối đa MỘT đơn Deposited cùng lúc" (một đám cưới): trả đơn Deposited khác cùng hạng mục, hoặc null.
+   * Dùng khi khách đặt cọc và khi NCC gửi / tạo lại đơn.
+   */
+  private async depositedElsewhere(weddingId: string | null, categoryId: string | null, exceptOrderId?: string): Promise<CategoryOrder | null> {
+    if (!weddingId || !categoryId) return null;
+    const rows = await this.prisma.orders.findMany({
+      where: { wedding_id: weddingId, status: 'Deposited' },
+      select: { id: true, status: true, order_code: true, vendor_profiles: { select: { business_name: true, category_id: true, service_categories: { select: { name: true } } } } },
+    });
+    const orders: CategoryOrder[] = rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      categoryId: r.vendor_profiles?.category_id ?? null,
+      code: r.order_code ?? '',
+      vendorName: r.vendor_profiles?.business_name ?? '',
+      categoryName: r.vendor_profiles?.service_categories?.name ?? '',
+    }));
+    return depositedConflict(orders, categoryId, exceptOrderId) ?? null;
+  }
+
+  /** Mã tiếp theo trong tháng: DH<yyMM><4 số> (đơn), XNC… (giấy xác nhận cọc), HD… (hóa đơn cuối). */
+  private async nextCode(prefix: 'DH' | 'XNC' | 'HD') {
+    const yymm = new Date(Date.now() + 7 * HOUR).toISOString().slice(2, 7).replace('-', '');
     const start = `${prefix}${yymm}`;
-    const count =
-      field === 'order'
-        ? await this.prisma.orders.count({ where: { order_code: { startsWith: start } } })
-        : await this.prisma.invoices.count({ where: { invoice_code: { startsWith: start } } });
-    let n = count + 1;
-    // Tránh trùng khi có dữ liệu cũ lệch số
-    for (let i = 0; i < 20; i++, n++) {
-      const exists =
-        field === 'order'
-          ? await this.prisma.orders.findUnique({ where: { order_code: code(n) } })
-          : await this.prisma.invoices.findUnique({ where: { invoice_code: code(n) } });
-      if (!exists) return code(n);
-    }
-    return code(n);
+    const last =
+      prefix === 'DH'
+        ? (await this.prisma.orders.findFirst({ where: { order_code: { startsWith: start } }, orderBy: { order_code: 'desc' }, select: { order_code: true } }))?.order_code
+        : (await this.prisma.invoices.findFirst({ where: { invoice_code: { startsWith: start } }, orderBy: { invoice_code: 'desc' }, select: { invoice_code: true } }))?.invoice_code;
+    const n = last ? Number(last.slice(start.length)) : 0;
+    return `${start}${String((Number.isFinite(n) ? n : 0) + 1).padStart(4, '0')}`;
   }
 
-  /** Kiểm tra nội dung đơn. strict = gửi (kiểm tra đủ); không strict = lưu nháp (bỏ qua thiếu sót). */
-  private parse(c: ContentBody, strict: boolean): ParsedContent {
-    const errors: Record<string, string> = {};
-    const customerName = c.customerName?.trim() ?? '';
-    const customerPhone = c.customerPhone?.trim() ?? '';
-    const eventOk = typeof c.eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.eventDate) && !Number.isNaN(Date.parse(c.eventDate));
-    const eventDate = eventOk ? c.eventDate! : ymd(new Date());
-
-    const rawLines = (c.lines ?? []).filter((l) => (l.name?.trim() ?? '') !== '' || Number(l.quantity) > 0 || Number(l.unitPrice) > 0);
-    const lines = rawLines.map((l) => ({ name: l.name?.trim() ?? '', unit: l.unit?.trim() || 'Gói', quantity: Number(l.quantity) || 0, unitPrice: Number(l.unitPrice) || 0 }));
-    const total = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
-
-    const dep = c.installments?.[0];
-    const rate = dep?.rate === null || dep?.rate === undefined ? NaN : Number(dep.rate);
-    const rateOk = Number.isInteger(rate) && rate >= 1 && rate <= 99;
-    const dueOk = typeof dep?.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dep.dueDate);
-
-    if (strict) {
-      if (!customerName) errors.customerName = 'Nhập tên khách hàng.';
-      if (!PHONE.test(customerPhone)) errors.customerPhone = 'Số điện thoại gồm 9 đến 15 ký tự (số, khoảng trắng, + ( ) . -).';
-      if (!eventOk) errors.eventDate = 'Chọn ngày diễn ra sự kiện.';
-      if (!lines.length) errors.lines = 'Thêm ít nhất một dòng báo giá.';
-      lines.forEach((l, i) => {
-        if (!l.name) errors[`lines.${i}.name`] = 'Nhập tên hạng mục.';
-        if (!Number.isInteger(l.quantity) || l.quantity <= 0) errors[`lines.${i}.quantity`] = 'Số lượng là số nguyên lớn hơn 0.';
-        if (l.unitPrice < 0) errors[`lines.${i}.unitPrice`] = 'Đơn giá không âm.';
-      });
-      if (lines.length && total <= 0) errors.lines ??= 'Tổng tiền phải lớn hơn 0.';
-      if ((c.installments?.length ?? 0) !== 2) errors.installments = 'Đơn gồm 2 đợt: đặt cọc và thanh toán phần còn lại.';
-      if (!rateOk) errors.installments ??= 'Tỷ lệ đặt cọc là số nguyên từ 1 đến 99 (%).';
-      if (!dueOk) errors['installments.0.dueDate'] = 'Chọn hạn đặt cọc.';
-    }
-    if (Object.keys(errors).length) fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, errors);
-
+  /** Nội dung hiện tại của đơn, cùng dạng với nội dung đã kiểm tra (để so sánh thay đổi). */
+  private currentOf(o: OrderRow): ParsedContent {
     return {
-      customerName,
-      customerPhone,
-      eventDate,
-      note: c.note?.trim() || null,
-      lines,
-      percent: rateOk ? rate : 30,
-      depositDue: dueOk ? dep!.dueDate! : null,
-      total,
+      customerName: o.customer_name ?? '',
+      customerPhone: o.customer_phone ?? '',
+      eventDate: ymd(o.event_date),
+      note: o.note,
+      depositPercent: Number(o.deposit_percent),
+      items: o.order_items.map((i) => ({ itemName: i.item_name ?? '', unit: i.unit ?? '', quantity: i.quantity ?? 0, unitPrice: Number(i.unit_price), packageId: i.package_id ?? null })),
+      total: Number(o.total_amount),
+      packageId: o.package_id ?? null,
     };
   }
 
-  private depositOf(p: ParsedContent) {
-    return Math.round((p.total * p.percent) / 100);
+  /**
+   * Sảnh của đơn (Trung tâm tiệc cưới, docs/LICH_BAN_SANH.md). Sảnh phải là gói của chính NCC. Gửi / sửa đơn (`strict`) thì bắt buộc
+   * chọn sảnh, sảnh phải đang đăng và không bận ngày thực hiện (409 HALL_BUSY); sửa đơn giữ nguyên sảnh và ngày (`keep`) thì không kiểm lại.
+   * Dịch vụ khác không theo sảnh: trả null (bỏ sảnh nếu có gửi lên).
+   */
+  private async checkHall(
+    vendor: { id: string; category_id: string | null },
+    p: ParsedContent,
+    opts: { strict: boolean; exceptOrderId?: string; keep?: { packageId: string | null; eventDate: string } },
+  ): Promise<{ id: string; name: string } | null> {
+    if (!(await usesHalls(this.prisma, vendor.category_id))) return null;
+    if (!p.packageId) return opts.strict ? fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, { packageId: 'Chọn sảnh cho đơn.' }) : null;
+    const pkg = await this.prisma.service_packages.findFirst({ where: { id: p.packageId, vendor_id: vendor.id }, select: { id: true, name: true, status: true } });
+    if (!pkg) return fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, { packageId: 'Sảnh không thuộc nhà cung cấp này.' });
+    const hall = { id: pkg.id, name: pkg.name ?? '' };
+    if (!opts.strict || (opts.keep?.packageId === pkg.id && opts.keep.eventDate === p.eventDate)) return hall;
+    if (pkg.status !== 'Approved' && opts.keep?.packageId !== pkg.id) return fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, { packageId: 'Sảnh này đang ẩn hoặc chưa được duyệt.' });
+    const busy = await findHallConflict(this.prisma, pkg.id, p.eventDate, opts.exceptOrderId);
+    if (busy) {
+      const message = hallBusyMessage('VENDOR', hall.name, p.eventDate, busy);
+      return fail('HALL_BUSY', message, 409, { packageId: message, eventDate: message });
+    }
+    return hall;
   }
 
-  private dtoOf(p: ParsedContent, installmentsFrom: OrderContentDto['installments'][number][]): OrderContentDto {
-    return {
-      customerName: p.customerName,
-      customerPhone: p.customerPhone,
-      eventDate: p.eventDate,
-      note: p.note,
-      lines: p.lines.map((l, i) => ({ id: String(i), packageId: null, name: l.name, unit: l.unit, quantity: l.quantity, unitPrice: l.unitPrice, isPolicyFee: false })),
-      installments: installmentsFrom,
-    };
-  }
-
-  /** Nội dung đã phân tích dưới dạng OrderContentDto (để so sánh thay đổi khi gửi lại). */
-  private asContent(p: ParsedContent): OrderContentDto {
-    const deposit = this.depositOf(p);
-    return this.dtoOf(p, [
-      { id: 'deposit', name: 'Đợt 1 – Đặt cọc', rate: p.percent, amount: deposit, dueDate: p.depositDue ?? p.eventDate, method: 'VIETQR', note: null },
-      { id: 'final', name: 'Đợt 2 – Thanh toán còn lại', rate: 100 - p.percent, amount: p.total - deposit, dueDate: p.eventDate, method: 'CASH', note: null },
-    ]);
-  }
-
+  /** Cột của đơn từ nội dung đã kiểm tra. Bản nháp mà tiền cọc không nhỏ hơn tổng thì lưu cọc 0 (CSDL chỉ cho Draft cọc 0). */
   private orderData(p: ParsedContent) {
-    const deposit = this.depositOf(p);
+    const deposit = depositOf(p.total, p.depositPercent);
     return {
       customer_name: p.customerName,
       customer_phone: p.customerPhone,
       event_date: new Date(p.eventDate),
       note: p.note,
       total_amount: p.total,
-      deposit_percent: p.percent,
-      deposit_amount: deposit,
-      deposit_due_date: p.depositDue ? endOfDayVN(p.depositDue) : null,
+      deposit_percent: p.depositPercent,
+      deposit_amount: deposit > 0 && deposit < p.total ? deposit : 0,
+      package_id: p.packageId,
     };
   }
 
+  /**
+   * Hook timeline chạy SAU khi giao dịch chính đã commit (tiền đã ghi, đơn đã đổi trạng thái). Hook lỗi thì ghi log kèm mã đơn rồi bỏ qua:
+   * không để API trả 500 và không bỏ các bước sau (tin nhắn, thông báo). Timeline sinh bù được bằng `npm run timelines:repair`.
+   */
+  private async timelineHook<T>(what: string, orderCode: string | null, run: () => Promise<T>): Promise<T | undefined> {
+    try {
+      return await run();
+    } catch (e) {
+      this.logger.error(`Hook timeline (${what}) của đơn ${orderCode} lỗi sau khi đã ghi nhận: timeline cần sinh bù (npm run timelines:repair). ${e instanceof Error ? e.message : String(e)}`, e instanceof Error ? e.stack : undefined);
+      return undefined;
+    }
+  }
+
   private itemRows(orderId: string, p: ParsedContent) {
-    return p.lines.map((l) => ({ order_id: orderId, item_name: l.name, unit: l.unit, quantity: l.quantity, unit_price: l.unitPrice, amount: l.quantity * l.unitPrice }));
+    return p.items.map((l, i) => ({ id: orderedUuid(i), order_id: orderId, item_name: l.itemName, unit: l.unit, quantity: l.quantity, unit_price: l.unitPrice, amount: l.quantity * l.unitPrice, package_id: l.packageId ?? null }));
+  }
+
+  /**
+   * Gói của từng dòng hạng mục (order_items.package_id) phải là gói của chính NCC của đơn (400, lỗi theo dòng `items.<i>.packageId`).
+   * Việc chi tiết của đơn lấy từ package_tasks của các gói này (cộng sảnh của đơn) khi khách cọc.
+   */
+  private async checkItemPackages(vendorId: string, p: ParsedContent) {
+    const ids = [...new Set(p.items.flatMap((i) => (i.packageId ? [i.packageId] : [])))];
+    if (!ids.length) return;
+    const own = new Set((await this.prisma.service_packages.findMany({ where: { id: { in: ids }, vendor_id: vendorId }, select: { id: true } })).map((x) => x.id));
+    const details: Record<string, string> = {};
+    p.items.forEach((i, idx) => {
+      if (i.packageId && !own.has(i.packageId)) details[`items.${idx}.packageId`] = 'Gói không thuộc nhà cung cấp này.';
+    });
+    if (Object.keys(details).length) fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, details);
   }
 
   // ================= Phía cặp đôi =================
-
-  private async ownedByCouple(userId: string, id: string) {
-    const o = UUID.test(id) ? await this.prisma.orders.findFirst({ where: { id, weddings: { user_id: userId }, status: { not: 'Draft' } }, include: ORDER_INCLUDE }) : null;
-    return o ?? fail('ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.', 404);
-  }
 
   /** Chi tiết dịch vụ của đơn, kể cả khi NCC đang bị ẩn (cặp đôi có đơn thì vẫn xem được để thanh toán / theo dõi). */
   async serviceOfOrder(userId: string, id: string) {
@@ -224,33 +238,78 @@ export class OrdersService {
 
   async getForCouple(userId: string, id: string) {
     const o = await this.ownedByCouple(userId, id);
-    return toCoupleOrder(o, await this.conversationOf(o));
+    return toOrderDto(o, await this.conversationOf(o));
   }
 
-  async requestRevision(userId: string, id: string, note: string) {
+  /** Mọi đơn đã gửi của khách (không có bản nháp), mới nhất trước; trang Kế hoạch của khách hiện dưới từng hạng mục theo `category`. */
+  async listForCouple(userId: string, q: { status?: string }) {
+    await this.jobs.sweep({ coupleId: userId });
+    const where: Prisma.ordersWhereInput = { weddings: { user_id: userId }, status: { not: 'Draft' } };
+    if (q.status) {
+      if (!(ORDER_STATUSES as readonly string[]).includes(q.status) || q.status === 'Draft') return fail('VALIDATION_ERROR', 'Trạng thái đơn không hợp lệ.', 400, { status: 'Trạng thái đơn không hợp lệ.' });
+      where.status = q.status;
+    }
+    const [rows, convs] = await Promise.all([
+      this.prisma.orders.findMany({ where, include: ORDER_INCLUDE, orderBy: [{ created_date: 'desc' }, { order_code: 'desc' }], take: 200 }),
+      this.prisma.conversations.findMany({ where: { couple_id: userId }, select: { id: true, vendor_id: true } }),
+    ]);
+    const convByVendor = new Map(convs.map((c) => [c.vendor_id, c.id]));
+    return rows.map((o) => toOrderDto(o, convByVendor.get(o.vendor_profiles!.user_id!) ?? ''));
+  }
+
+  /**
+   * Khách yêu cầu chỉnh sửa. Bốn ô chọn là tùy chọn, nội dung chi tiết bắt buộc. Ghi OrderRevisions (Requested) kèm OrderRevisionChanges và CHỈ MỘT tin hệ thống.
+   * - Trước cọc (Pending): Pending -> NeedRevision, BeforeDeposit. NCC "Cập nhật đơn" thì hạn cọc đặt lại 24 giờ.
+   * - Sau cọc (Deposited, còn trước ngày thực hiện, chưa có yêu cầu đang chờ): đơn VẪN Deposited, AfterDeposit.
+   *   NCC "Chỉnh sửa" để áp dụng (tỷ lệ và tiền cọc giữ nguyên) hoặc từ chối.
+   */
+  async requestRevision(userId: string, id: string, body: { changes?: unknown; note?: string }) {
     const o = await this.ownedByCouple(userId, id);
-    const text = (note ?? '').trim();
-    if (!text) return fail('VALIDATION_ERROR', 'Nhập nội dung cần chỉnh sửa.', 400);
-    if (o.status !== 'Pending') return fail('ORDER_NOT_REVISABLE', 'Chỉ yêu cầu chỉnh sửa được đơn đang chờ đặt cọc.', 409);
+    const note = (body?.note ?? '').trim();
+    const rawChanges = Array.isArray(body?.changes) ? body.changes : [];
+    if (!note) return fail('VALIDATION_ERROR', 'Nhập nội dung chi tiết cần chỉnh sửa.', 400, { note: 'Nhập nội dung chi tiết cần chỉnh sửa.' });
+    if (rawChanges.some((c) => !(CHANGE_TYPES as readonly unknown[]).includes(c))) return fail('VALIDATION_ERROR', 'Nội dung muốn đổi không hợp lệ.', 400, { changes: `Chọn trong: ${CHANGE_TYPES.join(', ')}.` });
+    const changes = CHANGE_TYPES.filter((t) => rawChanges.includes(t)) as ChangeType[];
+    const afterDeposit = o.status === 'Deposited';
+    if (o.status !== 'Pending' && !afterDeposit) {
+      return fail('ORDER_NOT_REVISABLE', o.status === 'NeedRevision' ? 'Đơn đang chờ nhà cung cấp chỉnh sửa.' : 'Chỉ yêu cầu chỉnh sửa được đơn đang chờ đặt cọc hoặc đã đặt cọc.', 409);
+    }
+    if (afterDeposit && todayVn() >= ymd(o.event_date)) return fail('ORDER_NOT_REVISABLE', 'Đã đến ngày thực hiện, không gửi yêu cầu chỉnh sửa được nữa. Bạn nhắn nhà cung cấp trong chat nhé.', 409);
+
+    await this.prisma.$transaction(async (tx) => {
+      if (afterDeposit) {
+        if (await tx.order_revisions.count({ where: { order_id: id, status: 'Requested' } })) return fail('ORDER_NOT_REVISABLE', 'Bạn đã gửi một yêu cầu chỉnh sửa, đang chờ nhà cung cấp xử lý.', 409);
+      } else {
+        const r = await tx.orders.updateMany({ where: { id, status: 'Pending' }, data: { status: 'NeedRevision' } });
+        if (!r.count) return fail('ORDER_NOT_REVISABLE', 'Đơn không còn ở trạng thái chờ đặt cọc.', 409);
+      }
+      await tx.order_revisions.create({
+        data: {
+          order_id: id,
+          revision_type: afterDeposit ? 'AfterDeposit' : 'BeforeDeposit',
+          request_note: note,
+          old_total_amount: o.total_amount,
+          status: 'Requested',
+          order_revision_changes: { create: changes.map((change_type) => ({ change_type })) },
+        },
+      });
+    });
 
     const conversationId = await this.conversationOf(o);
-    await this.prisma.$transaction([
-      this.prisma.orders.update({ where: { id }, data: { status: 'NeedRevision' } }),
-      this.prisma.order_revisions.create({ data: { order_id: id, revision_type: 'BeforeDeposit', request_note: text, old_total_amount: o.total_amount, status: 'Requested' } }),
-    ]);
+    const what = changes.map((c) => CHANGE_LABEL[c]).join(', ');
+    const deposited = afterDeposit ? ' (đã đặt cọc, tiền cọc giữ nguyên)' : '';
     if (conversationId) {
-      await postMessage(this.prisma, { conversationId, senderId: userId, content: `Yêu cầu chỉnh sửa đơn ${o.order_code}:\n${text}`, orderId: id });
-      await postMessage(this.prisma, { conversationId, senderId: null, content: 'Đã gửi yêu cầu chỉnh sửa cho nhà cung cấp. Nhà cung cấp sẽ cập nhật và gửi lại đơn.', orderId: id, isRead: true });
+      await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `Khách yêu cầu chỉnh sửa đơn ${o.order_code}${deposited}: ${what ? `${what} · ` : ''}"${note}"` });
     }
     await notify(this.prisma, {
       userId: o.vendor_profiles!.user_id!,
       type: 'OrderRevisionRequested',
       title: 'Khách yêu cầu chỉnh sửa đơn',
-      content: `Khách yêu cầu chỉnh sửa đơn ${o.order_code}: ${text}`,
+      content: `Khách yêu cầu chỉnh sửa đơn ${o.order_code}${deposited}: ${what ? `${what} · ` : ''}${note}`,
       referenceType: 'Order',
       referenceId: id,
-    });
-    return toCoupleOrder(await this.loadFull(id), conversationId);
+    }).catch(() => undefined);
+    return this.dtoOf(id);
   }
 
   /**
@@ -260,13 +319,53 @@ export class OrdersService {
   async createDeposit(userId: string, orderId: string) {
     const cfg = vietqrConfig() ?? fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VietQR.', 501);
     const o = await this.ownedByCouple(userId, orderId);
-    if (o.status !== 'Pending') return fail('ORDER_NOT_PAYABLE', 'Đơn không ở trạng thái chờ đặt cọc.', 409);
+    if (o.status !== 'Pending') {
+      const why: Record<string, string> = {
+        Expired: 'Đơn đã hết hạn đặt cọc.',
+        NeedRevision: 'Đơn đang chờ nhà cung cấp chỉnh sửa, chưa thanh toán được.',
+        Deposited: 'Đơn đã được đặt cọc.',
+        Completed: 'Đơn đã hoàn thành.',
+        Cancelled: 'Đơn đã bị hủy.',
+      };
+      return fail('ORDER_NOT_PAYABLE', why[o.status ?? ''] ?? 'Đơn không ở trạng thái chờ đặt cọc.', 409);
+    }
     if (o.vendor_profiles?.status === 'Hidden') return fail('VENDOR_HIDDEN', 'Nhà cung cấp tạm ngừng nhận đơn mới nên chưa đặt cọc được.', 409);
+
+    // Quá hạn cọc mà chưa kịp quét (quét riêng giãn cách 15 giây): chuyển Expired ngay, không nhận cọc
+    if (o.deposit_due_date && o.deposit_due_date <= new Date()) {
+      this.jobs.forget({ coupleId: userId });
+      await this.jobs.sweep({ coupleId: userId });
+      return fail('ORDER_NOT_PAYABLE', 'Đơn đã hết hạn đặt cọc.', 409);
+    }
+    // Ngày thực hiện sau ngày cưới (khách đổi ngày cưới sau khi đơn đã gửi, hoặc đơn cũ): chặn trước khi chuyển tiền, vì timeline không dựng được
+    const weddingDate = ymd(o.weddings?.wedding_date ?? null);
+    if (eventAfterWedding(ymd(o.event_date), weddingDate)) {
+      return fail(
+        'EVENT_DATE_AFTER_WEDDING',
+        `Ngày thực hiện của đơn (${dmy(ymd(o.event_date))}) sau ngày cưới của bạn (${dmy(weddingDate)}). Bạn bấm "Yêu cầu chỉnh sửa" để nhà cung cấp đổi ngày thực hiện, hoặc cập nhật lại ngày cưới nếu bạn đã dời đám cưới.`,
+        409,
+        { eventDate: ymd(o.event_date), weddingDate },
+      );
+    }
+    // Hạng mục đã có đơn khác đang Deposited: chưa cho cọc (chặn trước khi chuyển tiền)
+    const taken = await this.depositedElsewhere(o.wedding_id, o.vendor_profiles?.service_categories?.id ?? null, o.id);
+    if (taken) return fail('CATEGORY_ALREADY_DEPOSITED', categoryTakenMessage('COUPLE', taken), 409);
+    // Sảnh đã bận ngày thực hiện (khách khác đã cọc, hoặc NCC đánh dấu bận): chặn trước khi chuyển tiền
+    const hallBusy = await this.hallBusyForCouple(o);
+    if (hallBusy) return fail('HALL_BUSY', hallBusy, 409);
+
     const deposit = Number(o.deposit_amount);
     if (!(deposit > 0)) return fail('ORDER_NOT_PAYABLE', 'Đơn chưa có số tiền cọc.', 409);
     // Dòng thanh toán chưa trả (giữ nguyên nếu đã có)
     const payment = await this.prisma.payments.upsert({ where: { order_id: orderId }, create: { order_id: orderId, status: 'Unpaid' }, update: {} });
     return { paymentId: payment.id, demoMode: demoPaymentEnabled(), ...buildPayInfo(cfg, { amount: deposit, content: depositContent(o.order_code!) }) };
+  }
+
+  /** Lời báo cho khách nếu sảnh của đơn đã bận ngày thực hiện (khách khác đã cọc, hoặc NCC đánh dấu bận); null nếu còn trống / đơn không theo sảnh. */
+  private async hallBusyForCouple(o: OrderRow): Promise<string | null> {
+    if (!o.package_id || !o.event_date) return null;
+    const busy = await findHallConflict(this.prisma, o.package_id, ymd(o.event_date), o.id);
+    return busy ? hallBusyMessage('COUPLE', o.service_packages?.name ?? '', ymd(o.event_date), busy) : null;
   }
 
   /**
@@ -279,6 +378,8 @@ export class OrdersService {
     if (o.status === 'Deposited' || o.status === 'Completed') return { status: 'PAID' as const, message: 'Đơn đã được đặt cọc.' };
     if (o.status !== 'Pending') return fail('ORDER_NOT_PAYABLE', 'Đơn không ở trạng thái chờ đặt cọc.', 409);
     const res = await this.markDepositPaid(o, `DEMO-${o.order_code}`, new Date());
+    if (res === 'CATEGORY_TAKEN') return { status: 'FAILED' as const, message: 'Hạng mục này đã có đơn khác đang đặt cọc nên đơn chưa được ghi nhận.' };
+    if (res === 'HALL_BUSY') return { status: 'FAILED' as const, message: 'Sảnh đã có khách khác đặt cọc ngày này nên đơn chưa được ghi nhận.' };
     if (res === 'NOT_PENDING') return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái, không ghi nhận được đặt cọc.' };
     return { status: 'PAID' as const, message: 'Đặt cọc thành công (chế độ thử).' };
   }
@@ -292,33 +393,60 @@ export class OrdersService {
     const txn = await this.sepay.findPayment(depositContent(o.order_code!), Number(o.deposit_amount));
     if (!txn) return { status: 'PENDING' as const, message: 'Chưa nhận được tiền. Nếu bạn vừa chuyển khoản, vui lòng đợi ít giây.' };
     const res = await this.markDepositPaid(o, txn.id, txn.paidAt);
+    if (res === 'CATEGORY_TAKEN') {
+      return { status: 'FAILED' as const, message: 'Hạng mục này đã có đơn khác đang đặt cọc nên đơn chưa được ghi nhận. Vui lòng liên hệ Forever để được hỗ trợ hoàn tiền.' };
+    }
     if (res === 'NOT_PENDING') {
       return { status: 'FAILED' as const, message: 'Đơn đã thay đổi trạng thái trong lúc thanh toán. Vui lòng liên hệ Forever để được hỗ trợ hoàn tiền.' };
+    }
+    if (res === 'HALL_BUSY') {
+      return { status: 'FAILED' as const, message: 'Sảnh đã có khách khác đặt cọc ngày này trong lúc bạn thanh toán nên đơn chưa được ghi nhận. Vui lòng liên hệ Forever để được hỗ trợ hoàn tiền.' };
     }
     return { status: 'PAID' as const, message: 'Đặt cọc thành công.' };
   }
 
   /**
-   * Ghi nhận đã cọc: đơn sang Deposited, lưu giao dịch, giấy xác nhận cọc, timeline, tin nhắn, báo NCC.
-   * Chỉ đơn còn chờ cọc mới được ghi (trang quay về và IPN có thể đến cùng lúc). Đơn đã bị hủy / hết hạn trong lúc khách
-   * đang thanh toán thì không ghi, trả NOT_PENDING để báo hoàn tiền.
+   * Ghi nhận đã cọc: Payments Paid, Orders Deposited, Invoices DepositReceipt, tin DepositReceipt (hệ thống gửi), thêm NCC vào
+   * kế hoạch của khách, sinh việc chi tiết trên timeline, báo NCC. Chỉ đơn còn Pending mới được ghi (trang quay về và IPN có thể
+   * đến cùng lúc). Đơn đã hủy / hết hạn trong lúc khách đang thanh toán thì không ghi, trả NOT_PENDING để báo hoàn tiền.
    */
-  private async markDepositPaid(o: OrderRow, transactionCode: string, paidAt: Date): Promise<'PAID' | 'ALREADY' | 'NOT_PENDING'> {
+  private async markDepositPaid(o: OrderRow, transactionCode: string, paidAt: Date): Promise<'PAID' | 'ALREADY' | 'NOT_PENDING' | 'CATEGORY_TAKEN' | 'HALL_BUSY'> {
     const orderId = o.id;
     const taken = await this.prisma.payments.findUnique({ where: { transaction_code: transactionCode }, select: { order_id: true } });
     const txCode = taken && taken.order_id !== orderId ? `${transactionCode}-${orderId.slice(0, 4)}` : transactionCode;
-    const receiptCode = await this.nextCode('XNC', 'receipt');
+    const receiptCode = await this.nextCode('XNC');
+    const categoryId = o.vendor_profiles?.service_categories?.id ?? null;
     const done = await this.prisma.$transaction(async (tx) => {
-      const { count } = await tx.orders.updateMany({ where: { id: orderId, status: 'Pending' }, data: { status: 'Deposited' } });
-      if (!count) return false;
+      // Hai khoản cọc cùng hạng mục của cùng đám cưới không được chạy song song: khóa theo (đám cưới, hạng mục) rồi kiểm tra lại
+      if (categoryId) {
+        await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`${o.wedding_id}:${categoryId}`}))`;
+        const other = await tx.orders.findFirst({ where: { wedding_id: o.wedding_id, status: 'Deposited', id: { not: orderId }, vendor_profiles: { category_id: categoryId } }, select: { id: true } });
+        if (other) return 'TAKEN' as const;
+      }
+      // Sảnh (Trung tâm tiệc cưới): hai khoản cọc cùng sảnh, cùng ngày không chạy song song; sảnh vừa bận thì không ghi nhận
+      if (o.package_id && o.event_date) {
+        await lockHallDay(tx, o.package_id, ymd(o.event_date));
+        if (await findHallConflict(tx, o.package_id, ymd(o.event_date), orderId)) return 'HALL' as const;
+      }
+      const r = await tx.orders.updateMany({ where: { id: orderId, status: 'Pending', OR: [{ deposit_due_date: null }, { deposit_due_date: { gt: paidAt } }] }, data: { status: 'Deposited' } });
+      if (!r.count) return false;
       await tx.payments.upsert({
         where: { order_id: orderId },
         create: { order_id: orderId, status: 'Paid', transaction_code: txCode, paid_date: paidAt },
         update: { status: 'Paid', transaction_code: txCode, paid_date: paidAt },
       });
       await tx.invoices.create({ data: { order_id: orderId, invoice_code: receiptCode, type: 'DepositReceipt' } });
+      await tx.plan_vendors.upsert({ where: { wedding_id_vendor_id: { wedding_id: o.wedding_id!, vendor_id: o.vendor_id! } }, create: { wedding_id: o.wedding_id!, vendor_id: o.vendor_id! }, update: {} });
       return true;
     });
+    if (done === 'TAKEN') {
+      this.logger.warn(`Khách đã trả cọc (mã ${txCode}) cho đơn ${o.order_code} nhưng hạng mục đã có đơn khác đang Deposited: không ghi nhận, cần hoàn tiền thủ công.`);
+      return 'CATEGORY_TAKEN';
+    }
+    if (done === 'HALL') {
+      this.logger.warn(`Khách đã trả cọc (mã ${txCode}) cho đơn ${o.order_code} nhưng sảnh đã bận ngày thực hiện: không ghi nhận, cần hoàn tiền thủ công.`);
+      return 'HALL_BUSY';
+    }
     if (!done) {
       const now = await this.prisma.orders.findUnique({ where: { id: orderId }, select: { status: true } });
       if (now?.status === 'Deposited' || now?.status === 'Completed') return 'ALREADY';
@@ -327,8 +455,7 @@ export class OrdersService {
     }
     const deposit = Number(o.deposit_amount);
 
-    await onOrderDeposited(this.prisma, { id: o.id, wedding_id: o.wedding_id!, vendor_id: o.vendor_id!, event_date: o.event_date! });
-
+    await this.timelineHook('đặt cọc', o.order_code, () => onOrderDeposited(this.prisma, { id: o.id, wedding_id: o.wedding_id!, vendor_id: o.vendor_id!, event_date: o.event_date! }));
     const conversationId = await this.conversationOf(o);
     if (conversationId) {
       await postMessage(this.prisma, {
@@ -337,7 +464,7 @@ export class OrdersService {
         type: 'DepositReceipt',
         orderId,
         isRead: true,
-        content: `Giấy xác nhận cọc ${receiptCode}: đã nhận ${money(deposit)} cho đơn ${o.order_code}. Số còn lại thanh toán trực tiếp cho nhà cung cấp.`,
+        content: `Giấy xác nhận cọc ${receiptCode}: đã nhận ${money(deposit)} cho đơn ${o.order_code}. Số còn lại ${money(Number(o.total_amount) - deposit)} thanh toán trực tiếp với NCC.`,
       });
     }
     await notify(this.prisma, {
@@ -347,283 +474,423 @@ export class OrdersService {
       content: `Đơn ${o.order_code} đã được đặt cọc ${money(deposit)}.`,
       referenceType: 'Order',
       referenceId: orderId,
-    });
+    }).catch(() => undefined);
     return 'PAID';
   }
 
-  // ================= Phía nhà cung cấp =================
+  // ================= Phía nhà cung cấp: đọc =================
 
   async listForVendor(userId: string, q: ListQuery) {
     const v = await this.vendorOf(userId);
-    const rows = await this.prisma.orders.findMany({ where: { vendor_id: v.id }, include: ORDER_INCLUDE, orderBy: { order_code: 'desc' } });
-    const convs = await this.prisma.conversations.findMany({ where: { vendor_id: userId } });
+    await this.jobs.sweep({ vendorId: v.id });
+    const convs = await this.prisma.conversations.findMany({ where: { vendor_id: userId }, select: { id: true, couple_id: true } });
     const convByCouple = new Map(convs.map((c) => [c.couple_id, c.id]));
 
-    let list = rows;
-    if (q.conversationId) {
-      const cp = convs.find((c) => c.id === q.conversationId)?.couple_id;
-      list = list.filter((o) => o.weddings?.user_id === cp);
+    const where: Prisma.ordersWhereInput = { vendor_id: v.id };
+    const and: Prisma.ordersWhereInput[] = [];
+    if (q.status) {
+      if (!(ORDER_STATUSES as readonly string[]).includes(q.status)) return fail('VALIDATION_ERROR', 'Trạng thái đơn không hợp lệ.', 400, { status: `Chọn trong: ${ORDER_STATUSES.join(', ')}.` });
+      where.status = q.status;
     }
-    if (q.status) list = list.filter((o) => serviceStatusOf(o.status) === q.status);
-    if (q.paymentStatus) list = list.filter((o) => paymentStatusOf(o.status) === q.paymentStatus);
-    if (q.from) list = list.filter((o) => ymd(o.event_date) >= q.from!);
-    if (q.to) list = list.filter((o) => ymd(o.event_date) <= q.to!);
-    const term = q.q?.trim().toLowerCase();
+    if (q.conversationId) {
+      const couple = convs.find((c) => c.id === q.conversationId)?.couple_id;
+      if (!couple) return Paginated.of([], 0, { page: 1, pageSize: Math.min(100, Math.max(1, Math.trunc(Number(q.pageSize)) || 20)) });
+      where.weddings = { user_id: couple };
+    }
+    if (q.from && DATE.test(q.from)) and.push({ event_date: { gte: new Date(`${q.from}T00:00:00Z`) } });
+    if (q.to && DATE.test(q.to)) and.push({ event_date: { lte: new Date(`${q.to}T00:00:00Z`) } });
+    if (q.depositFrom || q.depositTo) {
+      const paid: Prisma.DateTimeNullableFilter = {};
+      if (q.depositFrom && DATE.test(q.depositFrom)) paid.gte = startOfDayVn(q.depositFrom);
+      if (q.depositTo && DATE.test(q.depositTo)) paid.lte = new Date(endOfDayVn(q.depositTo).getTime() + 59_999);
+      and.push({ payments: { status: 'Paid', paid_date: paid } });
+    }
+    const term = q.q?.trim();
     if (term) {
       const digits = term.replace(/\D/g, '');
-      list = list.filter((o) => (o.order_code ?? '').toLowerCase().includes(term) || (o.customer_name ?? '').toLowerCase().includes(term) || (digits.length >= 3 && (o.customer_phone ?? '').replace(/\D/g, '').includes(digits)));
+      and.push({
+        OR: [
+          { order_code: { contains: term, mode: 'insensitive' } },
+          { customer_name: { contains: term, mode: 'insensitive' } },
+          { customer_phone: { contains: term } },
+          ...(digits.length >= 3 ? [{ customer_phone: { contains: digits } }] : []),
+        ],
+      });
     }
+    if (and.length) where.AND = and;
 
     const page = Math.max(1, Math.trunc(Number(q.page)) || 1);
     const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(q.pageSize)) || 20));
-    const slice = list.slice((page - 1) * pageSize, page * pageSize);
-    const items = await Promise.all(
-      slice.map(async (o) => toServiceOrder(o, convByCouple.get(o.weddings?.user_id ?? null) ?? '', o.status === 'Cancelled' ? await this.cancelReason(o.id) : null)),
+    const [total, rows] = await Promise.all([
+      this.prisma.orders.count({ where }),
+      this.prisma.orders.findMany({ where, include: ORDER_INCLUDE, orderBy: [{ created_date: 'desc' }, { order_code: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
+    ]);
+    return Paginated.of(
+      rows.map((o) => toOrderDto(o, convByCouple.get(o.weddings!.user_id!) ?? '')),
+      total,
+      { page, pageSize },
     );
-    return Paginated.of(items, list.length, { page, pageSize });
   }
 
+  /** Số đơn theo từng trạng thái (7 trạng thái thô), không phụ thuộc bộ lọc. */
   async countsForVendor(userId: string) {
     const v = await this.vendorOf(userId);
-    const rows = await this.prisma.orders.findMany({ where: { vendor_id: v.id }, select: { status: true } });
-    const counts: Record<string, number> = { DRAFT: 0, AWAITING_CONFIRMATION: 0, REVISION_REQUESTED: 0, CONFIRMED: 0, CANCELLED: 0 };
-    for (const r of rows) counts[serviceStatusOf(r.status)]++;
+    await this.jobs.sweep({ vendorId: v.id });
+    const rows = await this.prisma.orders.groupBy({ by: ['status'], where: { vendor_id: v.id }, _count: { _all: true } });
+    const counts: Record<string, number> = Object.fromEntries(ORDER_STATUSES.map((s) => [s, 0]));
+    for (const r of rows) if (r.status) counts[r.status] = r._count._all;
     return counts;
   }
 
   async getForVendor(userId: string, id: string) {
     const { order } = await this.ownedByVendor(userId, id);
-    return this.serviceOrderOf(order.id);
+    return toOrderDto(order, await this.conversationOf(order));
   }
 
-  async create(userId: string, body: { conversationId?: string; content?: ContentBody; send?: boolean }) {
+  // ================= Phía nhà cung cấp: ghi =================
+
+  /** Tạo đơn trong hội thoại (send = false: lưu nháp, true: gửi luôn). Backend tự suy WeddingId từ hội thoại. */
+  async create(userId: string, body: { conversationId?: string; content?: ContentInput; send?: boolean }) {
     const v = await this.vendorOf(userId);
     const conv = body.conversationId && UUID.test(body.conversationId) ? await this.prisma.conversations.findFirst({ where: { id: body.conversationId, vendor_id: userId } }) : null;
     if (!conv) return fail('CONVERSATION_NOT_FOUND', 'Không tìm thấy hội thoại.', 404);
-    const wedding = conv.couple_id ? await this.prisma.weddings.findUnique({ where: { user_id: conv.couple_id } }) : null;
+    const wedding = await this.prisma.weddings.findUnique({ where: { user_id: conv.couple_id ?? undefined } });
     if (!wedding) return fail('WEDDING_NOT_SET', 'Khách chưa thiết lập thông tin đám cưới nên chưa tạo được đơn.', 409);
 
-    const p = this.parse(body.content ?? {}, !!body.send);
-    const code = await this.nextCode('DH', 'order');
+    const send = wantsSend(body);
+    const p = parseContent(body.content ?? {}, send ? 'send' : 'draft', { weddingDate: wedding.wedding_date ? ymd(wedding.wedding_date) : null });
+    if (send) {
+      // Gửi / tạo lại đơn khi hạng mục đã có đơn Deposited khác: chặn, chưa tạo gì (lưu nháp thì vẫn được)
+      const taken = await this.depositedElsewhere(wedding.id, v.category_id);
+      if (taken) return fail('CATEGORY_ALREADY_DEPOSITED', categoryTakenMessage('VENDOR', taken), 409);
+    }
+    const hall = await this.checkHall(v, p, { strict: send });
+    p.packageId = hall?.id ?? null;
+    await this.checkItemPackages(v.id, p);
+    const code = await this.nextCode('DH');
     const created = await this.prisma.$transaction(async (tx) => {
       const o = await tx.orders.create({ data: { ...this.orderData(p), vendor_id: v.id, wedding_id: wedding.id, order_code: code, status: 'Draft' } });
-      if (p.lines.length) await tx.order_items.createMany({ data: this.itemRows(o.id, p) });
+      if (p.items.length) await tx.order_items.createMany({ data: this.itemRows(o.id, p) });
       return o;
     });
-    if (body.send) await this.doSend(userId, created.id);
-    return this.serviceOrderOf(created.id);
+    if (send) await this.applySend(userId, await this.loadFull(created.id), p, hall?.name);
+    return this.dtoOf(created.id);
   }
 
-  async saveDraft(userId: string, id: string, content: ContentBody) {
-    const { order } = await this.ownedByVendor(userId, id);
-    if (order.status !== 'Draft') return fail('ORDER_NOT_REVISABLE', 'Chỉ lưu nháp được đơn chưa gửi. Đơn đã gửi chỉ sửa và gửi lại.', 409);
-    const p = this.parse(content ?? {}, false);
+  async saveDraft(userId: string, id: string, content: ContentInput) {
+    const { vendor, order } = await this.ownedByVendor(userId, id);
+    if (order.status !== 'Draft') return fail('ORDER_NOT_DRAFT', 'Chỉ lưu nháp được đơn chưa gửi. Đơn đã gửi chỉ cập nhật và gửi lại.', 409);
+    const p = parseContent(content ?? {}, 'draft');
+    p.packageId = (await this.checkHall(vendor, p, { strict: false }))?.id ?? null;
+    await this.checkItemPackages(vendor.id, p);
     await this.prisma.$transaction([
       this.prisma.orders.update({ where: { id }, data: this.orderData(p) }),
       this.prisma.order_items.deleteMany({ where: { order_id: id } }),
       this.prisma.order_items.createMany({ data: this.itemRows(id, p) }),
     ]);
-    return this.serviceOrderOf(id);
+    return this.dtoOf(id);
   }
 
-  async send(userId: string, id: string, body: { content?: ContentBody }) {
+  /** Gửi đơn Draft lần đầu, hoặc "Cập nhật đơn" khi Pending / NeedRevision (hạn cọc đặt lại 24 giờ, thẻ mới trong chat). */
+  async send(userId: string, id: string, body: { content?: ContentInput }) {
     const { vendor, order } = await this.ownedByVendor(userId, id);
     if (vendor.status === 'Hidden') return fail('VENDOR_HIDDEN', 'Hồ sơ đang bị ẩn nên chưa gửi đơn mới được. Vui lòng liên hệ Forever.', 409);
     if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status ?? '')) {
-      return fail('ORDER_NOT_REVISABLE', order.status === 'Deposited' || order.status === 'Completed' ? 'Đơn đã đặt cọc, không sửa và gửi lại được.' : 'Đơn đã hủy hoặc hết hạn.', 409);
+      return fail('ORDER_NOT_SENDABLE', 'Chỉ gửi được đơn nháp, hoặc cập nhật đơn đang chờ đặt cọc / chờ chỉnh sửa.', 409);
     }
-    const p = this.parse(body.content ?? {}, true);
-
-    if (order.status !== 'Draft') {
-      const changes = contentChanges(contentOf(order), this.asContent(p));
-      if (!changes.length) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn đang gửi.', 400);
-    }
-    const before = contentOf(order);
-    await this.prisma.$transaction([
-      this.prisma.orders.update({ where: { id }, data: this.orderData(p) }),
-      this.prisma.order_items.deleteMany({ where: { order_id: id } }),
-      this.prisma.order_items.createMany({ data: this.itemRows(id, p) }),
-    ]);
-    await this.doSend(userId, id, order.status === 'Draft' ? null : contentChanges(before, this.asContent(p)));
-    return this.serviceOrderOf(id);
+    const taken = await this.depositedElsewhere(order.wedding_id, order.vendor_profiles?.service_categories?.id ?? null, order.id);
+    if (taken) return fail('CATEGORY_ALREADY_DEPOSITED', categoryTakenMessage('VENDOR', taken), 409);
+    const p = parseContent(body.content ?? {}, 'send', { currentEventDate: order.status === 'Draft' ? undefined : ymd(order.event_date), weddingDate: ymd(order.weddings?.wedding_date ?? null) || null });
+    // Đơn chưa cọc chưa giữ sảnh nên luôn kiểm lại sảnh có bận ngày thực hiện không
+    const hall = await this.checkHall(vendor, p, { strict: true, exceptOrderId: order.id });
+    p.packageId = hall?.id ?? null;
+    await this.checkItemPackages(vendor.id, p);
+    if (order.status !== 'Draft' && sameContent(p, this.currentOf(order))) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn đang gửi.', 400);
+    await this.applySend(userId, order, p, hall?.name);
+    return this.dtoOf(id);
   }
 
-  /** Chuyển đơn sang Chờ đặt cọc, thêm tin vào hội thoại và báo cho khách. changes = null: gửi lần đầu. */
-  private async doSend(userId: string, id: string, changes: string[] | null = null) {
-    const o = await this.loadFull(id);
-    const total = Number(o.total_amount);
-    const deposit = Number(o.deposit_amount);
-    const conversationId = await this.conversationOf(o);
+  /** Lưu nội dung, chuyển Pending, đặt hạn cọc = bây giờ + 24 giờ, tạo Payments Unpaid, ghi OrderRevisions, gửi thẻ đơn mới. */
+  private async applySend(userId: string, order: OrderRow, p: ParsedContent, hallName?: string) {
+    const id = order.id;
+    const deposit = depositOf(p.total, p.depositPercent);
+    const dueDate = new Date(Date.now() + 24 * HOUR);
+    const oldTotal = Number(order.total_amount);
 
-    await this.prisma.$transaction([
-      this.prisma.orders.update({ where: { id }, data: { status: 'Pending' } }),
-      this.prisma.payments.upsert({ where: { order_id: id }, create: { order_id: id, status: 'Unpaid' }, update: {} }),
-      ...(changes
-        ? [this.prisma.order_revisions.updateMany({ where: { order_id: id, status: 'Requested' }, data: { status: 'Applied', new_total_amount: total, applied_date: new Date() } })]
-        : []),
-    ]);
-    if (conversationId) {
-      if (changes) {
-        await postMessage(this.prisma, {
-          conversationId,
-          senderId: null,
-          orderId: id,
-          isRead: true,
-          content: `Đã cập nhật và gửi lại đơn ${o.order_code}${changes.length ? `\n${changes.map((c) => `- ${c}`).join('\n')}` : ''}`,
+    await this.prisma.$transaction(async (tx) => {
+      // Có điều kiện trạng thái: khách vừa cọc (Deposited) hay đơn vừa hết hạn thì không kéo về Pending
+      const r = await tx.orders.updateMany({
+        where: { id, status: { in: ['Draft', 'Pending', 'NeedRevision'] } },
+        data: { ...this.orderData(p), deposit_amount: deposit, deposit_due_date: dueDate, status: 'Pending' },
+      });
+      if (!r.count) return fail('ORDER_NOT_SENDABLE', 'Đơn vừa đổi trạng thái (khách đã đặt cọc hoặc đơn đã hết hạn). Tải lại để xem.', 409);
+      await tx.order_items.deleteMany({ where: { order_id: id } });
+      await tx.order_items.createMany({ data: this.itemRows(id, p) });
+      if (!order.payments) await tx.payments.create({ data: { order_id: id, status: 'Unpaid' } });
+      if (order.status !== 'Draft') {
+        // Đóng mọi yêu cầu của khách đang chờ (đọc trong transaction: khách có thể vừa gửi yêu cầu lúc NCC đang soạn)
+        const applied = await tx.order_revisions.updateMany({
+          where: { order_id: id, revision_type: 'BeforeDeposit', status: 'Requested' },
+          data: { status: 'Applied', new_total_amount: p.total, applied_date: new Date() },
         });
+        if (!applied.count) await tx.order_revisions.create({ data: { order_id: id, revision_type: 'BeforeDeposit', request_note: null, old_total_amount: oldTotal, new_total_amount: p.total, status: 'Applied', applied_date: new Date() } });
       }
+    });
+
+    const conversationId = await this.conversationOf(order);
+    const updated = order.status !== 'Draft';
+    if (conversationId) {
       await postMessage(this.prisma, {
         conversationId,
         senderId: userId,
         type: 'Order',
         orderId: id,
-        content: `Đơn dịch vụ ${o.order_code}: tổng ${money(total)}, đặt cọc ${Number(o.deposit_percent)}% = ${money(deposit)}. Hạn thanh toán cọc: ${o.deposit_due_date ? ymdVN(o.deposit_due_date) : ymd(o.event_date)}.`,
-      });
-    }
-    await notify(this.prisma, {
-      userId: o.weddings!.user_id!,
-      type: 'OrderSent',
-      title: changes ? 'Nhà cung cấp đã gửi lại đơn' : 'Nhà cung cấp đã gửi đơn dịch vụ',
-      content: `Đơn ${o.order_code} đang chờ bạn đặt cọc ${money(deposit)}.`,
-      referenceType: 'Order',
-      referenceId: id,
-    });
-  }
-
-  /** NCC xác nhận đã thu phần còn lại (ngoài hệ thống): đơn hoàn thành, lập hóa đơn và tính hoa hồng. */
-  async recordPayment(userId: string, id: string, body: { installmentId?: string; amount?: number; paidAt?: string; method?: string }) {
-    const { vendor, order } = await this.ownedByVendor(userId, id);
-    if (order.status !== 'Deposited') {
-      return fail('ORDER_NOT_PAYABLE', order.status === 'Completed' ? 'Đơn đã thu đủ.' : 'Chỉ ghi nhận thanh toán khi đơn đã được đặt cọc.', 409);
-    }
-    const total = Number(order.total_amount);
-    const remaining = total - Number(order.deposit_amount);
-    const errors: Record<string, string> = {};
-    if (body.installmentId !== 'final') errors.installmentId = 'Đơn chỉ ghi nhận được đợt thanh toán phần còn lại (đợt cọc do hệ thống ghi nhận).';
-    if (Number(body.amount) !== remaining) errors.amount = `Số tiền phải đúng phần còn lại: ${money(remaining)}.`;
-    if (!['BANK_TRANSFER', 'CASH'].includes(String(body.method))) errors.method = 'Chọn chuyển khoản hoặc tiền mặt.';
-    const paidAt = body.paidAt ? new Date(body.paidAt) : new Date();
-    if (Number.isNaN(paidAt.getTime())) errors.paidAt = 'Thời điểm nhận tiền không hợp lệ.';
-    if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Khoản thu chưa hợp lệ.', 400, errors);
-
-    await this.complete(vendor, order, paidAt, false);
-    return this.serviceOrderOf(id);
-  }
-
-  /**
-   * NCC quên xác nhận thu đủ: đơn đã cọc qua AUTO_COMPLETE_DAYS ngày sau ngày sự kiện (giờ VN) thì hệ thống tự hoàn thành,
-   * coi như đã thu đủ phần còn lại vào lúc tự hoàn thành, và tính hoa hồng như khi NCC tự xác nhận (kỳ đã thanh toán thì dồn kỳ sau).
-   * Trả về số đơn đã tự hoàn thành.
-   */
-  async autoCompleteOverdue(now = new Date()) {
-    const cutoff = new Date(`${ymdVN(new Date(now.getTime() - AUTO_COMPLETE_DAYS * 86_400_000))}T00:00:00Z`);
-    const due = await this.prisma.orders.findMany({ where: { status: 'Deposited', event_date: { lte: cutoff } }, include: ORDER_INCLUDE });
-    let done = 0;
-    for (const order of due) {
-      const vendor = order.vendor_id ? await this.prisma.vendor_profiles.findUnique({ where: { id: order.vendor_id }, select: { id: true, category_id: true, business_name: true } }) : null;
-      if (!vendor?.category_id) continue;
-      // Một đơn lỗi (VD NCC vừa tự xác nhận cùng lúc) không chặn các đơn còn lại
-      try {
-        await this.complete(vendor, order, now, true);
-        done++;
-      } catch {
-        continue;
-      }
-    }
-    return done;
-  }
-
-  /** Đơn hoàn thành: lập hóa đơn cuối, tính hoa hồng vào bảng kê, nhắn vào hội thoại và báo cặp đôi (tự động thì báo cả NCC). */
-  private async complete(vendor: { id: string; category_id: string | null }, order: OrderRow, paidAt: Date, auto: boolean) {
-    const id = order.id;
-    const total = Number(order.total_amount);
-    const category = await this.prisma.service_categories.findUniqueOrThrow({ where: { id: vendor.category_id! } });
-    const rate = Number(category.commission_rate);
-    const commission = Math.round((total * rate) / 100);
-    // Kỳ tính hoa hồng là tháng hoàn thành. Bảng kê đã thanh toán thì đã khép lại: hoa hồng của đơn hoàn thành sau đó
-    // được tính dồn sang bảng kê tháng sau (lặp tới kỳ chưa thanh toán). Hạn thanh toán là ngày 25 của tháng sau kỳ.
-    // Tháng hoàn thành tính theo giờ Việt Nam (cùng cách hiển thị tháng ở bảng kê)
-    let periodStart = new Date(`${ymdVN(paidAt).slice(0, 7)}-01T00:00:00Z`);
-    for (;;) {
-      const closed = await this.prisma.commission_statements.findUnique({ where: { vendor_id_period_month: { vendor_id: vendor.id, period_month: periodStart } }, select: { status: true } });
-      if (closed?.status !== 'Paid') break;
-      periodStart = new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth() + 1, 1));
-    }
-    const dueDate = new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth() + 1, 25));
-    const invoiceCode = await this.nextCode('HD', 'final');
-
-    await this.prisma.$transaction(async (tx) => {
-      // Chỉ đơn còn ở trạng thái đã cọc (job tự hoàn thành và NCC bấm cùng lúc thì chỉ một bên ghi)
-      const { count } = await tx.orders.updateMany({ where: { id, status: 'Deposited' }, data: { status: 'Completed', completed_date: paidAt } });
-      if (!count) return fail('ORDER_NOT_PAYABLE', 'Đơn đã thu đủ.', 409);
-      await tx.invoices.create({ data: { order_id: id, invoice_code: invoiceCode, type: 'FinalInvoice' } });
-      const st = await tx.commission_statements.upsert({
-        where: { vendor_id_period_month: { vendor_id: vendor.id, period_month: periodStart } },
-        create: { vendor_id: vendor.id, period_month: periodStart, due_date: dueDate, total_orders: 0, total_amount: 0, status: 'Unpaid' },
-        update: {},
-      });
-      await tx.commissions.create({ data: { order_id: id, statement_id: st.id, order_amount: total, rate, amount: commission } });
-      await tx.commission_statements.update({ where: { id: st.id }, data: { total_orders: { increment: 1 }, total_amount: { increment: commission } } });
-    });
-
-    const conversationId = await this.conversationOf(order);
-    if (conversationId) {
-      await postMessage(this.prisma, {
-        conversationId,
-        senderId: null,
-        type: 'FinalInvoice',
-        orderId: id,
-        isRead: true,
-        content: auto
-          ? `Hóa đơn ${invoiceCode}: đơn ${order.order_code} (tổng ${money(total)}) được hệ thống tự hoàn thành ${AUTO_COMPLETE_DAYS} ngày sau ngày sự kiện.`
-          : `Hóa đơn ${invoiceCode}: đã thu đủ đơn ${order.order_code}, tổng ${money(total)}. Đơn hoàn thành.`,
+        content: `Đơn dịch vụ ${order.order_code}${hallName ? ` (${hallName})` : ''}: tổng ${money(p.total)}, đặt cọc ${p.depositPercent}% = ${money(deposit)}. Hạn thanh toán cọc: ${ymdVn(dueDate)}.`,
       });
     }
     await notify(this.prisma, {
       userId: order.weddings!.user_id!,
-      type: 'OrderCompleted',
-      title: 'Đơn dịch vụ đã hoàn thành',
-      content: `Đơn ${order.order_code} đã được thanh toán đủ và hoàn thành.`,
+      type: 'OrderSent',
+      title: updated ? 'Nhà cung cấp đã gửi lại đơn' : 'Nhà cung cấp đã gửi đơn dịch vụ',
+      content: `Đơn ${order.order_code} đang chờ bạn đặt cọc ${money(deposit)}.`,
       referenceType: 'Order',
       referenceId: id,
-    });
-    if (auto && order.vendor_profiles?.user_id) {
-      await notify(this.prisma, {
-        userId: order.vendor_profiles.user_id,
-        type: 'OrderCompleted',
-        title: 'Hệ thống đã tự hoàn thành đơn',
-        content: `Đơn ${order.order_code} (${order.customer_name}) chưa được xác nhận thu đủ sau ${AUTO_COMPLETE_DAYS} ngày kể từ ngày sự kiện ${ymd(order.event_date)
-          .split('-')
-          .reverse()
-          .join('/')} nên hệ thống đã tự hoàn thành. Hoa hồng ${money(commission)} được tính vào kỳ ${ymd(periodStart).slice(5, 7)}/${ymd(periodStart).slice(0, 4)}.`,
-        referenceType: 'Order',
-        referenceId: id,
-      });
-    }
+    }).catch(() => undefined);
   }
 
-  async cancel(userId: string, id: string, reason: string) {
-    const { order } = await this.ownedByVendor(userId, id);
-    const text = (reason ?? '').trim();
-    if (!text) return fail('VALIDATION_ERROR', 'Nhập lý do hủy đơn.', 400);
-    if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status ?? '')) {
-      return fail('CONFLICT', order.status === 'Deposited' || order.status === 'Completed' ? 'Đơn đã nhận cọc, không thể hủy.' : 'Đơn đã hủy hoặc hết hạn.', 409);
-    }
-    await this.prisma.orders.update({ where: { id }, data: { status: 'Cancelled', cancelled_date: new Date() } });
-    if (order.status !== 'Draft') {
-      const conversationId = await this.conversationOf(order);
-      if (conversationId) {
-        await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `Đã hủy đơn ${order.order_code}. Lý do: ${text}` });
+  /**
+   * Sửa đơn sau cọc (Deposited): hạng mục, ngày, ghi chú. Khóa tỷ lệ và tiền cọc; tên, số điện thoại giữ nguyên.
+   * Bắt buộc "Nội dung thay đổi" (khách thấy). Ghi OrderRevisions AfterDeposit trạng thái Applied; đơn vẫn Deposited.
+   * Khách đang có yêu cầu chỉnh sửa (AfterDeposit, Requested) thì yêu cầu đó cũng thành Applied.
+   */
+  async editDeposited(userId: string, id: string, body: { content?: ContentInput; changeNote?: string }) {
+    const { vendor, order } = await this.ownedByVendor(userId, id);
+    if (order.status !== 'Deposited') return fail('ORDER_NOT_EDITABLE', 'Chỉ sửa được đơn đã đặt cọc.', 409);
+    const changeNote = (body.changeNote ?? '').trim();
+    if (!changeNote) return fail('VALIDATION_ERROR', 'Nhập nội dung thay đổi để khách biết.', 400, { changeNote: 'Nhập nội dung thay đổi để khách biết.' });
+
+    const current = this.currentOf(order);
+    const p = parseContent({ ...(body.content ?? {}), customerName: current.customerName, customerPhone: current.customerPhone, depositPercent: current.depositPercent }, 'edit', { currentEventDate: current.eventDate, weddingDate: ymd(order.weddings?.wedding_date ?? null) || null });
+    // Đổi sảnh hoặc ngày thì sảnh mới phải trống ngày đó; giữ nguyên thì không kiểm lại (đơn cũ chưa có sảnh: phải chọn)
+    const hall = await this.checkHall(vendor, p, { strict: true, exceptOrderId: id, keep: { packageId: order.package_id, eventDate: current.eventDate } });
+    p.packageId = hall?.id ?? null;
+    // Việc chi tiết đã sinh theo gói lúc cọc: sửa sau cọc không đổi gói của dòng (dòng cùng tên giữ gói cũ, dòng mới không gắn gói)
+    for (const i of p.items) i.packageId = current.items.find((c) => c.itemName.trim().toLowerCase() === i.itemName.trim().toLowerCase())?.packageId ?? null;
+    const deposit = Number(order.deposit_amount);
+    if (p.total < deposit) return fail('ORDER_TOTAL_BELOW_DEPOSIT', `Tổng mới không được nhỏ hơn tiền đã cọc (${money(deposit)}).`, 400);
+    if (sameContent(p, current)) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn hiện tại.', 400);
+
+    const changes = changeTypesBetween(current, p);
+    const hallMoved = !!hall && (hall.id !== order.package_id || p.eventDate !== current.eventDate);
+    await this.prisma.$transaction(async (tx) => {
+      if (hallMoved) {
+        // Khách khác có thể đang cọc đúng sảnh, đúng ngày đó: khóa (sảnh, ngày) rồi kiểm lại
+        await lockHallDay(tx, hall.id, p.eventDate);
+        const busy = await findHallConflict(tx, hall.id, p.eventDate, id);
+        if (busy) return fail('HALL_BUSY', hallBusyMessage('VENDOR', hall.name, p.eventDate, busy), 409);
       }
-      await notify(this.prisma, {
-        userId: order.weddings!.user_id!,
-        type: 'OrderCancelled',
-        title: 'Đơn dịch vụ đã bị hủy',
-        content: `Đơn ${order.order_code} đã bị nhà cung cấp hủy. Lý do: ${text}`,
-        referenceType: 'Order',
-        referenceId: id,
+      const r = await tx.orders.updateMany({ where: { id, status: 'Deposited' }, data: { event_date: new Date(p.eventDate), note: p.note, total_amount: p.total, package_id: p.packageId } });
+      if (!r.count) return fail('ORDER_NOT_EDITABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 409);
+      await tx.order_items.deleteMany({ where: { order_id: id } });
+      await tx.order_items.createMany({ data: this.itemRows(id, p) });
+      await tx.order_revisions.updateMany({
+        where: { order_id: id, revision_type: 'AfterDeposit', status: 'Requested' },
+        data: { status: 'Applied', new_total_amount: p.total, applied_date: new Date() },
+      });
+      await tx.order_revisions.create({
+        data: {
+          order_id: id,
+          revision_type: 'AfterDeposit',
+          request_note: changeNote,
+          old_total_amount: order.total_amount,
+          new_total_amount: p.total,
+          status: 'Applied',
+          applied_date: new Date(),
+          order_revision_changes: { create: changes.map((change_type) => ({ change_type })) },
+        },
+      });
+    });
+
+    // Đổi ngày thực hiện: việc chi tiết neo theo ngày đó trên timeline của khách phải tính lại
+    if (changes.includes('EventDate')) await this.timelineHook('đổi ngày thực hiện', order.order_code, () => onOrderEventDateChanged(this.prisma, id));
+
+    const conversationId = await this.conversationOf(order);
+    if (conversationId) {
+      await postMessage(this.prisma, { conversationId, senderId: userId, type: 'Order', orderId: id, content: `Đơn dịch vụ ${order.order_code} đã được cập nhật: ${changeNote}` });
+    }
+    await notify(this.prisma, {
+      userId: order.weddings!.user_id!,
+      type: 'OrderSent',
+      title: 'Nhà cung cấp đã cập nhật đơn',
+      content: `Đơn ${order.order_code} đã được cập nhật: ${changeNote}`,
+      referenceType: 'Order',
+      referenceId: id,
+    }).catch(() => undefined);
+    return this.dtoOf(id);
+  }
+
+  /**
+   * NCC từ chối yêu cầu chỉnh sửa của khách với đơn đã cọc (AfterDeposit, Requested): yêu cầu thành Rejected, đơn giữ nguyên.
+   * Lý do (tùy chọn) chỉ nằm trong tin hệ thống, không có cột lưu. Trước cọc không có từ chối: NCC "Cập nhật đơn".
+   */
+  async rejectRevision(userId: string, id: string, body: { note?: string }) {
+    const { order } = await this.ownedByVendor(userId, id);
+    if (order.status !== 'Deposited') return fail('REVISION_NOT_FOUND', 'Đơn không có yêu cầu chỉnh sửa đang chờ.', 409);
+    const note = body?.note?.trim() || null;
+    const r = await this.prisma.order_revisions.updateMany({ where: { order_id: id, revision_type: 'AfterDeposit', status: 'Requested' }, data: { status: 'Rejected' } });
+    if (!r.count) return fail('REVISION_NOT_FOUND', 'Đơn không có yêu cầu chỉnh sửa đang chờ.', 409);
+
+    const conversationId = await this.conversationOf(order);
+    if (conversationId) {
+      await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `NCC đã từ chối yêu cầu chỉnh sửa đơn ${order.order_code}${note ? ` · ${note}` : ''}. Đơn giữ nguyên.` });
+    }
+    await notify(this.prisma, {
+      userId: order.weddings!.user_id!,
+      type: 'OrderRevisionRejected',
+      title: 'Nhà cung cấp từ chối yêu cầu chỉnh sửa',
+      content: `Yêu cầu chỉnh sửa đơn ${order.order_code} không được chấp nhận${note ? `: ${note}` : ''}.`,
+      referenceType: 'Order',
+      referenceId: id,
+    }).catch(() => undefined);
+    return this.dtoOf(id);
+  }
+
+  /** Hoàn tất: chỉ khi Deposited và đã qua EventDate (giờ VN). Tạo hoa hồng vào bảng kê tháng hoàn thành. */
+  /**
+   * NCC hoàn tất đơn. Phần còn lại (tiền mặt) phải được ghi nhận: chưa ghi nhận mà body không có restReceived = true thì 409 REST_PAYMENT_NOT_RECORDED
+   * (kèm số tiền để giao diện hỏi); có restReceived = true thì ghi nhận rồi hoàn tất cùng một transaction.
+   */
+  async complete(userId: string, id: string, body: { restReceived?: unknown } = {}) {
+    const { order } = await this.ownedByVendor(userId, id);
+    if (order.status !== 'Deposited') return fail('ORDER_NOT_COMPLETABLE', 'Chỉ hoàn tất được đơn đã đặt cọc.', 409);
+    if (todayVn() <= ymd(order.event_date)) return fail('ORDER_EVENT_NOT_PASSED', 'Chỉ hoàn tất được khi đã qua ngày thực hiện.', 409);
+    const gate = completeGate(this.restOf(order), body?.restReceived);
+    if (typeof gate !== 'string') return fail(gate.code, gate.message, gate.status, gate.details);
+    if (!(await completeOrder(this.prisma, id, new Date(), 'VENDOR', { restReceived: gate === 'record' }))) return fail('ORDER_NOT_COMPLETABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 409);
+    return this.dtoOf(id);
+  }
+
+  private restOf(order: OrderRow) {
+    return restPaymentOf({ status: order.status, total: Number(order.total_amount), deposit: Number(order.deposit_amount) }, order.timeline_tasks[0] ?? null);
+  }
+
+  /** Đơn của NCC cho API đợt 2: một truy vấn nhẹ, không quét hết hạn và không dựng lại cả đơn. */
+  private async restOrderOf(userId: string, id: string) {
+    const o = UUID.test(id)
+      ? await this.prisma.orders.findFirst({
+          where: { id, vendor_profiles: { user_id: userId } },
+          select: {
+            id: true,
+            order_code: true,
+            status: true,
+            event_date: true,
+            wedding_id: true,
+            total_amount: true,
+            deposit_amount: true,
+            vendor_profiles: { select: { business_name: true, category_id: true } },
+            weddings: { select: { user_id: true } },
+          },
+        })
+      : null;
+    return o ?? fail('ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.', 404);
+  }
+
+  /**
+   * NCC ghi nhận đã nhận đủ tiền mặt phần còn lại (đơn Deposited hoặc Completed). Chưa có việc PAY (đơn cũ) thì tạo.
+   * Trả NGAY { restPayment, taskId }; thông báo cho khách chạy sau response.
+   */
+  async recordRestPayment(userId: string, id: string) {
+    const order = await this.restOrderOf(userId, id);
+    if (order.status !== 'Deposited' && order.status !== 'Completed') return fail('REST_PAYMENT_NOT_AVAILABLE', 'Chỉ ghi nhận được cho đơn đã đặt cọc hoặc đã hoàn thành.', 409);
+    const vendorName = order.vendor_profiles?.business_name ?? 'Nhà cung cấp';
+    const changed = await applyRestReceived(
+      this.prisma as unknown as RestDb,
+      { id: order.id, wedding_id: order.wedding_id, category_id: order.vendor_profiles?.category_id ?? null, event_date: order.event_date!, vendorName },
+      new Date(),
+    );
+    const pay = await this.prisma.timeline_tasks.findFirst({ where: { order_id: order.id, task_code: payCode(order.id) }, select: { id: true, status: true, completed_date: true } });
+    const coupleId = order.weddings?.user_id;
+    if (changed && coupleId) {
+      runAfter('thông báo nhận tiền mặt', () => notifyRestReceived(this.prisma, { orderId: order.id, taskId: pay?.id, orderCode: order.order_code, coupleUserId: coupleId, vendorUserId: userId, vendorName, amount: Number(order.total_amount) - Number(order.deposit_amount) }), (m) => this.logger.warn(m));
+    }
+    return { restPayment: restPaymentOf({ status: order.status, total: Number(order.total_amount), deposit: Number(order.deposit_amount) }, pay), taskId: pay?.id ?? null };
+  }
+
+  /** "Bỏ ghi nhận": việc PAY về Waiting. Trả NGAY { restPayment, taskId }; realtime chạy sau response. */
+  async clearRestPayment(userId: string, id: string) {
+    const order = await this.restOrderOf(userId, id);
+    if (order.status !== 'Deposited' && order.status !== 'Completed') return fail('REST_PAYMENT_NOT_AVAILABLE', 'Chỉ bỏ ghi nhận được cho đơn đã đặt cọc hoặc đã hoàn thành.', 409);
+    await clearRestReceived(this.prisma as unknown as RestDb, order.id);
+    const pay = await this.prisma.timeline_tasks.findFirst({ where: { order_id: order.id, task_code: payCode(order.id) }, select: { id: true, status: true, completed_date: true } });
+    const coupleId = order.weddings?.user_id;
+    runAfter('realtime bỏ ghi nhận tiền mặt', async () => publish({ users: coupleId ? [coupleId, userId] : [userId], event: 'task', data: { orderId: order.id, taskId: pay?.id } }), (m) => this.logger.warn(m));
+    return { restPayment: restPaymentOf({ status: order.status, total: Number(order.total_amount), deposit: Number(order.deposit_amount) }, pay), taskId: pay?.id ?? null };
+  }
+
+  /** Xuất hóa đơn cuối (mỗi đơn một lần): Deposited hoặc Completed. Tạo Invoices FinalInvoice và gửi tin FinalInvoice (NCC gửi). */
+  async finalInvoice(userId: string, id: string) {
+    const { order } = await this.ownedByVendor(userId, id);
+    if (!['Deposited', 'Completed'].includes(order.status ?? '')) return fail('INVOICE_NOT_AVAILABLE', 'Chỉ xuất được hóa đơn cho đơn đã đặt cọc hoặc đã hoàn thành.', 409);
+    if (order.invoices.some((i) => i.type === 'FinalInvoice')) return fail('INVOICE_EXISTS', 'Đơn đã xuất hóa đơn cuối.', 409);
+    // Hóa đơn cuối ghi "đã thanh toán tiền mặt": chỉ xuất khi NCC đã ghi nhận đã nhận phần còn lại
+    const rest = this.restOf(order);
+    const blocked = finalInvoiceGate(rest);
+    if (blocked) return fail(blocked.code, blocked.message, blocked.status, blocked.details);
+    const receivedOn = rest.receivedDate ? dmy(ymdVN(new Date(rest.receivedDate))) : '';
+
+    const code = await this.nextCode('HD');
+    await this.prisma.invoices.create({ data: { order_id: id, invoice_code: code, type: 'FinalInvoice' } });
+    const total = Number(order.total_amount);
+    const deposit = Number(order.deposit_amount);
+    const conversationId = await this.conversationOf(order);
+    if (conversationId) {
+      await postMessage(this.prisma, {
+        conversationId,
+        senderId: userId,
+        type: 'FinalInvoice',
+        orderId: id,
+        content: `Hóa đơn ${code} cho đơn ${order.order_code}: tổng ${money(total)}, đã cọc ${money(deposit)}, đã thanh toán tiền mặt ${money(rest.amount)}${receivedOn ? ` ngày ${receivedOn}` : ''}.`,
       });
     }
-    return this.serviceOrderOf(id);
+    return this.dtoOf(id);
+  }
+
+  /**
+   * NCC hủy đơn đã cọc: chỉ khi Deposited và hôm nay (giờ VN) còn TRƯỚC EventDate. Bắt buộc chọn lý do
+   * (CUSTOMER_REQUEST: khách mất cọc; VENDOR_UNABLE: NCC hoàn cọc ngoài hệ thống), ghi chú tùy chọn.
+   * Ghi CancelledDate, CancelReason; ghi chú (nếu có) CHỈ đưa vào tin hệ thống trong chat, không lưu cột; tin hệ thống vào chat; không tính hoa hồng; xóa việc chi tiết trên timeline của khách.
+   */
+  async cancel(userId: string, id: string, body: { reason?: string; note?: string }) {
+    const { order } = await this.ownedByVendor(userId, id);
+    const reason = body?.reason;
+    if (!reason || !(CANCEL_REASONS as readonly string[]).includes(reason)) {
+      return fail('VALIDATION_ERROR', 'Chọn lý do hủy đơn.', 400, { reason: `Chọn một trong: ${CANCEL_REASONS.join(', ')}.` });
+    }
+    if (order.status !== 'Deposited' || todayVn() >= ymd(order.event_date)) {
+      return fail('ORDER_NOT_CANCELLABLE', 'Chỉ hủy được đơn đã đặt cọc và còn trước ngày thực hiện.', 422);
+    }
+    const note = body.note?.trim() || null;
+
+    const r = await this.prisma.orders.updateMany({
+      where: { id, status: 'Deposited' },
+      data: { status: 'Cancelled', cancelled_date: new Date(), cancel_reason: reason },
+    });
+    if (!r.count) return fail('ORDER_NOT_CANCELLABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 422);
+    await this.timelineHook('hủy đơn', order.order_code, () => onOrderCancelled(this.prisma, { id, wedding_id: order.wedding_id!, vendor_id: order.vendor_id! }));
+
+    const label = CANCEL_LABEL[reason as CancelReason];
+    const conversationId = await this.conversationOf(order);
+    if (conversationId) {
+      await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `NCC đã hủy đơn ${order.order_code} · Lý do: ${label}${note ? ` · ${note}` : ''}` });
+    }
+    await notify(this.prisma, {
+      userId: order.weddings!.user_id!,
+      type: 'OrderCancelled',
+      title: 'Đơn dịch vụ đã bị hủy',
+      content: `Đơn ${order.order_code} đã bị nhà cung cấp hủy. Lý do: ${label}. Các việc chi tiết của dịch vụ ${order.vendor_profiles?.service_categories?.name ?? ''} đã được gỡ khỏi timeline.`,
+      referenceType: 'Order',
+      referenceId: id,
+    }).catch(() => undefined);
+    return this.dtoOf(id);
   }
 }
