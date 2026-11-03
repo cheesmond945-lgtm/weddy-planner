@@ -68,6 +68,8 @@ export function mainActionKey(o: Order): ActionKey | null {
 
 interface RunnerOptions {
   onOpenForm: (mode: OrderFormMode) => void
+  /** "Tạo lại đơn": có thì gọi thay cho mở form tại chỗ (trang Quản lý đơn hàng chuyển sang chat, đơn luôn soạn trong chat) */
+  onAgain?: (order: Order) => void
   onView?: (order: Order) => void
   onViewInvoice: (order: Order, type: InvoiceType) => void
 }
@@ -76,7 +78,7 @@ interface RunnerOptions {
  * Chạy thao tác của NCC trên đơn. Hoàn tất, Xuất hóa đơn và Tạo lại đơn hỏi xác nhận trước (hộp thoại nằm ở `dialogs`,
  * cần render một lần cùng nơi dùng). Gửi đơn, Cập nhật đơn, Chỉnh sửa xác nhận ngay trong form đơn.
  */
-export function useOrderActionRunner({ onOpenForm, onView, onViewInvoice }: RunnerOptions): {
+export function useOrderActionRunner({ onOpenForm, onAgain, onView, onViewInvoice }: RunnerOptions): {
   run: (key: ActionKey, order: Order) => void
   busy: boolean
   dialogs: ReactNode
@@ -151,7 +153,7 @@ export function useOrderActionRunner({ onOpenForm, onView, onViewInvoice }: Runn
           </p>
         )}
       </ConfirmDialog>
-      <ConfirmDialog open={confirm?.type === 'again'} onOpenChange={close} title="Tạo lại đơn?" confirmLabel="Tạo lại đơn" onConfirm={() => o && onOpenForm({ kind: 'again', from: o })}>
+      <ConfirmDialog open={confirm?.type === 'again'} onOpenChange={close} title="Tạo lại đơn?" confirmLabel="Tạo lại đơn" onConfirm={() => o && (onAgain ? onAgain(o) : onOpenForm({ kind: 'again', from: o }))}>
         <p>Tạo đơn mới với cùng thông tin, mã đơn mới.</p>
       </ConfirmDialog>
       {confirm?.type === 'reject' && o && (

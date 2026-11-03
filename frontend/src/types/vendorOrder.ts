@@ -151,16 +151,36 @@ export interface OrderContent {
   packageId: string | null
 }
 
+/** Số liệu 4 thẻ đầu trang Quản lý đơn hàng, backend tính trên toàn bộ đơn của NCC (GET /vendors/me/orders/counts → tiles). */
+export interface OrderTilesData {
+  /** Đơn Chờ cọc, và trong đó số đơn hạn cọc còn dưới 24 giờ */
+  pending: number
+  expiringSoon: number
+  /** Chờ chỉnh sửa + Đã cọc có yêu cầu chỉnh sửa của khách đang chờ */
+  needsAction: number
+  /** Đã cọc, ngày thực hiện trong 30 ngày tới, và tổng giá trị */
+  upcoming: number
+  upcomingValue: number
+  /** Đã cọc, đã qua ngày thực hiện (NCC bấm được Hoàn tất), và trong đó số đơn chưa nhận tiền mặt */
+  dueToComplete: number
+  dueRestPending: number
+}
+
+/** Số đơn theo từng trạng thái (không theo bộ lọc) kèm số liệu 4 thẻ. */
+export type OrderCounts = Record<OrderStatus, number> & { tiles: OrderTilesData }
+
 export interface OrderListQuery {
   q?: string
-  status?: OrderStatus
+  /** Một trạng thái, hoặc nhiều trạng thái ngăn bằng dấu phẩy ("Expired,Cancelled") */
+  status?: string
+  /** Chỉ đơn cần NCC xử lý (Chờ chỉnh sửa, hoặc Đã cọc có yêu cầu chỉnh sửa đang chờ) */
+  needsAction?: boolean
+  /** Chỉ đơn Đã cọc / Hoàn thành mà đợt 2 (tiền mặt) chưa ghi nhận */
+  restPending?: boolean
   /** Ngày sự kiện từ / đến "YYYY-MM-DD" (gồm cả hai đầu) */
   from?: string
   to?: string
   conversationId?: string
-  /** Ngày cọc (Payments.PaidDate, giờ VN) từ / đến "YYYY-MM-DD", gồm cả hai đầu: đơn đã cọc trong khoảng này, mọi trạng thái */
-  depositFrom?: string
-  depositTo?: string
   page?: number
   pageSize?: number
 }

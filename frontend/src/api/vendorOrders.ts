@@ -1,17 +1,18 @@
 import type { Paginated } from '@/types/api'
-import type { AddTaskResult, BoardTask, CalendarItem, CancelReason, Order, NewOrderTaskInput, OrderContent, OrderDaySlot, OrderListQuery, OrderProgress, OrderStatus, OrderTasks, RestResult, TaskItemResult, TaskOwner, TaskStatus } from '@/types/vendorOrder'
+import type { AddTaskResult, BoardTask, CalendarItem, CancelReason, Order, NewOrderTaskInput, OrderContent, OrderCounts, OrderDaySlot, OrderListQuery, OrderProgress, OrderTasks, RestResult, TaskItemResult, TaskOwner, TaskStatus } from '@/types/vendorOrder'
 import { http, requestRaw } from './client'
 
 /** Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp). */
 export const vendorOrdersApi = {
   /** Danh sách đơn có lọc, phân trang (trang Quản lý đơn hàng). Gồm cả bản nháp. */
   list: async (query: OrderListQuery): Promise<Paginated<Order>> => {
-    const res = await requestRaw<Order[]>('/vendors/me/orders', { query: { ...query } })
+    const { needsAction, restPending, ...rest } = query
+    const res = await requestRaw<Order[]>('/vendors/me/orders', { query: { ...rest, needsAction: needsAction ? '1' : undefined, restPending: restPending ? '1' : undefined } })
     return { data: res.data, meta: res.meta! }
   },
 
-  /** Số đơn theo từng trạng thái (không theo bộ lọc). */
-  counts: (): Promise<Record<OrderStatus, number>> =>
+  /** Số đơn theo từng trạng thái (không theo bộ lọc) và số liệu 4 thẻ thống kê. */
+  counts: (): Promise<OrderCounts> =>
     http.get('/vendors/me/orders/counts'),
 
   /** Đơn của một hội thoại (gồm cả bản nháp), để vẽ thẻ đơn trong chat. */

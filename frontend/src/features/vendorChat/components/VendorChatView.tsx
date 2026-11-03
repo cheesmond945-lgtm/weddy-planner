@@ -36,13 +36,14 @@ export function VendorChatView() {
   const detail = orders.find((o) => o.id === detailId)
   const invoiceOrder = orders.find((o) => o.id === invoice?.orderId)
 
-  // Từ trang Quản lý đơn hàng: "+ Tạo đơn" chọn khách rồi sang đây (?c=…&create=1) mở sẵn form tạo đơn
-  const wantCreate = params.get('create') === '1'
+  // Từ trang Quản lý đơn hàng: "Tạo lại đơn" sang đây (?c=…&again=<mã đơn>) mở sẵn form tạo lại từ đơn hết hạn / đã hủy
+  const againId = params.get('again')
+  const againOrder = againId ? orders.find((o) => o.id === againId) : undefined
   useEffect(() => {
-    if (!wantCreate || !active) return
-    setForm({ kind: 'new' })
+    if (!againOrder || !active) return
+    setForm({ kind: 'again', from: againOrder })
     setParams({ c: active.id }, { replace: true })
-  }, [wantCreate, active, setParams])
+  }, [againOrder, active, setParams])
 
   // Làm nổi thẻ đơn vừa gửi trong 2,4 giây (như prototype)
   useEffect(() => {
