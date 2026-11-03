@@ -11,6 +11,8 @@ interface Handlers {
   onEdit: (item: TimelineItem) => void
   onRemove: (item: TimelineItem) => void
   onChat?: (item: TimelineItem) => void
+  /** "Muốn thêm hoặc bỏ bước nào? Nhắn NCC": mở chat với NCC của đơn kèm câu soạn sẵn */
+  onAskVendor?: (serviceId: string, orderCode: string | null) => void
 }
 
 interface GroupProps extends Handlers {
@@ -39,7 +41,7 @@ export function defaultOpen(kids: TimelineItem[]) {
  * Thẻ nhóm của Mốc chốt đã cọc: ✓ đã chốt, tên NCC + mã đơn, tiến độ "Đã xong x/N việc", mũi tên. Bấm thẻ (hoặc mũi tên, Enter, Space)
  * xổ / thu danh sách việc con, không mở hộp hoàn thành. Thu gọn thì hiện việc kế tiếp; có việc con quá hạn thì chấm đỏ.
  */
-export function TimelineGroupCard({ book, kids, visibleKids, open, onToggle, leaving, ...handlers }: GroupProps) {
+export function TimelineGroupCard({ book, kids, visibleKids, open, onToggle, leaving, onAskVendor, ...handlers }: GroupProps) {
   const total = kids.length
   const doneCount = kids.filter((k) => k.isDone).length
   const next = kids.find((k) => !k.isDone)
@@ -51,6 +53,7 @@ export function TimelineGroupCard({ book, kids, visibleKids, open, onToggle, lea
   const vendor = owner?.[0].serviceName ?? kids[0]?.serviceName ?? book.serviceName
   const orderCode = owner?.[0].orderCode
   const packageName = owner?.[0].packageName
+  const askServiceId = owner?.find((k) => k.serviceId)?.serviceId ?? null
   const processMissing = !!book.vendorProcessMissing
   const processSyncing = !!book.processSyncFailed
   // Đơn giữ nhóm này có ngày thực hiện sau ngày cưới (đơn cũ hoặc khách đã đổi ngày cưới): các hạn bên dưới tính theo ngày đó
@@ -130,6 +133,14 @@ export function TimelineGroupCard({ book, kids, visibleKids, open, onToggle, lea
               </li>
             ))}
             {visibleKids.length === 0 && <li className="py-2 text-[13px] text-muted-foreground">Không có việc nào ở mục này.</li>}
+            {onAskVendor && askServiceId && (
+              <li className="text-[12.5px] text-muted-foreground">
+                Muốn thêm hoặc bỏ bước nào?{' '}
+                <button type="button" onClick={() => onAskVendor(askServiceId, orderCode ?? null)} className="font-semibold text-gold-ink underline underline-offset-2 hover:text-gold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
+                  Nhắn NCC
+                </button>
+              </li>
+            )}
           </ul>
         </div>
       </div>
