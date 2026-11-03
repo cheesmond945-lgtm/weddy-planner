@@ -1,3 +1,4 @@
+import { TASK_LABELS } from '../../lib/taskLabels.ts'
 import type { BoardTask, TaskStatus } from '@/types/vendorOrder'
 
 /*
@@ -13,7 +14,7 @@ import type { BoardTask, TaskStatus } from '@/types/vendorOrder'
 export type BoardColumn = 'customer' | 'todo' | 'done'
 
 export const BOARD_COLUMNS: readonly { key: BoardColumn; title: string }[] = [
-  { key: 'customer', title: 'Chờ khách làm' },
+  { key: 'customer', title: TASK_LABELS.waitingCustomer },
   { key: 'todo', title: 'Cần làm' },
   { key: 'done', title: 'Đã xong' },
 ]
@@ -118,11 +119,27 @@ export function boardSummary(tasks: readonly BoardTask[], today: string) {
   return s
 }
 
+/** Một đơn đang làm: khách, mã đơn, tên gói, số việc xong và số việc đã chốt lịch ("x/y việc xong · a/b đã chốt lịch"). */
+export interface CustomerInfo {
+  orderId: string
+  customerName: string
+  orderCode: string
+  /** Số việc của NCC đang trễ ở đơn này */
+  late: number
+  packages: string
+  done: number
+  total: number
+  confirmed: number
+}
+
 /** Mục của ô chọn Khách: mỗi đơn đang làm một mục; đơn có việc Cần làm trễ lên trước (kèm số việc trễ), rồi theo tên khách. */
-export function customerOptions(tasks: readonly BoardTask[]): { orderId: string; customerName: string; orderCode: string; late: number }[] {
-  const map = new Map<string, { orderId: string; customerName: string; orderCode: string; late: number }>()
+export function customerOptions(tasks: readonly BoardTask[]): CustomerInfo[] {
+  const map = new Map<string, CustomerInfo>()
   for (const t of tasks) {
-    const o = map.get(t.orderId) ?? { orderId: t.orderId, customerName: t.customerName, orderCode: t.orderCode, late: 0 }
+    const o = map.get(t.orderId) ?? { orderId: t.orderId, customerName: t.customerName, orderCode: t.orderCode, late: 0, packages: (t.packageNames ?? []).join(', '), done: 0, total: 0, confirmed: 0 }
+    o.total++
+    if (t.isDone) o.done++
+    if (t.dateStatus === 'CONFIRMED') o.confirmed++
     if (columnOf(t) === 'todo' && t.overdue) o.late++
     map.set(t.orderId, o)
   }

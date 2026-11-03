@@ -2,10 +2,15 @@ import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { formatDate, toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { useCompleteOrder, useOrders } from '../hooks'
+import { useRestAction, useRestPending } from '../taskActions'
+import { REST_TONE_CLASS, restLabel } from '../restPayment'
+import { RestReceivedDialog } from './RestReceivedDialog'
+import type { Order } from '@/types/vendorOrder'
 import type { FinishedOrder } from '../taskBoard'
 import { OrderProgressPanel } from './OrderProgressPanel'
 
@@ -44,12 +49,49 @@ function ArchiveRow({ orderId, hue, head, actions, readOnly }: { orderId: string
 /** Nút Hoàn tất đơn: chỉ bấm được khi đã qua ngày thực hiện (luật backend). */
 function CompleteButton({ order }: { order: FinishedOrder }) {
   const complete = useCompleteOrder()
+  const [asking, setAsking] = useState(false)
   const can = toISODate(today()) > order.eventDate
   if (!can) return <span className="text-[12.5px] text-muted-foreground">Hoàn tất được từ {formatDate(dayAfter(order.eventDate))}</span>
+  // Phần còn lại là tiền mặt: hỏi đã nhận đủ chưa, rồi ghi nhận và hoàn tất cùng lúc
   return (
-    <Button size="sm" disabled={complete.isPending} onClick={() => complete.mutate(order.orderId)}>
-      Hoàn tất đơn
-    </Button>
+    <>
+      <Button size="sm" disabled={complete.isPending} onClick={() => setAsking(true)}>
+        Hoàn tất đơn
+      </Button>
+      <ConfirmDialog
+        open={asking}
+        onOpenChange={setAsking}
+        title="Đã nhận tiền mặt?"
+        confirmLabel="Đã nhận, hoàn tất"
+        cancelLabel="Chưa, để sau"
+        onConfirm={() => complete.mutate({ orderId: order.orderId, restReceived: true })}
+      >
+        <p>
+          Bạn đã nhận đủ phần tiền mặt còn lại của đơn <b>{order.orderCode}</b> chưa? Bấm "Đã nhận, hoàn tất" để ghi nhận và hoàn tất đơn.
+        </p>
+      </ConfirmDialog>
+    </>
+  )
+}
+
+/** Đơn đã hoàn tất: nhãn đợt 2 ("Đã nhận dd/mm" / cam "Chưa nhận") và nút ghi nhận tiền mặt khi chưa nhận. */
+function RestCell({ order }: { order: Order }) {
+  const restAction = useRestAction()
+  const busy = useRestPending(order.id)
+  const [asking, setAsking] = useState(false)
+  const l = restLabel(order, 'VENDOR')
+  if (l.tone === 'none') return null
+  const pending = order.restPayment?.status === 'Pending'
+  return (
+    <>
+      <span className={cn('text-[12.5px]', REST_TONE_CLASS[l.tone])}>Đợt 2: {l.text}</span>
+      {pending && (
+        <Button size="sm" variant="outline" className="border-line-strong" disabled={busy} onClick={() => setAsking(true)}>
+          Ghi nhận đã nhận tiền mặt
+        </Button>
+      )}
+      <RestReceivedDialog open={asking} amount={order.restPayment?.amount} onOpenChange={setAsking} onConfirm={() => void restAction(order.id, true, order.orderCode)} />
+    </>
   )
 }
 
@@ -127,6 +169,7 @@ export function BoardArchive({ finished, hueFor }: BoardArchiveProps) {
                   orderId={o.id}
                   hue={hueFor(o.id)}
                   readOnly
+                  actions={<RestCell order={o} />}
                   head={
                     <>
                       <p className="text-[14px] font-semibold [overflow-wrap:anywhere]">{o.customerName || 'Khách'}</p>

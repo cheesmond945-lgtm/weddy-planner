@@ -1,15 +1,9 @@
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { matchesBoard } from '../taskBoard'
+import { matchesBoard, type CustomerInfo } from '../taskBoard'
 
-export interface CustomerOption {
-  orderId: string
-  customerName: string
-  orderCode: string
-  /** Số việc của NCC đang trễ ở đơn này */
-  late: number
-}
+export type CustomerOption = CustomerInfo
 
 interface CustomerPickerProps {
   options: readonly CustomerOption[]
@@ -32,7 +26,7 @@ export function CustomerPicker({ options, value, onChange, hueFor }: CustomerPic
   const id = useId()
   const current = options.find((o) => o.orderId === value)
   // Mục đầu là "Tất cả khách" (orderId ''), chỉ hiện khi chưa gõ tìm
-  const shown: (CustomerOption | null)[] = [...(q.trim() ? [] : [null]), ...options.filter((o) => matchesBoard({ ...o, title: '' }, q))]
+  const shown: (CustomerOption | null)[] = [...(q.trim() ? [] : [null]), ...options.filter((o) => matchesBoard({ ...o, packageNames: o.packages ? [o.packages] : [], title: '' }, q))]
 
   useEffect(() => {
     if (!open) return
@@ -120,7 +114,17 @@ export function CustomerPicker({ options, value, onChange, hueFor }: CustomerPic
                   <i aria-hidden className="size-2.5 shrink-0 rounded-full" style={o ? { backgroundColor: `hsl(${hueFor(o.orderId)} 60% 48%)` } : undefined} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{o ? o.customerName || 'Khách' : 'Tất cả khách'}</span>
-                    {o && <span className="block text-[12px] text-muted-foreground">{o.orderCode}</span>}
+                    {o && (
+                      <span className="block text-[12px] text-muted-foreground">
+                        {o.orderCode}
+                        {o.packages && ` · Gói ${o.packages}`}
+                      </span>
+                    )}
+                    {o && (
+                      <span className="block text-[12px] text-muted-foreground">
+                        {o.done}/{o.total} việc xong · {o.confirmed}/{o.total} đã hẹn
+                      </span>
+                    )}
                   </span>
                   {o && o.late > 0 && <span className="shrink-0 rounded-pill bg-warn px-1.5 text-[11px] font-bold text-white">{o.late} trễ</span>}
                   {selected && <Check className="size-4 shrink-0" aria-hidden />}
