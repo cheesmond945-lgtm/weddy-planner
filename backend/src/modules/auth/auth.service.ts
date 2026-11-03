@@ -204,7 +204,7 @@ export class AuthService {
     const email = emailRaw?.trim().toLowerCase() ?? '';
     if (!EMAIL_RE.test(email)) return fail('VALIDATION_ERROR', 'Email chưa hợp lệ.', 400, { email: 'Email chưa hợp lệ.' });
     const user = await this.prisma.users.findUnique({ where: { email } });
-    if (!user) return fail('EMAIL_NOT_FOUND', 'Email này chưa đăng ký tài khoản WebPlan.', 404);
+    if (!user) return fail('EMAIL_NOT_FOUND', 'Email này chưa đăng ký tài khoản Forever.', 404);
     if (user.status === 'Locked') return fail('ACCOUNT_DISABLED', 'Tài khoản đã bị khóa.', 403);
 
     const existing = this.resets.get(email);

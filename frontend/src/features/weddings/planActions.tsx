@@ -114,6 +114,15 @@ export function usePlanActions() {
         }),
       ),
 
+    /** "Chọn gói này cho kế hoạch": thêm nhà cung cấp với gói này, hoặc đổi gói nếu đã có trong kế hoạch. */
+    choosePackage: (service: ServiceSummary, packageId: string, packageName: string) =>
+      requireCouple(() =>
+        withReplace(service, (replace) => weddingsApi.addPlanItem(service.id, replace, packageId), (_r, replaced) => {
+          toast(replaced ? `Đã thay dịch vụ và chọn ${packageName}` : `Đã chọn ${packageName} cho kế hoạch`)
+          void refresh()
+        }),
+      ),
+
     /**
      * openChat trong prototype: chưa có trong kế hoạch thì thêm vào, chuyển sang Đang trao đổi, mở khung chat bên phải.
      * Chưa đăng nhập: đăng nhập xong quay lại trang với ?chat=<id> để tự mở lại khung chat (ChatPanelResume).
@@ -188,6 +197,24 @@ export function ChatPanelResume() {
     )
   }, [serviceId, user, setParams])
   return null
+}
+
+/**
+ * Nút "Chọn gói này cho kế hoạch" ở trang chi tiết nhà cung cấp. Đã có đơn với nhà cung cấp thì khóa (giá theo đơn).
+ * Không hiện cho tài khoản không phải cặp đôi.
+ */
+export function ChoosePackageButton({ service, packageId, packageName }: { service: ServiceSummary; packageId: string; packageName: string }) {
+  const { user } = useAuth()
+  const { choosePackage } = usePlanActions()
+  const item = usePlanItemOf(service.id)
+  if (user && user.role !== 'COUPLE') return null
+  const chosen = item?.package?.source === 'SELECTED' && item.package.id === packageId
+  const locked = item?.package?.source === 'ORDER'
+  return (
+    <Button variant={chosen ? 'secondary' : 'default'} size="sm" disabled={chosen || locked} onClick={() => choosePackage(service, packageId, packageName)}>
+      {chosen ? 'Đã chọn cho kế hoạch' : locked ? 'Đã có đơn, giá theo đơn' : 'Chọn gói này cho kế hoạch'}
+    </Button>
+  )
 }
 
 /** Dịch vụ đã có trong kế hoạch chưa (và trạng thái). */

@@ -1,296 +1,311 @@
-import { Sparkles, Star, TriangleAlert } from 'lucide-react'
-import { Fragment, useState, type ReactNode } from 'react'
+import { CalendarCheck, CalendarX, CalendarClock, TriangleAlert } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { formatUnitPrice, isTablePriced, tableNote } from '@/features/catalog/price'
-import { formatNumber } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
-import type { ServiceDetail, ServicePackage } from '@/types/catalog'
-import { GoogleAttribution } from '@/features/catalog/components/GoogleAttribution'
-import { GoogleMapsLink } from '@/features/catalog/components/GoogleMapsLink'
-
-/** Điểm Google của một cột: đang tải, có điểm, hoặc chưa có (lỗi / chưa liên kết / chưa có điểm). */
-export type RatingCell = { status: 'loading' } | { status: 'none' } | { status: 'ok'; rating: number; count: number }
+import type { ServiceDetail } from '@/types/catalog'
+import type { CompareColumn, CompareResult } from '@/types/compare'
 
 interface CompareTableProps {
-  services: ServiceDetail[]
-  /** Phương án được đề xuất (null khi ngang nhau) */
-  recommendedId: string | null
-  isTie: boolean
-  /** Điểm Google theo id (GET /vendors/{id}/google-rating, mode summary) */
-  ratings: Record<string, RatingCell>
-  /** Ngân sách gợi ý cho hạng mục (đồng); null khi chưa có thông tin đám cưới */
-  budget: number | null
-  /** Nút thêm vào kế hoạch cho từng cột; primary = nút chính */
-  renderActions?: (s: ServiceDetail, primary: boolean) => ReactNode
-  /** Nút cho NCC chưa có gói (nhắn tin với NCC) */
+  result: CompareResult
+  /** Đổi gói ở dropdown: trang gọi lại API kèm gói mới, BE tính lại các dòng và dòng tóm tắt */
+  onPick: (serviceId: string, packageId: string) => void
+  /** Đang tính lại sau khi đổi gói */
+  updating?: boolean
+  /** Nút "Thêm vào kế hoạch" (khi gói không bị khóa) */
+  renderAdd: (s: ServiceDetail) => ReactNode
+  /** NCC chưa có gói nào: nút nhắn tin */
   renderQuote?: (s: ServiceDetail) => ReactNode
 }
 
-/** 34000000 -> "34", 12500000 -> "12,5" (đơn vị triệu, không kèm chữ) */
-const millions = (n: number) => (n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })
-
-const byPrice = (s: ServiceDetail) => [...s.packages].sort((a, b) => a.price - b.price)
-
-/** Gói đắt nhất còn trong ngân sách; không có ngân sách hoặc gói nào cũng vượt thì lấy gói rẻ nhất. */
-function suggestPackage(s: ServiceDetail, budget: number | null): ServicePackage | null {
-  const pkgs = byPrice(s)
-  if (!pkgs.length) return null
-  if (budget === null) return pkgs[0]
-  return pkgs.filter((p) => p.price <= budget).at(-1) ?? pkgs[0]
+/** Nhãn theo dòng (chỉ khi các bên khác nhau, BE quyết định) */
+function RowBadge({ children }: { children: ReactNode }) {
+  return <span className="mt-1.5 inline-flex rounded-pill bg-sage-soft px-2.5 py-[3px] text-xs font-semibold whitespace-nowrap text-sage">{children}</span>
 }
 
-/** Tách "Hoa bàn, backdrop 5m, cổng hoa" thành từng ý để so khác nhau. */
-const parts = (text: string) =>
-  text
-    .split(/[,;\n]/)
-    .map((x) => x.trim())
-    .filter(Boolean)
+const Muted = ({ children }: { children: ReactNode }) => <span className="text-muted-foreground">{children}</span>
+const Small = ({ children, className }: { children: ReactNode; className?: string }) => (
+  <div className={cn('mt-1 text-[13px] text-muted-foreground', className)}>{children}</div>
+)
 
-function BestBadge({ children }: { children: ReactNode }) {
-  return <span className="mt-1 inline-flex rounded-pill bg-sage-soft px-2.5 py-[3px] text-xs font-semibold whitespace-nowrap text-sage">{children}</span>
-}
+/** Lịch ngày cưới ngay dưới tên NCC: Còn trống (xanh), Đã kín (đỏ), Chưa xác nhận (xám) */
+const DAY_STYLE = {
+  FREE: { icon: CalendarCheck, cls: 'bg-sage-soft text-sage' },
+  FULL: { icon: CalendarX, cls: 'bg-warn-soft text-warn' },
+  UNCONFIRMED: { icon: CalendarClock, cls: 'bg-line text-muted-foreground' },
+  MINE: { icon: CalendarCheck, cls: 'bg-sage text-white' },
+} as const
 
-/** Nhãn "Đề xuất" cạnh tên trong tiêu đề cột (.rectag trong prototype). */
-function RecommendTag() {
+function DayBadge({ a }: { a: NonNullable<CompareColumn['availability']> }) {
+  const { icon: Icon, cls } = DAY_STYLE[a.status]
   return (
-    <span
-      title="Dựa trên điểm Google Maps, giá và thông tin đám cưới của bạn"
-      className="inline-flex items-center gap-[5px] rounded-pill bg-primary px-2.5 py-1 text-[11.5px] font-semibold whitespace-nowrap text-primary-foreground"
-    >
-      <Sparkles className="size-[13px]" strokeWidth={2} aria-hidden />
-      Đề xuất
+    <span className={cn('mt-1.5 inline-flex items-center gap-1.5 rounded-pill px-2.5 py-[3px] text-xs font-semibold', cls)}>
+      <Icon className="size-3.5" aria-hidden />
+      {a.text}
     </span>
   )
 }
 
-/** Ghi chú dưới ô chọn gói: gợi ý / trong ngân sách / vượt ngân sách. */
-function BudgetNote({ price, budget, suggested }: { price: number; budget: number | null; suggested: boolean }) {
-  if (budget === null) return null
-  if (price > budget)
-    return (
-      <span className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-warn-soft px-2 py-1 text-xs font-medium text-warn">
-        <TriangleAlert className="size-3.5" aria-hidden />
-        Cao hơn ngân sách {millions(price - budget)}tr
-      </span>
-    )
-  if (suggested)
-    return (
-      <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-gold">
-        <Sparkles className="size-3.5" aria-hidden />
-        Gợi ý theo ngân sách
-      </span>
-    )
-  return <span className="mt-2 inline-flex text-xs text-sage">Trong ngân sách</span>
-}
+/** Dòng thường: mỗi cột một ô; dòng gộp (span): một ô trải hết các cột */
+type Row =
+  { label: string; hint?: string | null; cell: (c: CompareColumn, s: ServiceDetail) => ReactNode } | { label: string; hint?: string | null; span: ReactNode }
 
-const Muted = ({ children }: { children: ReactNode }) => <span className="text-muted-foreground">{children}</span>
+/**
+ * Bảng so sánh 2–3 dịch vụ cùng hạng mục (3.4). Hàng đầu cố định khi cuộn: tên NCC, lịch ngày cưới, nút.
+ * Thứ tự dòng: Chọn gói (đã cọc: khóa); Tổng chi phí ước tính; So với mức gợi ý; Nếu chọn gói này / Nếu đổi nhà cung cấp; Giống nhau (dòng gộp); Số bàn tính phí (tiệc);
+ * Vị trí; Sức chứa (tiệc); Đánh giá; Điểm nổi bật. NCC đã kín ngày cưới thì làm mờ cột. Không có đề xuất, chỉ nhãn theo dòng.
+ */
+export function CompareTable({ result, onPick, updating, renderAdd, renderQuote }: CompareTableProps) {
+  const { columns, rows: show, budgetNote, sameNote, consequenceLabel, locationNote } = result.comparison
+  const services = result.items
+  const pairs = columns.map((c) => ({ c, s: services.find((x) => x.id === c.id)! }))
+  const faded = (c: CompareColumn) => c.availability?.status === 'FULL'
 
-type Row = { label: string; cell: (s: ServiceDetail) => ReactNode }
-
-/** Bảng so sánh 2–3 nhà cung cấp cùng hạng mục (renderCompare trong prototype, 3.4). */
-export function CompareTable({ services, recommendedId, isTie, ratings, budget, renderActions, renderQuote }: CompareTableProps) {
-  // Gói đang chọn theo id NCC; chưa chọn thì dùng gói gợi ý theo ngân sách
-  const [picked, setPicked] = useState<Record<string, string>>({})
-  const suggested = Object.fromEntries(services.map((s) => [s.id, suggestPackage(s, budget)]))
-  const pkgOf = (s: ServiceDetail) => s.packages.find((p) => p.id === picked[s.id]) ?? suggested[s.id]
-
-  const chosen = services.map(pkgOf).filter((p): p is ServicePackage => !!p)
-  const prices = chosen.map((p) => p.price)
-  const minPrice = chosen.length > 1 && new Set(prices).size > 1 ? Math.min(...prices) : null
-  const okRatings = services.map((s) => ratings[s.id]).filter((r): r is Extract<RatingCell, { status: 'ok' }> => r?.status === 'ok')
-  const maxRating = okRatings.length > 1 ? Math.max(...okRatings.map((r) => r.rating)) : null
-  const showCapacity = chosen.some((p) => p.capacity)
-  // Mô tả dạng liệt kê ngắn ("Hoa bàn, backdrop 5m"): ý có trong mọi gói in thường, ý riêng in đậm.
-  // Mô tả dạng đoạn văn thì không so từng ý.
-  const isList = chosen.length > 1 && chosen.every((p) => parts(p.description).every((x) => x.length <= 40))
-  const common = isList ? new Set(parts(chosen[0].description).filter((x) => chosen.every((p) => parts(p.description).includes(x)))) : null
-
-  const recCell = (s: ServiceDetail) => (s.id === recommendedId ? 'bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))]' : '')
-  const noPkg = <Muted>—</Muted>
-
-  const groups: { title: string; rows: Row[] }[] = [
+  const rows: Row[] = [
     {
-      title: 'Về nhà cung cấp',
-      rows: [
-        {
-          label: 'Đánh giá',
-          cell: (s) => {
-            const r = ratings[s.id] ?? { status: 'loading' }
-            if (r.status === 'loading') return <span aria-label="Đang tải điểm Google" className="inline-block h-4 w-24 animate-pulse rounded-sm bg-muted" />
-            if (r.status === 'none') return <GoogleMapsLink url={s.googleMapsUrl} label="Xem trên Google Maps" />
-            return (
-              <>
-                <span className="inline-flex items-center gap-[5px]">
-                  <Star className="size-3.5 fill-gold text-gold" aria-hidden />
-                  <b className="font-semibold">{r.rating.toFixed(1)}</b>
-                  <Muted>({formatNumber(r.count)})</Muted>
-                </span>
-                {r.rating === maxRating && (
-                  <>
-                    <br />
-                    <BestBadge>Điểm cao nhất</BestBadge>
-                  </>
-                )}
-              </>
-            )
-          },
-        },
-        {
-          label: 'Khoảng giá',
-          cell: (s) =>
-            !s.packages.length ? noPkg : s.priceFrom === s.priceTo ? `${millions(s.priceFrom)} triệu` : `${millions(s.priceFrom)} – ${millions(s.priceTo)} triệu`,
-        },
-        { label: 'Phong cách', cell: (s) => (s.styles.length ? s.styles.join(', ') : noPkg) },
-      ],
+      label: 'Chọn gói',
+      cell: (c) =>
+        c.package && c.locked ? (
+          // Đã cọc: khóa ở gói trong đơn, chỉ cách đổi (không để khách vào ngõ cụt)
+          <>
+            <select
+              aria-label={`Gói của ${c.name}`}
+              value={c.package.id}
+              disabled
+              className="w-full max-w-[240px] rounded-md border border-line bg-line/40 px-3 py-2 text-ink"
+            >
+              <option value={c.package.id}>{c.package.name}</option>
+            </select>
+            <Small>
+              Đã cọc gói này. Muốn đổi gói, nhắn nhà cung cấp; muốn đổi nhà cung cấp, hủy đơn ở{' '}
+              <Link to={paths.planTab.services} className="font-medium text-gold-700 underline underline-offset-[3px]">
+                tab Dịch vụ
+              </Link>
+              .
+            </Small>
+          </>
+        ) : c.package ? (
+          <select
+            aria-label={`Chọn gói của ${c.name}`}
+            value={c.package.id}
+            onChange={(e) => onPick(c.id, e.target.value)}
+            className="w-full max-w-[240px] cursor-pointer rounded-md border border-line bg-surface px-3 py-2 text-ink focus:border-ring focus:outline-2 focus:outline-offset-0 focus:outline-ring"
+          >
+            {c.packages.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Muted>Chưa cập nhật gói</Muted>
+        ),
     },
     {
-      title: 'Về gói đã chọn',
-      rows: [
-        {
-          label: 'Chọn gói',
-          cell: (s) => {
-            const p = pkgOf(s)
-            if (!p) return <Muted>Chưa cập nhật gói</Muted>
-            return (
-              <>
-                <select
-                  aria-label={`Chọn gói của ${s.name}`}
-                  value={p.id}
-                  onChange={(e) => setPicked((m) => ({ ...m, [s.id]: e.target.value }))}
-                  className="w-full max-w-[220px] cursor-pointer rounded-md border border-line bg-surface px-3 py-2 text-ink focus:border-ring focus:outline-2 focus:outline-offset-0 focus:outline-ring"
-                >
-                  {byPrice(s).map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
-                <br />
-                <BudgetNote price={p.price} budget={budget} suggested={p.id === suggested[s.id]?.id} />
-              </>
-            )
-          },
-        },
-        {
-          label: 'Giá',
-          cell: (s) => {
-            const p = pkgOf(s)
-            if (!p) return <Muted>Chưa có gói đăng giá</Muted>
-            return (
-              <>
-                <b className="font-semibold">{formatUnitPrice(p.price, s)}</b>
-                {isTablePriced(s) && <div className="text-[13px] text-muted-foreground">{tableNote(p.minTables)}</div>}
-                {p.price === minPrice && (
-                  <>
-                    <br />
-                    <BestBadge>Giá thấp nhất</BestBadge>
-                  </>
-                )}
-              </>
-            )
-          },
-        },
-        ...(showCapacity
-          ? [{ label: 'Quy mô', cell: (s: ServiceDetail) => (pkgOf(s)?.capacity ? `Tối đa ${formatNumber(pkgOf(s)!.capacity!)} khách` : noPkg) }]
-          : []),
-        {
-          label: 'Bao gồm',
-          cell: (s) => {
-            const p = pkgOf(s)
-            if (!p) return noPkg
-            const items = parts(p.description)
-            if (!common || !items.length)
-              return p.description ? (
-                <p title={p.description} className="line-clamp-4">
-                  {p.description}
-                </p>
+      label: 'Tổng chi phí ước tính',
+      cell: (c) => {
+        if (!c.package) return <Muted>—</Muted>
+        if (c.total === null) return <Muted>{formatMoney(c.package.price)} × số bàn</Muted>
+        return (
+          <>
+            <b className="font-semibold">{formatMoney(c.total)}</b>
+            {c.formula && <Small>{c.formula}</Small>}
+            {c.assumption && <Small>{c.assumption}</Small>}
+            {c.labels.cheapest && (
+              <div>
+                <RowBadge>Chi phí thấp nhất</RowBadge>
+              </div>
+            )}
+          </>
+        )
+      },
+    },
+    // Mọi bên đều cao hơn mức gợi ý: một dòng chung thay cho chữ đỏ lặp lại ở từng cột
+    ...(show.budget
+      ? [
+          budgetNote
+            ? {
+                label: 'So với mức gợi ý',
+                span: (
+                  <span className="inline-flex items-start gap-1.5 text-warn">
+                    <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                    {budgetNote}
+                  </span>
+                ),
+              }
+            : {
+                label: 'So với mức gợi ý',
+                cell: (c: CompareColumn) =>
+                  !c.budget ? (
+                    <Muted>—</Muted>
+                  ) : (
+                    <span className={c.budget.kind === 'OVER' ? 'text-warn' : c.budget.kind === 'LEFT' ? 'text-sage' : 'text-ink'}>{c.budget.text}</span>
+                  ),
+              },
+        ]
+      : []),
+    ...(show.consequence
+      ? [
+          {
+            label: consequenceLabel,
+            cell: (c: CompareColumn) =>
+              !c.consequence ? (
+                <Muted>—</Muted>
               ) : (
-                noPkg
-              )
-            return items.map((x, i) => (
-              <Fragment key={i}>
-                {i > 0 && ', '}
-                {common.has(x) ? x : <b className="font-semibold">{x}</b>}
-              </Fragment>
-            ))
+                <>
+                  <span className={cn('font-medium')}>{c.consequence.text}</span>
+                  {/* Phép tính đầy đủ (làm tròn 10.000đ như tab Ngân sách) để con số minh bạch */}
+                  <Small className="text-[12px]">{c.consequence.detail}</Small>
+                </>
+              ),
           },
-        },
-      ],
+        ]
+      : []),
+    ...(sameNote ? [{ label: 'Giống nhau', span: <span>{sameNote.replace(/^Giống nhau: /, '')}</span> }] : []),
+    ...(show.tables
+      ? [
+          {
+            label: 'Số bàn tính phí',
+            cell: (c: CompareColumn) =>
+              !c.tables ? (
+                <Muted>—</Muted>
+              ) : (
+                <>
+                  {c.tables.text}
+                  {c.tables.warning && <Small className="text-warn">{c.tables.warning}</Small>}
+                </>
+              ),
+          },
+        ]
+      : []),
+    ...(show.location ? [{ label: 'Vị trí', hint: locationNote, cell: (c: CompareColumn) => c.location?.text ?? <Muted>Chưa rõ khu vực</Muted> }] : []),
+    ...(show.capacity
+      ? [
+          {
+            label: 'Sức chứa',
+            cell: (c: CompareColumn) =>
+              !c.capacity ? (
+                <Muted>Chưa ghi sức chứa</Muted>
+              ) : (
+                <>
+                  <span className={cn(!c.capacity.fits && 'text-warn')}>{c.capacity.text}</span>
+                  {c.labels.largestCapacity && (
+                    <div>
+                      <RowBadge>Sức chứa lớn nhất</RowBadge>
+                    </div>
+                  )}
+                </>
+              ),
+          },
+        ]
+      : []),
+    {
+      label: 'Đánh giá',
+      cell: (c) => (
+        <>
+          {c.rating.value === null ? <Muted>{c.rating.text}</Muted> : c.rating.text}
+          {c.labels.topRated && (
+            <div>
+              <RowBadge>Điểm cao nhất</RowBadge>
+            </div>
+          )}
+        </>
+      ),
+    },
+    {
+      label: 'Điểm nổi bật',
+      cell: (c) =>
+        c.includes.length ? (
+          <ul className="list-disc space-y-0.5 pl-4">
+            {c.includes.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        ) : (
+          <Muted>—</Muted>
+        ),
     },
   ]
 
   const cell = 'border-b border-line px-4 py-[13px] align-top'
-  const recActionId = isTie ? null : recommendedId
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+    // Màn rộng không cuộn ngang trong bảng để hàng đầu (tên NCC, lịch, nút) dính được khi cuộn trang
+    <div
+      className={cn('overflow-x-auto rounded-lg border border-line bg-surface transition-opacity lg:overflow-visible', updating && 'opacity-60')}
+      aria-busy={updating || undefined}
+    >
       <table className="w-full min-w-[620px] border-collapse text-[14px]">
-        <thead>
+        <thead className="sticky top-[76px] z-10 bg-surface shadow-[0_6px_10px_-8px_rgb(var(--shadow-rgb)/0.25)]">
           <tr>
-            <th className="w-[130px] border-b border-line px-4 py-[13px]">
+            <th className="w-[160px] px-4 pt-[13px] pb-2.5">
               <span className="sr-only">Tiêu chí</span>
             </th>
-            {services.map((s) => (
-              <th
-                key={s.id}
-                scope="col"
-                className={cn('border-b border-line px-4 py-[13px] text-left align-top', s.id === recommendedId && 'border-t-[3px] border-t-primary', recCell(s))}
-              >
-                <span className="inline-flex flex-wrap items-center gap-2 font-serif text-[17px] font-semibold">
-                  {s.name}
-                  {s.id === recommendedId && <RecommendTag />}
-                </span>
-                <div className="mt-0.5 text-[13px] font-medium text-muted-foreground">
-                  {s.category.name} · {s.location}
+            {pairs.map(({ c, s }) => (
+              <th key={c.id} scope="col" className="px-4 pt-[13px] pb-2.5 text-left align-top font-normal">
+                <div className={cn(faded(c) && 'opacity-55')}>
+                  <span className="font-serif text-[17px] font-semibold">{c.name}</span>
+                  <div className="mt-0.5 text-[13px] font-medium text-muted-foreground">{s.location}</div>
                 </div>
+                {c.availability && (
+                  <div>
+                    <DayBadge a={c.availability} />
+                  </div>
+                )}
               </th>
+            ))}
+          </tr>
+          {/* Hàng nút riêng để mọi cột thẳng hàng (tên NCC dài ngắn khác nhau); nút vàng, cùng cỡ.
+              Lý do khóa riêng của từng cột (đã kín, không đủ chỗ) ghi nhỏ dưới nút; đã cọc NCC khác thì chỉ có một cảnh báo chung ở đầu trang. */}
+          <tr>
+            <th className="border-b border-line px-4 pb-3">
+              <span className="sr-only">Thao tác</span>
+            </th>
+            {pairs.map(({ c, s }) => (
+              <td key={c.id} className="border-b border-line px-4 pb-3 align-top">
+                <div className="flex flex-wrap items-center gap-2">
+                  {!s.packages.length ? (
+                    renderQuote?.(s)
+                  ) : c.canAdd ? (
+                    renderAdd(s)
+                  ) : (
+                    <Button size="sm" disabled title={c.blockReason ?? undefined}>
+                      Thêm vào kế hoạch
+                    </Button>
+                  )}
+                  <Button asChild variant="outline" size="sm" className="border-gold-500 text-gold-800 hover:bg-gold-100">
+                    <Link to={paths.serviceDetail(c.id)}>Xem chi tiết</Link>
+                  </Button>
+                </div>
+                {!c.canAdd && c.blockReason && c.blockKind !== 'LOCKED' && <Small className="max-w-[300px]">{c.blockReason}</Small>}
+              </td>
             ))}
           </tr>
         </thead>
         <tbody>
-          {groups.map((g) => (
-            <Fragment key={g.title}>
-              <tr>
-                <th scope="colgroup" colSpan={services.length + 1} className="border-b border-line bg-bg px-4 py-2 text-left text-[13px] font-semibold text-muted-foreground">
-                  {g.title}
-                </th>
-              </tr>
-              {g.rows.map((r) => (
-                <tr key={r.label}>
-                  <th scope="row" className={cn(cell, 'text-left font-medium text-muted-foreground')}>
-                    {r.label}
-                  </th>
-                  {services.map((s) => (
-                    <td key={s.id} className={cn(cell, recCell(s))}>
-                      {r.cell(s)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </Fragment>
+          {rows.map((r) => (
+            <tr key={r.label}>
+              <th scope="row" className={cn(cell, 'text-left font-medium text-muted-foreground')}>
+                {r.label}
+                {r.hint && <span className="mt-0.5 block text-[12px] font-normal">{r.hint}</span>}
+              </th>
+              {'span' in r ? (
+                <td colSpan={pairs.length} className={cn(cell, 'bg-surface-2/60')}>
+                  {r.span}
+                </td>
+              ) : (
+                pairs.map(({ c, s }) => (
+                  <td key={c.id} className={cn(cell, faded(c) && 'opacity-55')}>
+                    {r.cell(c, s)}
+                  </td>
+                ))
+              )}
+            </tr>
           ))}
-          <tr>
-            <th scope="row" className="px-4 py-[13px]">
-              <span className="sr-only">Thao tác</span>
-            </th>
-            {services.map((s) => (
-              <td key={s.id} className={cn('px-4 py-[13px] align-top', recCell(s))}>
-                <div className="flex flex-wrap items-center gap-2">
-                  {s.packages.length ? renderActions?.(s, isTie || s.id === recActionId) : renderQuote?.(s)}
-                  <Button asChild variant="ghost" size="sm">
-                    <Link to={paths.serviceDetail(s.id)}>Xem chi tiết</Link>
-                  </Button>
-                </div>
-              </td>
-            ))}
-          </tr>
         </tbody>
       </table>
-      <div className="border-t border-line px-4 py-2 text-right">
-        <GoogleAttribution />
-      </div>
     </div>
   )
 }

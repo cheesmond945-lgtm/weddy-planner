@@ -5,12 +5,22 @@ export const paths = {
   // Phía cặp đôi (theo prototype)
   services: '/',
   serviceDetail: (id: string | number) => `/services/${id}`,
+  /** Trang Timeline (cách xem theo thời gian / dịch vụ / lịch) */
   timeline: '/timeline',
   favorites: '/favorites',
   compare: '/favorites/compare',
+  /** Kế hoạch của tôi: vào /plan thì chuyển sang subtab Tổng quan */
   plan: '/plan',
+  planTab: {
+    overview: '/plan/tong-quan',
+    services: '/plan/dich-vu',
+    budget: '/plan/ngan-sach',
+    guests: '/plan/khach-moi',
+  },
   deal: (id: string | number) => `/plan/deal/${id}`,
   chat: '/chat',
+  /** Xem kế hoạch qua link công khai */
+  publicPlanTab: (token: string, tab: string) => `/xem/${token}/${tab}`,
 
   // Xác thực
   login: '/login',

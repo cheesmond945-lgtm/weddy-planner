@@ -18,10 +18,11 @@ import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ConsultationRequestsModule } from './modules/consultation-requests/consultation-requests.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { AvailabilityModule } from './modules/availability/availability.module';
 import { HallsModule } from './modules/halls/halls.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 
 @Module({
-  imports: [PrismaModule, AiModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, RealtimeModule, HallsModule, ReviewsModule],
+  imports: [PrismaModule, AiModule, StorageModule, MailModule, GooglePlacesModule, AuthModule, CatalogModule, VendorsModule, HealthModule, FavoritesModule, CompareModule, WeddingsModule, ChatModule, OrdersModule, CommissionsModule, AdminModule, ConsultationRequestsModule, NotificationsModule, RealtimeModule, HallsModule, ReviewsModule, AvailabilityModule],
 })
 export class AppModule {}

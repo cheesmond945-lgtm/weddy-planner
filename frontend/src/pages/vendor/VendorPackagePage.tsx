@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
+import { VendorAvailabilityManager } from '@/features/availability/components/VendorAvailabilityManager'
 import { Button } from '@/components/ui/button'
 import { hasEditableUpdate, isEditablePackage, packageCategoryOf } from '@/features/vendorPackages/constants'
 import { PackageDetails } from '@/features/vendorPackages/components/PackageDetails'
@@ -119,6 +120,8 @@ export default function VendorPackagePage() {
       ) : (
         <PackageDetails pkg={p} profile={profile.data} category={category} onEdit={() => setEditingAt(p.updatedAt)} editorExtras={extras} />
       )}
+      {/* Lịch khả dụng theo từng gói (gói đã gửi duyệt trở đi) */}
+      {p && p.status !== 'DRAFT' && tab === 'info' && <VendorAvailabilityManager packageId={p.id} packageName={p.name} />}
     </div>
   )
 }

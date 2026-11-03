@@ -68,4 +68,4 @@ Nếu các nguồn mâu thuẫn nhau, DỪNG và hỏi tôi, không tự chọn.
 - Thêm thư viện mới khi chưa hỏi.
 - Tự đổi tên thực thể, enum, trường dữ liệu.
 - Sửa module hoặc tài liệu API của người khác khi chưa được yêu cầu.
-- Sao chép các phần chỉ có trong prototype (thanh mô phỏng NCC, ô "Hiện mã chức năng").
+- Sao chép các phần chỉ có trong prototype (thanh mô phỏng NCC, ô "Hiện mã chức năng"). 

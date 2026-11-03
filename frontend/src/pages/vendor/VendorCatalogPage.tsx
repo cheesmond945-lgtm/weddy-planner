@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react'
 import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
+import { AvailabilityReminderBanner } from '@/features/availability/components/VendorAvailabilityManager'
 import { Button } from '@/components/ui/button'
 import { TableCard, TableSkeleton } from '@/features/adminShared/components/AdminTable'
 import { Pagination } from '@/features/adminShared/components/Pagination'
@@ -55,6 +56,7 @@ export default function VendorCatalogPage() {
         }
       />
       {profile && <PackageStatusSummary profile={profile} />}
+      <AvailabilityReminderBanner />
 
       <TableCard>
         <PackageToolbar filters={filters} allTags={allTagsOf(all)} onChange={update} onReset={reset} />

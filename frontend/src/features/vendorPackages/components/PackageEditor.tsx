@@ -100,7 +100,7 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
   const tasksDirty = !!tasks?.dirty
   const errors = checkMode ? validatePackage(values, { mode: checkMode, venue, canSubmit }) : {}
 
-  // Gợi ý số mâm tối thiểu khi đã nhập sức chứa hợp lệ
+  // Gợi ý số bàn tối thiểu khi đã nhập sức chứa hợp lệ
   const capacityNum = Number(values.capacity)
   const suggestedTables = venue && Number.isInteger(capacityNum) && capacityNum >= GUESTS_PER_TABLE ? suggestMinTables(capacityNum) : null
 
@@ -174,11 +174,11 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
               />
             </div>
             <Field
-              label={venue ? 'Giá mỗi mâm *' : 'Giá *'}
+              label={venue ? 'Giá mỗi bàn *' : 'Giá *'}
               error={errors.price}
-              hint={venue ? `Mâm ${GUESTS_PER_TABLE} khách, đã gồm sảnh và dịch vụ đi kèm. Khách đặt theo số mâm khi lên đơn.` : undefined}
+              hint={venue ? `Bàn ${GUESTS_PER_TABLE} khách, đã gồm sảnh và dịch vụ đi kèm. Khách đặt theo số bàn khi lên đơn.` : undefined}
             >
-              <WithUnit unit={venue ? 'đ/mâm' : 'đ'}>
+              <WithUnit unit={venue ? 'đ/bàn' : 'đ'}>
                 <MoneyInput
                   className={cn(input(!!errors.price), venue ? 'pr-16' : 'pr-8', 'text-right tabular-nums')}
                   disabled={off}
@@ -192,7 +192,15 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
               <TagsInput tags={values.tags} onChange={(tags) => set({ tags })} disabled={off} />
             </Field>
             {venue && (
-              <Field label="Sức chứa tối đa (khách)" error={errors.capacity} hint="Tính theo khách, không quy đổi sang bàn.">
+              <Field label="Đơn vị tính giá">
+                <select className={input()} disabled={off} value={values.unit} onChange={(e) => set({ unit: e.target.value as 'TABLE' | 'PACKAGE' })}>
+                  <option value="TABLE">Theo bàn (giá một bàn)</option>
+                  <option value="PACKAGE">Trọn gói</option>
+                </select>
+              </Field>
+            )}
+            {venue && (
+              <Field label="Sức chứa tối đa (khách)" error={errors.capacity} hint="Tùy chọn · tính theo khách, không quy đổi sang bàn.">
                 <WithUnit unit="khách">
                   <input
                     type="number"
@@ -209,24 +217,24 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
                 </WithUnit>
               </Field>
             )}
-            {venue && (
+            {venue && values.unit === 'TABLE' && (
               <Field
-                label="Số mâm tối thiểu"
+                label="Số bàn tối thiểu"
                 error={errors.minTables}
                 hint={
                   suggestedTables && String(suggestedTables) !== values.minTables.trim() && !off ? (
                     <>
-                      Đặt từ số mâm này mới được kèm sảnh.{' '}
+                      Đặt từ số bàn này mới được kèm sảnh.{' '}
                       <button type="button" onClick={() => set({ minTables: String(suggestedTables) })} className="font-medium text-gold-ink underline underline-offset-2">
-                        Dùng gợi ý {suggestedTables} mâm
+                        Dùng gợi ý {suggestedTables} bàn
                       </button>
                     </>
                   ) : (
-                    'Đặt từ số mâm này mới được kèm sảnh.'
+                    'Đặt từ số bàn này mới được kèm sảnh.'
                   )
                 }
               >
-                <WithUnit unit="mâm">
+                <WithUnit unit="bàn">
                   <input
                     type="number"
                     min={1}
@@ -434,7 +442,7 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
         facts={[
           values.name.trim() ? `Tên gói: ${values.name.trim()}` : '',
           category?.name ? `Lĩnh vực: ${category.name}` : '',
-          Number(values.price) > 0 ? `Giá chỉ từ: ${formatMoney(Number(values.price))}${venue ? ' / mâm' : ''}` : '',
+          Number(values.price) > 0 ? `Giá chỉ từ: ${formatMoney(Number(values.price))}${venue ? ' / bàn' : ''}` : '',
           venue && values.capacity.trim() ? `Sức chứa: ${values.capacity.trim()} khách` : '',
           values.tags.length ? `Phong cách: ${values.tags.join(', ')}` : '',
         ].filter(Boolean)}

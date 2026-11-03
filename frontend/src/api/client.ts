@@ -59,7 +59,8 @@ export async function requestRaw<T>(path: string, options: RequestOptions = {}):
       },
       body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     })
-  } catch {
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e
     throw new ApiError(0, 'NETWORK_ERROR', 'Không kết nối được máy chủ.')
   }
 
@@ -80,6 +81,27 @@ export async function requestRaw<T>(path: string, options: RequestOptions = {}):
 /** Gọi API, chỉ trả về phần data. */
 export async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   return (await requestRaw<T>(path, options)).data
+}
+
+/** Tải file (CSV) từ API kèm token rồi lưu về máy với tên `filename`. */
+export async function download(path: string, filename: string) {
+  const token = authStore.getToken()
+  let res: Response
+  try {
+    res = await fetch(buildUrl(path), { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  } catch {
+    throw new ApiError(0, 'NETWORK_ERROR', 'Không kết nối được máy chủ.')
+  }
+  if (!res.ok) {
+    const err = ((await res.json().catch(() => null)) as ApiErrorBody | null)?.error
+    throw new ApiError(res.status, err?.code ?? 'UNKNOWN_ERROR', err?.message ?? 'Không tải được file.')
+  }
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 export const http = {

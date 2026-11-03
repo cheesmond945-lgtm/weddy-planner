@@ -1,11 +1,11 @@
 import type { LucideIcon } from 'lucide-react'
-import { ChevronRight, CircleUserRound, ClipboardCheck, Handshake, Inbox, LayoutDashboard, LogOut, Menu, PieChart, Package, Users } from 'lucide-react'
+import { ChevronRight, CircleUserRound, ClipboardCheck, Inbox, LayoutDashboard, LogOut, Menu, PieChart, Package, Users } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
 import { applySavedTheme, ThemeToggle } from '@/components/ThemeToggle'
 import { toast } from '@/components/ui/toast'
 import { NotificationBell } from '@/features/adminNotifications/components/NotificationBell'
-import { PartnerRegistrationDialog } from '@/features/partnerRegistration/components/PartnerRegistrationDialog'
+
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
@@ -220,7 +220,6 @@ function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }
 }
 
 function Header({ onOpenMenu, onLogout }: { onOpenMenu: () => void; onLogout: () => void }) {
-  const [registerOpen, setRegisterOpen] = useState(false)
   return (
     <header className="sticky top-0 z-30 flex h-[62px] items-center gap-3.5 border-b border-line bg-header px-4 backdrop-blur-[10px] min-[901px]:px-7">
       <button
@@ -233,16 +232,6 @@ function Header({ onOpenMenu, onLogout }: { onOpenMenu: () => void; onLogout: ()
       </button>
 
       <div className="ml-auto flex items-center gap-2.5">
-        {/* Tạm đặt ở header Admin để thử form; sau này chuyển sang header giao diện khách hàng */}
-        <button
-          type="button"
-          onClick={() => setRegisterOpen(true)}
-          className="inline-flex h-9 items-center gap-2 rounded-pill border border-line-strong px-3.5 text-[13px] font-medium text-ink transition-colors hover:bg-gold-soft hover:text-gold-ink"
-        >
-          <Handshake className="size-4" />
-          <span className="max-sm:hidden">Đăng ký hợp tác</span>
-        </button>
-        <PartnerRegistrationDialog open={registerOpen} onOpenChange={setRegisterOpen} />
         <ThemeToggle />
         <NotificationBell />
         <span aria-hidden className="mx-1 h-6 w-px bg-line max-sm:hidden" />

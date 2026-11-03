@@ -96,6 +96,12 @@ export const vendorOrdersApi = {
   rejectRevision: (orderId: string, note?: string): Promise<Order> =>
     http.post(`/vendors/me/orders/${orderId}/revision-requests/reject`, { note }),
 
+  /** Đồng ý yêu cầu đổi số khách (tăng giá trị thì chờ khách nộp cọc bổ sung, không tăng thì áp dụng ngay) */
+  approveGuestChange: (orderId: string): Promise<Order> => http.post(`/vendors/me/orders/${orderId}/guest-changes/approve`),
+  rejectGuestChange: (orderId: string, note?: string): Promise<Order> => http.post(`/vendors/me/orders/${orderId}/guest-changes/reject`, { note }),
+  /** Từ chối yêu cầu hủy của khách (đồng ý: cancel với reason CUSTOMER_REQUEST) */
+  rejectCancelRequest: (orderId: string, note?: string): Promise<Order> => http.post(`/vendors/me/orders/${orderId}/cancel-requests/reject`, { note }),
+
   /** Hoàn tất đơn (chỉ khi đã qua ngày sự kiện). */
   /** restReceived: true = đồng thời ghi nhận đã nhận đủ tiền mặt phần còn lại (chưa ghi nhận mà không gửi thì 409 REST_PAYMENT_NOT_RECORDED) */
   complete: (orderId: string, restReceived?: boolean): Promise<Order> =>

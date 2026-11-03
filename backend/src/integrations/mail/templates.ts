@@ -17,7 +17,7 @@ function otpEmail(opts: { subject: string; name: string; otp: string; minutes: n
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #eadfd0;border-radius:16px">
     <tr><td style="padding:28px 32px 8px;text-align:center">
       <div style="font-size:12px;letter-spacing:3px;color:#ae8131;font-weight:bold">WEDDY PLANNER</div>
-      <div style="font-family:Georgia,serif;font-size:26px;color:#ae8131;font-weight:bold;margin-top:6px">WEBPLAN</div>
+      <div style="font-family:Georgia,serif;font-size:26px;color:#ae8131;font-weight:bold;margin-top:6px">FOREVER</div>
     </td></tr>
     <tr><td style="padding:16px 32px 28px">
       <p style="margin:0 0 12px">Chào ${escape(name)},</p>
@@ -34,23 +34,23 @@ function otpEmail(opts: { subject: string; name: string; otp: string; minutes: n
 /** Email gửi mã OTP đăng ký. */
 export function registerOtpEmail(name: string, otp: string, minutes: number) {
   return otpEmail({
-    subject: `${otp} là mã xác thực đăng ký WebPlan`,
+    subject: `${otp} là mã xác thực đăng ký Forever`,
     name,
     otp,
     minutes,
-    intro: 'Mã xác thực đăng ký tài khoản WebPlan của bạn là',
-    ignoreNote: 'Nếu bạn không đăng ký WebPlan, hãy bỏ qua email này.',
+    intro: 'Mã xác thực đăng ký tài khoản Forever của bạn là',
+    ignoreNote: 'Nếu bạn không đăng ký Forever, hãy bỏ qua email này.',
   });
 }
 
 /** Email gửi mã OTP đặt lại mật khẩu. */
 export function resetPasswordOtpEmail(name: string, otp: string, minutes: number) {
   return otpEmail({
-    subject: `${otp} là mã đặt lại mật khẩu WebPlan`,
+    subject: `${otp} là mã đặt lại mật khẩu Forever`,
     name,
     otp,
     minutes,
-    intro: 'Mã đặt lại mật khẩu tài khoản WebPlan của bạn là',
+    intro: 'Mã đặt lại mật khẩu tài khoản Forever của bạn là',
     ignoreNote: 'Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này. Mật khẩu hiện tại vẫn giữ nguyên.',
   });
 }

@@ -1,10 +1,10 @@
 import type { VendorFile } from '@/types/vendor'
 import type { SavePackageRequest, VendorPackage } from '@/types/vendorPackage'
 
-/** Mỗi mâm 10 khách (giá gói trung tâm sự kiện là giá mỗi mâm). */
+/** Mỗi bàn 10 khách (giá gói trung tâm sự kiện là giá mỗi bàn). */
 export const GUESTS_PER_TABLE = 10
 
-/** Gợi ý số mâm tối thiểu theo sức chứa: khoảng 2/3 số mâm tối đa, làm tròn tới bội số 5, ít nhất 5. */
+/** Gợi ý số bàn tối thiểu theo sức chứa: khoảng 2/3 số bàn tối đa, làm tròn tới bội số 5, ít nhất 5. */
 export const suggestMinTables = (capacity: number) => Math.max(5, Math.round(capacity / 15 / 5) * 5)
 
 /** Giá trị đang sửa trên form gói. Giá và sức chứa 0 nghĩa là chưa nhập (ô tiền MoneyInput dùng 0 cho ô trống). */
@@ -14,6 +14,9 @@ export interface PackageFormValues {
   tags: string[]
   price: number
   capacity: string
+  /** Nhà hàng: TABLE (giá một bàn) hoặc PACKAGE (trọn gói). Hạng mục khác luôn PACKAGE */
+  unit: 'TABLE' | 'PACKAGE'
+  /** Số bàn tối thiểu (chỉ gói tính theo bàn), chuỗi rỗng là không yêu cầu */
   minTables: string
   photos: VendorFile[]
 }
@@ -27,6 +30,7 @@ export const EMPTY_PACKAGE: PackageFormValues = {
   tags: [],
   price: 0,
   capacity: '',
+  unit: 'TABLE',
   minTables: '',
   photos: [],
 }
@@ -38,6 +42,7 @@ export function toFormValues(p: VendorPackage): PackageFormValues {
     tags: p.tags,
     price: p.price,
     capacity: p.capacity ? String(p.capacity) : '',
+    unit: p.pricingUnit ?? 'TABLE',
     minTables: p.minTables ? String(p.minTables) : '',
     photos: p.photos,
   }
@@ -50,7 +55,8 @@ export function toRequest(v: PackageFormValues, venue: boolean): SavePackageRequ
     price: v.price,
     tags: v.tags,
     capacity: venue && v.capacity.trim() ? Number(v.capacity) : null,
-    minTables: venue && v.minTables.trim() ? Number(v.minTables) : null,
+    unit: venue ? v.unit : 'PACKAGE',
+    minTables: venue && v.unit === 'TABLE' && v.minTables.trim() ? Number(v.minTables) : null,
     photos: v.photos,
     // Ảnh đầu tiên là ảnh đại diện của gói
     coverPublicId: v.photos[0]?.publicId ?? null,
@@ -70,7 +76,7 @@ const positiveInt = (s: string) => Number.isInteger(Number(s)) && Number(s) > 0
 
 /**
  * Kiểm tra gói (như prototype NCC).
- * - 'draft' (Lưu nháp): cần tên gói và giá; sức chứa, số mâm tối thiểu nếu đã nhập thì phải hợp lệ.
+ * - 'draft' (Lưu nháp): cần tên gói và giá; sức chứa, số bàn tối thiểu nếu đã nhập thì phải hợp lệ.
  * - 'submit' (Gửi duyệt): thêm mô tả, ít nhất một ảnh, và hồ sơ đã xác minh đúng lĩnh vực.
  */
 export function validatePackage(v: PackageFormValues, opts: { mode: 'draft' | 'submit'; venue: boolean; canSubmit: boolean }): PackageErrors {
@@ -79,10 +85,13 @@ export function validatePackage(v: PackageFormValues, opts: { mode: 'draft' | 's
   if (!v.price) errors.price = 'Nhập giá.'
   if (opts.venue && v.capacity.trim() && !positiveInt(v.capacity)) errors.capacity = 'Sức chứa là số nguyên dương.'
   if (opts.venue && v.minTables.trim()) {
-    if (!positiveInt(v.minTables)) errors.minTables = 'Số mâm tối thiểu là số nguyên dương.'
+    if (!positiveInt(v.minTables)) errors.minTables = 'Số bàn tối thiểu là số nguyên dương.'
     else if (positiveInt(v.capacity) && Number(v.minTables) * GUESTS_PER_TABLE > Number(v.capacity)) {
-      errors.minTables = `Sảnh ${v.capacity} khách chứa tối đa ${Math.floor(Number(v.capacity) / GUESTS_PER_TABLE)} mâm.`
+      errors.minTables = `Sảnh ${v.capacity} khách chứa tối đa ${Math.floor(Number(v.capacity) / GUESTS_PER_TABLE)} bàn.`
     }
+  }
+  if (opts.venue && v.unit === 'TABLE' && v.minTables.trim() && !(Number.isInteger(Number(v.minTables)) && Number(v.minTables) >= 1 && Number(v.minTables) <= 500)) {
+    errors.minTables = 'Số bàn tối thiểu là số nguyên từ 1 đến 500.'
   }
   if (opts.mode === 'draft') return errors
 

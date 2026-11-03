@@ -10,10 +10,19 @@ import { dueBounds, dueRangeIssue, sequenceIssue } from './timeline-rules';
 import { ownerOf } from './task-owner';
 import { serviceKeyOf, SUGGEST_LABEL, TIMELINE_TEMPLATES, suggestOf, templateOf, type ServiceKey } from './timeline-templates';
 import { WeddingsService } from './weddings.service';
+import { dbFeatures, requireDbFeature } from '../../prisma/db-features';
 
 const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);
 };
+
+export interface TimelineUpdateBody {
+  title?: string;
+  dueDate?: string;
+  isDone?: boolean;
+  /** Ghi chú tối đa 200 ký tự, chuỗi rỗng hoặc null để xóa */
+  note?: string | null;
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
@@ -45,7 +54,7 @@ export class TimelineService {
     const [tasks, cats, plan, orders] = await Promise.all([
       this.prisma.timeline_tasks.findMany({ where: { wedding_id: w.id }, orderBy: [{ scheduled_date: 'asc' }, { display_order: 'asc' }, { created_date: 'asc' }], include: { task_confirmations: true } }),
       this.prisma.service_categories.findMany(),
-      this.weddings.planSnapshot(userId, w.id),
+      this.weddings.planSnapshot(w.user_id, w.id),
       this.prisma.orders.findMany({
         where: { wedding_id: w.id },
         select: {
@@ -157,6 +166,8 @@ export class TimelineService {
         processSyncFailed: kind === 'CATEGORY_DEADLINE' && done && processSyncFailed(t.category_id),
         /** CATEGORY_DEADLINE đang Todo: đơn ĐÃ CỌC rồi bị hủy gần nhất cùng hạng mục ("Đơn … với … đã hủy ngày …"); cọc đơn mới thì Mốc chốt xong và dòng này mất */
         cancelledOrder: kind === 'CATEGORY_DEADLINE' && !done ? cancelledOrderOf(t.category_id) : null,
+        /** Ghi chú của việc (tối đa 200 ký tự), không ghi người viết */
+        note: t.note ?? null,
       };
     }).map((i, idx) => {
       const tpl = templateOf(tasks[idx].task_code);
@@ -207,19 +218,30 @@ export class TimelineService {
     return new Date(dueDate);
   }
 
-  async addTask(userId: string, body: { title?: string; dueDate?: string }) {
+  async addTask(userId: string, body: Pick<TimelineUpdateBody, 'title' | 'dueDate' | 'note'>) {
     const w = await this.weddings.requireWedding(userId);
-    const title = body.title?.trim() ?? '';
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
     if (!title || title.length > 255) return fail('VALIDATION_ERROR', 'Nhập tên việc (tối đa 255 ký tự).', 400);
     const due = await this.checkDue(body.dueDate, w.wedding_date);
-    await this.prisma.timeline_tasks.create({ data: { wedding_id: w.id, title, scheduled_date: due, status: 'Todo', task_type: 'Frame', display_order: 0 } });
+    if (typeof body.note === 'string' && body.note.trim()) requireDbFeature('timelineNotes');
+    const note = typeof body.note === 'string' ? body.note.trim() : '';
+    if (note.length > 200) return fail('VALIDATION_ERROR', 'Ghi chú tối đa 200 ký tự.', 400);
+    await this.prisma.timeline_tasks.create({
+      data: { wedding_id: w.id, title, scheduled_date: due, status: 'Todo', task_type: 'Frame', display_order: 0, ...(note && { note }) },
+    });
     return this.get(userId);
   }
 
-  async update(userId: string, id: string, body: { title?: string; dueDate?: string; isDone?: boolean }) {
+  async update(userId: string, id: string, body: TimelineUpdateBody) {
     const { wedding, task } = await this.task(userId, id);
     const deadline = task.task_type === 'Frame' && !!task.task_code?.endsWith('_BOOK');
-    const data: { title?: string; scheduled_date?: Date; status?: string; completed_date?: Date | null } = {};
+    const data: {
+      title?: string;
+      scheduled_date?: Date;
+      status?: string;
+      completed_date?: Date | null;
+      note?: string | null;
+    } = {};
 
     // Việc chi tiết gắn đơn do NCC quản lý: khách không tick, đổi hạn, đổi tên, xóa (403 TIMELINE_ITEM_READONLY)
     const readonly = customerReadonlyIssue(task);
@@ -236,6 +258,13 @@ export class TimelineService {
       if (deadline) return fail('TIMELINE_ITEM_READONLY', 'Mốc "Chốt" tự hoàn thành khi đặt cọc dịch vụ.', 400);
       data.status = body.isDone ? 'Done' : 'Todo';
       data.completed_date = body.isDone ? new Date() : null;
+    }
+    if (body.note !== undefined) requireDbFeature('timelineNotes');
+    if (body.note !== undefined) {
+      const note = typeof body.note === 'string' ? body.note.trim() : '';
+      if (body.note !== null && typeof body.note !== 'string') return fail('VALIDATION_ERROR', 'Ghi chú không hợp lệ.', 400);
+      if (note.length > 200) return fail('VALIDATION_ERROR', 'Ghi chú tối đa 200 ký tự.', 400);
+      data.note = note || null;
     }
     if (Object.keys(data).length) await this.prisma.timeline_tasks.update({ where: { id }, data });
     return this.get(userId);

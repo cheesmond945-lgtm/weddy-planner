@@ -1,5 +1,7 @@
-import { Plus } from 'lucide-react'
+import { Download, FileSpreadsheet, Plus } from 'lucide-react'
+import { weddingsApi } from '@/api/weddings'
 import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/toast'
 import { daysBetween, formatDate, parseDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import type { TimelineItem, Wedding } from '@/types/wedding'
@@ -7,12 +9,15 @@ import type { TimelineItem, Wedding } from '@/types/wedding'
 interface TimelineHeroProps {
   wedding: Wedding
   items: TimelineItem[]
-  onEdit: () => void
-  onAddTask: () => void
+  /** Không truyền (người chỉ xem): ẩn nút */
+  onEdit?: () => void
+  onAddTask?: () => void
+  /** Nhập việc từ Excel/CSV */
+  onImport?: () => void
 }
 
 /** Khối đầu trang Timeline: số ngày còn lại, thông tin, tiến độ (tlhero trong prototype). */
-export function TimelineHero({ wedding, items, onEdit, onAddTask }: TimelineHeroProps) {
+export function TimelineHero({ wedding, items, onEdit, onAddTask, onImport }: TimelineHeroProps) {
   const days = Math.max(0, daysBetween(today(), parseDate(wedding.date)))
   // Không tính chỗ giữ (LOCKED) và ngày thực hiện (SERVICE_DATE) vào tiến độ
   const real = items.filter((i) => i.kind !== 'LOCKED' && i.kind !== 'SERVICE_DATE')
@@ -28,9 +33,8 @@ export function TimelineHero({ wedding, items, onEdit, onAddTask }: TimelineHero
       <div className="grid gap-1">
         <b className="font-semibold">{formatDate(wedding.date)}</b>
         <div className="text-muted-foreground">
-          {wedding.location}, {wedding.guestCount ? `${wedding.guestCount} khách` : 'chưa nhập sức chứa'}, ngân sách {formatMoney(wedding.budget)}
+          {wedding.ward ? `${wedding.ward}, ` : ''}{wedding.location}, {wedding.guestCount ? `${wedding.guestCount} khách` : 'chưa nhập sức chứa'}, ngân sách {formatMoney(wedding.budget)}
         </div>
-        {wedding.styles.length > 0 && <div className="text-muted-foreground">Phong cách: {wedding.styles.join(', ')}</div>}
         <div className="mt-2.5 h-1.5 overflow-hidden rounded-[9px] bg-line" aria-hidden>
           <i className="block h-full bg-sage" style={{ width: `${percent}%` }} />
         </div>
@@ -39,12 +43,26 @@ export function TimelineHero({ wedding, items, onEdit, onAddTask }: TimelineHero
         </div>
       </div>
       <div className="flex flex-col gap-2 max-[860px]:flex-row max-[860px]:flex-wrap">
-        <Button variant="outline" onClick={onEdit}>
-          Chỉnh sửa thông tin
-        </Button>
-        <Button variant="outline" onClick={onAddTask}>
-          <Plus />
-          Thêm việc
+        {onEdit && (
+          <Button variant="outline" onClick={onEdit}>
+            Chỉnh sửa thông tin
+          </Button>
+        )}
+        {onAddTask && (
+          <Button variant="outline" onClick={onAddTask}>
+            <Plus />
+            Thêm việc
+          </Button>
+        )}
+        {onImport && (
+          <Button variant="outline" onClick={onImport}>
+            <FileSpreadsheet />
+            Nhập từ Excel
+          </Button>
+        )}
+        <Button variant="outline" onClick={() => weddingsApi.downloadExport('tasks').catch((e: Error) => toast(e.message))}>
+          <Download />
+          Tải về
         </Button>
       </div>
     </section>

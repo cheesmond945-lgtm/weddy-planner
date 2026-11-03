@@ -19,14 +19,35 @@ export interface PriceRange {
 }
 
 /**
- * Bộ lọc danh sách dịch vụ lưu trên URL (?q=&category=&priceMin=&priceMax=), quay lại từ trang chi tiết vẫn giữ.
- * Danh mục, mức giá, từ khóa là 3 bộ lọc cộng dồn. Không còn lọc khu vực: gõ tên quận / đường vào ô từ khóa.
+ * Bộ lọc danh sách dịch vụ lưu trên URL (?q=&category=&area=&priceMin=&priceMax=), quay lại từ trang chi tiết vẫn giữ.
+ * Danh mục, khu vực, mức giá, từ khóa cộng dồn (AND). Từ khóa chỉ khớp tên và mô tả; khu vực là bộ lọc cứng riêng.
  */
 export interface ServiceFilters {
   q: string
   category: string
+  /** Phường/xã chính thức ("Phường Đống Đa"); rỗng là chưa chọn, ALL_AREAS là người dùng chọn "Tất cả khu vực" */
+  area: string
+  price: PriceRange
+  /** Bộ lọc AI đã hiểu từ câu gõ (tham số nl*): ưu tiên hơn dropdown; bỏ chip thì dropdown quay về giá trị người dùng đã chọn */
+  nl: NlState | null
+}
+
+/** Giới hạn độ dài câu tìm kiếm, khớp QUERY_MAX_LENGTH ở backend (search.config.ts) */
+export const QUERY_MAX_LENGTH = 100
+
+/** Người dùng chủ động chọn "Tất cả khu vực" (để không chọn sẵn khu vực đám cưới lần nữa) */
+export const ALL_AREAS = 'all'
+
+export interface NlState {
+  /** Câu đã gõ (hiện cạnh nhãn "Hiểu theo ngôn ngữ tự nhiên") */
+  text: string
+  category: string
+  area: string
+  styles: string[]
   price: PriceRange
 }
+
+const NL_KEYS = ['nlq', 'nlCategory', 'nlArea', 'nlStyles', 'nlMin', 'nlMax']
 
 const num = (v: string | null) => (v && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined)
 
@@ -48,24 +69,41 @@ export function useServiceFilters() {
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const category = params.get('category') ?? ''
+  const area = params.get('area') ?? ''
   const priceMin = num(params.get('priceMin'))
   const priceMax = num(params.get('priceMax'))
 
-  const filters = useMemo<ServiceFilters>(() => ({ q, category, price: { min: priceMin, max: priceMax } }), [q, category, priceMin, priceMax])
+  const nlKey = NL_KEYS.map((k) => params.get(k) ?? '').join('\u0001')
+  const filters = useMemo<ServiceFilters>(() => {
+    const [text, nlCategory, nlArea, nlStyles, nlMin, nlMax] = nlKey.split('\u0001')
+    const nl = nlKey.replace(/\u0001/g, '')
+      ? { text, category: nlCategory, area: nlArea, styles: nlStyles ? nlStyles.split(',') : [], price: { min: num(nlMin), max: num(nlMax) } }
+      : null
+    return { q, category, area, price: { min: priceMin, max: priceMax }, nl }
+  }, [q, category, area, priceMin, priceMax, nlKey])
 
   const setFilters = useCallback(
     (patch: Partial<ServiceFilters>) => {
       setParams(
         (prev) => {
           const next = new URLSearchParams(prev)
-          // Đổi hạng mục thì đóng khung gợi ý AI (setCat trong prototype)
-          if ('category' in patch && patch.category !== prev.get('category')) next.delete('ai')
+          // Đổi hạng mục, tìm kiếm hoặc lọc giá thì bỏ "Gợi ý cho bạn": danh sách xếp theo kết quả lọc
+          next.delete('ai')
+          // Người dùng tự chọn lại thì bỏ phần AI tương ứng; tìm câu mới thì bỏ hết bộ lọc AI cũ
+          if ('q' in patch) for (const k of NL_KEYS) next.delete(k)
+          if ('category' in patch) next.delete('nlCategory')
+          if ('area' in patch) next.delete('nlArea')
+          if ('price' in patch) {
+            next.delete('nlMin')
+            next.delete('nlMax')
+          }
           const set = (key: string, v: string | number | undefined) => {
             if (v === undefined || v === '') next.delete(key)
             else next.set(key, String(v))
           }
           if ('q' in patch) set('q', patch.q?.trim())
           if ('category' in patch) set('category', patch.category)
+          if ('area' in patch) set('area', patch.area)
           if ('price' in patch) {
             set('priceMin', patch.price?.min)
             set('priceMax', patch.price?.max)
@@ -78,17 +116,74 @@ export function useServiceFilters() {
     [setParams],
   )
 
-  const clearFilters = useCallback(() => setFilters({ q: '', category: '', price: {} }), [setFilters])
+  const clearFilters = useCallback(() => setFilters({ q: '', category: '', area: ALL_AREAS, price: {} }), [setFilters])
 
-  return { filters, setFilters, clearFilters }
+  /** Ghi bộ lọc AI đã hiểu lên URL (thay câu gõ): từ đây bỏ chip là lọc lại bằng GET /services, không gọi AI nữa */
+  const applyNl = useCallback(
+    (text: string, f: { category: string | null; area: string | null; styles: string[]; priceMin: number | null; priceMax: number | null }) =>
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('q')
+          for (const k of NL_KEYS) next.delete(k)
+          const set = (k: string, v: string | number | null | undefined) => v !== null && v !== undefined && v !== '' && next.set(k, String(v))
+          set('nlq', text)
+          set('nlCategory', f.category)
+          set('nlArea', f.area)
+          set('nlStyles', f.styles.join(','))
+          set('nlMin', f.priceMin)
+          set('nlMax', f.priceMax)
+          return next
+        },
+        { replace: true, preventScrollReset: true },
+      ),
+    [setParams],
+  )
+
+  /** Bỏ một chip AI (nlCategory, nlArea, nlStyles, nlPrice) hoặc bỏ hết */
+  const removeNl = useCallback(
+    (key: 'category' | 'area' | 'styles' | 'price' | 'all', style?: string) =>
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (key === 'all') for (const k of NL_KEYS) next.delete(k)
+          if (key === 'category') next.delete('nlCategory')
+          if (key === 'area') next.delete('nlArea')
+          if (key === 'price') {
+            next.delete('nlMin')
+            next.delete('nlMax')
+          }
+          if (key === 'styles') {
+            const rest = (next.get('nlStyles') ?? '').split(',').filter((s) => s && s !== style)
+            if (rest.length) next.set('nlStyles', rest.join(','))
+            else next.delete('nlStyles')
+          }
+          // Không còn chip nào thì bỏ luôn câu đã hiểu
+          if (!['nlCategory', 'nlArea', 'nlStyles', 'nlMin', 'nlMax'].some((k) => next.get(k))) next.delete('nlq')
+          return next
+        },
+        { replace: true, preventScrollReset: true },
+      ),
+    [setParams],
+  )
+
+  return { filters, setFilters, clearFilters, applyNl, removeNl }
 }
 
-/** Đổi bộ lọc trên URL thành query gửi API. */
+/** Khu vực dropdown thực sự dùng để lọc (ALL_AREAS / rỗng là mọi khu vực) */
+export const dropdownArea = (f: Pick<ServiceFilters, 'area'>) => (f.area && f.area !== ALL_AREAS ? f.area : undefined)
+
+/**
+ * Đổi bộ lọc trên URL thành query gửi API: bộ lọc AI (nl) ưu tiên hơn dropdown; không mâu thuẫn thì kết hợp AND.
+ * Không gửi q: tìm theo câu gõ đi đường /services/search riêng.
+ */
 export function toServiceQuery(f: ServiceFilters): ServiceListQuery {
+  const nlPrice = f.nl && hasPrice(f.nl.price)
   return {
-    q: f.q.trim() || undefined,
-    category: f.category || undefined,
-    priceMin: f.price.min,
-    priceMax: f.price.max,
+    category: f.nl?.category || f.category || undefined,
+    area: f.nl?.area || dropdownArea(f),
+    styles: f.nl?.styles.length ? f.nl.styles.join(',') : undefined,
+    priceMin: nlPrice ? f.nl!.price.min : f.price.min,
+    priceMax: nlPrice ? f.nl!.price.max : f.price.max,
   }
 }

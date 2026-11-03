@@ -1,6 +1,6 @@
-import { Sparkles, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import type { CSSProperties } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import { useRemovePlanItem } from '../hooks'
 import { usePlanActions } from '../planActions'
 import { PLAN_STATUS } from '../status'
 import { useAiSuggest } from '../useAiSuggest'
+import { PackageSwitcher } from './PackageSwitcher'
 
 interface PlanSlotsProps {
   categorySlugs: string[]
@@ -25,18 +26,19 @@ interface PlanSlotsProps {
   /** Mọi đơn NCC đã gửi cho khách (GET /orders), hiện dưới đúng hạng mục */
   orders: Order[]
   onRevise: (order: Order) => void
+  /** Số khách dự kiến (cảnh báo gói không đủ chỗ) */
+  guestCount?: number
 }
 
 /**
  * Các hạng mục của kế hoạch, mỗi hạng mục một dịch vụ (planServices trong prototype), kèm các đơn dịch vụ của hạng mục đó
  * (Thanh toán cọc, Yêu cầu chỉnh sửa, Xem chi tiết, Nhắn NCC). Hạng mục có đơn nhưng không còn trong kế hoạch vẫn hiện ở cuối.
  */
-export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise }: PlanSlotsProps) {
+export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, guestCount = 0 }: PlanSlotsProps) {
   const { data: categories = [] } = useCategories()
   const { openChat } = usePlanActions()
   const remove = useRemovePlanItem()
   const aiSuggest = useAiSuggest()
-  const navigate = useNavigate()
 
   const ordersOf = (slug: string) => orders.filter((o) => o.category?.slug === slug)
   const extraSlugs = [...new Set(orders.map((o) => o.category?.slug).filter((s): s is string => !!s && !categorySlugs.includes(s)))]
@@ -85,16 +87,7 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise }
                     <div className="min-w-[200px] flex-1">
                       <b className="font-serif text-base font-semibold">{item.service.name}</b>
                       <RatingMeta service={item.service} />
-                      <div className="mt-1 text-[13px] text-muted-foreground">
-                        {item.packageName}: {formatMoney(item.price)}
-                        {/* Chưa có đơn, giá theo mâm: ghi rõ cách ước tính */}
-                        {item.estimate && (
-                          <span className="block text-xs">
-                            Ước tính {formatMoney(item.estimate.unitPrice)}/mâm × {item.estimate.tables} mâm
-                            {item.estimate.minTables && item.estimate.tables === item.estimate.minTables ? ' (số mâm tối thiểu)' : ''}, đã gồm sảnh
-                          </span>
-                        )}
-                      </div>
+                      <PackageSwitcher item={item} guestCount={guestCount} />
                     </div>
                     <Badge tone={PLAN_STATUS[item.status].tone}>{PLAN_STATUS[item.status].label}</Badge>
                     <div className="flex flex-wrap items-center gap-2">
@@ -105,11 +98,6 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise }
                       >
                         Nhắn tin
                       </Button>
-                      {item.status === 'CONFIRMED' && (
-                        <Button variant="outline" size="sm" onClick={() => navigate(`${paths.timeline}?category=${slug}`)}>
-                          Xem việc cần làm
-                        </Button>
-                      )}
                       {(item.status === 'PLANNED' || item.status === 'DISCUSSING') && (
                         <Button
                           variant="outline"
@@ -135,8 +123,7 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise }
                   </Button>
                   {hasWedding && (
                     <Button variant="secondary" size="sm" onClick={() => aiSuggest(slug)}>
-                      <Sparkles className="size-[15px]" />
-                      Gợi ý bằng AI
+                      Gợi ý cho bạn
                     </Button>
                   )}
                 </div>

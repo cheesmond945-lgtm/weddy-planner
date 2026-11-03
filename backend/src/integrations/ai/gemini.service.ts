@@ -52,6 +52,30 @@ export class GeminiService {
     return t;
   }
 
+  /**
+   * Gọi model chính ở chế độ JSON (responseMimeType application/json, temperature 0) với thời gian chờ ngắn, không thử model dự phòng
+   * (tìm kiếm không được chờ lâu). Trả đối tượng đã parse; thiếu khóa, lỗi mạng, quá thời gian hoặc JSON hỏng thì ném lỗi để nơi gọi xử lý.
+   */
+  async json(system: string, prompt: string, timeoutMs: number): Promise<unknown> {
+    if (!this.configured) throw new Error('AI_NOT_CONFIGURED');
+    const model = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY!.trim() },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 512, responseMimeType: 'application/json' },
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = (await res.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
+    const text = body.candidates?.[0]?.content?.parts?.filter((p) => !p.thought).map((p) => p.text ?? '').join('').trim();
+    if (!text) throw new Error('Gemini không trả nội dung');
+    return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+  }
+
   /** Trả đoạn văn đã làm sạch, hoặc null khi không dùng được AI. */
   async write(system: string, prompt: string, temperature = 0.8): Promise<string | null> {
     if (!this.configured) return null;

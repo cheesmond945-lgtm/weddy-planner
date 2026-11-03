@@ -21,12 +21,7 @@ export const NO_FILTERS: TimelineFilters = { q: '', month: '', owner: 'all' }
 export const hasFilters = (f: TimelineFilters) => !!(f.q.trim() || f.month || f.owner !== 'all')
 
 /** Bỏ dấu tiếng Việt, đ thành d, chữ thường: "Đặt cọc" khớp "dat coc". */
-export const foldText = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/đ/gi, 'd')
-    .toLowerCase()
+export const foldText = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase()
 
 const dmy = (s: string) => s.split('-').reverse().join('/')
 
@@ -37,26 +32,93 @@ function wordsOf(i: TimelineItem): string[] {
   return text.split(/[^a-z0-9/]+/).filter(Boolean)
 }
 
-/** Tách "tháng N" khỏi từ khóa (tìm theo tháng của hạn, mọi năm); phần còn lại là các từ. */
+/*
+ * Luật tìm giống ô tìm Dịch vụ cưới (backend catalog/search.config.ts, giữ hai nơi trùng nhau): cụm đồng nghĩa hạng mục
+ * ("chụp hình" = "chụp ảnh" = "quay phim", "make up" = "trang điểm"...), bỏ từ nối và từ chung chung ("đẹp", "uy tín").
+ */
+const CATEGORY_SYNONYMS: Record<string, string> = {
+  'chup hinh': 'chup anh',
+  'chup anh': 'chup anh',
+  'chup anh cuoi': 'chup anh',
+  'quay phim': 'chup anh',
+  makeup: 'trang diem',
+  'make up': 'trang diem',
+  'trang diem': 'trang diem',
+  'nha hang': 'trung tam to chuc su kien',
+  'trung tam tiec cuoi': 'trung tam to chuc su kien',
+  'trung tam to chuc su kien': 'trung tam to chuc su kien',
+  'sanh cuoi': 'trung tam to chuc su kien',
+  'sanh tiec': 'trung tam to chuc su kien',
+  decor: 'trang tri',
+  'trang tri': 'trang tri',
+  'hoa cuoi': 'hoa cuoi',
+  'hoa cam tay': 'hoa cuoi',
+  'vay cuoi': 'trang phuc',
+  'ao cuoi': 'trang phuc',
+  'trang phuc': 'trang phuc',
+  vest: 'trang phuc',
+}
+const SYNONYM_PHRASES = Object.keys(CATEGORY_SYNONYMS).sort((a, b) => b.length - a.length)
+const STOP_WORDS = ['o', 'tai', 'cho', 'va', 'cua', 'voi', 'la', 'cac', 'nhung', 'mot', 'can', 'muon', 'tim']
+const GENERIC_WORDS = ['dep', 'xinh', 'tot', 'hay', 'sang', 'chat luong', 'uy tin', 'ung y', 'dep nhat', 'tot nhat']
+
+/** Lấy các cụm có trong câu (khớp nguyên từ), bỏ chúng khỏi câu */
+function takePhrases(work: string, phrases: readonly string[]) {
+  const found: string[] = []
+  for (const p of phrases) {
+    while (work.includes(` ${p} `)) {
+      found.push(p)
+      work = work.replace(` ${p} `, ' ')
+    }
+  }
+  return { work, found }
+}
+
+/**
+ * Tách "tháng N" khỏi từ khóa (tìm theo tháng của hạn, mọi năm); nhận cụm hạng mục (đổi về tên hạng mục chuẩn);
+ * phần còn lại là các từ, đã bỏ từ nối / từ chung chung (trừ khi câu chỉ có những từ đó).
+ */
 function parseQuery(q: string) {
   let month: number | null = null
   const rest = foldText(q).replace(/thang\s*(\d{1,2})\b/, (_, m: string) => {
     month = Number(m)
     return ' '
   })
-  return { month, terms: rest.split(/\s+/).filter(Boolean) }
+  const cat = takePhrases(
+    ` ${rest
+      .split(/[^a-z0-9/]+/)
+      .filter(Boolean)
+      .join(' ')} `,
+    SYNONYM_PHRASES,
+  )
+  const generic = takePhrases(cat.work, GENERIC_WORDS)
+  const all = generic.work.split(' ').filter(Boolean)
+  const terms = all.filter((w) => !STOP_WORDS.includes(w))
+  const categories = [...new Set(cat.found.map((p) => CATEGORY_SYNONYMS[p]))]
+  return { month, categories, terms: terms.length || categories.length ? terms : all }
 }
+
+/** Mọi cụm gõ được hiểu là hạng mục chuẩn `canonical` (gồm chính nó) */
+const phrasesOf = (canonical: string) => [canonical, ...SYNONYM_PHRASES.filter((p) => CATEGORY_SYNONYMS[p] === canonical)]
 
 /**
  * Mỗi từ khóa phải là ĐẦU của một từ trong việc (không khớp giữa chữ: "hang" không khớp "thang"); đủ mọi từ, thứ tự tùy ý.
+ * Cụm hạng mục khớp việc thuộc hạng mục đó hoặc có cụm cùng nghĩa trong chữ ("chụp hình" khớp "Chụp ảnh cưới", "quay phim").
  * "tháng 12" khớp việc có hạn trong tháng 12; "12/11" khớp ngày hạn 12/11.
  */
 export function matchesQuery(i: TimelineItem, q: string): boolean {
-  const { month, terms } = parseQuery(q)
+  const { month, categories, terms } = parseQuery(q)
   if (month !== null && (!i.dueDate || Number(i.dueDate.slice(5, 7)) !== month)) return false
-  if (!terms.length) return true
+  if (!terms.length && !categories.length) return true
   const words = wordsOf(i)
-  return terms.every((t) => words.some((w) => w.startsWith(t)))
+  const text = ` ${words.join(' ')} `
+  const categoryName = i.category
+    ? foldText(i.category.name)
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+    : ''
+  const inCategory = (c: string) => categoryName === c || phrasesOf(c).some((p) => text.includes(` ${p} `))
+  return categories.every(inCategory) && terms.every((t) => words.some((w) => w.startsWith(t)))
 }
 
 /**
@@ -126,6 +188,7 @@ export function monthOptions(items: readonly TimelineItem[], today: string): Mon
   const out: MonthOption[] = []
   if (overdue) out.push({ value: 'overdue', label: 'Quá hạn', count: overdue })
   if (soon) out.push({ value: 'soon', label: 'Sắp đến hạn', count: soon })
-  for (const [m, count] of [...months].sort(([a], [b]) => a.localeCompare(b))) out.push({ value: m, label: `Tháng ${Number(m.slice(5))}/${m.slice(0, 4)}`, count })
+  for (const [m, count] of [...months].sort(([a], [b]) => a.localeCompare(b)))
+    out.push({ value: m, label: `Tháng ${Number(m.slice(5))}/${m.slice(0, 4)}`, count })
   return out
 }

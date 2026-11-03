@@ -7,6 +7,7 @@ import { notify } from '../chat/chat-messages';
 import { ALBUM_BUCKET, StorageService } from '../../integrations/storage/storage.service';
 import { GUESTS_PER_TABLE, categorySlug, priceUnitOf } from '../catalog/services.service';
 import { fileNameOfPath, mimeOfPath } from './vendor-files';
+import { dbFeatures, unitOf } from '../../prisma/db-features';
 import { parseTasks, syncPackageTasks, toTaskDto } from './package-tasks';
 import { hasChanges, livePhotos, liveSnapshot, openUpdate, UPDATE_STATUS_OUT, type PackageSnapshot } from './package-update';
 import { VENUE_SLUG, defaultOf, hm, minutesOfTime, parseDayPlan, timeOfMinutes, type DayPlanInput } from '../weddings/wedding-day';
@@ -17,7 +18,9 @@ export interface SavePackageBody {
   price?: number | null;
   tags?: string[];
   capacity?: number | null;
-  /** Trung tâm sự kiện: số mâm tối thiểu để được kèm sảnh (giá gói là giá mỗi mâm) */
+  /** Đơn vị tính: TABLE (giá một bàn/mâm) hoặc PACKAGE (trọn gói). Nhà hàng mặc định TABLE, hạng mục khác luôn PACKAGE */
+  unit?: string | null;
+  /** Số bàn tối thiểu (chỉ gói tính theo bàn) */
   minTables?: number | null;
   photos?: { publicId: string }[];
   coverPublicId?: string | null;
@@ -93,6 +96,9 @@ export class VendorPackagesService {
       reviewNote: p.status === 'NeedRevision' ? (p.package_verifications[0]?.admin_note ?? null) : upd?.status === 'NeedRevision' ? upd.admin_note : null,
       tags: live.tags,
       capacity: live.capacity,
+      // Như catalog: unit để hiển thị (bàn/gói), pricingUnit để form chọn
+      unit: unitOf(p) === 'mâm' ? 'bàn' : 'gói',
+      pricingUnit: unitOf(p) === 'mâm' ? 'TABLE' : 'PACKAGE',
       minTables: live.minTables ?? null,
       photos: await this.files(live.photos),
       coverPublicId: live.cover,
@@ -189,13 +195,19 @@ export class VendorPackagesService {
 
     const price = toInt(body.price);
     const capacity = isRestaurant ? toInt(body.capacity) : null;
-    const minTables = isRestaurant ? toInt(body.minTables) : null;
     if (price === null || !Number.isInteger(price) || price <= 0) errors.price = 'Giá phải là số nguyên dương.';
     if (capacity !== null && (!Number.isInteger(capacity) || capacity <= 0)) errors.capacity = 'Sức chứa phải là số nguyên dương.';
-    if (minTables !== null && (!Number.isInteger(minTables) || minTables <= 0)) errors.minTables = 'Số mâm tối thiểu phải là số nguyên dương.';
-    // Mỗi mâm 10 khách: số mâm tối thiểu không vượt quá số mâm sảnh chứa được
+    // Đơn vị tính thay cho việc đọc "/mâm" trong mô tả (cột service_packages.unit)
+    let unit: 'mâm' | 'gói' = 'gói';
+    if (isRestaurant) {
+      if (body.unit === undefined || body.unit === null || body.unit === 'TABLE') unit = 'mâm';
+      else if (body.unit !== 'PACKAGE') errors.unit = 'Đơn vị tính phải là theo bàn hoặc trọn gói.';
+    } else if (body.unit !== undefined && body.unit !== null && body.unit !== 'PACKAGE') errors.unit = 'Hạng mục này chỉ tính trọn gói.';
+    const minTables = unit === 'mâm' ? toInt(body.minTables) : null;
+    if (minTables !== null && (!Number.isInteger(minTables) || minTables < 1 || minTables > 500)) errors.minTables = 'Số bàn tối thiểu là số nguyên từ 1 đến 500.';
+    // Mỗi bàn 10 khách: số bàn tối thiểu không vượt quá số bàn sảnh chứa được
     else if (minTables !== null && capacity !== null && Number.isInteger(capacity) && minTables * GUESTS_PER_TABLE > capacity) {
-      errors.minTables = `Sảnh ${capacity} khách chứa tối đa ${Math.floor(capacity / GUESTS_PER_TABLE)} mâm.`;
+      errors.minTables = `Sảnh ${capacity} khách chứa tối đa ${Math.floor(capacity / GUESTS_PER_TABLE)} bàn.`;
     }
 
     // Tag viết hoa chữ cái đầu, không trùng
@@ -212,7 +224,7 @@ export class VendorPackagesService {
 
     if (Object.keys(errors).length) fail('VALIDATION_ERROR', 'Thông tin gói chưa hợp lệ.', 400, errors);
     const cover = body.coverPublicId && photos.includes(body.coverPublicId) ? body.coverPublicId : (photos[0] ?? null);
-    return { name, description, price: price as number, capacity, minTables, tags, photos, cover };
+    return { name, description, price: price as number, capacity, unit, minTables, tags, photos, cover };
   }
 
   private albumRows(packageId: string, photos: string[], cover: string | null) {
@@ -228,7 +240,7 @@ export class VendorPackagesService {
     const d = this.parse(body, categorySlug(vendor.service_categories.name) === 'nha-hang', vendor.id, new Set());
     const created = await this.prisma.$transaction(async (tx) => {
       const p = await tx.service_packages.create({
-        data: { vendor_id: vendor.id, name: d.name, description: d.description, price: d.price, capacity: d.capacity, min_tables: d.minTables, status: 'Draft' },
+        data: { vendor_id: vendor.id, name: d.name, description: d.description, price: d.price, capacity: d.capacity, ...(dbFeatures.budgetTiers && { unit: d.unit }), min_tables: d.minTables, status: 'Draft' },
       });
       if (d.tags.length) await tx.package_tags.createMany({ data: d.tags.map((tag) => ({ package_id: p.id, tag })) });
       if (d.photos.length) await tx.package_albums.createMany({ data: this.albumRows(p.id, d.photos, d.cover) });
@@ -308,7 +320,7 @@ export class VendorPackagesService {
     await this.prisma.$transaction([
       this.prisma.service_packages.update({
         where: { id },
-        data: { name: d.name, description: d.description, price: d.price, capacity: d.capacity, min_tables: d.minTables },
+        data: { name: d.name, description: d.description, price: d.price, capacity: d.capacity, ...(dbFeatures.budgetTiers && { unit: d.unit }), min_tables: d.minTables },
       }),
       this.prisma.package_tags.deleteMany({ where: { package_id: id } }),
       this.prisma.package_tags.createMany({ data: d.tags.map((tag) => ({ package_id: id, tag })) }),

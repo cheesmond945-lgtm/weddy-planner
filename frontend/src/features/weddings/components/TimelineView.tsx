@@ -8,6 +8,7 @@ import { toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import type { PrepLevel, TimelineItem, Wedding } from '@/types/wedding'
 import { useTimeline, useTimelineMutations } from '../hooks'
+import { ImportDialog } from '../import/ImportDialog'
 import { countServices, groupByTime, type ViewMode } from '../timelineGroups'
 import { chatDraft, filterTimeline, processChangeDraft, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
 import { CompleteTaskDialog, ReopenTaskDialog } from './TimelineConfirmDialogs'
@@ -128,6 +129,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   const timeline = useTimeline(true)
   const { update, remove } = useTimelineMutations()
   const { openChat } = usePlanActions()
+  const [importing, setImporting] = useState(false)
   const [params, setParams] = useSearchParams()
   const show = (SHOWS.find((s) => s.value === params.get('show'))?.value ?? 'all') as Show
   const category = params.get('category') ?? ''
@@ -278,7 +280,13 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
 
   return (
     <>
-      <TimelineHero wedding={wedding} items={items} onEdit={() => setEditingWedding(true)} onAddTask={() => setAdding(true)} />
+      <TimelineHero
+        wedding={wedding}
+        items={items}
+        onEdit={() => setEditingWedding(true)}
+        onAddTask={() => setAdding(true)}
+        onImport={() => setImporting(true)}
+      />
       <UrgencyBanner level={level} daysLeft={daysLeft} />
       <WaitingBanner count={waitingCount} onPick={() => { setView('time'); setParam({ month: '', q: '', owner: 'mine', category: '', show: 'todo' }) }} />
       <DeadlineBanner overdue={overdueCount} soon={soonCount} onPick={(m) => { setView('time'); setParam({ month: m, q: '', owner: '', category: '', show: '' }) }} />
@@ -367,6 +375,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       <EditMilestoneDialog item={editing} wedding={wedding} onClose={() => setEditing(null)} />
       <AddTaskDialog open={adding} wedding={wedding} onClose={() => setAdding(false)} />
       <WeddingEditDialog open={editingWedding} onOpenChange={setEditingWedding} />
+      <ImportDialog type="tasks" open={importing} onOpenChange={setImporting} />
     </>
   )
 }

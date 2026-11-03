@@ -127,6 +127,42 @@ export interface Order {
   cancelledDate: string | null
   cancelReason: CancelReason | null
   createdDate: string
+  /** Số khách của đơn tiệc (sau lần đổi số khách gần nhất); null với đơn cũ / dịch vụ khác */
+  guestCount?: number | null
+  /** Khách yêu cầu hủy đơn đã cọc, chờ NCC xác nhận; null khi không có */
+  cancelRequest?: { requestedDate: string; note: string | null } | null
+  /** Yêu cầu đổi số khách, mới nhất trước */
+  guestChanges?: GuestChange[]
+}
+
+/** Yêu cầu đổi số khách của đơn tiệc đã cọc (docs/api/orders.md) */
+export interface GuestChange {
+  id: string
+  oldGuestCount: number | null
+  newGuestCount: number
+  oldTables: number
+  newTables: number
+  oldAmount: number
+  newAmount: number
+  /** Cọc bổ sung = 10% phần tăng; 0 khi giảm (không hoàn cọc) */
+  extraDeposit: number
+  /** AwaitingVendor: chờ NCC xác nhận; AwaitingDeposit: chờ nộp cọc bổ sung; Applied: đã áp dụng; Rejected: bị từ chối */
+  status: 'AwaitingVendor' | 'AwaitingDeposit' | 'Applied' | 'Rejected'
+  note: string | null
+  createdDate: string
+  appliedDate: string | null
+}
+
+/** Xem trước đổi số khách */
+export interface GuestChangeQuote {
+  oldTables: number
+  newTables: number
+  chargedTables: number
+  oldAmount: number
+  newAmount: number
+  extraDeposit: number
+  /** Hạn cuối gửi yêu cầu (YYYY-MM-DD) */
+  deadline: string
 }
 
 /** Một hạng mục NCC nhập (số tiền do backend tính). */

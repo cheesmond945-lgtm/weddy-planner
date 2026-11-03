@@ -20,7 +20,7 @@ export default function DealPage() {
         description={order.error.message}
         action={
           <Button asChild variant="outline">
-            <Link to={paths.plan}>Về kế hoạch</Link>
+            <Link to={paths.planTab.services}>Về kế hoạch</Link>
           </Button>
         }
       />

@@ -3,11 +3,25 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../integrations/storage/storage.service';
 import { Paginated } from '../../common/utils/pagination';
 import { categoryKindOf } from './category-kind';
+import { unitOf } from '../../prisma/db-features';
+import { officialWard } from '../weddings/wards';
+
+/** Số khách và số bàn dự kiến để tính chi phí ước tính; khách chưa có đám cưới thì guestCount null, tables 0 (tính theo số bàn tối thiểu) */
+export interface Expected {
+  guestCount: number | null;
+  tables: number;
+}
 
 export interface ServiceQuery {
   q?: string;
   category?: string;
   location?: string;
+  /** Khu vực (phường/xã chính thức, có tiền tố, lấy từ GET /services/areas): lọc cứng, kết hợp AND với từ khóa */
+  area?: string;
+  /** Phong cách (thẻ gói): dịch vụ phải có đủ các phong cách này */
+  styles?: string[];
+  /** Số khách / số bàn dự kiến của người xem (cặp đôi đã thiết lập đám cưới) để tính chi phí ước tính nhà hàng */
+  expected?: Expected;
   priceMin?: number;
   priceMax?: number;
   page?: number;
@@ -42,6 +56,10 @@ const foldText = (s: string) =>
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D')
     .toLowerCase();
+
+/** Đổi từ "mâm" thành "bàn" (giữ kiểu viết hoa), chỉ khi đứng riêng một từ: "4.500.000đ/mâm" -> "4.500.000đ/bàn". */
+const tablesNotTrays = (s: string) =>
+  s.normalize('NFC').replace(/(?<!\p{L})m(â)m(?!\p{L})/giu, (w) => (w === w.toUpperCase() ? 'BÀN' : w[0] === 'M' ? 'Bàn' : 'bàn'));
 
 /**
  * Cách hiện mục "Gói dịch vụ" ở trang chi tiết: "tiles" = mỗi gói một ô ảnh (biến thể của cùng dịch vụ:
@@ -104,9 +122,33 @@ export class ServicesService {
     return pkgs.map((p) => ({ id: p.id, name: p.name, price: Number(p.price), imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null }));
   }
 
-  private summarize(v: Awaited<ReturnType<ServicesService['loadVisible']>>[number]) {
+  /**
+   * Điểm trung bình (1 chữ số) và số lượt đánh giá của khách trên web (bảng reviews) cho nhiều NCC, một câu truy vấn.
+   * NCC chưa có đánh giá thì không có trong Map.
+   */
+  private async webRatings(vendorIds: string[]) {
+    const out = new Map<string, { rating: number; reviewCount: number }>();
+    if (!vendorIds.length) return out;
+    const rows = await this.prisma.reviews.findMany({
+      where: { order_items: { orders: { vendor_id: { in: vendorIds } } } },
+      select: { rating: true, order_items: { select: { orders: { select: { vendor_id: true } } } } },
+    });
+    const sums = new Map<string, { sum: number; count: number }>();
+    for (const r of rows) {
+      const id = r.order_items.orders?.vendor_id;
+      if (!id) continue;
+      const cur = sums.get(id) ?? { sum: 0, count: 0 };
+      sums.set(id, { sum: cur.sum + r.rating, count: cur.count + 1 });
+    }
+    for (const [id, x] of sums) out.set(id, { rating: Math.round((x.sum / x.count) * 10) / 10, reviewCount: x.count });
+    return out;
+  }
+
+  private summarize(v: Awaited<ReturnType<ServicesService['loadVisible']>>[number], ratings?: Map<string, { rating: number; reviewCount: number }>) {
     const prices = v.service_packages.map((p) => Number(p.price));
-    const cover = v.service_packages.flatMap((p) => p.package_albums)[0];
+    // Ảnh đại diện: ảnh bìa (is_cover) đầu tiên theo thứ tự gói; gói nào chưa đặt ảnh bìa thì bỏ qua. Không gói nào có thì lấy ảnh đầu tiên.
+    const albums = v.service_packages.flatMap((p) => p.package_albums);
+    const cover = albums.find((a) => a.is_cover) ?? albums[0];
     const slug = categorySlug(v.service_categories!.name);
     return {
       id: v.id,
@@ -120,8 +162,9 @@ export class ServicesService {
       priceUnit: priceUnitOf(slug),
       /** Số mâm tối thiểu của gói rẻ nhất (gói xếp theo giá tăng dần) */
       minTables: v.service_packages[0]?.min_tables ?? null,
-      rating: 0,
-      reviewCount: 0,
+      /** Điểm trung bình đánh giá trên web (0 khi chưa có) và số lượt; thẻ dịch vụ hiện sao khi có đánh giá */
+      rating: ratings?.get(v.id)?.rating ?? 0,
+      reviewCount: ratings?.get(v.id)?.reviewCount ?? 0,
       coverImageUrl: cover ? this.img(cover.url) : '',
       googleMapsUrl: v.google_maps_url,
       /** NCC đang bị Admin ẩn (chỉ thấy được với cặp đôi đã có đơn): tạm ngừng nhận đơn mới */
@@ -147,7 +190,9 @@ export class ServicesService {
   async summaries(ids: string[], forCouple?: string) {
     const wanted = new Set(ids);
     const hidden = forCouple ? await this.withOrderWith(forCouple, ids) : [];
-    return (await this.loadVisible(hidden)).filter((v) => wanted.has(v.id)).map((v) => this.summarize(v));
+    const vendors = (await this.loadVisible(hidden)).filter((v) => wanted.has(v.id));
+    const ratings = await this.webRatings(vendors.map((v) => v.id));
+    return vendors.map((v) => this.summarize(v, ratings));
   }
 
   async isVisible(id: string) {
@@ -168,6 +213,63 @@ export class ServicesService {
         serviceCount: mine.length,
       };
     });
+  }
+
+  /**
+   * Chi phí ước tính của một NCC (dùng cho dropdown Mức giá và tìm kiếm, không bao giờ so đơn giá bàn):
+   * dịch vụ thường = giá gói thấp nhất; nhà hàng = min theo gói (đủ chỗ nếu biết số khách) của đơn giá × max(số bàn dự kiến, số bàn tối thiểu, 1).
+   */
+  private estimatedCost(v: Awaited<ReturnType<ServicesService['loadVisible']>>[number], expected: Expected) {
+    const tablePriced = priceUnitOf(categorySlug(v.service_categories?.name ?? null)) === 'TABLE';
+    const pkgs = v.service_packages;
+    const fit = expected.guestCount ? pkgs.filter((p) => p.capacity === null || p.capacity >= expected.guestCount!) : pkgs;
+    const costs = (fit.length ? fit : pkgs).map((p) =>
+      tablePriced || unitOf(p) === 'mâm' ? Number(p.price) * Math.max(expected.tables, p.min_tables ?? 0, 1) : Number(p.price),
+    );
+    return costs.length ? Math.min(...costs) : 0;
+  }
+
+  /** Số khách / số bàn dự kiến của cặp đôi (đám cưới đã thiết lập) và nơi tổ chức; chưa có thì null */
+  async expectedFor(userId: string | null | undefined) {
+    if (!userId) return null;
+    const w = await this.prisma.weddings.findUnique({ where: { user_id: userId }, select: { guest_count: true, table_count_override: true, ward: true } }).catch(() => null);
+    if (!w) return null;
+    const guests = w.guest_count ?? 0;
+    return { guestCount: guests || null, tables: w.table_count_override ?? Math.max(1, Math.ceil(guests / 10)), ward: (w as { ward?: string | null }).ward ?? null };
+  }
+
+  /**
+   * Dữ liệu cho tìm kiếm (search.service.ts): thẻ dịch vụ kèm mô tả, khu vực chính thức, phong cách, chi phí ước tính.
+   * Chỉ NCC đã duyệt, đang hiển thị (loadVisible).
+   */
+  async catalogItems(expected: Expected) {
+    const vendors = await this.loadVisible();
+    const ratings = await this.webRatings(vendors.map((v) => v.id));
+    return vendors.map((v) => {
+      const s = this.summarize(v, ratings);
+      return {
+        ...s,
+        name: s.name ?? '',
+        description: v.description ?? '',
+        categoryName: s.category.name,
+        area: officialWard(v.ward),
+        styles: [...new Set(v.service_packages.flatMap((p) => p.package_tags.map((t) => t.tag)))],
+        rating: s.rating,
+        reviewCount: s.reviewCount,
+        /** Chi phí ước tính theo số bàn dự kiến của người xem */
+        cost: this.estimatedCost(v, expected),
+      };
+    });
+  }
+
+  /**
+   * Khu vực để lọc: các phường/xã khác nhau trong dữ liệu NCC đang hiển thị, đổi về tên chính thức có tiền tố
+   * ("Phường Đống Đa"), xếp theo tên. Dùng chung cho bộ lọc trang Dịch vụ và ô nơi tổ chức trong form đám cưới.
+   */
+  async areas() {
+    const vendors = await this.loadVisible();
+    const names = [...new Set(vendors.map((v) => officialWard(v.ward)).filter((w): w is string => !!w))];
+    return names.sort((a, b) => a.replace(/^(Phường|Xã) /, '').localeCompare(b.replace(/^(Phường|Xã) /, ''), 'vi'));
   }
 
   async locations() {
@@ -194,19 +296,30 @@ export class ServicesService {
   async list(query: ServiceQuery) {
     const page = Math.max(1, Math.trunc(query.page ?? 1) || 1);
     const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize ?? 20) || 20));
-    // Từ khóa khớp tên dịch vụ / NCC, danh mục và địa chỉ (đường, phường, quận...), không phân biệt dấu và hoa thường
+    // Tìm kiếm tầng 1: từ khóa chỉ khớp chữ trong tên và mô tả của NCC (không khớp khu vực, địa chỉ hay danh mục), không phân biệt dấu và hoa thường.
+    // Khu vực là bộ lọc cứng riêng (area), kết hợp AND với từ khóa.
     const q = foldText(query.q?.trim() ?? '');
 
-    const items = (await this.loadVisible())
-      .map((v) => this.summarize(v))
+    const vendors = (await this.loadVisible()).filter((v) => (!query.area || officialWard(v.ward) === query.area) && (!q || foldText(`${v.business_name ?? ''} ${v.description ?? ''}`).includes(q)));
+    const ratings = await this.webRatings(vendors.map((v) => v.id));
+    // Mức giá so với CHI PHÍ ƯỚC TÍNH (nhà hàng: đơn giá × max(số bàn dự kiến, tối thiểu)), không so đơn giá bàn
+    const expected = query.expected ?? { guestCount: null, tables: 0 };
+    const wantStyles = (query.styles ?? []).map((x) => foldText(x));
+    const items = vendors
+      .filter((v) => {
+        if (!wantStyles.length) return true;
+        const tags = new Set(v.service_packages.flatMap((p) => p.package_tags.map((t) => foldText(t.tag))));
+        return wantStyles.every((x) => tags.has(x));
+      })
+      .map((v) => ({ s: this.summarize(v, ratings), cost: this.estimatedCost(v, expected) }))
       .filter(
-        (s) =>
+        ({ s, cost }) =>
           (!query.category || s.category.slug === query.category) &&
           (!query.location || s.location === query.location) &&
-          (query.priceMin === undefined || s.priceFrom >= query.priceMin) &&
-          (query.priceMax === undefined || s.priceFrom < query.priceMax) &&
-          (!q || foldText(`${s.name} ${s.category.name} ${s.address}`).includes(q)),
-      );
+          (query.priceMin === undefined || cost >= query.priceMin) &&
+          (query.priceMax === undefined || cost < query.priceMax),
+      )
+      .map(({ s, cost }) => ({ ...s, estimatedCost: cost }));
 
     const rows = items.slice((page - 1) * pageSize, page * pageSize);
     return Paginated.of(rows, items.length, { page, pageSize });
@@ -221,10 +334,19 @@ export class ServicesService {
     const capacities = v.service_packages.map((p) => p.capacity).filter((c): c is number => c !== null);
     const covers = v.service_packages.flatMap((p) => p.package_albums.filter((a) => a.is_cover));
     const others = v.service_packages.flatMap((p) => p.package_albums.filter((a) => !a.is_cover));
+    // Ảnh đại diện nằm ở gói khác gói đầu (vd ForeverMark lấy ảnh sảnh Xanh Đêm): đưa cả album gói đó lên đầu thư viện ảnh,
+    // thứ tự gói giữ nguyên. Ảnh đại diện ở gói đầu thì giữ cách xếp cũ (ảnh bìa các gói trước, rồi các ảnh còn lại).
+    const coverPkg = v.service_packages.find((p) => p.package_albums.some((a) => a.is_cover));
+    const gallery =
+      coverPkg && coverPkg !== v.service_packages[0]
+        ? [...coverPkg.package_albums, ...v.service_packages.filter((p) => p !== coverPkg).flatMap((p) => p.package_albums)]
+        : [...covers, ...others];
     const tags = [...new Set(v.service_packages.flatMap((p) => p.package_tags.map((t) => t.tag)))];
+    const tablePriced = priceUnitOf(categorySlug(v.service_categories?.name ?? null)) === 'TABLE';
+    const isTable = (p: { unit?: string | null; description?: string | null }) => tablePriced || unitOf(p) === 'mâm';
 
     return {
-      ...this.summarize(v),
+      ...this.summarize(v, await this.webRatings([v.id])),
       priceTo: Math.max(...prices),
       description: v.description,
       highlights: [] as string[],
@@ -236,16 +358,18 @@ export class ServicesService {
       contactPhone: (await this.prisma.users.findUnique({ where: { id: v.user_id ?? undefined }, select: { phone_number: true } }))?.phone_number ?? null,
       isVerified: true,
       isGuaranteed: false,
-      images: [...covers, ...others].slice(0, 60).map((a) => this.img(a.url)),
+      images: gallery.slice(0, 60).map((a) => this.img(a.url)),
       packages: v.service_packages.map((p) => ({
         id: p.id,
         name: p.name,
-        description: p.description,
+        // Nhà hàng tính theo bàn: mô tả NCC còn ghi "mâm" thì đổi sang "bàn" cho thống nhất
+        description: tablesNotTrays(p.description ?? ''),
         price: Number(p.price),
         capacity: p.capacity,
-        // CSDL chưa có cột đơn vị tính: đọc từ mô tả của NCC ("…4.500.000đ/mâm"), không có thì là gói
-        unit: priceUnitOf(categorySlug(v.service_categories?.name ?? null)) === 'TABLE' ? 'mâm' : ((p.description ?? '').match(/đ\s*\/\s*(mâm|bàn|khách|người|set|bộ)/i)?.[1].toLowerCase() ?? 'gói'),
-        // Ảnh bìa và thẻ phong cách của gói
+        // Đơn vị tính (cột service_packages.unit, hoặc danh mục báo giá theo mâm): "mâm" là giá một mâm, giao diện gọi là "bàn"; còn lại là trọn gói
+        unit: isTable(p) ? 'bàn' : 'gói',
+        pricingUnit: isTable(p) ? ('TABLE' as const) : ('PACKAGE' as const),
+        // Ảnh bìa và thẻ (tag) của gói: chỉ dùng cho tìm kiếm và bộ lọc, không so với đám cưới
         imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null,
         tags: p.package_tags.map((t) => t.tag),
         minTables: p.min_tables,

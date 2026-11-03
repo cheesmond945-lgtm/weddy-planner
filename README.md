@@ -65,9 +65,17 @@ npm run dev
 
 Lệnh `npm` phải chạy trong `frontend/` hoặc `backend/`. Thư mục gốc không có `package.json`.
 
+Kiểm tra backend kết nối được DB: mở http://localhost:3000/api/health, kết quả `{"data":{"status":"ok","db":"up"}}`.
+
 Nếu `npm run start:dev` tự thoát hoặc báo lỗi ngay khi khởi động (xảy ra trên một số máy Windows), chạy `npm run build` rồi `node dist/main`, và chạy lại hai lệnh này mỗi khi sửa code backend.
 
-Kiểm tra backend kết nối được DB: mở http://localhost:3000/api/health, kết quả `{"data":{"status":"ok","db":"up"}}`.
+### Biến môi trường mới
+
+- `SHARE_TOKEN_SECRET` (backend, không bắt buộc): khóa sinh mã link xem kế hoạch công khai. Để trống thì dùng `JWT_SECRET`. Đổi khóa thì mọi link cũ hết hiệu lực. Xem [docs/api/sharing.md](docs/api/sharing.md).
+
+### SQL thủ công chưa chạy
+
+Backend tự kiểm tra lúc khởi động. File SQL nào chưa chạy lên DB thì in cảnh báo `[DB] Chưa chạy SQL: …`, các trang cũ vẫn chạy, tính năng cần file đó trả 503 `DB_MIGRATION_PENDING`. Danh sách file và cách chạy: [docs/LICH_SU_THAY_DOI_DB.md](docs/LICH_SU_THAY_DOI_DB.md).
 
 ## Thay đổi cấu trúc cơ sở dữ liệu
 

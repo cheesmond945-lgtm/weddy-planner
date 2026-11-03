@@ -121,7 +121,7 @@ export class CommissionsService {
         ? [{ id: row!.id, amount: Number(row!.total_amount), proofFile: null, note: row!.transaction_code ? `Mã giao dịch ${row!.transaction_code}` : null, submittedAt: (row!.paid_date ?? row!.created_date)?.toISOString() ?? '', status: 'CONFIRMED', reviewedAt: (row!.paid_date ?? row!.created_date)?.toISOString() ?? '', reviewNote: null }]
         : [],
       transfer: {
-        accountName: process.env.WEBPLAN_ACCOUNT_NAME ?? 'WEBPLAN DEMO',
+        accountName: process.env.WEBPLAN_ACCOUNT_NAME ?? 'FOREVER DEMO',
         bankName: process.env.WEBPLAN_BANK_NAME ?? 'Ngân hàng mẫu',
         accountNumber: process.env.WEBPLAN_ACCOUNT_NUMBER ?? 'DEMO-000000 · Không dùng chuyển tiền',
         content: `${summary.code} — ${v.business_name}`,

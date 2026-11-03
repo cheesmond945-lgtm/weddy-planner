@@ -24,6 +24,29 @@ export const ORDER_INCLUDE = {
 
 export type OrderRow = Prisma.ordersGetPayload<{ include: typeof ORDER_INCLUDE }>;
 
+/**
+ * Đã chạy prisma/manual/2026-11-02-02-order-adjustments.sql (main.ts gọi lúc khởi động): đọc kèm yêu cầu đổi số khách.
+ * Chưa chạy thì không thêm để câu truy vấn không lỗi.
+ */
+export function enableOrderAdjustments() {
+  (ORDER_INCLUDE as Record<string, unknown>).order_adjustments = { orderBy: { created_date: 'desc' } };
+}
+
+type AdjustmentRow = {
+  id: string;
+  old_guest_count: number | null;
+  new_guest_count: number;
+  old_tables: number;
+  new_tables: number;
+  old_amount: unknown;
+  new_amount: unknown;
+  extra_deposit: unknown;
+  status: string;
+  note: string | null;
+  created_date: Date;
+  applied_date: Date | null;
+};
+
 /** Ngày thuần (cột @db.Date) -> "YYYY-MM-DD". */
 export const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
 /** Thời điểm (timestamptz) -> "YYYY-MM-DD" theo giờ Việt Nam. */
@@ -42,7 +65,13 @@ const REVISION_CHANGE_ORDER = ['Item', 'Quantity', 'EventDate', 'Other'];
  * `category` (lĩnh vực của NCC) để trang Kế hoạch của khách hiện đơn dưới đúng hạng mục.
  */
 export function toOrderDto(o: OrderRow, conversationId: string) {
-  const cancel = o as unknown as { cancel_reason?: string | null };
+  const cancel = o as unknown as {
+    cancel_reason?: string | null;
+    guest_count?: number | null;
+    cancel_requested_date?: Date | null;
+    cancel_request_note?: string | null;
+    order_adjustments?: AdjustmentRow[];
+  };
   const sent = o.status !== 'Draft';
   const cat = o.vendor_profiles!.service_categories!;
   return {
@@ -96,6 +125,25 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
     completedDate: o.completed_date ? o.completed_date.toISOString() : null,
     cancelledDate: o.cancelled_date ? o.cancelled_date.toISOString() : null,
     cancelReason: cancel.cancel_reason ?? null,
+    /** Số khách của đơn tiệc (sau lần đổi số khách gần nhất); null với đơn cũ / dịch vụ khác */
+    guestCount: cancel.guest_count ?? null,
+    /** Khách yêu cầu hủy đơn đã cọc, chờ NCC xác nhận; null khi không có */
+    cancelRequest: cancel.cancel_requested_date ? { requestedDate: cancel.cancel_requested_date.toISOString(), note: cancel.cancel_request_note ?? null } : null,
+    /** Yêu cầu đổi số khách, mới nhất trước (status: AwaitingVendor, AwaitingDeposit, Applied, Rejected) */
+    guestChanges: (cancel.order_adjustments ?? []).map((a) => ({
+      id: a.id,
+      oldGuestCount: a.old_guest_count,
+      newGuestCount: a.new_guest_count,
+      oldTables: a.old_tables,
+      newTables: a.new_tables,
+      oldAmount: Number(a.old_amount),
+      newAmount: Number(a.new_amount),
+      extraDeposit: Number(a.extra_deposit),
+      status: a.status,
+      note: a.note,
+      createdDate: a.created_date.toISOString(),
+      appliedDate: a.applied_date ? a.applied_date.toISOString() : null,
+    })),
     createdDate: (o.created_date ?? new Date(0)).toISOString(),
   };
 }

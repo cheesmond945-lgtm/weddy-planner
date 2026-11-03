@@ -41,10 +41,10 @@ export const TIMELINE_TEMPLATES: readonly TimelineTemplate[] = [
   // Việc KHUNG (SELF / CHOOSE / BOOK): order 1..31 theo thứ tự dòng
   { order: 1, code: 'SELF_FAMILY_ALIGN', title: 'Thống nhất với hai gia đình: ngân sách, quy mô tiệc, giờ các lễ, tiệc tổ chức bên nào', service: null, kind: 'SELF', anchor: 'W', offset: -270 },
   { order: 2, code: 'SELF_GUEST_DRAFT', title: 'Lập danh sách khách sơ bộ, chọn phong cách và màu chủ đạo', service: null, kind: 'SELF', anchor: 'W', offset: -250 },
-  { order: 3, code: 'VENUE_SHORTLIST', title: 'Lọc và hỏi giá 3–5 nhà hàng: lịch trống, giá mâm, phí sảnh, ưu đãi', service: 'nha-hang', kind: 'CHOOSE', anchor: 'W', offset: -235, showSuggest: true },
+  { order: 3, code: 'VENUE_SHORTLIST', title: 'Lọc và hỏi giá 3–5 nhà hàng: lịch trống, giá bàn, phí sảnh, ưu đãi', service: 'nha-hang', kind: 'CHOOSE', anchor: 'W', offset: -235, showSuggest: true },
   { order: 4, code: 'VENUE_TOUR', title: 'Đi xem sảnh để đánh giá: sức chứa, sân khấu, bãi xe, khung giờ còn trống', service: 'nha-hang', kind: 'CHOOSE', anchor: 'W', offset: -205, weekendPreferred: true },
   { order: 5, code: 'PHOTO_SHORTLIST', title: 'Lọc và hỏi giá 3–5 studio chụp ảnh & quay phim: phong cách, các buổi cần (album, phóng sự, phim), lịch trống', service: 'chup-anh', kind: 'CHOOSE', anchor: 'W', offset: -200, showSuggest: true },
-  { order: 6, code: 'VENUE_TASTE', title: 'Thử món theo thực đơn dự kiến (mâm 10 người), góp ý khẩu vị; xin báo giá chính thức, phụ phí và ưu đãi tặng kèm', service: 'nha-hang', kind: 'CHOOSE', anchor: 'W', offset: -190, weekendPreferred: true },
+  { order: 6, code: 'VENUE_TASTE', title: 'Thử món theo thực đơn dự kiến (bàn 10 người), góp ý khẩu vị; xin báo giá chính thức, phụ phí và ưu đãi tặng kèm', service: 'nha-hang', kind: 'CHOOSE', anchor: 'W', offset: -190, weekendPreferred: true },
   { order: 7, code: 'PHOTO_CONSULT', title: 'Gặp tư vấn studio: xem album in thật, phim mẫu; trao đổi concept, số bộ đồ, địa điểm và sản phẩm bàn giao (album, ảnh phóng, file gốc)', service: 'chup-anh', kind: 'CHOOSE', anchor: 'W', offset: -185, weekendPreferred: true },
   { order: 8, code: 'VENUE_BOOK', title: 'Chốt nhà hàng: so sánh, xác nhận đơn và đặt cọc', service: 'nha-hang', kind: 'BOOK', anchor: 'W', offset: -180 },
   { order: 9, code: 'PHOTO_BOOK', title: 'Chốt chụp ảnh & quay phim: so sánh, xác nhận đơn và đặt cọc', service: 'chup-anh', kind: 'BOOK', anchor: 'W', offset: -170 },

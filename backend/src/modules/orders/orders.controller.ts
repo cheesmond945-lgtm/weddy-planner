@@ -1,16 +1,68 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { OrderAdjustmentsService } from './order-adjustments.service';
 import { OrderTasksService } from './order-tasks.service';
 import { ListQuery, OrdersService } from './orders.service';
 import type { ContentInput } from './order-rules';
 
-/** Đơn dịch vụ phía cặp đôi (docs/api/orders.md, docs/THE_DON_PHIA_KHACH.md). */
+/**
+ * Đơn dịch vụ phía cặp đôi (docs/api/orders.md, docs/THE_DON_PHIA_KHACH.md).
+ */
 @UseGuards(JwtAuthGuard)
 @Roles('Couple')
 @Controller('orders')
 export class CoupleOrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly adjustments: OrderAdjustmentsService,
+  ) {}
+
+  /** Xem trước đổi số khách (đơn tiệc đã cọc): ?guestCount= → số bàn, giá trị mới, cọc bổ sung */
+  @Get(':id/guest-changes/quote')
+  quoteGuestChange(@Req() req: any, @Param('id') id: string, @Query('guestCount') guestCount?: string) {
+    return this.adjustments.quote(req.user.sub, id, guestCount);
+  }
+
+  /** Gửi yêu cầu đổi số khách: { guestCount, note? } → chờ NCC xác nhận */
+  @HttpCode(200)
+  @Post(':id/guest-changes')
+  requestGuestChange(@Req() req: any, @Param('id') id: string, @Body() body: { guestCount?: unknown; note?: unknown }) {
+    return this.adjustments.request(req.user.sub, id, body ?? {});
+  }
+
+  /** Mã QR nộp cọc bổ sung (NCC đã đồng ý, giá trị đơn tăng) */
+  @HttpCode(200)
+  @Post(':id/guest-changes/pay')
+  payGuestChange(@Req() req: any, @Param('id') id: string) {
+    return this.adjustments.payInfo(req.user.sub, id);
+  }
+
+  @HttpCode(200)
+  @Post(':id/guest-changes/pay/check')
+  checkGuestChangePay(@Req() req: any, @Param('id') id: string) {
+    return this.adjustments.checkPay(req.user.sub, id);
+  }
+
+  /** Chế độ thử (PAYMENT_DEMO_MODE=true): ghi nhận cọc bổ sung ngay */
+  @HttpCode(200)
+  @Post(':id/guest-changes/pay/demo-confirm')
+  demoGuestChangePay(@Req() req: any, @Param('id') id: string) {
+    return this.adjustments.demoPay(req.user.sub, id);
+  }
+
+  /** Khách yêu cầu hủy đơn đã cọc (cọc không hoàn): { note? } */
+  @HttpCode(200)
+  @Post(':id/cancel-requests')
+  requestCancel(@Req() req: any, @Param('id') id: string, @Body() body: { note?: unknown }) {
+    return this.adjustments.requestCancel(req.user.sub, id, body ?? {});
+  }
+
+  /** Rút yêu cầu hủy */
+  @Delete(':id/cancel-requests')
+  withdrawCancel(@Req() req: any, @Param('id') id: string) {
+    return this.adjustments.withdrawCancel(req.user.sub, id);
+  }
 
   /** Mọi đơn đã gửi của khách (không có nháp), cho trang Kế hoạch; lọc tùy chọn theo ?status= */
   @Get()
@@ -68,7 +120,32 @@ export class PaymentsController {
 @Roles('Vendor')
 @Controller('vendors/me/orders')
 export class VendorOrdersController {
-  constructor(private readonly orders: OrdersService, private readonly tasks: OrderTasksService) {}
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly tasks: OrderTasksService,
+    private readonly adjustments: OrderAdjustmentsService,
+  ) {}
+
+  /** Đồng ý yêu cầu đổi số khách (tăng giá trị thì chờ khách nộp cọc bổ sung) */
+  @HttpCode(200)
+  @Post(':id/guest-changes/approve')
+  approveGuestChange(@Req() req: any, @Param('id') id: string) {
+    return this.adjustments.approve(req.user.sub, id);
+  }
+
+  /** Từ chối yêu cầu đổi số khách: { note? } */
+  @HttpCode(200)
+  @Post(':id/guest-changes/reject')
+  rejectGuestChange(@Req() req: any, @Param('id') id: string, @Body() body: { note?: unknown }) {
+    return this.adjustments.reject(req.user.sub, id, body ?? {});
+  }
+
+  /** Từ chối yêu cầu hủy của khách: { note? }. Đồng ý: POST :id/cancel với reason CUSTOMER_REQUEST */
+  @HttpCode(200)
+  @Post(':id/cancel-requests/reject')
+  rejectCancel(@Req() req: any, @Param('id') id: string, @Body() body: { note?: unknown }) {
+    return this.adjustments.rejectCancel(req.user.sub, id, body ?? {});
+  }
 
   @Get()
   list(@Req() req: any, @Query() q: ListQuery) {

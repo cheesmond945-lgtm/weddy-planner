@@ -5,6 +5,8 @@ import { CoupleLayout } from '@/layouts/CoupleLayout'
 import { VendorLayout } from '@/layouts/VendorLayout'
 import ForbiddenPage from '@/pages/ForbiddenPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+import PublicPlanPage from '@/pages/PublicPlanPage'
+import TimelinePage from '@/pages/couple/TimelinePage'
 import DepositTermsPreviewPage from '@/pages/preview/DepositTermsPreviewPage'
 import TermsPreviewPage from '@/pages/preview/TermsPreviewPage'
 import AdminAccountPage from '@/pages/admin/AdminAccountPage'
@@ -27,10 +29,13 @@ import ChatPage from '@/pages/couple/ChatPage'
 import ComparePage from '@/pages/couple/ComparePage'
 import DealPage from '@/pages/couple/DealPage'
 import FavoritesPage from '@/pages/couple/FavoritesPage'
-import PlanPage from '@/pages/couple/PlanPage'
+import PlanBudgetPage from '@/pages/couple/PlanBudgetPage'
+import PlanGuestsPage from '@/pages/couple/PlanGuestsPage'
+import PlanLayoutPage from '@/pages/couple/PlanLayoutPage'
+import PlanOverviewPage from '@/pages/couple/PlanOverviewPage'
+import PlanServicesPage from '@/pages/couple/PlanServicesPage'
 import ServiceDetailPage from '@/pages/couple/ServiceDetailPage'
 import ServicesPage from '@/pages/couple/ServicesPage'
-import TimelinePage from '@/pages/couple/TimelinePage'
 import VendorCatalogPage from '@/pages/vendor/VendorCatalogPage'
 import VendorChatPage from '@/pages/vendor/VendorChatPage'
 import VendorCommissionsPage from '@/pages/vendor/VendorCommissionsPage'
@@ -39,6 +44,7 @@ import VendorCalendarPage from '@/pages/vendor/VendorCalendarPage'
 import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
 import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
 import VendorProfilePage from '@/pages/vendor/VendorProfilePage'
+import { RedirectKeepSearch } from './RedirectKeepSearch'
 import VendorAccountPage from '@/pages/vendor/VendorAccountPage'
 import { RequireRole } from './RequireRole'
 import { paths } from './paths'
@@ -58,11 +64,25 @@ export const router = createBrowserRouter([
       {
         element: <RequireRole roles={['COUPLE']} />,
         children: [
-          { path: paths.timeline, element: <TimelinePage /> },
           { path: paths.favorites, element: <FavoritesPage /> },
           { path: paths.compare, element: <ComparePage /> },
-          { path: paths.plan, element: <PlanPage /> },
+          // Kế hoạch của tôi: mỗi subtab một route con, reload hay dán link vẫn đúng tab
+          {
+            path: paths.plan,
+            element: <PlanLayoutPage />,
+            children: [
+              // /plan: trang khung tự chuyển sang tab đầu tiên được xem
+              { index: true, element: null },
+              { path: paths.planTab.overview, element: <PlanOverviewPage /> },
+              { path: paths.planTab.services, element: <PlanServicesPage /> },
+              { path: paths.planTab.budget, element: <PlanBudgetPage /> },
+              { path: paths.planTab.guests, element: <PlanGuestsPage /> },
+            ],
+          },
           { path: '/plan/deal/:dealId', element: <DealPage /> },
+          { path: paths.timeline, element: <TimelinePage /> },
+          // Link cũ /plan/timeline sang trang Timeline
+          { path: '/plan/timeline', element: <RedirectKeepSearch to={paths.timeline} /> },
           { path: paths.chat, element: <ChatPage /> },
         ],
       },
@@ -125,6 +145,9 @@ export const router = createBrowserRouter([
       },
     ],
   },
+
+  // Xem kế hoạch qua link công khai: khung riêng, đầu trang chỉ có Đăng nhập và Đăng ký
+  { path: '/xem/:token/:tab?', element: <PublicPlanPage /> },
 
   { path: paths.forbidden, element: <ForbiddenPage /> },
   { path: '*', element: <NotFoundPage /> },
