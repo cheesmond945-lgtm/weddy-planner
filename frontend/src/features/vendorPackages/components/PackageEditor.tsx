@@ -1,4 +1,4 @@
-import { EyeOff, Send, Sparkles, Trash2 } from 'lucide-react'
+import { Clock, Eye, EyeOff, Send, Sparkles, Trash2 } from 'lucide-react'
 import { AiWriteDialog } from '@/components/AiWriteDialog'
 import { formatMoney } from '@/lib/format'
 import { vendorPackagesApi } from '@/api/vendorPackages'
@@ -328,13 +328,17 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
         onOpenChange={(o) => !o && setConfirm(null)}
         title={isUpdate ? (resubmit ? 'Gửi lại bản cập nhật để duyệt?' : 'Gửi bản cập nhật để duyệt?') : resubmit ? 'Gửi lại gói để duyệt?' : 'Gửi gói để duyệt?'}
         confirmLabel="Gửi duyệt"
+        icon={<Send />}
         onConfirm={() => doSave(true)}
       >
-        <p>
-          {isUpdate
-            ? 'Sau khi gửi, bản cập nhật chỉ đọc cho tới khi Admin xử lý. Trong thời gian này khách vẫn thấy phiên bản đang đăng.'
-            : 'Sau khi gửi, gói chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý. Gói chưa hiển thị công khai cho tới khi được duyệt.'}
-        </p>
+        <ul className="mt-0! list-none! space-y-2.5 pl-0!">
+          <SubmitStep icon={<Clock />}>
+            {isUpdate ? 'Bản cập nhật chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý.' : 'Gói chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý.'}
+          </SubmitStep>
+          <SubmitStep icon={<Eye />}>
+            {isUpdate ? 'Khách vẫn thấy phiên bản đang đăng cho tới khi bản cập nhật được duyệt.' : 'Gói chưa hiển thị công khai cho tới khi được duyệt.'}
+          </SubmitStep>
+        </ul>
       </ConfirmDialog>
       <ConfirmDialog
         open={confirm === 'remove'}
@@ -384,5 +388,14 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
       />
       <UnsavedChangesGuard when={dirty && !readOnly && !busy} />
     </form>
+  )
+}
+
+function SubmitStep({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <li className="flex gap-2.5 text-muted-foreground">
+      <span className="mt-0.5 shrink-0 text-gold [&_svg]:size-4">{icon}</span>
+      <span>{children}</span>
+    </li>
   )
 }
