@@ -11,10 +11,10 @@ import { hallBusyMessage } from '../halls/hall-busy';
 import { findHallConflict, lockHallDay, usesHalls } from '../halls/hall-store';
 import { onOrderCancelled, onOrderDeposited, onOrderEventDateChanged } from '../weddings/timeline-hooks';
 import { OrderJobsService } from './order-jobs.service';
-import { completeOrder, notifyRestReceived } from './order-lifecycle';
+import { completeOrder, notifyRestCleared, notifyRestReceived } from './order-lifecycle';
 import { runAfter } from '../../common/after-response';
 import { payCode } from '../weddings/timeline-rows';
-import { applyRestReceived, clearRestReceived, completeGate, finalInvoiceGate, restPaymentOf, type RestDb } from './rest-payment';
+import { applyRestReceived, clearRestGate, clearRestReceived, completeGate, finalInvoiceGate, restPaymentOf, type RestDb } from './rest-payment';
 import { ORDER_INCLUDE, OrderRow, toOrderDto, ymd, ymdVN } from './order-mapping';
 import { publish } from '../realtime/realtime.bus';
 import {
@@ -820,10 +820,16 @@ export class OrdersService {
   async clearRestPayment(userId: string, id: string) {
     const order = await this.restOrderOf(userId, id);
     if (order.status !== 'Deposited' && order.status !== 'Completed') return fail('REST_PAYMENT_NOT_AVAILABLE', 'Chỉ bỏ ghi nhận được cho đơn đã đặt cọc hoặc đã hoàn thành.', 409);
-    await clearRestReceived(this.prisma as unknown as RestDb, order.id);
+    // Đã xuất hóa đơn cuối thì không bỏ ghi nhận được (409), kể cả khi kéo việc thanh toán ra khỏi Done trên bảng việc
+    const final = await this.prisma.invoices.findFirst({ where: { order_id: order.id, type: 'FinalInvoice' }, select: { invoice_code: true } });
+    const blocked = clearRestGate(final?.invoice_code ?? null);
+    if (blocked) return fail(blocked.code, blocked.message, blocked.status, blocked.details);
+    const changed = await clearRestReceived(this.prisma as unknown as RestDb, order.id);
     const pay = await this.prisma.timeline_tasks.findFirst({ where: { order_id: order.id, task_code: payCode(order.id) }, select: { id: true, status: true, completed_date: true } });
     const coupleId = order.weddings?.user_id;
-    runAfter('realtime bỏ ghi nhận tiền mặt', async () => publish({ users: coupleId ? [coupleId, userId] : [userId], event: 'task', data: { orderId: order.id, taskId: pay?.id } }), (m) => this.logger.warn(m));
+    if (changed && coupleId) {
+      runAfter('thông báo bỏ ghi nhận tiền mặt', () => notifyRestCleared(this.prisma, { orderId: order.id, taskId: pay?.id, orderCode: order.order_code, coupleUserId: coupleId, vendorUserId: userId, vendorName: order.vendor_profiles?.business_name ?? 'Nhà cung cấp', amount: Number(order.total_amount) - Number(order.deposit_amount) }), (m) => this.logger.warn(m));
+    }
     return { restPayment: restPaymentOf({ status: order.status, total: Number(order.total_amount), deposit: Number(order.deposit_amount) }, pay), taskId: pay?.id ?? null };
   }
 

@@ -55,6 +55,12 @@ export const AUTO_COMPLETE_DAYS = 7;
  * (event_date < hôm nay − 7, nghĩa là từ ngày thứ 8 sau ngày thực hiện). `today` là "YYYY-MM-DD" giờ VN.
  */
 export const autoCompleteCutoff = (today: string) => new Date(`${addDaysYmd(today, -AUTO_COMPLETE_DAYS)}T00:00:00Z`);
+
+/** Tin hệ thống trong chat khi đơn hoàn thành: NCC bấm tay khác với hệ thống tự hoàn tất. */
+export const completedChatText = (orderCode: string | null, by: 'VENDOR' | 'SYSTEM') =>
+  by === 'VENDOR'
+    ? `NCC đã hoàn tất đơn ${orderCode}.`
+    : `Đơn ${orderCode} được hệ thống tự hoàn tất vì đã quá ngày thực hiện hơn ${AUTO_COMPLETE_DAYS} ngày mà NCC chưa bấm Hoàn tất.`;
 const validYmd = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 /** "YYYY-MM-DD" -> "dd/mm/yyyy" để đưa vào thông báo. */
 export const dmy = (s: string) => s.split('-').reverse().join('/');

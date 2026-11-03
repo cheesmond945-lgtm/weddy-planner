@@ -13,8 +13,8 @@ import { hm, instantOf, localOf, minutesFrom, plannedOf, slotRangeIssue } from '
 import { loadWeddingDay, slotDto, venueDto } from '../weddings/wedding-day-store';
 import { DelayedNotices } from './delayed-notice';
 import { OrderJobsService } from './order-jobs.service';
-import { notifyRestReceived } from './order-lifecycle';
-import { applyRestReceived, isRestPayCode, recordsRestPayment, type RestDb } from './rest-payment';
+import { notifyRestCleared, notifyRestReceived } from './order-lifecycle';
+import { applyRestReceived, clearRestGate, isRestPayCode, recordsRestPayment, type RestDb } from './rest-payment';
 import { checkVendorTaskEdit, dateStatusOf, editOrderTaskIssue, isYmd, parseNewOrderTask, parseOrderTaskPatch, parseStatusBody, removeOrderTaskIssue, scheduleDateIssue, type RuleError } from './order-task-rules';
 import { UUID, fail, todayVn, ymdOf } from './order-rules';
 
@@ -364,6 +364,14 @@ export class OrderTasksService {
     const coupleId = order.weddings?.user_id ?? null;
     let row: TaskRow = task;
 
+    // Kéo việc thanh toán đợt 2 ra khỏi Done = bỏ ghi nhận tiền mặt: cùng luật với nút "Bỏ ghi nhận" (đã có hóa đơn cuối thì 409)
+    const unrecording = isRestPayCode(task.task_code) && task.status === 'Done' && next !== 'Done';
+    if (unrecording) {
+      const final = await this.prisma.invoices.findFirst({ where: { order_id: order.id, type: 'FinalInvoice' }, select: { invoice_code: true } });
+      const blocked = clearRestGate(final?.invoice_code ?? null);
+      if (blocked) return throwRule(blocked);
+    }
+
     if (recordsRestPayment(task.task_code, next) && order.event_date) {
       const changed = await applyRestReceived(this.prisma as unknown as RestDb, { id: order.id, wedding_id: order.wedding_id, category_id: order.vendor_profiles?.category_id ?? null, event_date: order.event_date, vendorName }, now);
       row = { ...task, status: 'Done', completed_date: task.status === 'Done' ? task.completed_date : now };
@@ -382,6 +390,10 @@ export class OrderTasksService {
       this.later('thông báo đổi trạng thái', async () => {
         this.publishTask(userId, order, task.id);
         if (!coupleId) return;
+        if (unrecording) {
+          await notifyRestCleared(this.prisma, { orderId: order.id, taskId: task.id, orderCode: order.order_code, coupleUserId: coupleId, vendorUserId: userId, vendorName, amount: Number(order.total_amount) - Number(order.deposit_amount) });
+          return;
+        }
         // Chuyển sang "chờ khách": báo khách; cùng việc chỉ báo một lần mỗi 24 giờ (chống spam khi kéo thả qua lại)
         if (next === 'Waiting' && was !== 'Waiting') {
           const recent = await this.prisma.notifications.count({ where: { user_id: coupleId, type: 'TaskWaiting', reference_type: 'TimelineTask', reference_id: task.id, created_date: { gte: new Date(Date.now() - 24 * 3600_000) } } });

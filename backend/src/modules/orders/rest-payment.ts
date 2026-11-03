@@ -53,6 +53,16 @@ export function finalInvoiceGate(rest: RestPayment): RuleError | null {
 }
 
 /**
+ * Chặn "Bỏ ghi nhận" khi đơn đã xuất hóa đơn cuối: hóa đơn ghi "đã thanh toán tiền mặt" và không hủy hay xuất lại được,
+ * nên bỏ ghi nhận sẽ làm hóa đơn và trạng thái đợt 2 mâu thuẫn nhau. `finalInvoiceCode` là mã hóa đơn cuối của đơn (null nếu chưa có).
+ */
+export function clearRestGate(finalInvoiceCode: string | null): RuleError | null {
+  return finalInvoiceCode
+    ? { code: 'REST_PAYMENT_HAS_FINAL_INVOICE', message: `Đơn đã xuất hóa đơn cuối ${finalInvoiceCode}, không thể bỏ ghi nhận tiền mặt.`, status: 409, details: { invoiceCode: finalInvoiceCode } }
+    : null;
+}
+
+/**
  * Hoàn tất đơn: đã Received thì hoàn tất bình thường; chưa mà NCC gửi restReceived = true thì ghi nhận rồi hoàn tất cùng transaction ('record');
  * chưa mà không gửi thì 409 REST_PAYMENT_NOT_RECORDED kèm số tiền để giao diện hỏi lại.
  */
