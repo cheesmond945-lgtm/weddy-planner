@@ -4,12 +4,12 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
-export type RowMenuItem = { label: string; icon: LucideIcon; onClick: () => void; danger?: boolean } | 'separator'
+export type RowMenuItem = { label: string; icon: LucideIcon; onClick: () => void; danger?: boolean; /** Có thì mục bị mờ, lý do hiện ở tooltip */ disabled?: string } | 'separator'
 
 const WIDTH = 210
 
 /** Nút "…" mở menu thao tác của một dòng (RowMenu trong prototype NCC). Menu nổi trên bảng, tự lật lên khi sát đáy màn hình. */
-export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] }) {
+export function RowMenu({ label, items, compact }: { label: string; items: RowMenuItem[]; /** Nút nhỏ (28px) cho thẻ việc */ compact?: boolean }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -61,7 +61,8 @@ export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] 
         title="Thao tác"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'grid size-[34px] place-items-center rounded-sm border border-transparent text-muted-foreground transition-colors hover:bg-gold-soft hover:text-gold-ink',
+          'grid place-items-center rounded-sm border border-transparent text-muted-foreground transition-colors hover:bg-gold-soft hover:text-gold-ink',
+          compact ? 'size-7' : 'size-[34px]',
           open && 'border-gold/35 bg-gold-soft text-gold-ink',
         )}
       >
@@ -72,7 +73,7 @@ export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] 
           <div
             ref={menuRef}
             role="menu"
-            style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999, width: WIDTH }}
+            style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999, width: WIDTH, pointerEvents: 'auto' }}
             onKeyDown={(e) => {
               if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
               e.preventDefault()
@@ -90,12 +91,14 @@ export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] 
                   key={it.label}
                   type="button"
                   role="menuitem"
+                  disabled={!!it.disabled}
+                  title={it.disabled}
                   onClick={() => {
                     setOpen(false)
                     it.onClick()
                   }}
                   className={cn(
-                    'flex w-full items-center gap-2.5 rounded-sm px-2.5 py-[9px] text-left text-[13.5px] outline-none [&_svg]:size-4',
+                    'flex w-full items-center gap-2.5 rounded-sm px-2.5 py-[9px] text-left text-[13.5px] outline-none disabled:cursor-not-allowed disabled:opacity-45 [&_svg]:size-4',
                     it.danger ? 'text-warn hover:bg-warn-soft focus-visible:bg-warn-soft' : 'text-ink hover:bg-gold-soft hover:text-gold-ink focus-visible:bg-gold-soft focus-visible:text-gold-ink [&_svg]:text-muted-foreground',
                   )}
                 >

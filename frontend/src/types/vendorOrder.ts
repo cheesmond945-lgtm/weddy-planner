@@ -29,6 +29,15 @@ export interface OrderItem {
   packageName?: string | null
 }
 
+/** Đợt 2 (phần còn lại, tiền mặt trả trực tiếp cho NCC): Received khi NCC đã ghi nhận nhận đủ; NotApplicable khi đơn chưa cọc / hết hạn / đã hủy. */
+export interface RestPayment {
+  /** Tổng − cọc */
+  amount: number
+  status: 'Pending' | 'Received' | 'NotApplicable'
+  /** ISO, khi Received */
+  receivedDate: string | null
+}
+
 /** Thanh toán đặt cọc qua VietQR (Payments), mỗi đơn một dòng, tạo lúc gửi đơn. */
 export interface OrderPayment {
   status: 'Unpaid' | 'Paid'
@@ -87,7 +96,7 @@ export interface Order {
   vendorName?: string
   /** Lĩnh vực của NCC (trang Kế hoạch của khách hiện đơn dưới hạng mục này) */
   category?: CategoryRef
-  /** Sảnh (gói) của đơn, Trung tâm tổ chức sự kiện (docs/LICH_BAN_SANH.md); null với dịch vụ khác và đơn cũ */
+  /** Sảnh (gói) của đơn, Trung tâm tiệc cưới (docs/LICH_BAN_SANH.md); null với dịch vụ khác và đơn cũ */
   package?: { id: string; name: string } | null
   status: OrderStatus
   customerName: string
@@ -98,6 +107,8 @@ export interface Order {
   weddingDate?: string | null
   items: OrderItem[]
   totalAmount: number
+  /** Đợt 2 (tiền mặt): trạng thái ghi nhận của NCC */
+  restPayment: RestPayment
   /** Tỷ lệ cọc (%), lớn hơn 0 và nhỏ hơn 100 */
   depositPercent: number
   /** Tiền cọc, backend tính, làm tròn đến 100.000đ */
@@ -136,7 +147,7 @@ export interface OrderContent {
   note: string | null
   depositPercent: number
   items: OrderItemInput[]
-  /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tổ chức sự kiện gửi / sửa đơn; dịch vụ khác để null */
+  /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tiệc cưới gửi / sửa đơn; dịch vụ khác để null */
   packageId: string | null
 }
 
@@ -175,6 +186,10 @@ export interface OrderTask {
   overdue: boolean
   /** Việc lấy từ gói của NCC */
   isPackageTask: boolean
+  /** Việc RIÊNG của đơn do NCC thêm ('ORD:'), không thuộc gói */
+  isCustomOrderTask: boolean
+  /** Việc "Thanh toán phần còn lại": sang Done = ghi nhận đã nhận đủ tiền mặt (có hộp xác nhận) */
+  isRestPayment: boolean
   /** Ngày dự kiến (PLANNED) hay đã chốt với khách (CONFIRMED) */
   dateStatus: 'PLANNED' | 'CONFIRMED'
   confirmedAt: string | null
@@ -195,11 +210,41 @@ export interface OrderProgress {
   dueSoonVendor: number
 }
 
+/** Kết quả đổi trạng thái / chốt / đổi ngày: đúng việc vừa cập nhật (không trả cả danh sách). */
+export interface TaskItemResult {
+  item: OrderTask
+}
+
+/** Việc riêng của đơn vừa thêm; addedToPackage: đã thêm luôn vào quy trình của gói (chỉ áp cho đơn sau). */
+export interface AddTaskResult extends TaskItemResult {
+  addedToPackage: boolean
+}
+
+/** Nội dung thêm việc riêng cho đơn (POST /vendors/me/orders/:id/tasks). */
+export interface NewOrderTaskInput {
+  title: string
+  note: string | null
+  owner: TaskOwner
+  /** "YYYY-MM-DD", từ hôm nay đến ngày thực hiện + 120; việc được chốt ngày luôn */
+  date: string
+  addToPackage: boolean
+}
+
+/** Kết quả ghi nhận / bỏ ghi nhận tiền mặt đợt 2: đợt 2 của đơn và id việc "Thanh toán phần còn lại". */
+export interface RestResult {
+  restPayment: RestPayment
+  taskId: string | null
+}
+
 export interface OrderTasks {
   items: OrderTask[]
   progress: OrderProgress
   /** Ngày thực hiện của đơn "YYYY-MM-DD" (giới hạn trên của ô đổi ngày = ngày này + 120) */
   eventDate?: string
+  /** Số tiền đợt 2 của đơn (tổng − cọc), để hỏi xác nhận đã nhận tiền mặt */
+  restAmount?: number
+  /** Đơn có gói dịch vụ (hiện checkbox "Thêm vào quy trình của gói" khi thêm việc) */
+  hasPackage?: boolean
 }
 
 /** Một việc trên Bảng việc (GET /vendors/me/orders/tasks): việc của đơn đang thực hiện kèm thông tin đơn để gom theo khách / đơn. */
@@ -211,12 +256,14 @@ export interface BoardTask extends OrderTask {
   eventDate: string
   /** Tên gói của NCC gắn với đơn (sảnh và gói của các dòng) */
   packageNames: string[]
+  /** Số tiền đợt 2 của đơn (tổng − cọc) */
+  restAmount: number
 }
 
 /** Một mục trên lịch làm việc của NCC (GET /vendors/me/orders/calendar). */
 export type CalendarItem =
   | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: OrderStatus; isDone: boolean }
-  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isDone: boolean; status: TaskStatus; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean }
+  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isRestPayment: boolean; isPackageTask: boolean; isCustomOrderTask: boolean; isDone: boolean; status: TaskStatus; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean }
 
 /**
  * Giờ có mặt ngày cưới của một đơn (GET /vendors/me/orders/:id/day-slot, docs/LICH_TRINH_NGAY_CUOI.md).
