@@ -47,6 +47,14 @@ export const ymdOf = (d: Date) => d.toISOString().slice(0, 10);
 export const addDaysYmd = (s: string, n: number) => new Date(Date.parse(`${s}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 export const startOfDayVn = (s: string) => new Date(`${s}T00:00:00+07:00`);
 export const endOfDayVn = (s: string) => new Date(`${s}T23:59:00+07:00`);
+
+/** Số ngày sau ngày thực hiện thì hệ thống tự hoàn tất đơn Deposited mà NCC quên bấm Hoàn tất. */
+export const AUTO_COMPLETE_DAYS = 7;
+/**
+ * Mốc tự hoàn tất: đơn Deposited có event_date < mốc này thì tự hoàn tất, tức là khi đã QUÁ ngày thực hiện hơn 7 ngày
+ * (event_date < hôm nay − 7, nghĩa là từ ngày thứ 8 sau ngày thực hiện). `today` là "YYYY-MM-DD" giờ VN.
+ */
+export const autoCompleteCutoff = (today: string) => new Date(`${addDaysYmd(today, -AUTO_COMPLETE_DAYS)}T00:00:00Z`);
 const validYmd = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 /** "YYYY-MM-DD" -> "dd/mm/yyyy" để đưa vào thông báo. */
 export const dmy = (s: string) => s.split('-').reverse().join('/');

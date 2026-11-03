@@ -36,7 +36,7 @@ export function PeriodOrders({ summary, detail, loading }: { summary: Commission
           </span>
           <p className="text-[14px] font-medium">Chưa có đơn hoàn thành trong kỳ</p>
           <p className="max-w-[420px] text-[13px] text-muted-foreground">
-            Đơn được tính hoa hồng khi bạn xác nhận đã thu đủ ở Quản lý đơn hàng. Quên xác nhận thì hệ thống tự hoàn thành 7 ngày sau ngày cưới.
+            Đơn được tính hoa hồng khi bạn xác nhận đã thu đủ ở Quản lý đơn hàng. Quên xác nhận thì hệ thống tự hoàn thành khi đã quá ngày thực hiện hơn 7 ngày.
           </p>
         </div>
       ) : (

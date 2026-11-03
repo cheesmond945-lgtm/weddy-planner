@@ -16,8 +16,8 @@ export interface TimeGroup {
  */
 export function groupByTime(items: readonly TimelineItem[], today: string): TimeGroup[] {
   const sorted = [...items].filter((i) => i.dueDate).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!)) // sort ổn định: cùng hạn giữ thứ tự cũ
-  const overdue = sorted.filter((i) => !i.isDone && i.dueDate! < today)
-  const rest = sorted.filter((i) => i.isDone || i.dueDate! >= today)
+  const overdue = sorted.filter((i) => !i.isDone && !i.isRestPayment && i.dueDate! < today)
+  const rest = sorted.filter((i) => !overdue.includes(i))
   const groups: TimeGroup[] = []
   if (overdue.length) groups.push({ key: 'overdue', title: 'Quá hạn', items: overdue })
   for (const i of rest) {

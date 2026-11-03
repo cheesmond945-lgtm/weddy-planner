@@ -140,7 +140,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
             </td>
             <td className={cn(td, 'tabular-nums')}>{valid ? `${100 - percent}%` : '—'}</td>
             <td className={cn(td, 'font-semibold whitespace-nowrap tabular-nums')}>{formatMoney(rest)}</td>
-            <td className={td}>{eventDate ? `${formatDate(eventDate)} (trả muộn tới +7 ngày)` : 'Ngày sự kiện (trả muộn tới +7 ngày)'}</td>
+            <td className={td}>{eventDate ? `Hạn chót: ${formatDate(eventDate)} (ngày cưới)` : 'Hạn chót: ngày cưới'}</td>
             <td className={td}>Tiền mặt, trả trực tiếp cho NCC</td>
           </tr>
         </tbody>

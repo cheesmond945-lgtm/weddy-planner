@@ -3,7 +3,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { notify, postMessage } from '../chat/chat-messages';
 import { publish } from '../realtime/realtime.bus';
 import { applyRestReceived, closableDetailTasksWhere, type RestDb } from './rest-payment';
-import { HOUR, addDaysYmd, endOfDayVn, money, todayVn, ymdOf } from './order-rules';
+import { AUTO_COMPLETE_DAYS, HOUR, addDaysYmd, autoCompleteCutoff, endOfDayVn, money, todayVn, ymdOf } from './order-rules';
 
 /*
  * Chuyển trạng thái đơn do thời gian hoặc do NCC (hết hạn cọc, hoàn thành). Mọi bước đều idempotent: chỉ xử lý dòng thật sự
@@ -111,13 +111,16 @@ export async function completeOrder(prisma: PrismaService, orderId: string, comp
   return true;
 }
 
-/** Đơn Deposited đã qua EventDate + 7 ngày tự hoàn thành; CompletedDate = cuối ngày đó (giờ VN) để hoa hồng vào đúng tháng. */
+/**
+ * Đơn Deposited có EventDate < hôm nay − 7 (đã quá ngày thực hiện hơn 7 ngày) tự hoàn thành; CompletedDate = cuối ngày EventDate + 7 (giờ VN)
+ * để hoa hồng vào đúng tháng. Không kiểm tra đã ghi nhận đợt 2 hay chưa.
+ */
 export async function autoComplete(prisma: PrismaService, scope: Prisma.ordersWhereInput = {}) {
-  const cutoff = new Date(`${addDaysYmd(todayVn(), -7)}T00:00:00Z`);
+  const cutoff = autoCompleteCutoff(todayVn());
   const rows = await prisma.orders.findMany({ where: { status: 'Deposited', event_date: { lt: cutoff }, ...scope }, select: { id: true, event_date: true } });
   let n = 0;
   for (const o of rows) {
-    const completedAt = endOfDayVn(addDaysYmd(ymdOf(o.event_date!), 7));
+    const completedAt = endOfDayVn(addDaysYmd(ymdOf(o.event_date!), AUTO_COMPLETE_DAYS));
     if (await completeOrder(prisma, o.id, completedAt, 'SYSTEM')) n++;
   }
   return n;

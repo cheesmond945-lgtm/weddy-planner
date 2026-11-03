@@ -45,7 +45,7 @@ export function TimelineGroupCard({ book, kids, visibleKids, open, onToggle, lea
   const total = kids.length
   const doneCount = kids.filter((k) => k.isDone).length
   const next = kids.find((k) => !k.isDone)
-  const overdue = kids.some((k) => !k.isDone && k.dueDate && parseDate(k.dueDate) < today())
+  const overdue = kids.some((k) => !k.isDone && !k.isRestPayment && k.dueDate && parseDate(k.dueDate) < today())
   // Đơn đang giữ nhiều việc con nhất (việc đã xong của đơn cũ có thể còn sót lại trong nhóm)
   const byOrder = new Map<string, TimelineItem[]>()
   for (const k of kids) if (k.orderCode) byOrder.set(k.orderCode, [...(byOrder.get(k.orderCode) ?? []), k])

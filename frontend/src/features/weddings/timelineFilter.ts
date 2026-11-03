@@ -81,7 +81,8 @@ export function chatDraft(i: Pick<TimelineItem, 'title' | 'orderCode' | 'status'
 export const processChangeDraft = (orderCode: string | null) =>
   `Chào shop, mình muốn trao đổi về các bước trong quy trình${orderCode ? ` của đơn ${orderCode}` : ''}: mình muốn thêm hoặc bỏ bước ... bạn xem giúp mình ạ.`
 
-export const isOverdue = (i: TimelineItem, today: string) => !i.isDone && !!i.dueDate && i.dueDate < today
+/** Quá hạn: chưa xong và hạn trước hôm nay. Việc thanh toán đợt 2 không bao giờ quá hạn (quá hạn chót khách và NCC tự thỏa thuận). */
+export const isOverdue = (i: TimelineItem, today: string) => !i.isDone && !i.isRestPayment && !!i.dueDate && i.dueDate < today
 
 /** Nhắc "sắp đến hạn" khi còn từng này ngày (gồm đúng hôm nay); cùng giá trị với backend (task-owner.ts DUE_SOON_DAYS). */
 export const DUE_SOON_DAYS = 2

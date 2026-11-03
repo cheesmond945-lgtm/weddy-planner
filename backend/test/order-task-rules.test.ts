@@ -120,6 +120,13 @@ describe("'Waiting' được tính là chưa xong (không chỉ 'Todo')", () => 
   const today = '2027-03-10';
   const t = (status: string, due: string, owner: TaskOwner = 'VENDOR') => ({ due, done: status === 'Done', owner, title: 'x', status });
 
+  it('orderProgress: việc thanh toán đợt 2 (restPayment) quá hạn KHÔNG tính trễ, vẫn là việc mở', () => {
+    const p = orderProgress([{ due: '2027-03-05', done: false, owner: 'CUSTOMER', status: 'Waiting', restPayment: true }], '2027-03-20');
+    assert.equal(p.open, 1);
+    assert.equal(p.overdueCustomer, 0);
+    assert.equal(p.overdueVendor, 0);
+  });
+
   it('orderProgress: việc Waiting là việc mở; quá hạn Waiting tính phía khách, quá hạn Todo tính phía NCC', () => {
     const p = orderProgress([t('Done', '2027-03-01'), t('Todo', '2027-03-05'), t('Waiting', '2027-03-05', 'CUSTOMER'), t('Waiting', '2027-03-20', 'CUSTOMER'), t('Todo', '2027-03-11')], today);
     assert.equal(p.total, 5);

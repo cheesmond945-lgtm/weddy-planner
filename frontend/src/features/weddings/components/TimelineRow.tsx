@@ -89,7 +89,7 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 export function TimelineCard({ item, leaving, nested, showService, onComplete, onReopen, onEdit, onRemove, onChat }: TimelineCardProps) {
   const due = parseDate(item.dueDate!)
   const done = item.isDone
-  const overdue = !done && due < today()
+  const overdue = !done && !item.isRestPayment && due < today()
   // Sắp đến hạn: còn 0 đến 2 ngày (cùng ngưỡng với thông báo của backend)
   const dueSoon = !done && !overdue && daysBetween(today(), due) <= DUE_SOON_DAYS
   // Mốc "Chốt" tự xong khi đặt cọc: không tick tay

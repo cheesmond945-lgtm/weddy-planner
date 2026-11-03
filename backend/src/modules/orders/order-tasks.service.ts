@@ -88,7 +88,7 @@ export class OrderTasksService {
       isCustomOrderTask: isCustomOrderTaskCode(t.task_code),
       /** Việc "Thanh toán phần còn lại" (PAY:): Done = NCC đã nhận đủ tiền mặt (ghi nhận đợt 2) */
       isRestPayment: isRestPayCode(t.task_code),
-      overdue: !done && !!due && due < ctx.today,
+      overdue: !done && !!due && due < ctx.today && !isRestPayCode(t.task_code),
       ...dateStatusOf(t.task_confirmations?.confirmed_date, t.task_confirmations?.confirmed_at, { due, event: ctx.event, isPackageBefore: before }),
     };
   }
@@ -118,11 +118,11 @@ export class OrderTasksService {
       select: { order_id: true, task_code: true, title: true, scheduled_date: true, status: true },
     });
     const owners = ownersFrom(await loadPackageMeta(this.prisma, rows.map((t) => t.task_code)));
-    const by = new Map<string, { due: string; done: boolean; owner: ReturnType<typeof ownerOf>; title: string; status: string | null }[]>();
+    const by = new Map<string, { due: string; done: boolean; owner: ReturnType<typeof ownerOf>; title: string; status: string | null; restPayment: boolean }[]>();
     for (const r of rows) {
       if (!r.order_id || !r.scheduled_date) continue;
       const list = by.get(r.order_id) ?? [];
-      list.push({ due: ymdOf(r.scheduled_date), done: r.status === 'Done', owner: ownerOf(r.task_code, owners), title: r.title ?? '', status: r.status });
+      list.push({ due: ymdOf(r.scheduled_date), done: r.status === 'Done', owner: ownerOf(r.task_code, owners), title: r.title ?? '', status: r.status, restPayment: isRestPayCode(r.task_code) });
       by.set(r.order_id, list);
     }
     return Object.fromEntries([...by].map(([id, tasks]) => [id, orderProgress(tasks, today)]));
