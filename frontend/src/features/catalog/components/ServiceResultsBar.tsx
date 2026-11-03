@@ -3,17 +3,15 @@ import { ALL_AREAS, dropdownArea, hasPrice, priceLabel, type ServiceFilters } fr
 
 interface ServiceResultsBarProps {
   filters: ServiceFilters
-  /** Tổng số dịch vụ khớp bộ lọc; chưa tải xong thì giữ chỗ */
-  total?: number
   onRemove: (patch: Partial<ServiceFilters>) => void
   onClear: () => void
 }
 
 /**
- * Hàng kết quả cố định dưới chip danh mục, luôn hiện: "N dịch vụ", các bộ lọc đang bật (từ khóa, khu vực, mức giá) dạng tag có nút x,
+ * Hàng kết quả cố định dưới chip danh mục, luôn hiện: các bộ lọc đang bật (từ khóa, khu vực, mức giá) dạng tag có nút x,
  * và "Xóa bộ lọc" khi có bộ lọc. Chiều cao cố định để trang không nhảy khi bật / tắt lọc.
  */
-export function ServiceResultsBar({ filters, total, onRemove, onClear }: ServiceResultsBarProps) {
+export function ServiceResultsBar({ filters, onRemove, onClear }: ServiceResultsBarProps) {
   const tags = [
     filters.q && { key: 'q', label: `"${filters.q}"`, remove: () => onRemove({ q: '' }) },
     // Bỏ tag khu vực = chọn "Tất cả khu vực" (không tự chọn lại khu vực đám cưới)
@@ -24,9 +22,6 @@ export function ServiceResultsBar({ filters, total, onRemove, onClear }: Service
 
   return (
     <div className="mt-4 mb-6 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2">
-      <p className="text-sm font-medium text-ink-2" aria-live="polite">
-        {total === undefined ? <span className="inline-block h-4 w-20 animate-pulse rounded-sm bg-muted align-middle" /> : `${total} dịch vụ`}
-      </p>
       {tags.map((t) => (
         <span key={t.key} className="inline-flex h-8 items-center gap-1 rounded-pill border border-line bg-surface pr-1 pl-3 text-[13px] text-ink">
           {t.label}

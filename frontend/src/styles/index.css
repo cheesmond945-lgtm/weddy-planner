@@ -157,6 +157,23 @@
   text-shadow: 0 1px 6px rgb(0 0 0 / 0.35);
 }
 
+/* Khung thông báo nằm trong header kính mờ: trả token về bản sáng, nền trắng đặc để chữ đọc rõ */
+.header-on-photo [role='dialog'][aria-label='Thông báo'] {
+  --surface: #fff;
+  --ink: #2b2620;
+  --ink-2: #5e5547;
+  --muted: #5e5547;
+  --line: #e9dfcb;
+  --accent-soft: #f3e8cf;
+  --gold-100: #f3e8cf;
+  --gold-800: #6f4f16;
+  --gold-700: #8a6420;
+  --gold-500: #ae8131;
+  --gold: #8a6420;
+  color: var(--ink);
+  text-shadow: none;
+}
+
 /*
  * Dải ảnh đầu trang Dịch vụ cưới kiểu cuộn phim: nền tối, hàng lỗ phim ở trên (ngay dưới header) và ở dưới,
  * ảnh nằm giữa hai hàng lỗ nên header không che ảnh. Lỗ phim là ảnh nền lặp nên trôi cùng ảnh.

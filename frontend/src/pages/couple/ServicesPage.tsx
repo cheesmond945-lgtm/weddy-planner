@@ -113,7 +113,6 @@ export default function ServicesPage() {
     return <SuggestionsPanel categorySlug={filters.category} categoryName={categoryName(filters.category)} onExpand={() => setAiMode('all')} cardActions={cardActions} />
   }
 
-  const total = textMode ? result?.total : services.data?.pages[0]?.meta.total
   const waitingAi = textMode && needsAi && second.isPending
 
   let body
@@ -172,7 +171,7 @@ export default function ServicesPage() {
       <div className="min-h-[44px]">
         {categories.data && <CategoryChips categories={categories.data} value={activeCategory} onChange={(category) => setFilters({ category })} />}
       </div>
-      <ServiceResultsBar filters={view} total={waitingAi ? undefined : total} onRemove={setFilters} onClear={clearFilters} />
+      <ServiceResultsBar filters={view} onRemove={setFilters} onClear={clearFilters} />
       {waitingAi && <AiWaiting />}
       {shown && (hasChips || (textMode && result?.ai?.priceRejected)) && (
         <NlChips filters={shown} categoryName={shown.category ? categoryName(shown.category) : undefined} priceRejected={textMode && result?.ai?.priceRejected} onRemove={removeChip} />
