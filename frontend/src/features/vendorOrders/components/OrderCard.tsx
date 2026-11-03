@@ -4,6 +4,7 @@ import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { useNow } from '@/lib/clock'
 import { cn } from '@/lib/utils'
+import { PaymentLines } from './PaymentLines'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { changesLabel, depositDeadline, formatStamp, openRevision, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
@@ -92,8 +93,7 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
           {updated.requestNote}
         </p>
       )}
-      {row(`Đặt cọc (${o.depositPercent}%)`, <span className="text-primary">{formatMoney(o.depositAmount)}</span>)}
-      {row('Còn lại', formatMoney(o.totalAmount - o.depositAmount))}
+      {row('Thanh toán', <PaymentLines order={o} />)}
       {o.status === 'Pending' && o.depositDueDate && row('Hạn đặt cọc', <span className="text-gold-ink">{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</span>)}
 
       {o.payment?.status === 'Paid' && o.payment.paidDate && (

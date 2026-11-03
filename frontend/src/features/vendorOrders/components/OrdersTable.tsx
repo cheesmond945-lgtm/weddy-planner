@@ -1,4 +1,4 @@
-import { Ban, CheckCheck, ChevronLeft, ChevronRight, Copy, Eye, FilePen, FileText, MessageSquareX, Pencil, type LucideIcon } from 'lucide-react'
+import { Ban, Banknote, CheckCheck, ChevronLeft, ChevronRight, Copy, Eye, FilePen, FileText, MessageSquareX, Pencil, Undo2, type LucideIcon } from 'lucide-react'
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
@@ -10,9 +10,9 @@ import { cn } from '@/lib/utils'
 import type { PageMeta } from '@/types/api'
 import type { Order } from '@/types/vendorOrder'
 import { actionsOf, mainActionKey, type ActionKey } from '../actions'
-import { formatDM } from '../calc'
 import { attentionOf, countdownText, msToDeadline, URGENT_HOURS } from '../summary'
 import { LateProgressBadge, OrderStatusBadge } from './OrderBadges'
+import { PaymentLines } from './PaymentLines'
 
 const ICON: Record<ActionKey, LucideIcon> = {
   view: Eye,
@@ -25,6 +25,8 @@ const ICON: Record<ActionKey, LucideIcon> = {
   invoice: FileText,
   viewInvoice: FileText,
   cancel: Ban,
+  receiveRest: Banknote,
+  unreceiveRest: Undo2,
 }
 
 /*
@@ -55,45 +57,39 @@ function Countdown({ order: o }: { order: Order }) {
   return <Badge tone={urgent ? 'warn' : 'wait'}>{countdownText(ms)}</Badge>
 }
 
-/** Dòng 2 của cột Đặt cọc: thanh tiến độ mảnh + "Đã cọc 26/10" hoặc "Chưa cọc"; bản nháp chỉ ghi "Chưa gửi". */
-function DepositProgress({ order: o }: { order: Order }) {
-  if (o.status === 'Draft') return <span className="text-[12px] text-muted-foreground">Chưa gửi</span>
-  const paidDate = o.payment?.status === 'Paid' ? o.payment.paidDate : null
-  const dead = o.status === 'Expired'
-  return (
-    <span className="flex items-center gap-1.5 text-[12px] whitespace-nowrap">
-      <span aria-hidden className="h-1 w-8 flex-none overflow-hidden rounded-pill bg-line">
-        <span className={cn('block h-full rounded-pill', paidDate ? 'w-full bg-sage' : dead ? 'w-0' : 'w-full bg-gold/40')} />
-      </span>
-      {paidDate ? <span className="font-medium text-sage">Đã cọc {formatDM(paidDate)}</span> : <span className={dead ? 'text-muted-foreground' : 'font-medium text-gold-ink'}>Chưa cọc</span>}
-    </span>
-  )
-}
+/** Nút chính trên dòng: chữ ngắn hơn ở nút hẹp, đầy đủ trong menu "…". */
+const MAIN_LABEL: Partial<Record<ActionKey, string>> = { edit: 'Sửa theo yêu cầu' }
 
-/** Nút chính (chỉ đơn cần NCC xử lý, cùng cỡ, nền vàng) và menu "…" ở mọi dòng (Xem chi tiết + thao tác còn lại). */
+/**
+ * Nút chính (tối đa một nút mỗi dòng: Hoàn tất, Cập nhật đơn, Tạo lại đơn, Sửa theo yêu cầu, tùy trạng thái; dạng viền, cỡ nhỏ, chữ tự xuống dòng
+ * nên không bị cắt) và menu "…" có Xem chi tiết cùng mọi thao tác (kể cả "Ghi nhận đã nhận tiền mặt", chưa phải nút chính).
+ */
 function RowActions({ order: o, busy, onRun, chevron }: { order: Order; busy: boolean; onRun: (key: ActionKey, order: Order) => void; chevron?: boolean }) {
   const actions = actionsOf(o, { withView: true })
   const mainKey = mainActionKey(o)
   const main = actions.find((a) => a.key === mainKey)
-  const menu: RowMenuItem[] = actions
-    .filter((a) => a.key !== mainKey)
-    .map((a) => ({
-      label: a.label,
-      icon: ICON[a.key],
-      danger: a.danger,
-      onClick: () => onRun(a.key, o),
-    }))
+  const menu: RowMenuItem[] = actions.map((a) => ({
+    label: a.label,
+    icon: ICON[a.key],
+    danger: a.danger,
+    disabled: a.disabledReason,
+    onClick: () => onRun(a.key, o),
+  }))
   return (
     <div className="flex items-center justify-end gap-1" {...stop}>
-      <span className="flex h-8 w-[92px] flex-none justify-end">
-        {main && (
-          <Button size="sm" className="h-8 w-full px-1 text-[12px]" disabled={busy && main.key === 'complete'} onClick={() => onRun(main.key, o)}>
-            {main.label}
-          </Button>
-        )}
-      </span>
+      {main && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-auto min-h-8 w-[84px] flex-none border-line-strong px-1.5 py-1 text-[12px] leading-tight font-medium whitespace-normal"
+          disabled={busy && main.key === 'complete'}
+          onClick={() => onRun(main.key, o)}
+        >
+          {MAIN_LABEL[main.key] ?? main.label}
+        </Button>
+      )}
       <RowMenu label={o.orderCode} items={menu} />
-      {chevron && <ChevronRight aria-hidden className="size-4 flex-none text-muted-foreground/50 max-[1279px]:hidden" />}
+      {chevron && <ChevronRight aria-hidden className="size-4 flex-none text-muted-foreground/50" />}
     </div>
   )
 }
@@ -114,13 +110,13 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
       <div className="max-[1099px]:hidden">
         <table className="w-full table-fixed border-collapse">
           <colgroup>
-            <col className="w-[11%] max-[1279px]:w-[13.5%]" />
-            <col className="w-[21%] max-[1279px]:w-[21.5%]" />
-            <col className={cn('w-[9.5%]', dateCol)} />
-            <col className="w-[11.5%] max-[1279px]:w-[13%]" />
-            <col className="w-[17%] max-[1279px]:w-[19%]" />
-            <col className="w-[14%] max-[1279px]:w-[16%]" />
-            <col className="w-[16%] max-[1279px]:w-[17%]" />
+            <col className="w-[9%] max-[1279px]:w-[11%]" />
+            <col className="w-[17%] max-[1279px]:w-[20%]" />
+            <col className={cn('w-[9%]', dateCol)} />
+            <col className="w-[11%] max-[1279px]:w-[12%]" />
+            <col className="w-[25%] max-[1279px]:w-[27%]" />
+            <col className="w-[14%] max-[1279px]:w-[15%]" />
+            <col className="w-[15%]" />
           </colgroup>
           <thead>
             <tr>
@@ -128,7 +124,7 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
               <th className={th}>Khách</th>
               <th className={cn(th, dateCol)}>Ngày thực hiện</th>
               <th className={cn(th, 'text-right')}>Tổng giá trị</th>
-              <th className={th}>Đặt cọc</th>
+              <th className={th}>Thanh toán</th>
               <th className={th}>Trạng thái đơn</th>
               <th className={th} />
             </tr>
@@ -158,11 +154,8 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
                   <td className={cn(td, 'whitespace-nowrap', dateCol)}>{formatDate(o.eventDate)}</td>
                   <td className={cn(td, 'text-right font-semibold whitespace-nowrap tabular-nums')}>{formatMoney(o.totalAmount)}</td>
                   <td className={td}>
-                    <span className="block whitespace-nowrap tabular-nums">
-                      <b className="font-semibold">{o.depositPercent}%</b> <span className="text-muted-foreground">·</span> {formatMoney(o.depositAmount)}
-                    </span>
-                    <span className="mt-1.5 block">
-                      <DepositProgress order={o} />
+                    <span className="block">
+                      <PaymentLines order={o} onReceive={o.restPayment?.status === 'Pending' ? () => onRun('receiveRest', o) : undefined} />
                     </span>
                   </td>
                   <td className={td}>
@@ -212,11 +205,8 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
                 <div className="mt-3 flex items-end justify-between gap-3">
                   <span className="min-w-0 text-[13px]">
                     <b className="text-[15px] font-semibold tabular-nums">{formatMoney(o.totalAmount)}</b>
-                    <span className="block whitespace-nowrap text-muted-foreground tabular-nums">
-                      Cọc {o.depositPercent}% · {formatMoney(o.depositAmount)}
-                    </span>
                     <span className="mt-1.5 block">
-                      <DepositProgress order={o} />
+                      <PaymentLines order={o} onReceive={o.restPayment?.status === 'Pending' ? () => onRun('receiveRest', o) : undefined} />
                     </span>
                   </span>
                   <span className="flex flex-col items-end gap-2">

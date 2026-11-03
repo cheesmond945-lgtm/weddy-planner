@@ -1,6 +1,7 @@
 import { Receipt } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { effectiveSender } from '@/features/chat/messageSender'
 import { formatStamp } from '@/features/vendorOrders/calc'
 import { OrderCard } from '@/features/vendorOrders/components/OrderCard'
 import type { OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
@@ -22,7 +23,7 @@ interface MessageItemProps {
 
 const Time = ({ at }: { at: string }) => <time className="mt-1 text-[11px] text-muted-foreground">{formatStamp(at)}</time>
 
-/** Khung tin: của NCC bên phải, của khách bên trái, chứng từ ở bên trái (hệ thống gửi). */
+/** Khung tin: của NCC bên phải (kể cả hóa đơn cuối), của khách bên trái; tin hệ thống và giấy xác nhận cọc nằm giữa. */
 function Bubble({ mine, wide, at, children }: { mine: boolean; wide?: boolean; at: string; children: ReactNode }) {
   return (
     <div className={cn('grid max-w-[78%] max-[640px]:max-w-[94%]', mine ? 'self-end justify-items-end' : 'self-start', wide && 'w-full max-w-[min(420px,92%)] max-[640px]:max-w-full')}>
@@ -52,22 +53,40 @@ export function MessageItem({ message: m, order, isLatestCard, highlight, onOpen
       )
     }
     case 'DepositReceipt':
-    case 'FinalInvoice':
+    case 'FinalInvoice': {
+      // Suy theo loại tin (tin cũ có thể lưu sai sender): hóa đơn cuối do NCC xuất = bên PHẢI; giấy xác nhận cọc = tin hệ thống GIỮA khung
+      const viewButton = order && (
+        <Button size="sm" variant="outline" className="mt-2.5 border-line-strong" onClick={() => onViewInvoice(order, m.type as InvoiceType)}>
+          Xem
+        </Button>
+      )
+      if (effectiveSender(m) === 'SYSTEM') {
+        return (
+          <div className="grid w-full max-w-[min(420px,92%)] justify-items-center self-center max-[640px]:max-w-full">
+            <div className="w-full rounded-[22px] border border-sage/25 bg-sage-soft px-4 py-3">
+              <p className="mb-1 text-[11px] font-semibold tracking-[0.06em] text-sage uppercase">Forever xác nhận</p>
+              <div className="flex items-start gap-2.5 text-[13.5px] leading-relaxed">
+                <Receipt className="mt-0.5 size-4 flex-none text-sage" />
+                <span>{m.content}</span>
+              </div>
+              {viewButton}
+            </div>
+            <Time at={m.sentDate} />
+          </div>
+        )
+      }
       return (
-        <Bubble mine={false} wide at={m.sentDate}>
-          <div className="w-full rounded-[22px] rounded-bl-[5px] border border-line bg-surface px-4 py-3 shadow-bubble">
+        <Bubble mine wide at={m.sentDate}>
+          <div className="w-full rounded-[22px] rounded-br-[5px] border border-line bg-surface px-4 py-3 shadow-bubble">
             <div className="flex items-start gap-2.5 text-[13.5px] leading-relaxed">
               <Receipt className="mt-0.5 size-4 flex-none text-sage" />
               <span>{m.content}</span>
             </div>
-            {order && (
-              <Button size="sm" variant="outline" className="mt-2.5 border-line-strong" onClick={() => onViewInvoice(order, m.type as InvoiceType)}>
-                Xem
-              </Button>
-            )}
+            {viewButton}
           </div>
         </Bubble>
       )
+    }
   }
 
   if (m.sender === 'SYSTEM') {

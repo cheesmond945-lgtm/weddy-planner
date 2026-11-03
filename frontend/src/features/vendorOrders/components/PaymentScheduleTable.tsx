@@ -2,7 +2,9 @@ import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { Order } from '@/types/vendorOrder'
+import { useAuth } from '@/store/auth'
 import { formatDay, formatDayTime } from '../calc'
+import { restLabel, type Viewer } from '../restPayment'
 
 const th = 'px-2.5 py-2 text-left align-bottom text-[11px] leading-tight font-medium tracking-[0.03em] text-muted-foreground uppercase'
 const td = 'px-2.5 py-2.5 align-top text-[13px] leading-snug [overflow-wrap:anywhere]'
@@ -13,6 +15,8 @@ const pct = (n: number) => `${Math.round(n * 100) / 100}%`
 interface State {
   text: string
   ok?: boolean
+  /** Chưa nhận / chưa thanh toán: nhấn màu vàng */
+  warn?: boolean
 }
 
 /** Trạng thái đợt 1 theo Payments và trạng thái đơn. */
@@ -23,12 +27,12 @@ function depositState(o: Order): State {
   return { text: 'Chưa cọc' }
 }
 
-/** Trạng thái đợt 2: không có dòng dữ liệu, coi là đã thu khi đơn Hoàn thành. */
-function restState(o: Order): State {
-  if (o.status === 'Completed') return { text: 'Đã hoàn thành', ok: true }
-  if (o.status === 'Deposited') return { text: 'Thu khi hoàn thành' }
+/** Trạng thái đợt 2 theo ghi nhận của NCC (việc PAY Done), không còn suy từ trạng thái đơn. */
+function restState(o: Order, viewer: Viewer): State {
   if (o.status === 'Cancelled') return { text: 'Không thu (khách đã hủy)' }
-  return { text: '—' }
+  const l = restLabel(o, viewer)
+  if (l.tone === 'ok') return { text: viewer === 'VENDOR' ? l.text.replace('Đã nhận', 'Đã nhận tiền mặt ·') : l.text, ok: true }
+  return { text: l.text, warn: l.tone !== 'none' }
 }
 
 interface Row {
@@ -46,6 +50,8 @@ interface Row {
  * Màn rộng: bảng cố định độ rộng cột, chữ tự xuống dòng nên không cuộn ngang. Điện thoại: mỗi đợt một thẻ dọc.
  */
 export function PaymentScheduleTable({ order: o }: { order: Order }) {
+  const { user } = useAuth()
+  const viewer: Viewer = user?.role === 'VENDOR' ? 'VENDOR' : 'COUPLE'
   const rest = o.totalAmount - o.depositAmount
   const rows: Row[] = [
     {
@@ -62,7 +68,7 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
       amount: formatMoney(rest),
       due: `${formatDate(o.eventDate)} (trả muộn tới +7 ngày)`,
       method: 'Tiền mặt, trả trực tiếp cho NCC',
-      state: restState(o),
+      state: restState(o, viewer),
     },
   ]
 
@@ -96,7 +102,7 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
               <td className={cn(td, 'font-semibold tabular-nums')}>{r.amount}</td>
               <td className={td}>{r.due}</td>
               <td className={td}>{r.method}</td>
-              <td className={cn(td, r.state.ok && 'font-semibold text-sage')}>{r.state.text}</td>
+              <td className={cn(td, r.state.ok && 'font-semibold text-sage', r.state.warn && 'font-semibold text-gold-ink')}>{r.state.text}</td>
             </tr>
           ))}
         </tbody>
@@ -117,7 +123,7 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
               <dt className="text-muted-foreground">Phương thức</dt>
               <dd>{r.method}</dd>
               <dt className="text-muted-foreground">Trạng thái</dt>
-              <dd className={cn(r.state.ok && 'font-semibold text-sage')}>{r.state.text}</dd>
+              <dd className={cn(r.state.ok && 'font-semibold text-sage', r.state.warn && 'font-semibold text-gold-ink')}>{r.state.text}</dd>
             </dl>
           </li>
         ))}
