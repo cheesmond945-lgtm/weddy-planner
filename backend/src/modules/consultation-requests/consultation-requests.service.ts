@@ -1,8 +1,9 @@
+import { normalizePhone, PHONE_MESSAGE, VN_PHONE_RE } from '../../common/phone.ts';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { fail, UUID } from '../admin/admin-common';
 
-const PHONE_RE = /^0\d{9}$/;
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export interface CreateConsultationDto {
@@ -21,12 +22,12 @@ export class ConsultationRequestsService {
   async create(b: CreateConsultationDto) {
     const brandName = b.brandName?.trim() ?? '';
     const contactName = b.contactName?.trim() ?? '';
-    const phone = b.phone?.trim() ?? '';
+    const phone = normalizePhone(b.phone);
     const email = b.email?.trim().toLowerCase() ?? '';
     const errors: Record<string, string> = {};
     if (!brandName || brandName.length > 150) errors.brandName = 'Nhập tên thương hiệu (tối đa 150 ký tự).';
     if (!contactName || contactName.length > 100) errors.contactName = 'Nhập tên người liên hệ (tối đa 100 ký tự).';
-    if (!PHONE_RE.test(phone)) errors.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.';
+    if (!VN_PHONE_RE.test(phone)) errors.phone = PHONE_MESSAGE;
     if (!EMAIL_RE.test(email) || email.length > 255) errors.email = 'Email chưa hợp lệ.';
     const category = UUID.test(b.categoryId ?? '') ? await this.prisma.service_categories.findUnique({ where: { id: b.categoryId! } }) : null;
     if (!category) errors.categoryId = 'Chọn lĩnh vực hoạt động.';

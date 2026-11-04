@@ -32,12 +32,12 @@ async function postOrderNotice(prisma: PrismaService, o: RestNotice, content: st
  */
 export async function notifyRestReceived(prisma: PrismaService, o: RestNotice) {
   publish({ users: [o.coupleUserId, o.vendorUserId], event: 'task', data: { orderId: o.orderId, taskId: o.taskId } });
-  await postOrderNotice(prisma, o, `${o.vendorName || 'Nhà cung cấp'} đã xác nhận nhận đủ ${money(o.amount)} tiền mặt (đợt 2) cho đơn ${o.orderCode ?? ''}. Đơn đã thanh toán đủ.`).catch(() => undefined);
+  await postOrderNotice(prisma, o, `${o.vendorName || 'Nhà cung cấp'} đã xác nhận nhận đủ ${money(o.amount)} (đợt 2) cho đơn ${o.orderCode ?? ''}. Đơn đã thanh toán đủ.`).catch(() => undefined);
   await notify(prisma, {
     userId: o.coupleUserId,
     type: 'RestPaymentReceived',
-    title: 'Nhà cung cấp đã nhận tiền mặt',
-    content: `${o.vendorName || 'Nhà cung cấp'} đã xác nhận nhận đủ ${money(o.amount)} tiền mặt cho đơn ${o.orderCode ?? ''}.`,
+    title: 'Nhà cung cấp đã nhận đủ tiền',
+    content: `${o.vendorName || 'Nhà cung cấp'} đã xác nhận nhận đủ ${money(o.amount)} cho đơn ${o.orderCode ?? ''}.`,
     referenceType: 'Order',
     referenceId: o.orderId,
   }).catch(() => undefined);
@@ -46,7 +46,7 @@ export async function notifyRestReceived(prisma: PrismaService, o: RestNotice) {
 /** NCC bỏ ghi nhận tiền mặt đợt 2: tin hệ thống trong chat cho cả hai bên và làm các phiên đang mở tải lại. */
 export async function notifyRestCleared(prisma: PrismaService, o: RestNotice) {
   publish({ users: [o.coupleUserId, o.vendorUserId], event: 'task', data: { orderId: o.orderId, taskId: o.taskId } });
-  await postOrderNotice(prisma, o, `${o.vendorName || 'Nhà cung cấp'} đã bỏ ghi nhận khoản tiền mặt ${money(o.amount)} (đợt 2) của đơn ${o.orderCode ?? ''}. Đợt 2 trở về trạng thái chưa nhận.`).catch(() => undefined);
+  await postOrderNotice(prisma, o, `${o.vendorName || 'Nhà cung cấp'} đã bỏ ghi nhận khoản đã nhận ${money(o.amount)} (đợt 2) của đơn ${o.orderCode ?? ''}. Đợt 2 trở về trạng thái chưa nhận.`).catch(() => undefined);
 }
 
 /** Đơn Pending quá hạn cọc thành Expired (NeedRevision không hết hạn vì đang chờ NCC). */

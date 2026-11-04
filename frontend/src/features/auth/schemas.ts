@@ -1,8 +1,8 @@
 import { z } from 'zod'
+import { isVnPhone, PHONE_MESSAGE } from '@/lib/phone'
 
 // Quy tắc và câu báo lỗi lấy theo prototype (doLogin, doRegister, saveProfile)
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-export const PHONE_RE = /^0\d{9}$/
 export const MIN_PASSWORD = 6
 
 export const loginSchema = z.object({
@@ -44,7 +44,7 @@ export const resetPasswordSchema = z
 export const profileSchema = z.object({
   name: z.string().trim().min(1, 'Họ và tên không được để trống.'),
   username: z.string().trim().min(1, 'Nhập tên đăng nhập.').max(50, 'Tên đăng nhập tối đa 50 ký tự.'),
-  phone: z.union([z.literal(''), z.string().trim().regex(PHONE_RE, 'Số điện thoại cần 10 số, bắt đầu bằng 0.')]),
+  phone: z.union([z.literal(''), z.string().trim().refine(isVnPhone, PHONE_MESSAGE)]),
 })
 
 export type FieldErrors<T> = Partial<Record<keyof T, string>>

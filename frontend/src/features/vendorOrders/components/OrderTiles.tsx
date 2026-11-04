@@ -51,7 +51,7 @@ export function OrderTiles({ tiles: t, query, onFilter }: OrderTilesProps) {
           label="Đến hạn hoàn tất"
           value={t.dueToComplete}
           tone={t.dueToComplete ? 'text-gold-ink' : ''}
-          foot={t.dueToComplete ? `Đã qua ngày thực hiện${t.dueRestPending ? ` · ${t.dueRestPending} đơn chưa nhận tiền mặt` : ''}` : 'Không có đơn chờ hoàn tất'}
+          foot={t.dueToComplete ? `Đã qua ngày thực hiện${t.dueRestPending ? ` · ${t.dueRestPending} đơn chưa nhận tiền` : ''}` : 'Không có đơn chờ hoàn tất'}
         />
       ),
     },

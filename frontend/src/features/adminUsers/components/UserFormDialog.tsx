@@ -1,3 +1,4 @@
+import { isVnPhone, PHONE_MESSAGE } from '@/lib/phone'
 import { Copy, LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -34,7 +35,6 @@ interface UserFormDialogProps {
 type Errors = Partial<Record<'username' | 'email' | 'phone' | 'role' | 'categoryId', string>>
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const PHONE_RE = /^0\d{9}$/
 
 /** Thêm mới / sửa thông tin tài khoản (hộp "Thêm mới tài khoản", "Sửa thông tin tài khoản"). */
 export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialogProps) {
@@ -69,7 +69,7 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
     const e: Errors = {}
     if (!v.username.trim()) e.username = 'Nhập tên đăng nhập.'
     if (!EMAIL_RE.test(v.email.trim())) e.email = 'Email chưa hợp lệ.'
-    if (!PHONE_RE.test(v.phone.trim())) e.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.'
+    if (!isVnPhone(v.phone)) e.phone = PHONE_MESSAGE
     if (!v.role) e.role = 'Chọn vai trò người dùng.'
     if (needCategory && !v.categoryId) e.categoryId = 'Chọn lĩnh vực cung cấp.'
     setErrors(e)

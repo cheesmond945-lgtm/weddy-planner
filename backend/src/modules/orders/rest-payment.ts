@@ -49,7 +49,7 @@ const money = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
 export function finalInvoiceGate(rest: RestPayment): RuleError | null {
   return rest.status === 'Received'
     ? null
-    : { code: 'REST_PAYMENT_NOT_RECORDED', message: `Hãy ghi nhận đã nhận ${money(rest.amount)} tiền mặt phần còn lại trước khi xuất hóa đơn cuối.`, status: 409, details: { amount: rest.amount } };
+    : { code: 'REST_PAYMENT_NOT_RECORDED', message: `Hãy ghi nhận đã nhận ${money(rest.amount)} phần còn lại trước khi xuất hóa đơn cuối.`, status: 409, details: { amount: rest.amount } };
 }
 
 /**
@@ -58,7 +58,7 @@ export function finalInvoiceGate(rest: RestPayment): RuleError | null {
  */
 export function clearRestGate(finalInvoiceCode: string | null): RuleError | null {
   return finalInvoiceCode
-    ? { code: 'REST_PAYMENT_HAS_FINAL_INVOICE', message: `Đơn đã xuất hóa đơn cuối ${finalInvoiceCode}, không thể bỏ ghi nhận tiền mặt.`, status: 409, details: { invoiceCode: finalInvoiceCode } }
+    ? { code: 'REST_PAYMENT_HAS_FINAL_INVOICE', message: `Đơn đã xuất hóa đơn cuối ${finalInvoiceCode}, không thể bỏ ghi nhận đã nhận tiền.`, status: 409, details: { invoiceCode: finalInvoiceCode } }
     : null;
 }
 
@@ -69,7 +69,7 @@ export function clearRestGate(finalInvoiceCode: string | null): RuleError | null
 export function completeGate(rest: RestPayment, restReceived: unknown): 'ok' | 'record' | RuleError {
   if (rest.status === 'Received') return 'ok';
   if (restReceived === true) return 'record';
-  return { code: 'REST_PAYMENT_NOT_RECORDED', message: `Bạn đã nhận đủ ${money(rest.amount)} tiền mặt phần còn lại chưa? Hãy ghi nhận trước khi hoàn tất.`, status: 409, details: { amount: rest.amount } };
+  return { code: 'REST_PAYMENT_NOT_RECORDED', message: `Bạn đã nhận đủ ${money(rest.amount)} phần còn lại chưa? Hãy ghi nhận trước khi hoàn tất.`, status: 409, details: { amount: rest.amount } };
 }
 
 /** Điều kiện các việc chi tiết còn mở mà hoàn thành đơn được đóng: mọi việc chưa Done TRỪ việc thanh toán phần còn lại (PAY:). */

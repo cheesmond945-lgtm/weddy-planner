@@ -5,7 +5,6 @@ import { CoupleLayout } from '@/layouts/CoupleLayout'
 import { VendorLayout } from '@/layouts/VendorLayout'
 import NotFoundPage from '@/pages/NotFoundPage'
 import PublicPlanPage from '@/pages/PublicPlanPage'
-import TimelinePage from '@/pages/couple/TimelinePage'
 import DepositTermsPreviewPage from '@/pages/preview/DepositTermsPreviewPage'
 import TermsPreviewPage from '@/pages/preview/TermsPreviewPage'
 import AdminAccountPage from '@/pages/admin/AdminAccountPage'
@@ -33,6 +32,7 @@ import PlanBudgetPage from '@/pages/couple/PlanBudgetPage'
 import PlanLayoutPage from '@/pages/couple/PlanLayoutPage'
 import PlanOverviewPage from '@/pages/couple/PlanOverviewPage'
 import PlanServicesPage from '@/pages/couple/PlanServicesPage'
+import PlanTimelinePage from '@/pages/couple/PlanTimelinePage'
 import ServiceDetailPage from '@/pages/couple/ServiceDetailPage'
 import ServicesPage from '@/pages/couple/ServicesPage'
 import VendorCatalogPage from '@/pages/vendor/VendorCatalogPage'
@@ -76,14 +76,14 @@ export const router = createBrowserRouter([
                   // /plan: trang khung tự chuyển sang tab đầu tiên được xem
                   { index: true, element: null },
                   { path: paths.planTab.overview, element: <PlanOverviewPage /> },
+                  { path: paths.planTab.timeline, element: <PlanTimelinePage /> },
                   { path: paths.planTab.services, element: <PlanServicesPage /> },
                   { path: paths.planTab.budget, element: <PlanBudgetPage /> },
                 ],
               },
               { path: '/plan/deal/:dealId', element: <DealPage /> },
-              { path: paths.timeline, element: <TimelinePage /> },
-              // Link cũ /plan/timeline sang trang Timeline
-              { path: '/plan/timeline', element: <RedirectKeepSearch to={paths.timeline} /> },
+              // Link cũ /timeline (trang Lập Timeline trước đây) sang tab Timeline của Kế hoạch
+              { path: '/timeline', element: <RedirectKeepSearch to={paths.timeline} /> },
               { path: paths.chat, element: <ChatPage /> },
               { path: paths.account, element: <CoupleAccountPage /> },
             ],

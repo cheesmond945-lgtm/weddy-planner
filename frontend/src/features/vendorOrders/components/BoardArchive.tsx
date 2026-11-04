@@ -60,13 +60,13 @@ function CompleteButton({ order }: { order: FinishedOrder }) {
       <ConfirmDialog
         open={asking}
         onOpenChange={setAsking}
-        title="Đã nhận tiền mặt?"
+        title="Đã nhận đủ tiền?"
         confirmLabel="Đã nhận, hoàn tất"
         cancelLabel="Chưa, để sau"
         onConfirm={() => complete.mutate({ orderId: order.orderId, restReceived: true })}
       >
         <p>
-          Bạn đã nhận đủ phần tiền mặt còn lại của đơn <b>{order.orderCode}</b> chưa? Bấm "Đã nhận, hoàn tất" để ghi nhận và hoàn tất đơn.
+          Bạn đã nhận đủ phần tiền còn lại của đơn <b>{order.orderCode}</b> chưa? Bấm "Đã nhận, hoàn tất" để ghi nhận và hoàn tất đơn.
         </p>
       </ConfirmDialog>
     </>
@@ -86,7 +86,7 @@ function RestCell({ order }: { order: Order }) {
       <span className={cn('text-[12.5px]', REST_TONE_CLASS[l.tone])}>Đợt 2: {l.text}</span>
       {pending && (
         <Button size="sm" variant="outline" className="border-line-strong" disabled={busy} onClick={() => setAsking(true)}>
-          Ghi nhận đã nhận tiền mặt
+          Ghi nhận đã nhận tiền
         </Button>
       )}
       <RestReceivedDialog open={asking} amount={order.restPayment?.amount} onOpenChange={setAsking} onConfirm={() => void restAction(order.id, true, order.orderCode)} />

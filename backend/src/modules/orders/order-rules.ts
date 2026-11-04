@@ -1,3 +1,4 @@
+import { normalizePhone, PHONE_MESSAGE, VN_PHONE_RE } from '../../common/phone.ts';
 import { HttpException } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 
@@ -118,7 +119,6 @@ export type ChangeType = (typeof CHANGE_TYPES)[number];
 export const CHANGE_LABEL: Record<ChangeType, string> = { Item: 'Đổi hạng mục', Quantity: 'Đổi số lượng', EventDate: 'Đổi ngày thực hiện', Other: 'Khác' };
 
 export const UNITS = ['Gói', 'Bàn'] as const;
-const PHONE = /^[0-9 +().-]{9,15}$/;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const money = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
@@ -185,7 +185,7 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
   const errors: Record<string, string> = {};
 
   const customerName = c.customerName?.trim() ?? '';
-  const customerPhone = c.customerPhone?.trim() ?? '';
+  const customerPhone = normalizePhone(c.customerPhone);
   const eventOk = validYmd(c.eventDate);
   const eventDate = eventOk ? (c.eventDate as string) : '';
   if (!eventOk) errors.eventDate = 'Chọn ngày diễn ra sự kiện.';
@@ -229,7 +229,7 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
 
   if (strict) {
     if (!customerName) errors.customerName = 'Nhập tên khách hàng.';
-    if (!PHONE.test(customerPhone)) errors.customerPhone = 'Số điện thoại gồm 9 đến 15 ký tự (số, khoảng trắng, + ( ) . -).';
+    if (!VN_PHONE_RE.test(customerPhone)) errors.customerPhone = PHONE_MESSAGE;
     if (!items.length) errors.items = 'Thêm ít nhất một hạng mục.';
     else if (total <= 0) errors.items ??= 'Tổng tiền phải lớn hơn 0.';
     if (!hasPercent) errors.depositPercent = 'Nhập tỷ lệ đặt cọc (%).';

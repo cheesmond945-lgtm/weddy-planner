@@ -15,7 +15,7 @@ import { controlClass, FormSection } from '@/features/vendors/components/FormPar
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 import { useUpdateProfile } from '../hooks'
-import { PHONE_RE } from '../schemas'
+import { isVnPhone, PHONE_MESSAGE } from '@/lib/phone'
 
 const card = 'rounded-md border border-line bg-surface px-7 pt-[26px] pb-6 shadow-portal max-sm:px-4 max-sm:pt-5 max-sm:pb-4'
 type Errors = { currentPassword?: string; newPassword?: string; confirmPassword?: string; form?: string }
@@ -60,7 +60,7 @@ export function AccountSettings({
     const found: typeof infoErrors = {}
     if (!draft.name.trim()) found.name = `Nhập ${nameLabel.toLowerCase()}.`
     if (!draft.username.trim()) found.username = 'Nhập tên đăng nhập.'
-    if (editablePhone && draft.phone.trim() && !PHONE_RE.test(draft.phone.trim())) found.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.'
+    if (editablePhone && draft.phone.trim() && !isVnPhone(draft.phone)) found.phone = PHONE_MESSAGE
     setInfoErrors(found)
     if (Object.keys(found).length) return
     update.mutate(

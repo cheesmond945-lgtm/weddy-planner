@@ -5,14 +5,15 @@ export const paths = {
   // Phía cặp đôi (theo prototype)
   services: '/',
   serviceDetail: (id: string | number) => `/services/${id}`,
-  /** Trang Timeline (cách xem theo thời gian / dịch vụ / lịch) */
-  timeline: '/timeline',
+  /** Timeline: tab trong Kế hoạch của tôi (cạnh Tổng quan); link cũ /timeline chuyển về đây */
+  timeline: '/plan/timeline',
   favorites: '/favorites',
   compare: '/favorites/compare',
   /** Kế hoạch của tôi: vào /plan thì chuyển sang subtab Tổng quan */
   plan: '/plan',
   planTab: {
     overview: '/plan/tong-quan',
+    timeline: '/plan/timeline',
     services: '/plan/dich-vu',
     budget: '/plan/ngan-sach',
   },

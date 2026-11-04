@@ -1,3 +1,4 @@
+import { isVnPhone, PHONE_MESSAGE } from '@/lib/phone'
 import { todayVN } from '@/lib/clock'
 import { depositPercentError, isDepositTooLarge } from '@/lib/deposit'
 import { formatDate } from '@/lib/date'
@@ -8,7 +9,6 @@ import { filledItems, totalOf, type OrderFormValues } from './calc'
 export type OrderErrors = Record<string, string>
 
 // Quy tắc theo docs/api/orders.md (backend kiểm tra lại)
-const PHONE_RE = /^[0-9 +().-]{9,15}$/
 
 /** Ngày sự kiện hợp lệ: đủ "YYYY-MM-DD", năm 4 chữ số (ô ngày của trình duyệt cho gõ năm 5 chữ số, giá trị thành "55555-05-12"). */
 const eventDateError = (date: string) => {
@@ -42,7 +42,7 @@ export function validateOrder(
   if (opts.requireHall && !v.packageId) e.packageId = 'Chọn sảnh cho đơn.'
   else if (opts.hallHidden) e.packageId = 'Sảnh này đang ẩn, không nhận đơn mới. Chọn sảnh khác.'
   if (!v.customerName.trim()) e.customerName = 'Nhập tên khách hàng.'
-  if (!PHONE_RE.test(v.customerPhone.trim())) e.customerPhone = 'Nhập số điện thoại hợp lệ (9–15 chữ số).'
+  if (!isVnPhone(v.customerPhone)) e.customerPhone = PHONE_MESSAGE
   const date = eventDateError(v.eventDate)
   if (date) e.eventDate = date
   else if (v.eventDate !== opts.originalEventDate && v.eventDate < todayVN()) e.eventDate = 'Ngày diễn ra sự kiện phải từ hôm nay trở đi.'

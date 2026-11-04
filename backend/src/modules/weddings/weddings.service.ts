@@ -343,7 +343,15 @@ export class WeddingsService {
     if (sameCategory.length) {
       const statuses = await this.statuses(w.user_id, w.id, sameCategory);
       const locked = sameCategory.find((v) => ['AWAITING_DEPOSIT', 'CONFIRMED'].includes(statuses.get(v.id)!.status));
-      if (locked) return fail('PLAN_CATEGORY_LOCKED', 'Hạng mục này đang chờ đặt cọc hoặc đã chốt, không thể thay.', 409);
+      if (locked) {
+        const [old] = await this.services.summaries([locked.id]);
+        const state = statuses.get(locked.id)!.status === 'CONFIRMED' ? 'đã chốt (đã đặt cọc)' : 'đang chờ đặt cọc';
+        return fail(
+          'PLAN_CATEGORY_LOCKED',
+          `Hạng mục ${(vendor.service_categories?.name ?? 'này').toLowerCase()} ${state} với ${old?.name ?? 'nhà cung cấp khác'}, nên chưa thêm ${vendor.business_name ?? 'dịch vụ này'} vào kế hoạch được. Bạn vẫn nhắn tin tư vấn bình thường.`,
+          409,
+        );
+      }
       if (!replace) {
         const old = (await this.services.summaries([sameCategory[0].id]))[0];
         return fail('PLAN_CATEGORY_TAKEN', 'Hạng mục này đã có dịch vụ khác trong kế hoạch.', 409, { existingItemId: sameCategory[0].id, existingServiceName: old?.name ?? '' });

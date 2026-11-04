@@ -10,7 +10,7 @@ describe('Bỏ ghi nhận tiền mặt khi đã có hóa đơn cuối', () => {
     assert.ok(e);
     assert.equal(e.status, 409);
     assert.equal(e.code, 'REST_PAYMENT_HAS_FINAL_INVOICE');
-    assert.equal(e.message, 'Đơn đã xuất hóa đơn cuối HD26110003, không thể bỏ ghi nhận tiền mặt.');
+    assert.equal(e.message, 'Đơn đã xuất hóa đơn cuối HD26110003, không thể bỏ ghi nhận đã nhận tiền.');
     assert.deepEqual(e.details, { invoiceCode: 'HD26110003' });
   });
 

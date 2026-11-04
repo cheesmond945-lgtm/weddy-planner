@@ -146,13 +146,18 @@ export function OrderItemsEditor({ items, onChange, errors, packages, lookup, ha
               <Input
                 className={cn(cell, 'text-right tabular-nums')}
                 type="number"
-                min={1}
+                // Dòng sảnh: không đặt dưới số bàn tối thiểu của gói (nút giảm dừng ở mức tối thiểu, gõ thấp hơn thì rời ô tự nâng lên), chỉ tăng thêm
+                min={isHall && hall?.minTables ? hall.minTables : 1}
                 step={1}
                 placeholder="0"
                 aria-label={`Số lượng ${i + 1}`}
                 aria-invalid={errors[`item:${i}:quantity`] ? true : undefined}
                 value={it.quantity || ''}
                 onChange={(e) => update(it.key, { quantity: Number(e.target.value) || 0 })}
+                onBlur={() => {
+                  const min = isHall && hall?.minTables ? hall.minTables : 0
+                  if (min && it.quantity < min) update(it.key, { quantity: min })
+                }}
               />
               {err(errors[`item:${i}:quantity`])}
               {/* Dòng sảnh: luôn hiện số bàn tối thiểu của gói, không đợi nhập sai */}

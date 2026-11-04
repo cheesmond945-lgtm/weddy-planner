@@ -31,7 +31,7 @@ function depositState(o: Order): State {
 function restState(o: Order, viewer: Viewer): State {
   if (o.status === 'Cancelled') return { text: 'Không thu (khách đã hủy)' }
   const l = restLabel(o, viewer)
-  if (l.tone === 'ok') return { text: viewer === 'VENDOR' ? l.text.replace('Đã nhận', 'Đã nhận tiền mặt ·') : l.text, ok: true }
+  if (l.tone === 'ok') return { text: viewer === 'VENDOR' ? l.text.replace('Đã nhận', 'Đã nhận tiền ·') : l.text, ok: true }
   return { text: l.text, warn: l.tone !== 'none' }
 }
 
@@ -67,7 +67,7 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
       percent: pct(100 - o.depositPercent),
       amount: formatMoney(rest),
       due: `Hạn chót: ${formatDate(o.eventDate)} (ngày cưới)${viewer === 'COUPLE' ? '. Bạn có thể trả sớm hơn.' : ''}`,
-      method: 'Tiền mặt, trả trực tiếp cho NCC',
+      method: 'Trả trực tiếp cho NCC',
       state: restState(o, viewer),
     },
   ]

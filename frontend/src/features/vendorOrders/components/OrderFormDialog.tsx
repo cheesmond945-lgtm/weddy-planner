@@ -26,6 +26,7 @@ import { CHANGE_LABEL } from '../constants'
 import { eventDateAdvice } from '../eventDate'
 import { useSaveOrder, type SaveOrderInput } from '../hooks'
 import { validateDraft, validateOrder, type OrderErrors } from '../validation'
+import { isVnPhone, PHONE_MESSAGE } from '@/lib/phone'
 import { applyHall, hallFieldState, hallLineEdited, hallLineIndex, hallTablesError, needsNoPackageConfirm, type LinkPackage } from '../orderLines'
 import { OrderItemsEditor } from './OrderItemsEditor'
 import { PanelDialog } from './PanelDialog'
@@ -145,7 +146,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
             <td className={cn(td, 'tabular-nums')}>{valid ? `${100 - percent}%` : '—'}</td>
             <td className={cn(td, 'font-semibold whitespace-nowrap tabular-nums')}>{formatMoney(rest)}</td>
             <td className={td}>{eventDate ? `Hạn chót: ${formatDate(eventDate)} (ngày cưới)` : 'Hạn chót: ngày cưới'}</td>
-            <td className={td}>Tiền mặt, trả trực tiếp cho NCC</td>
+            <td className={td}>Trả trực tiếp cho NCC</td>
           </tr>
         </tbody>
       </table>
@@ -176,6 +177,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   )
   const [values, setValues] = useState(initial)
   const [checked, setChecked] = useState(false)
+  const [phoneTouched, setPhoneTouched] = useState(false)
   // Lưu nháp bắt nhập ngày sự kiện (để BE không tự đặt thành ngày hôm nay)
   const [needDate, setNeedDate] = useState(false)
   const [formError, setFormError] = useState('')
@@ -234,9 +236,12 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   const advice = eventDateAdvice({ eventDate: values.eventDate, weddingDate, today: todayVN(), categorySlug })
   // Tỷ lệ cọc báo lỗi ngay khi gõ (không đợi bấm Gửi) và khoá nút Gửi / Lưu nháp khi sai; đơn đã cọc thì tỷ lệ đã khóa
   const percentError = locked ? undefined : depositPercentError(values.depositPercent)
+  // Số điện thoại báo sai ngay khi nhập xong (rời ô), rồi cập nhật theo từng lần gõ; không đợi bấm Gửi
+  const phoneError = phoneTouched && values.customerPhone.trim() && !isVnPhone(values.customerPhone) ? PHONE_MESSAGE : undefined
   const errors: OrderErrors = {
     ...(checked ? validateOrder(values, rules) : needDate ? validateDraft(values) : {}),
     ...(percentError && { depositPercent: percentError }),
+    ...(phoneError && { customerPhone: phoneError }),
   }
   const request = order?.revisions.find((r) => r.status === 'Requested')
   const canDraft = mode.kind === 'new' || mode.kind === 'again' || mode.kind === 'draft'
@@ -449,6 +454,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                   aria-invalid={errors.customerPhone ? true : undefined}
                   value={values.customerPhone}
                   onChange={(e) => set({ customerPhone: e.target.value })}
+                  onBlur={() => setPhoneTouched(true)}
                 />
               </Field>
               <Field
@@ -534,7 +540,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
             <OrderItemsEditor items={values.items} packages={venue ? [] : linkable} lookup={lookup} hall={hallPkg} lockPackages={locked} errors={errors} onChange={(next) => set({ items: next })} />
           </Section>
 
-          <Section title="Đặt cọc và thanh toán" hint="Chỉ khoản cọc đi qua hệ thống (VietQR). Phần còn lại khách trả tiền mặt trực tiếp cho bạn.">
+          <Section title="Đặt cọc và thanh toán" hint="Chỉ khoản cọc đi qua hệ thống (VietQR). Phần còn lại khách trả trực tiếp cho bạn.">
             <ScheduleTable
               percent={values.depositPercent}
               onPercent={(depositPercent) => set({ depositPercent })}

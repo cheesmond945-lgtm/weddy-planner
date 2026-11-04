@@ -103,7 +103,7 @@ export function HallCalendar({ packageId, weddingDate, mine = [] }: HallCalendar
                       : `Sảnh này còn trống vào ngày cưới của bạn (${formatDate(wedding)}).`}
               </p>
             ) : (
-              <p className="text-[13px] text-muted-foreground">Thiết lập ngày cưới ở Lập timeline để so sánh nhanh với lịch của sảnh.</p>
+              <p className="text-[13px] text-muted-foreground">Thiết lập ngày cưới ở Kế hoạch của tôi để so sánh nhanh với lịch của sảnh.</p>
             )}
 
             <header className="mt-3 mb-2 flex items-center justify-between gap-2">

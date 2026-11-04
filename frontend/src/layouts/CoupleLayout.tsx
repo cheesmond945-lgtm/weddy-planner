@@ -22,7 +22,6 @@ import { useAuth } from '@/store/auth'
 
 const NAV = [
   { to: paths.services, label: 'Dịch vụ cưới' },
-  { to: paths.timeline, label: 'Lập Timeline' },
   { to: paths.favorites, label: 'Dịch vụ yêu thích' },
   { to: paths.plan, label: 'Kế hoạch của tôi' },
 ]

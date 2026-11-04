@@ -47,12 +47,12 @@ export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAct
   if (o.status === 'Deposited' || o.status === 'Completed') {
     const rest = o.restPayment?.status
     // Đợt 2 (tiền mặt phần còn lại): NCC ghi nhận đã nhận; hóa đơn cuối chỉ xuất sau khi đã ghi nhận
-    if (rest === 'Pending') out.push({ key: 'receiveRest', label: 'Ghi nhận đã nhận tiền mặt', primary: false })
-    if (rest === 'Received') out.push({ key: 'unreceiveRest', label: 'Bỏ ghi nhận tiền mặt', primary: false, ...(hasFinal && { disabledReason: 'Đã xuất hóa đơn cuối, không thể bỏ ghi nhận tiền mặt.' }) })
+    if (rest === 'Pending') out.push({ key: 'receiveRest', label: 'Ghi nhận đã nhận tiền', primary: false })
+    if (rest === 'Received') out.push({ key: 'unreceiveRest', label: 'Bỏ ghi nhận đã nhận tiền', primary: false, ...(hasFinal && { disabledReason: 'Đã xuất hóa đơn cuối, không thể bỏ ghi nhận đã nhận tiền.' }) })
     out.push(
       hasFinal
         ? { key: 'viewInvoice', label: 'Xem hóa đơn', primary: false }
-        : { key: 'invoice', label: 'Xuất hóa đơn', primary: false, ...(rest !== 'Received' && { disabledReason: 'Ghi nhận đã nhận tiền mặt trước khi xuất hóa đơn.' }) },
+        : { key: 'invoice', label: 'Xuất hóa đơn', primary: false, ...(rest !== 'Received' && { disabledReason: 'Ghi nhận đã nhận tiền trước khi xuất hóa đơn.' }) },
     )
   }
   if (canCancel(o)) out.push({ key: 'cancel', label: 'Hủy đơn', primary: false, danger: true })
@@ -135,18 +135,18 @@ export function useOrderActionRunner({ onOpenForm, onAgain, onView, onViewInvoic
       <ConfirmDialog
         open={confirm?.type === 'complete' && o?.restPayment?.status !== 'Received'}
         onOpenChange={close}
-        title="Đã nhận tiền mặt?"
+        title="Đã nhận đủ tiền?"
         confirmLabel="Đã nhận, hoàn tất"
         cancelLabel="Chưa, để sau"
         onConfirm={() => o && complete.mutate({ orderId: o.id, restReceived: true })}
       >
         <p>
-          Bạn đã nhận đủ <b>{o ? formatMoney(o.restPayment?.amount ?? o.totalAmount - o.depositAmount) : ''}</b> tiền mặt phần còn lại chưa? Bấm "Đã nhận, hoàn tất" để ghi nhận và hoàn tất đơn {o && <b>{o.orderCode}</b>}.
+          Bạn đã nhận đủ <b>{o ? formatMoney(o.restPayment?.amount ?? o.totalAmount - o.depositAmount) : ''}</b> phần còn lại chưa? Bấm "Đã nhận, hoàn tất" để ghi nhận và hoàn tất đơn {o && <b>{o.orderCode}</b>}.
         </p>
       </ConfirmDialog>
       <RestReceivedDialog open={confirm?.type === 'receiveRest'} amount={o?.restPayment?.amount} onOpenChange={close} onConfirm={() => o && void restAction(o.id, true, o.orderCode)} />
-      <ConfirmDialog open={confirm?.type === 'unreceiveRest'} onOpenChange={close} title="Bỏ ghi nhận tiền mặt?" confirmLabel="Bỏ ghi nhận" onConfirm={() => o && void restAction(o.id, false, o.orderCode)}>
-        <p>Đơn {o && <b>{o.orderCode}</b>} sẽ quay về trạng thái chưa nhận tiền mặt phần còn lại.</p>
+      <ConfirmDialog open={confirm?.type === 'unreceiveRest'} onOpenChange={close} title="Bỏ ghi nhận đã nhận tiền?" confirmLabel="Bỏ ghi nhận" onConfirm={() => o && void restAction(o.id, false, o.orderCode)}>
+        <p>Đơn {o && <b>{o.orderCode}</b>} sẽ quay về trạng thái chưa nhận tiền phần còn lại.</p>
       </ConfirmDialog>
       <ConfirmDialog open={confirm?.type === 'invoice'} onOpenChange={close} title="Xuất hóa đơn?" confirmLabel="Xuất hóa đơn" onConfirm={() => o && invoice.mutate(o.id)}>
         {o && (

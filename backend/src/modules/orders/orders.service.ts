@@ -593,6 +593,17 @@ export class OrdersService {
     const wedding = await this.prisma.weddings.findUnique({ where: { user_id: conv.couple_id ?? undefined } });
     if (!wedding) return fail('WEDDING_NOT_SET', 'Khách chưa thiết lập thông tin đám cưới nên chưa tạo được đơn.', 409);
 
+    // Một khách một đơn còn hiệu lực với NCC: đang có đơn nháp / chờ cọc / cần sửa / đã cọc thì cập nhật đơn đó, không tạo đơn mới
+    const open = await this.prisma.orders.findFirst({
+      where: { wedding_id: wedding.id, vendor_id: v.id, status: { in: ['Draft', 'Pending', 'NeedRevision', 'Deposited'] } },
+      select: { order_code: true, status: true },
+      orderBy: { created_date: 'desc' },
+    });
+    if (open) {
+      const state = { Draft: 'đang có bản nháp', Pending: 'đang chờ khách thanh toán cọc', NeedRevision: 'đang chờ bạn chỉnh sửa', Deposited: 'đã được đặt cọc' }[open.status as 'Draft'];
+      return fail('ORDER_ALREADY_OPEN', `Đơn ${open.order_code} với khách này ${state}. Hãy cập nhật đơn đó thay vì tạo đơn mới.`, 409);
+    }
+
     const send = wantsSend(body);
     const p = parseContent(body.content ?? {}, send ? 'send' : 'draft', { weddingDate: wedding.wedding_date ? ymd(wedding.wedding_date) : null });
     if (send) {
@@ -900,7 +911,7 @@ export class OrdersService {
         senderId: userId,
         type: 'FinalInvoice',
         orderId: id,
-        content: `Hóa đơn ${code} cho đơn ${order.order_code}: tổng ${money(total)}, đã cọc ${money(deposit)}, đã thanh toán tiền mặt ${money(rest.amount)}${receivedOn ? ` ngày ${receivedOn}` : ''}.`,
+        content: `Hóa đơn ${code} cho đơn ${order.order_code}: tổng ${money(total)}, đã cọc ${money(deposit)}, đã thanh toán trực tiếp cho NCC ${money(rest.amount)}${receivedOn ? ` ngày ${receivedOn}` : ''}.`,
       });
     }
     return this.dtoOf(id);

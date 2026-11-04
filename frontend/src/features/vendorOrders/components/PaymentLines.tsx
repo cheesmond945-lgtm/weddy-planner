@@ -66,7 +66,7 @@ export function PaymentLines({ order: o, onReceive, className }: { order: Order;
       <span className={row}>
         {restIcon}
         <span className="font-medium whitespace-nowrap tabular-nums">Đợt 2 · {formatMoney(amount)}</span>
-        <span className="whitespace-nowrap text-muted-foreground">Tiền mặt</span>
+        <span className="whitespace-nowrap text-muted-foreground">Trả trực tiếp</span>
         <span className="whitespace-nowrap">{restStatus}</span>
       </span>
     </span>

@@ -1,4 +1,4 @@
-import { LayoutDashboard, LayoutGrid, Pencil, Share2, Wallet, type LucideIcon } from 'lucide-react'
+import { LayoutDashboard, LayoutGrid, ListChecks, Pencil, Share2, Wallet, type LucideIcon } from 'lucide-react'
 import { useState, type CSSProperties } from 'react'
 import couplePhoto from '@/assets/plan-hero.jpg'
 import { NavLink, useOutletContext } from 'react-router'
@@ -120,6 +120,7 @@ export function PlanHubHeader({ wedding, onEdit }: { wedding: Wedding; onEdit: (
 
 export const PLAN_TAB_LINKS: { tab: PlanTab; to: string; label: string; icon: LucideIcon }[] = [
   { tab: 'overview', to: paths.planTab.overview, label: 'Tổng quan', icon: LayoutDashboard },
+  { tab: 'timeline', to: paths.planTab.timeline, label: 'Timeline', icon: ListChecks },
   { tab: 'services', to: paths.planTab.services, label: 'Dịch vụ', icon: LayoutGrid },
   { tab: 'budget', to: paths.planTab.budget, label: 'Ngân sách', icon: Wallet },
 ]

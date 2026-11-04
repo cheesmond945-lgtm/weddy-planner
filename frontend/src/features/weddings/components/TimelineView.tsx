@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
@@ -9,17 +10,14 @@ import type { PrepLevel, TimelineItem, Wedding } from '@/types/wedding'
 import { useTimeline, useTimelineMutations } from '../hooks'
 import { dateConflictOf, groupByTime, orderProgress, parseView, type ViewMode } from '../timelineGroups'
 import { chatDraft, filterTimeline, processChangeDraft, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
-import { ImportDialog } from '../import/ImportDialog'
 import { CompleteTaskDialog, DeleteTaskDialog } from './TimelineConfirmDialogs'
 import { AddTaskDialog, EditMilestoneDialog } from './TimelineDialogs'
 import { TimelineServiceSummary } from './TimelineServiceSummary'
 import { TimelineCalendar } from './TimelineCalendar'
 import { TimelineFilters } from './TimelineFilters'
-import { TimelineHero } from './TimelineHero'
 import { TimelineCard } from './TimelineRow'
 import { catalogApi } from '@/api/catalog'
 import { usePlanActions } from '../planActions'
-import { WeddingEditDialog } from './WeddingDialogs'
 
 type Show = 'todo' | 'done' | 'all'
 const SHOWS: { value: Show; label: string }[] = [
@@ -118,10 +116,8 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   const [editing, setEditing] = useState<TimelineItem | null>(null)
   const [completing, setCompleting] = useState<TimelineItem | null>(null)
   const [removing, setRemoving] = useState<TimelineItem | null>(null)
-  const [importing, setImporting] = useState(false)
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set())
   const [adding, setAdding] = useState(false)
-  const [editingWedding, setEditingWedding] = useState(false)
   const [view, setViewState] = useState<ViewMode>(loadView)
 
   if (timeline.isPending) return <div className="h-[420px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải timeline" />
@@ -230,13 +226,12 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
 
   return (
     <>
-      <TimelineHero wedding={wedding} items={items} onEdit={() => setEditingWedding(true)} onAddTask={() => setAdding(true)} onImport={() => setImporting(true)} />
       <UrgencyBanner level={level} daysLeft={daysLeft} />
       <WaitingBanner count={waitingCount} onPick={() => { setView('time'); setParam({ month: '', q: '', owner: 'mine', category: '', show: 'todo' }) }} />
       <DeadlineBanner overdue={overdueCount} soon={soonCount} onPick={(m) => { setView('time'); setParam({ month: m, q: '', owner: '', category: '', show: '' }) }} />
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="text-[26px] leading-[1.15]">Timeline</h1>
+      {/* Tab Timeline trong Kế hoạch của tôi: lọc trạng thái bên trái, nút Thêm việc bên phải (thông tin đám cưới đã ở đầu trang Kế hoạch) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="group" aria-label="Lọc theo trạng thái" className="flex flex-wrap gap-2">
           {SHOWS.map((s) => (
             <button key={s.value} type="button" aria-pressed={show === s.value} className={chip(show === s.value)} onClick={() => setShow(s.value)}>
@@ -244,6 +239,10 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
             </button>
           ))}
         </div>
+        <Button onClick={() => setAdding(true)}>
+          <Plus />
+          Thêm việc
+        </Button>
       </div>
 
       <TimelineFilters
@@ -284,10 +283,8 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
 
       <CompleteTaskDialog item={completing} onClose={() => setCompleting(null)} onConfirm={complete} />
       <DeleteTaskDialog item={removing} onClose={() => setRemoving(null)} onConfirm={removeTask} />
-      <ImportDialog type="tasks" open={importing} onOpenChange={setImporting} />
       <EditMilestoneDialog item={editing} wedding={wedding} onClose={() => setEditing(null)} />
       <AddTaskDialog open={adding} wedding={wedding} onClose={() => setAdding(false)} />
-      <WeddingEditDialog open={editingWedding} onOpenChange={setEditingWedding} />
     </>
   )
 }

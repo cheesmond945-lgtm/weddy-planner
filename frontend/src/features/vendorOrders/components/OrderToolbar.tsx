@@ -159,7 +159,7 @@ export function OrderToolbar({ query, onChange, onReset, hasFilter }: ToolbarPro
         )}
       >
         <Banknote className="size-[17px]" />
-        Chưa nhận tiền mặt
+        Chưa nhận tiền
       </button>
 
       {hasFilter && (

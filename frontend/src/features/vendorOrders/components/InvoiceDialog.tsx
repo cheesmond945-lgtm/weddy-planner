@@ -78,14 +78,14 @@ export function InvoiceDialog({ order: o, type, onClose, vendorName: vendorNameP
         )}
         {o.payment?.transactionCode && info('Mã giao dịch', o.payment.transactionCode)}
         {info(
-          type === 'DepositReceipt' ? 'Còn lại, trả tiền mặt trực tiếp cho NCC' : 'Đã thanh toán tiền mặt',
+          type === 'DepositReceipt' ? 'Còn lại, trả trực tiếp cho NCC' : 'Đã thanh toán trực tiếp cho NCC',
           `${formatMoney(rest)}${type === 'FinalInvoice' && o.restPayment?.receivedDate ? ` · ngày ${formatDay(o.restPayment.receivedDate)}` : ''}`,
         )}
       </div>
       <p className="mt-3 text-[12.5px] text-muted-foreground">
         {type === 'DepositReceipt'
           ? 'Hệ thống chỉ ghi nhận khoản cọc qua VietQR; phần còn lại thanh toán trực tiếp ngoài hệ thống.'
-          : 'Số tiền còn lại được trả bằng tiền mặt ngoài hệ thống, không có giao dịch trên hệ thống.'}{' '}
+          : 'Số tiền còn lại được trả trực tiếp cho NCC ngoài hệ thống, không có giao dịch trên hệ thống.'}{' '}
         Chứng từ này không phải hóa đơn điện tử theo quy định thuế.
       </p>
     </PanelDialog>
