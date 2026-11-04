@@ -74,7 +74,7 @@ Chốt / bỏ chốt phát sự kiện realtime `task` nên timeline của khác
 
 ## 6. Giao diện
 
-- **Khách:** form thông tin đám cưới có ô "Giờ đón khách / làm lễ" (không bắt buộc). Timeline có thẻ **Lịch trình ngày cưới** (dưới các dải nhắc), chỉ hiện khi có NCC làm đúng ngày cưới:
+- **Khách:** form thông tin đám cưới có ô "Giờ đón khách / làm lễ" (không bắt buộc). Timeline có thẻ **Lịch trình ngày cưới** (dưới các dải nhắc), chỉ hiện khi có NCC làm đúng ngày cưới. **Mặc định thu gọn thành một dòng** ("Lịch trình ngày cưới · Đón khách 09:00 · 1 nhà cung cấp", kèm số cảnh báo), bấm "Xem" mới mở chi tiết:
   các khung giờ theo thứ tự, mốc giờ đón khách chen vào đúng chỗ, nhãn "Đã chốt" / "Dự kiến", cảnh báo. Chưa có giờ chính thì nhắc nhập.
 - **NCC, chi tiết đơn:** mục **Giờ có mặt ngày cưới** (trên Tiến độ đơn): khung của đơn, nút Chốt giờ này / Đổi giờ… / Bỏ chốt, giờ sảnh mở, các đơn vị khác trong ngày.
   Hộp Đổi giờ chọn được có mặt từ hôm trước.

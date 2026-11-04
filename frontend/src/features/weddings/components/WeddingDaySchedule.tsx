@@ -26,7 +26,8 @@ function rowsOf(d: DaySchedule): Row[] {
  */
 export function WeddingDaySchedule({ onEditWedding }: { onEditWedding: () => void }) {
   const q = useDaySchedule(true)
-  const [open, setOpen] = useState(true)
+  // Mặc định thu gọn thành một dòng tóm tắt; bấm "Xem" mới mở chi tiết
+  const [open, setOpen] = useState(false)
   const d = q.data
   if (!d?.date || !d.slots.length) return null
   const day = d.date
@@ -39,14 +40,23 @@ export function WeddingDaySchedule({ onEditWedding }: { onEditWedding: () => voi
           <Clock className="size-4 text-gold-ink" aria-hidden />
           Lịch trình ngày cưới
         </h2>
-        <span className="text-[13px] text-muted-foreground">{dayHeading(day)}</span>
+        {open ? (
+          <span className="text-[13px] text-muted-foreground">{dayHeading(day)}</span>
+        ) : (
+          // Dòng tóm tắt: "Lịch trình ngày cưới · Đón khách 09:00 · 1 nhà cung cấp"
+          <span className="text-[13px] text-muted-foreground">
+            · {d.mainTime ? `Đón khách ${d.mainTime}` : 'Chưa có giờ đón khách'} · {d.slots.length} nhà cung cấp
+          </span>
+        )}
         {warns > 0 && <Badge tone="warn">{warns} cảnh báo</Badge>}
         <span className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant="outline" className="border-line-strong" onClick={onEditWedding}>
-            {d.mainTime ? `Đón khách ${d.mainTime} · Sửa` : 'Thêm giờ đón khách'}
-          </Button>
+          {open && (
+            <Button size="sm" variant="outline" className="border-line-strong" onClick={onEditWedding}>
+              {d.mainTime ? `Đón khách ${d.mainTime} · Sửa` : 'Thêm giờ đón khách'}
+            </Button>
+          )}
           <Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-            {open ? 'Thu gọn' : 'Mở'}
+            {open ? 'Thu gọn' : 'Xem'}
           </Button>
         </span>
       </div>
@@ -99,7 +109,6 @@ export function WeddingDaySchedule({ onEditWedding }: { onEditWedding: () => voi
               ),
             )}
           </ol>
-          <p className="mt-2.5 text-[12.5px] text-muted-foreground">Giờ dự kiến tính từ giờ đón khách và thời gian mỗi nhà cung cấp cần; nhà cung cấp xác nhận giờ thì hiện "Giờ đã xác nhận" và bạn được báo.</p>
         </>
       )}
     </section>
