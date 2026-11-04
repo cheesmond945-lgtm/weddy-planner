@@ -67,14 +67,14 @@ Có `OrderRevisions` loại AfterDeposit đang `Requested` thì thêm nhãn ph�
 
 **Hai giai đoạn (nhóm đã quyết):**
 
-- **Từ lúc gửi đơn đến khi cọc** (`Pending`, `NeedRevision`): khách có Thanh toán cọc, Yêu cầu chỉnh sửa, Xem chi tiết; NCC Cập nhật đơn (đặt lại hạn cọc 24 giờ).
+- **Từ lúc gửi đơn đến khi cọc** (`Pending`, `NeedRevision`): khách có Thanh toán cọc, Yêu cầu chỉnh sửa, Xem chi tiết; NCC Chỉnh sửa đơn (đặt lại hạn cọc 24 giờ).
 - **Sau khi cọc** (`Deposited`): khách **không** có Yêu cầu chỉnh sửa và Hủy đơn, chỉ còn Xem việc cần làm, Xem chi tiết. Khách muốn đổi gì thì nhắn trong chat, **NCC tự thao tác** (Chỉnh sửa, Hủy đơn). Không có yêu cầu chỉnh sửa sau cọc của khách (không có `OrderRevisions` `AfterDeposit` trạng thái `Requested`).
 
 | Trạng thái | Khách thấy dòng gợi ý | Nút của khách | NCC thấy dòng gợi ý | Nút của NCC |
 |---|---|---|---|---|
 | **Draft** | Không thấy thẻ | | "Bản nháp, khách chưa thấy" (banner trên khung chat) | **Tiếp tục soạn** (mở form; trong form có nút **Gửi đơn**) |
-| **Pending** | "Vui lòng thanh toán cọc trước {DepositDueDate}" | **Thanh toán cọc** (VietQR, chính) · Yêu cầu chỉnh sửa · Xem chi tiết | "Chờ khách thanh toán cọc · hạn {DepositDueDate}" | Xem chi tiết · Cập nhật đơn (đặt lại hạn 24 giờ) |
-| **NeedRevision** | "Đã gửi yêu cầu chỉnh sửa, chờ NCC cập nhật" | Xem chi tiết | "Khách yêu cầu: {các nội dung} · {RequestNote}" | **Cập nhật đơn** (chính) · Xem chi tiết |
+| **Pending** | "Vui lòng thanh toán cọc trước {DepositDueDate}" | **Thanh toán cọc** (VietQR, chính) · Yêu cầu chỉnh sửa · Xem chi tiết | "Chờ khách thanh toán cọc · hạn {DepositDueDate}" | Xem chi tiết · Chỉnh sửa đơn (đặt lại hạn 24 giờ) |
+| **NeedRevision** | "Đã gửi yêu cầu chỉnh sửa, chờ NCC cập nhật" | Xem chi tiết | "Khách yêu cầu: {các nội dung} · {RequestNote}" | **Chỉnh sửa đơn** (chính) · Xem chi tiết |
 | **Expired** | "Đơn đã hết hạn đặt cọc" | Xem chi tiết · Nhắn tin cho NCC | "Đơn hết hạn vì khách chưa cọc" | Xem chi tiết · **Tạo lại đơn** (sao chép hạng mục, mã mới) |
 | **Deposited** | "Đã đặt cọc. Còn lại {số tiền} thanh toán trực tiếp cho NCC" | **Xem việc cần làm** (timeline) · Xem chi tiết | "Đã nhận cọc. Thực hiện ngày {EventDate}". Đã qua `EventDate`: "Đã qua ngày thực hiện. Bấm Hoàn tất khi đã xong dịch vụ." | Xem chi tiết · Chỉnh sửa · **Hoàn tất** (chỉ hiện khi đã qua `EventDate`) · Xuất hóa đơn · **Hủy đơn** (viền đỏ; chỉ hiện khi hôm nay còn trước `EventDate`, giờ VN) |
 | **Completed** | "Đơn đã hoàn thành" | Xem chi tiết · Xem hóa đơn (nếu có) | "Đã hoàn thành ngày {CompletedDate}. Đã tính hoa hồng" | Xem chi tiết · Xuất hóa đơn (nếu chưa xuất) hoặc Xem hóa đơn (đã xuất) |
@@ -87,7 +87,7 @@ Có `OrderRevisions` loại AfterDeposit đang `Requested` thì thêm nhãn ph�
 | Gửi đơn | NCC | Draft, đủ trường bắt buộc, và khách chưa cọc đơn nào khác cùng hạng mục (`409 CATEGORY_ALREADY_DEPOSITED`). Hộp xác nhận: "Gửi đơn cho khách? Khách có 24 giờ để đặt cọc." | Draft → Pending; tạo `Payments` (Unpaid); `DepositDueDate` = +1 ngày; gửi tin `Order` vào chat |
 | Thanh toán cọc | Khách | Pending, chưa quá hạn, và hạng mục chưa có đơn `Deposited` khác (nếu có: `409 CATEGORY_ALREADY_DEPOSITED`, thông báo nêu mã đơn và NCC đang giữ hạng mục) | Mở VietQR. Thành công: Payments Paid, Orders Deposited, thêm vào PlanVendors, tạo Invoices DepositReceipt + tin `DepositReceipt`, sinh timeline chi tiết, thông báo |
 | Yêu cầu chỉnh sửa (trước cọc) | Khách | Pending | Chọn nội dung muốn đổi (OrderRevisionChanges: Đổi hạng mục, Đổi số lượng, Đổi ngày thực hiện, Khác) + lời nhắn. Tạo OrderRevisions (BeforeDeposit, Requested); Pending → NeedRevision |
-| Cập nhật đơn | NCC | Pending hoặc NeedRevision. Hộp xác nhận: "Gửi bản cập nhật cho khách? Hạn cọc được đặt lại 24 giờ." | Sửa tự do; OrderRevisions → Applied (ghi tổng mới); về Pending; đặt lại hạn 1 ngày; gửi thẻ mới |
+| Chỉnh sửa đơn | NCC | Pending hoặc NeedRevision. Hộp xác nhận: "Gửi bản cập nhật cho khách? Hạn cọc được đặt lại 24 giờ." | Sửa tự do; OrderRevisions → Applied (ghi tổng mới); về Pending; đặt lại hạn 1 ngày; gửi thẻ mới |
 | Chỉnh sửa | NCC | Deposited. Form có ô bắt buộc **"Nội dung thay đổi (khách sẽ thấy)"**. Hộp xác nhận ghi chú "Tiền cọc đã khóa, tổng mới không thấp hơn tiền cọc." | Sửa hạng mục, ngày, ghi chú. Khóa `DepositPercent`, `DepositAmount`. Tổng mới ≥ tiền đã cọc. Ghi `OrderRevisions` loại `AfterDeposit` trạng thái **`Applied` luôn** (ghi nội dung thay đổi vào `RequestNote`, `OldTotalAmount` → `NewTotalAmount`); gửi thẻ cập nhật vào chat |
 | Hủy đơn | **NCC** | Deposited **và hôm nay < `EventDate`** (giờ VN). Nút viền đỏ. Hộp xác nhận **bắt buộc chọn lý do**: "Khách yêu cầu hủy" (khách mất cọc) hoặc "NCC không thể thực hiện" (NCC hoàn cọc ngoài hệ thống), kèm ghi chú tùy chọn | Deposited → Cancelled, ghi `CancelledDate`, `CancelReason` (`CUSTOMER_REQUEST` / `VENDOR_UNABLE`); ghi chú tùy chọn chỉ đưa vào tin hệ thống (không lưu cột); tin hệ thống "NCC đã hủy đơn {mã} · Lý do: …"; không tính hoa hồng; xóa việc chi tiết của dịch vụ trên timeline của khách |
 | Hoàn tất | NCC | Deposited. Nút luôn hiện; trước ngày thực hiện bị khóa kèm chữ "Hoàn tất được từ <ngày thực hiện + 1>", chỉ bấm được khi đã qua `EventDate`. Hộp xác nhận: "Xác nhận đơn đã hoàn tất? Hoa hồng của đơn sẽ được tính." | Deposited → Completed, ghi `CompletedDate`; tạo Commissions vào bảng kê tháng. Hệ thống tự làm khi đã quá `EventDate` hơn 7 ngày (`eventDate < hôm nay − 7`) nếu NCC không bấm, tin hệ thống nói rõ là tự hoàn tất |
@@ -118,6 +118,6 @@ Có `OrderRevisions` loại AfterDeposit đang `Requested` thì thêm nhãn ph�
 
 ## 7. Phía NCC: bảng Quản lý đơn hàng và luồng khách yêu cầu chỉnh sửa trước cọc
 
-- **Nút chính trong bảng** chỉ có ở đơn cần NCC xử lý: Cập nhật đơn (NeedRevision), Hoàn tất (Deposited đã qua `EventDate`), Tạo lại đơn (Expired, Cancelled). Mọi đơn có menu "…" (Xem chi tiết và các thao tác còn lại theo bảng mục 4).
+- **Nút chính trong bảng** chỉ có ở đơn cần NCC xử lý: Chỉnh sửa đơn (NeedRevision), Hoàn tất (Deposited đã qua `EventDate`), Tạo lại đơn (Expired, Cancelled). Mọi đơn có menu "…" (Xem chi tiết và các thao tác còn lại theo bảng mục 4).
 - **NeedRevision:** không có hạn đặt cọc (đơn không hết hạn khi chờ NCC sửa). Thẻ đơn có hộp màu cam "Khách yêu cầu: {các nội dung} · "{RequestNote}"". Danh sách hội thoại có badge "Cần sửa".
-- **Form Cập nhật đơn** có dải nhắc lại yêu cầu của khách. Gửi xong: thẻ cũ thu gọn "Đơn {mã} đã được cập nhật, xem bản mới nhất bên dưới"; thẻ mới có dòng "Đã cập nhật: tổng {OldTotalAmount} → {NewTotalAmount}"; đơn về Pending, `DepositDueDate` = +24 giờ.
+- **Form Chỉnh sửa đơn** có dải nhắc lại yêu cầu của khách. Gửi xong: thẻ cũ thu gọn "Đơn {mã} đã được cập nhật, xem bản mới nhất bên dưới"; thẻ mới có dòng "Đã cập nhật: tổng {OldTotalAmount} → {NewTotalAmount}"; đơn về Pending, `DepositDueDate` = +24 giờ.

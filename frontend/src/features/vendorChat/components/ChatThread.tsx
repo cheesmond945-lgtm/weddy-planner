@@ -45,7 +45,7 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
       ? { mode: { kind: 'draft', order: openOrder }, label: 'Mở bản nháp', hint: `Đơn ${openOrder.orderCode} đang là bản nháp` }
       : openOrder.status === 'Deposited'
         ? { mode: { kind: 'edit', order: openOrder }, label: 'Chỉnh sửa đơn', hint: `Đơn ${openOrder.orderCode} đã được đặt cọc` }
-        : { mode: { kind: 'resend', order: openOrder }, label: 'Cập nhật đơn', hint: `Đơn ${openOrder.orderCode} đang chờ khách thanh toán cọc` }
+        : { mode: { kind: 'resend', order: openOrder }, label: 'Chỉnh sửa đơn', hint: `Đơn ${openOrder.orderCode} đang chờ khách thanh toán cọc` }
   // Thẻ mới nhất của từng đơn: gửi lại thì các thẻ cũ thu gọn
   const latestCard = useMemo(() => {
     const map = new Map<string, string>()
@@ -107,7 +107,7 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
             <Link to={orderPageHref(latestOrder.id)}>Xem đơn ›</Link>
           </Button>
         )}
-        <Button aria-label={formAction.label} title={formAction.hint ? `${formAction.hint}. Cập nhật đơn này thay vì tạo đơn mới.` : undefined} className="rounded-pill whitespace-nowrap max-sm:size-[42px] max-sm:p-0" onClick={() => onOpenForm(formAction.mode)}>
+        <Button aria-label={formAction.label} title={formAction.hint ? `${formAction.hint}. Chỉnh sửa đơn này thay vì tạo đơn mới.` : undefined} className="rounded-pill whitespace-nowrap max-sm:size-[42px] max-sm:p-0" onClick={() => onOpenForm(formAction.mode)}>
           {openOrder ? <FilePen /> : <Plus />}
           <span className="max-sm:hidden">{formAction.label}</span>
         </Button>

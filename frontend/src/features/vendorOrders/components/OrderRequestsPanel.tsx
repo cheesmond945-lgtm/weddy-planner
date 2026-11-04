@@ -37,7 +37,7 @@ export function OrderRequestsPanel({ order: o }: { order: Order }) {
           {change.extraDeposit ? `, cọc bổ sung ${formatMoney(change.extraDeposit)}` : ', không hoàn cọc'}.{change.note && ` "${change.note}"`}
           {change.status === 'AwaitingVendor' ? (
             <div className="mt-2 flex flex-wrap gap-2">
-              <Button size="sm" disabled={busy} onClick={() => act.mutate({ fn: () => vendorOrdersApi.approveGuestChange(o.id), done: change.extraDeposit ? 'Đã đồng ý, chờ khách nộp cọc bổ sung' : 'Đã đồng ý và cập nhật đơn' })}>
+              <Button size="sm" disabled={busy} onClick={() => act.mutate({ fn: () => vendorOrdersApi.approveGuestChange(o.id), done: change.extraDeposit ? 'Đã đồng ý, chờ khách nộp cọc bổ sung' : 'Đã đồng ý và chỉnh sửa đơn' })}>
                 Đồng ý
               </Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={() => act.mutate({ fn: () => vendorOrdersApi.rejectGuestChange(o.id), done: 'Đã từ chối yêu cầu đổi số khách' })}>

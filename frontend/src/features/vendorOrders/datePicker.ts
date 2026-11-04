@@ -25,8 +25,8 @@ export interface PickerOptions {
   today: string
   /** Ngày thực hiện của đơn; rỗng nếu không biết */
   eventDate: string
-  /** Ngày sớm nhất chọn được (hôm nay) */
-  min: string
+  /** Ngày sớm nhất chọn được (hôm nay); không có thì không giới hạn */
+  min?: string
   /** Ngày muộn nhất chọn được (ngày thực hiện + 120); không có thì không giới hạn */
   max?: string
 }
@@ -36,7 +36,7 @@ export function pickerDays(month: string, o: PickerOptions): PickerDay[] {
     date: g.date,
     day: Number(g.date.slice(8, 10)),
     inMonth: g.inMonth,
-    disabled: g.date < o.min || (!!o.max && g.date > o.max),
+    disabled: (!!o.min && g.date < o.min) || (!!o.max && g.date > o.max),
     selected: g.date === o.value,
     isToday: g.date === o.today,
     isEvent: !!o.eventDate && g.date === o.eventDate,
@@ -63,7 +63,7 @@ export function placePopover(anchor: { top: number; bottom: number; right: numbe
   }
 }
 
-export const canGoPrev = (month: string, min: string) => monthOf(min) < month
+export const canGoPrev = (month: string, min?: string) => !min || monthOf(min) < month
 
 /** Còn tháng sau để tiến tới (không giới hạn nếu không có ngày muộn nhất). */
 export const canGoNext = (month: string, max?: string) => !max || month < monthOf(max)

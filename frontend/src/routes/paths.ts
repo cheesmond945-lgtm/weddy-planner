@@ -17,7 +17,6 @@ export const paths = {
     services: '/plan/dich-vu',
     budget: '/plan/ngan-sach',
   },
-  deal: (id: string | number) => `/plan/deal/${id}`,
   chat: '/chat',
   /** Tài khoản của tôi (cặp đôi) */
   account: '/account',
@@ -38,6 +37,7 @@ export const paths = {
     packageNew: '/vendor/catalog/new',
     package: (id: string) => `/vendor/catalog/${id}`,
     orders: '/vendor/orders',
+    order: (id: string) => `/vendor/orders/${encodeURIComponent(id)}`,
     calendar: '/vendor/calendar',
     chat: '/vendor/chat',
     commissions: '/vendor/commissions',

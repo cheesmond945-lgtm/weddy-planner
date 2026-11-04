@@ -111,14 +111,12 @@ export function TaskRow({ t, orderId, eventDate = '', restAmount, customerName, 
         <TaskDateRow
           dueDate={t.dueDate}
           eventDate={eventDate}
-          confirmed={t.dateStatus === 'CONFIRMED'}
+          beforeEvent={t.beforeEvent}
           overdue={t.overdue}
           isDone={t.isDone}
           readOnly={!editable}
           busy={busy}
           onPickDate={(date) => void run(orderId, t.id, { kind: 'date', date })}
-          onConfirm={() => void run(orderId, t.id, { kind: 'confirm' })}
-          onUnconfirm={() => void run(orderId, t.id, { kind: 'unconfirm' })}
         />
       </div>
       <RestReceivedDialog open={receiving} amount={restAmount} onOpenChange={setReceiving} onConfirm={() => void run(orderId, t.id, { kind: 'status', status: 'Done' }, meta)} />

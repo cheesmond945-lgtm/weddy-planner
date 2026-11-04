@@ -60,7 +60,7 @@ function EditMilestoneForm({ item, wedding, onClose }: { item: TimelineItem; wed
       {editableTitle ? <FormField label="Tên công việc" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus /> : <p className="font-semibold">{item.title}</p>}
       <FormField label="Hạn hoàn thành" type="date" min={b.min} max={b.max} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
       <FormError message={error ?? update.error?.message} />
-      <DialogFooter className="mt-1">
+      <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
           Hủy
         </Button>
@@ -116,7 +116,7 @@ function AddTaskForm({ wedding, onClose }: { wedding: Wedding; onClose: () => vo
       <FormField label="Tên công việc" placeholder="Ví dụ: Đặt xe hoa" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
       <FormField label="Hạn hoàn thành" type="date" min={b.min} max={b.max} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
       <FormError message={error ?? add.error?.message} />
-      <DialogFooter className="mt-1">
+      <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
           Hủy
         </Button>

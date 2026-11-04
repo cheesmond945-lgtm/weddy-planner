@@ -157,7 +157,7 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
 
 /**
  * Sau khi khách lưu ngày cưới mới: báo các NCC có đơn đang giữ ngày thực hiện sau ngày cưới mới (đã cọc, hoặc chưa cọc nhưng đang chờ / chỉnh sửa)
- * để họ cập nhật đơn. Chỉ báo trường hợp AFTER_WEDDING (cần hành động); lỗi ghi thông báo không làm hỏng việc đổi ngày cưới.
+ * để họ chỉnh sửa đơn. Chỉ báo trường hợp AFTER_WEDDING (cần hành động); lỗi ghi thông báo không làm hỏng việc đổi ngày cưới.
  */
 export async function notifyVendorsOfWeddingDate(prisma: PrismaService, weddingId: string, newWedding: string) {
   const orders = await prisma.orders.findMany({

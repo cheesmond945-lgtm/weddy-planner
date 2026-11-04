@@ -238,7 +238,7 @@ function ImportBody({ type, version, onClose }: { type: ImportType; version?: st
       )}
 
       <FormError message={error ?? (check.error as Error | null)?.message} />
-      <DialogFooter className="mt-1">
+      <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
           Hủy
         </Button>

@@ -19,7 +19,7 @@ export function ReviseOrderDialog({ order, onClose }: { order: Order | null; onC
         <DialogHeader>
           <DialogTitle>{order ? `Yêu cầu chỉnh sửa đơn ${order.orderCode}` : 'Yêu cầu chỉnh sửa đơn'}</DialogTitle>
           <DialogDescription>
-            Cho nhà cung cấp biết bạn muốn chỉnh sửa gì. Nội dung này hiện trong khung chat và cho nhà cung cấp khi họ cập nhật đơn.
+            Cho nhà cung cấp biết bạn muốn chỉnh sửa gì. Nội dung này hiện trong khung chat và cho nhà cung cấp khi họ chỉnh sửa đơn.
             {order?.status === 'Deposited' && ` Đơn đã đặt cọc: khoản cọc ${formatMoney(order.depositAmount)} giữ nguyên, chỉ hạng mục, số lượng, ngày, ghi chú được đổi.`}
           </DialogDescription>
         </DialogHeader>
@@ -74,7 +74,7 @@ function ReviseForm({ order, onClose }: { order: Order; onClose: () => void }) {
         />
       </div>
       <FormError message={error ?? revise.error?.message} />
-      <DialogFooter className="mt-1">
+      <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
           Hủy bỏ
         </Button>

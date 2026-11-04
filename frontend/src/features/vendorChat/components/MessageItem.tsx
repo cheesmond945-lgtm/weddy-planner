@@ -42,7 +42,7 @@ export function MessageItem({ message: m, order, isLatestCard, highlight, onOpen
       if (!isLatestCard) {
         return (
           <p className="self-center rounded-pill bg-bg px-3.5 py-1.5 text-center text-[12.5px] text-muted-foreground">
-            Đơn {order.orderCode} đã được cập nhật, xem bản mới nhất bên dưới <time className="ml-1 text-[11px]">{formatStamp(m.sentDate)}</time>
+            Đơn {order.orderCode} đã được chỉnh sửa, xem bản mới nhất bên dưới <time className="ml-1 text-[11px]">{formatStamp(m.sentDate)}</time>
           </p>
         )
       }

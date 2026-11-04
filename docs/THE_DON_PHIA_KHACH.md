@@ -139,7 +139,7 @@ Mỗi hội thoại có badge theo đơn mới nhất với NCC đó: **Chờ c�
 Thẻ đơn phía khách (chat và trang Kế hoạch, cùng `CoupleOrderCard`) chỉ giữ phần cốt lõi, chia 3 phần ngăn bằng đường kẻ mảnh:
 - **Đầu:** tên NCC (chữ serif, tối đa 2 dòng), mã đơn chữ nhỏ, badge trạng thái; dòng hạng mục tóm tắt ("Sảnh Vàng Cánh Bướm · 30 bàn", nhiều dòng: "<dòng đầu> + N hạng mục khác").
 - **Tiền:** Ngày thực hiện, Tổng giá trị (đậm), "Cọc X%" (hoặc "Đã cọc · giờ ngày"), "Còn lại" (kèm trạng thái trả tiền mặt khi đã cọc).
-- **Hành động:** chip hạn cọc "Hạn đặt cọc còn N giờ (HH:MM dd/mm)" (dưới 6 giờ chuyển màu cảnh báo) hoặc "Đang chờ nhà cung cấp cập nhật đơn", nút theo trạng thái, link "Xem chi tiết →".
+- **Hành động:** chip hạn cọc "Hạn đặt cọc còn N giờ (HH:MM dd/mm)" (dưới 6 giờ chuyển màu cảnh báo) hoặc "Đang chờ nhà cung cấp chỉnh sửa đơn", nút theo trạng thái, link "Xem chi tiết →".
 - **Hết hạn / Hủy:** thu gọn một dòng "NCC · trạng thái · lý do ngắn", chữ nhạt, không bóng.
 
 Đơn giá từng dòng, sảnh, phương thức từng đợt, hạn chót đợt 2 (ngày cưới, có thể trả sớm), hạn cọc, ghi chú NCC, lịch sử chỉnh sửa và chứng từ có trong **Xem chi tiết**. Logic chữ ở `features/orders/cardSummary.ts`.

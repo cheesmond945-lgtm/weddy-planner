@@ -74,7 +74,7 @@ export const vendorOrdersApi = {
   saveDraft: (orderId: string, content: OrderContent, expectedVersion?: string): Promise<Order> =>
     http.put(`/vendors/me/orders/${orderId}/draft`, { content, expectedVersion }),
 
-  /** Gửi đơn Draft lần đầu, hoặc "Cập nhật đơn" đơn Pending / NeedRevision (đặt lại hạn cọc 1 ngày). */
+  /** Gửi đơn Draft lần đầu, hoặc "Chỉnh sửa đơn" đơn Pending / NeedRevision (đặt lại hạn cọc 1 ngày). */
   send: (orderId: string, content: OrderContent, expectedVersion?: string): Promise<Order> =>
     http.post(`/vendors/me/orders/${orderId}/send`, { content, expectedVersion }),
 

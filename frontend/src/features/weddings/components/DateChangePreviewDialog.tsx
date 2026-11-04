@@ -11,7 +11,7 @@ interface Props {
   error?: string | null
   onCancel: () => void
   onConfirm: () => void
-  /** Nhắn NCC cập nhật đơn lệch ngày */
+  /** Nhắn NCC chỉnh sửa đơn lệch ngày */
   onMessageVendor: (serviceId: string, orderCode: string, eventDate: string) => void
 }
 

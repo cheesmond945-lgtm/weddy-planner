@@ -13,7 +13,7 @@ interface ServiceInfoPanelProps {
   service: ServiceDetail
   /** Phần thêm trong khung chi tiết gói (lịch bận của sảnh) */
   packageExtra?: (pkg: ServicePackage) => ReactNode
-  /** Nhãn dưới card gói (sảnh bận / trống ngày cưới); có thì card hiện thêm nút "Xem chi tiết" */
+  /** Nhãn dưới card gói (sảnh bận / trống ngày cưới), đứng cạnh nút "Xem chi tiết" */
   packageBadge?: (pkg: ServicePackage) => ReactNode
   /** Phụ đề mục Gói dịch vụ thay cho câu mặc định */
   packagesSubtitle?: string
@@ -68,7 +68,6 @@ export function ServiceInfoPanel({ service, packageExtra, packageBadge, packages
                 images={imagesOf(service, p)}
                 onOpen={() => setOpened(p)}
                 badge={packageBadge?.(p)}
-                showDetailButton={!!packageBadge}
               />
             ))}
           </div>
@@ -112,15 +111,13 @@ interface PackageCardProps {
   onOpen: () => void
   /** Nhãn sảnh bận / trống ngày cưới của khách (trung tâm tiệc cưới) */
   badge?: ReactNode
-  /** Hiện nút "Xem chi tiết" dưới card (trung tâm tiệc cưới: chi tiết có lịch khả dụng) */
-  showDetailButton?: boolean
 }
 
 /**
  * Card một gói (gọn): ảnh ghép, tên + thuộc tính, giá. Mô tả và toàn bộ ảnh nằm trong khung bên phải khi bấm card,
  * để lưới không giãn lệch khi mở rộng mô tả.
  */
-function PackageCard({ pkg, images, onOpen, badge, showDetailButton }: PackageCardProps) {
+function PackageCard({ pkg, images, onOpen, badge }: PackageCardProps) {
   const attrs = attrsOf(pkg)
 
   return (
@@ -145,17 +142,13 @@ function PackageCard({ pkg, images, onOpen, badge, showDetailButton }: PackageCa
             <span className="block text-[13px] text-ink-2">/ {pkg.unit ?? 'gói'}</span>
           </div>
         </div>
-        {(badge || showDetailButton) && (
-          <div className="mt-auto flex items-center justify-between gap-2 border-t border-line pt-3">
-            {badge ?? <span />}
-            {showDetailButton && (
-              <span className="inline-flex items-center gap-0.5 text-sm font-semibold text-gold-700 group-hover:underline">
-                Xem chi tiết
-                <ChevronRight className="size-4" aria-hidden />
-              </span>
-            )}
-          </div>
-        )}
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-line pt-3">
+          {badge ?? <span />}
+          <span className="inline-flex items-center gap-0.5 text-sm font-semibold text-gold-700 group-hover:underline">
+            Xem chi tiết
+            <ChevronRight className="size-4" aria-hidden />
+          </span>
+        </div>
       </div>
     </button>
   )

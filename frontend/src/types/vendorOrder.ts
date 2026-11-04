@@ -245,6 +245,8 @@ export interface OrderTask {
   overdue: boolean
   /** Việc lấy từ gói của NCC */
   isPackageTask: boolean
+  /** Việc của gói có mốc trước ngày thực hiện: ngày chốt / đổi phải trước ngày thực hiện (không chọn trùng hoặc sau) */
+  beforeEvent?: boolean
   /** Việc RIÊNG của đơn do NCC thêm ('ORD:'), không thuộc gói */
   isCustomOrderTask: boolean
   /** Việc "Thanh toán phần còn lại": sang Done = ghi nhận đã nhận đủ tiền mặt (có hộp xác nhận) */
@@ -322,4 +324,4 @@ export interface BoardTask extends OrderTask {
 /** Một mục trên lịch làm việc của NCC (GET /vendors/me/orders/calendar). */
 export type CalendarItem =
   | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: OrderStatus; isDone: boolean }
-  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isRestPayment: boolean; isPackageTask: boolean; isCustomOrderTask: boolean; isDone: boolean; status: TaskStatus; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean }
+  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isRestPayment: boolean; isPackageTask: boolean; isCustomOrderTask: boolean; beforeEvent?: boolean; isDone: boolean; status: TaskStatus; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean }

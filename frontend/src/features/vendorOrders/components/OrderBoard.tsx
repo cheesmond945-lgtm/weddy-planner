@@ -1,22 +1,27 @@
 import { ChevronDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
 import { assignHues, hueOf, shortCouple } from '@/features/calendar/orderColors'
 import { daysBetween, formatDate, parseDate, toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
-import { paths } from '@/routes/paths'
 import type { Order, OrderProgress } from '@/types/vendorOrder'
 import { ORDER_STATUS } from '../constants'
+import { OrderPopup } from './OrderPopup'
 import { OrderProgressPanel } from './OrderProgressPanel'
 
-/** Đơn đang theo dõi trên lịch: chờ cọc, chờ chỉnh sửa, đã cọc. */
-export const ACTIVE_STATUSES: readonly Order['status'][] = ['Pending', 'NeedRevision', 'Deposited']
+/** Đơn vào lịch: chỉ đơn đã cọc (chắc chắn NCC làm). Đơn chờ cọc, chờ chỉnh sửa, hủy, hết hạn không vào lịch. */
+export const ACTIVE_STATUSES: readonly Order['status'][] = ['Deposited']
 
-/** Màu của đơn (hue) từ danh sách đơn: đơn đang theo dõi không trùng màu, đơn cũ giữ màu khi có đơn mới. */
-export const useHues = (orders: readonly Order[]) => {
-  const map = useMemo(() => assignHues(orders.map((o) => ({ id: o.id, orderCode: o.orderCode, active: ACTIVE_STATUSES.includes(o.status) }))), [orders])
+/** Đơn đã xong hết việc (có việc và việc nào cũng xong): chỉ còn chờ NCC bấm Hoàn tất, không cần theo dõi nữa. */
+export const isWorkFinished = (p: OrderProgress | undefined) => !!p && p.total > 0 && p.done >= p.total
+
+/** Đơn đang theo dõi việc: đã cọc mà còn việc chưa xong. */
+export const isTracked = (o: Order, p: OrderProgress | undefined) => ACTIVE_STATUSES.includes(o.status) && !isWorkFinished(p)
+
+/** Màu của đơn (hue) từ danh sách đơn: đơn đang theo dõi không trùng màu (đơn xong hết việc nhường màu), đơn cũ giữ màu khi có đơn mới. */
+export const useHues = (orders: readonly Order[], progress?: Record<string, OrderProgress>) => {
+  const map = useMemo(() => assignHues(orders.map((o) => ({ id: o.id, orderCode: o.orderCode, active: isTracked(o, progress?.[o.id]) }))), [orders, progress])
   return useMemo(() => (id: string) => hueOf(map, id), [map])
 }
 
@@ -29,6 +34,7 @@ function countdown(eventDate: string) {
 
 function OrderCardRow({ order, progress, hue }: { order: Order; progress?: OrderProgress; hue: number }) {
   const [open, setOpen] = useState(false)
+  const [viewing, setViewing] = useState(false)
   const status = ORDER_STATUS[order.status]
   const active = order.status === 'Deposited'
   const pct = progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 0
@@ -78,26 +84,27 @@ function OrderCardRow({ order, progress, hue }: { order: Order; progress?: Order
             </p>
           </>
         ) : (
-          <p className="mt-2 text-[13px] text-muted-foreground">{order.status === 'Pending' ? 'Chờ khách thanh toán cọc.' : order.status === 'NeedRevision' ? 'Chờ bạn cập nhật đơn theo yêu cầu của khách.' : ''}</p>
+          <p className="mt-2 text-[13px] text-muted-foreground">{order.status === 'Pending' ? 'Chờ khách thanh toán cọc.' : order.status === 'NeedRevision' ? 'Chờ bạn chỉnh sửa đơn theo yêu cầu của khách.' : ''}</p>
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {active && progress && progress.total > 0 && (
             <Button variant="outline" size="sm" className="border-line-strong" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-              {open ? 'Thu gọn việc' : `Xem ${progress.open} việc chưa xong`}
+              {open ? 'Thu gọn việc' : 'Xem các việc'}
               <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} />
             </Button>
           )}
-          <Button asChild variant="outline" size="sm" className="border-line-strong">
-            <Link to={`${paths.vendor.orders}?order=${order.id}`}>Xem đơn</Link>
+          <Button variant="outline" size="sm" className="border-line-strong" onClick={() => setViewing(true)}>
+            Xem đơn
           </Button>
         </div>
       </div>
       {open && (
-        <div className="border-t border-line bg-surface-2/50 px-4 py-3 pl-5">
+        <div className="max-h-[340px] overflow-y-auto overscroll-contain border-t border-line bg-surface-2/50 px-4 py-3 pl-5">
           <OrderProgressPanel orderId={order.id} customerName={order.customerName} />
         </div>
       )}
+      {viewing && <OrderPopup orderId={order.id} onClose={() => setViewing(false)} />}
     </li>
   )
 }
@@ -107,15 +114,39 @@ function OrderCardRow({ order, progress, hue }: { order: Order; progress?: Order
  * còn bao lâu. Đơn có việc của NCC bị trễ lên trước, rồi theo ngày thực hiện gần nhất. Mở rộng để tick việc.
  */
 export function OrderBoard({ orders, progress, hueFor }: { orders: readonly Order[]; progress: Record<string, OrderProgress> | undefined; hueFor: (id: string) => number }) {
-  const rows = orders
-    .filter((o) => ACTIVE_STATUSES.includes(o.status))
+  const [showFinished, setShowFinished] = useState(false)
+  const live = orders.filter((o) => ACTIVE_STATUSES.includes(o.status))
+  const rows = live
+    .filter((o) => isTracked(o, progress?.[o.id]))
     .sort((a, b) => (progress?.[b.id]?.overdueVendor ?? 0) - (progress?.[a.id]?.overdueVendor ?? 0) || a.eventDate.localeCompare(b.eventDate))
-  if (!rows.length) return <p className="rounded-xl border border-line bg-surface px-4 py-8 text-center text-muted-foreground">Chưa có đơn nào đang theo dõi.</p>
+  const finished = live.filter((o) => !isTracked(o, progress?.[o.id])).sort((a, b) => a.eventDate.localeCompare(b.eventDate))
+  if (!live.length) return <p className="rounded-xl border border-line bg-surface px-4 py-8 text-center text-muted-foreground">Chưa có đơn nào đang theo dõi.</p>
   return (
-    <ul className="grid gap-3.5 lg:grid-cols-2">
-      {rows.map((o) => (
-        <OrderCardRow key={o.id} order={o} progress={progress?.[o.id]} hue={hueFor(o.id)} />
-      ))}
-    </ul>
+    <>
+      {rows.length ? (
+        <ul className="grid items-start gap-3.5 lg:grid-cols-2">
+          {rows.map((o) => (
+            <OrderCardRow key={o.id} order={o} progress={progress?.[o.id]} hue={hueFor(o.id)} />
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-xl border border-line bg-surface px-4 py-8 text-center text-muted-foreground">Mọi đơn đã xong hết việc.</p>
+      )}
+      {finished.length > 0 && (
+        <div className="mt-5">
+          <Button variant="outline" size="sm" className="border-line-strong" aria-expanded={showFinished} onClick={() => setShowFinished((v) => !v)}>
+            Đã xong hết việc · {finished.length} đơn
+            <ChevronDown className={cn('size-4 transition-transform', showFinished && 'rotate-180')} />
+          </Button>
+          {showFinished && (
+            <ul className="mt-3 grid items-start gap-3.5 lg:grid-cols-2">
+              {finished.map((o) => (
+                <OrderCardRow key={o.id} order={o} progress={progress?.[o.id]} hue={hueFor(o.id)} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </>
   )
 }

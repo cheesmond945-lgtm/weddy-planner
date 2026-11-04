@@ -1,5 +1,5 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { Check, ImageIcon, X } from 'lucide-react'
+import { Check, ChevronRight, ImageIcon, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { FitImage } from '@/components/FitImage'
 import { formatMoney } from '@/lib/format'
@@ -145,12 +145,18 @@ function Tile({ pkg, image, big, onOpen, className }: TileProps) {
         <p className={cn('line-clamp-1 font-serif font-semibold text-ink', big ? 'text-[19px] @max-[699px]/content:text-base' : 'text-base @max-[699px]/content:text-[14px]')}>
           {pkg.name}
         </p>
-        <p className="mt-0.5 flex items-baseline gap-x-1 whitespace-nowrap">
-          <span className={cn('font-semibold whitespace-nowrap text-gold-700', big ? 'text-[22px] @max-[699px]/content:text-xl' : 'text-lg @max-[699px]/content:text-[15px]')}>
-            {formatMoney(pkg.price)}
+        <div className="mt-0.5 flex items-end justify-between gap-2">
+          <p className="flex items-baseline gap-x-1 whitespace-nowrap">
+            <span className={cn('font-semibold whitespace-nowrap text-gold-700', big ? 'text-[22px] @max-[699px]/content:text-xl' : 'text-lg @max-[699px]/content:text-[15px]')}>
+              {formatMoney(pkg.price)}
+            </span>
+            <span className="text-xs whitespace-nowrap text-ink-2">/ {pkg.unit ?? 'gói'}</span>
+          </p>
+          <span className="inline-flex shrink-0 items-center gap-0.5 text-[13px] font-semibold whitespace-nowrap text-gold-700 @max-[699px]/content:text-xs">
+            Xem chi tiết
+            <ChevronRight className="size-3.5" aria-hidden />
           </span>
-          <span className="text-xs whitespace-nowrap text-ink-2">/ {pkg.unit ?? 'gói'}</span>
-        </p>
+        </div>
       </div>
     </div>
   )

@@ -2,6 +2,7 @@ import { Clock, MessageCircle } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { Badge } from '@/components/Badge'
+import { FormError } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
 import { canRequestRevision, formatDayTime } from '@/features/vendorOrders/calc'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
@@ -17,6 +18,8 @@ import { paths } from '@/routes/paths'
 import { openRevision } from '@/features/vendorOrders/calc'
 import type { InvoiceType, Order } from '@/types/order'
 import { depositChip, endedReason, itemsSummaryParts } from '../cardSummary'
+import { useCreateDeposit } from '../hooks'
+import { DepositQrDialog } from './DepositQrDialog'
 import { DepositTermsDialog } from './DepositTermsDialog'
 import { EventDateNote } from './EventDateNote'
 import { CoupleOrderRequests } from './OrderRequests'
@@ -62,6 +65,8 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   const [detail, setDetail] = useState(false)
   const [invoice, setInvoice] = useState<InvoiceType | null>(null)
   const [termsOpen, setTermsOpen] = useState(false)
+  const [agreed, setAgreed] = useState(false)
+  const deposit = useCreateDeposit()
 
   const chat = variant === 'chat'
   const status = ORDER_STATUS[o.status]
@@ -95,6 +100,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   const dialogs = (
     <>
       <DepositTermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
+      <DepositQrDialog orderId={o.id} amount={o.depositAmount} info={deposit.data} open={deposit.isPending || !!deposit.data} onClose={() => deposit.reset()} />
       {detail && <OrderDetailDialog order={o} viewer="couple" onClose={() => setDetail(false)} onViewInvoice={(_, type) => setInvoice(type)} />}
       {invoice && <InvoiceDialog order={o} type={invoice} vendorName={o.vendorName} onClose={() => setInvoice(null)} />}
     </>
@@ -173,7 +179,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
         {(o.status === 'NeedRevision' || (o.status === 'Deposited' && waiting)) && (
           <p className="mb-3 inline-flex items-center gap-1.5 rounded-pill bg-[color-mix(in_srgb,var(--gold)_16%,var(--surface))] px-3 py-1 text-xs font-semibold text-gold-ink">
             <Clock className="size-3.5 shrink-0" aria-hidden />
-            {o.status === 'NeedRevision' ? 'Đang chờ nhà cung cấp cập nhật đơn' : 'Đang chờ nhà cung cấp xử lý yêu cầu'}
+            {o.status === 'NeedRevision' ? 'Đang chờ nhà cung cấp chỉnh sửa đơn' : 'Đang chờ nhà cung cấp xử lý yêu cầu'}
           </p>
         )}
 
@@ -182,7 +188,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
 
         <div className="flex flex-wrap gap-2 [&>button]:min-w-[140px] [&>button]:grow [&>button]:basis-[140px]">
           {o.status === 'Pending' && (
-            <Button variant="success" size={chat ? 'default' : 'sm'} disabled={chip?.overdue} onClick={() => navigate(paths.deal(o.id))}>
+            <Button variant="success" size={chat ? 'default' : 'sm'} disabled={chip?.overdue || !agreed || deposit.isPending} onClick={() => deposit.mutate(o.id)}>
               {chip?.overdue ? 'Đã hết hạn đặt cọc' : 'Thanh toán cọc'}
             </Button>
           )}
@@ -208,12 +214,19 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
             </Button>
           )}
         </div>
+        {deposit.isError && <FormError message={deposit.error.message} />}
 
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
           {o.status === 'Pending' && !chip?.overdue && (
-            <button type="button" className="text-xs text-muted-foreground underline underline-offset-2 hover:text-ink" onClick={() => setTermsOpen(true)}>
-              Điều khoản đặt dịch vụ
-            </button>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="accent-primary" />
+              <span>
+                Tôi đã đọc và đồng ý{' '}
+                <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => setTermsOpen(true)}>
+                  Điều khoản đặt dịch vụ
+                </button>
+              </span>
+            </label>
           )}
           {detailLink}
         </div>

@@ -19,7 +19,7 @@ export function OrderCard({ orderId, categorySlug, isLatest, onRevise, onMessage
   if (!o) return <div className="h-[230px] w-[min(360px,100%)] animate-pulse self-start rounded-[22px] bg-muted" />
   if (o.status === 'Draft') return null
   if (!isLatest) {
-    return <p className="self-center rounded-pill bg-bg px-3.5 py-1.5 text-center text-[12.5px] text-muted-foreground">Đơn {o.orderCode} đã được cập nhật, xem bản mới nhất bên dưới</p>
+    return <p className="self-center rounded-pill bg-bg px-3.5 py-1.5 text-center text-[12.5px] text-muted-foreground">Đơn {o.orderCode} đã được chỉnh sửa, xem bản mới nhất bên dưới</p>
   }
   return <CoupleOrderCard order={o} variant="chat" categorySlug={categorySlug} onRevise={onRevise} onMessageVendor={onMessageVendor} />
 }

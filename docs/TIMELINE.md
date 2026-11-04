@@ -79,8 +79,8 @@ Nguyên tắc: **ngày cưới W là mốc duy nhất của một đám cưới;
 
 | # | Quy tắc | Lỗi |
 |---|---|---|
-| A1 | `E ≤ W` khi NCC Gửi, Cập nhật, Tạo lại hoặc Chỉnh sửa sau cọc. Chỉnh sửa sau cọc mà giữ nguyên ngày đang có (đơn cũ lệch ngày) thì qua, để vẫn sửa được hạng mục / ghi chú. Cập nhật đơn chưa cọc không được miễn. Lưu nháp không kiểm | `422 EVENT_DATE_AFTER_WEDDING` |
-| A2 | Ngày cưới của khách phải còn ở phía sau (`W > hôm nay`) khi Gửi / Cập nhật đơn. Chỉnh sửa sau cọc không xét | `409 WEDDING_DATE_PASSED` |
+| A1 | `E ≤ W` khi NCC Gửi, Cập nhật, Tạo lại hoặc Chỉnh sửa sau cọc. Chỉnh sửa sau cọc mà giữ nguyên ngày đang có (đơn cũ lệch ngày) thì qua, để vẫn sửa được hạng mục / ghi chú. Chỉnh sửa đơn chưa cọc không được miễn. Lưu nháp không kiểm | `422 EVENT_DATE_AFTER_WEDDING` |
+| A2 | Ngày cưới của khách phải còn ở phía sau (`W > hôm nay`) khi Gửi / Chỉnh sửa đơn. Chỉnh sửa sau cọc không xét | `409 WEDDING_DATE_PASSED` |
 | A3 | Kiểm lại lúc khách **đặt cọc**: khách có thể đổi W sau khi đơn đã gửi, hoặc đơn cũ đã lệch. Chặn trước khi chuyển tiền; hướng dẫn "Yêu cầu chỉnh sửa → Đổi ngày thực hiện". Cổng thanh toán đã báo thành công (IPN) thì vẫn ghi nhận cọc (tiền đã thu), timeline xử lý ở 7.2 | `409 EVENT_DATE_AFTER_WEDDING` |
 
 Giao diện: form đơn của NCC điền sẵn E = W, hiện "Ngày cưới của khách", ô ngày có `max` = W. Thẻ đơn của khách báo "Khác ngày cưới của bạn" / "Sau ngày cưới của bạn" kèm cách xử lý.
@@ -97,7 +97,7 @@ Giao diện: form đơn của NCC điền sẵn E = W, hiện "Ngày cưới c�
 `regenerate-preview` trả thêm đơn lệch (xem `warnings[]`: `kind` = `DIFFERENT` | `AFTER_WEDDING`, `blocksDeposit`):
 - Đơn đã cọc: khác W mới thì nhắc (`DIFFERENT`), sau W mới thì `AFTER_WEDDING`.
 - Đơn `Pending` / `NeedRevision` có E sau W mới: `AFTER_WEDDING` + `blocksDeposit` (khách chưa cọc được cho tới khi NCC đổi ngày, mục A3).
-- Việc đổi ngày cưới **không bị chặn** (quyền của khách). Sau khi lưu, NCC có đơn `AFTER_WEDDING` nhận thông báo `WeddingDateChanged` để cập nhật đơn.
+- Việc đổi ngày cưới **không bị chặn** (quyền của khách). Sau khi lưu, NCC có đơn `AFTER_WEDDING` nhận thông báo `WeddingDateChanged` để chỉnh sửa đơn.
 
 ### 7.4 Khách tự đổi hạn việc (`PATCH` / `POST` timeline)
 

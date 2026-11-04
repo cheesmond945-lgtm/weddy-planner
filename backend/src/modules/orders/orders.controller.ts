@@ -229,7 +229,7 @@ export class VendorOrdersController {
     return this.orders.saveDraft(req.user.sub, id, body?.content ?? {}, body?.expectedVersion);
   }
 
-  /** Gửi đơn nháp, hoặc "Cập nhật đơn" (Pending, NeedRevision). */
+  /** Gửi đơn nháp, hoặc "Chỉnh sửa đơn" (Pending, NeedRevision). */
   @HttpCode(200)
   @Post(':id/send')
   send(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput; expectedVersion?: string }) {

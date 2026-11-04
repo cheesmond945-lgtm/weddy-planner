@@ -74,7 +74,7 @@ export const eventAfterWedding = (eventDate: string, weddingDate: string | null 
 /**
  * Lỗi ngày thực hiện / ngày cưới khi NCC gửi hoặc sửa đơn; null nếu hợp lệ. Hàm thuần, parseContent ném lỗi theo kết quả.
  * - send: ngày cưới của khách phải còn ở phía sau (WEDDING_DATE_PASSED, 409); ngày thực hiện không sau ngày cưới
- *   (EVENT_DATE_AFTER_WEDDING, 422), kể cả khi cập nhật đơn Pending / NeedRevision: khách chưa cọc nên NCC phải sửa.
+ *   (EVENT_DATE_AFTER_WEDDING, 422), kể cả khi chỉnh sửa đơn Pending / NeedRevision: khách chưa cọc nên NCC phải sửa.
  * - edit (sau cọc): chỉ kiểm ngày thực hiện, và giữ nguyên ngày đang có thì qua, để đơn cũ lệch ngày vẫn sửa được ghi chú, hạng mục.
  * - draft: không kiểm (nháp chưa tới tay khách).
  */
@@ -97,7 +97,7 @@ export function weddingDateIssue(
 
 export const DEPOSIT_ROUNDING = 100_000;
 export const DEPOSIT_MIN = 100_000;
-/** Tỷ lệ cọc tối thiểu (%), áp khi lưu nháp, gửi và cập nhật đơn. Đợt 1 (cọc) khách chuyển khoản qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC. */
+/** Tỷ lệ cọc tối thiểu (%), áp khi lưu nháp, gửi và chỉnh sửa đơn. Đợt 1 (cọc) khách chuyển khoản qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC. */
 export const DEPOSIT_PERCENT_MIN = 10;
 
 /** Tổng × tỷ lệ / 100, làm tròn gần nhất đến 100.000đ, tối thiểu 100.000đ (cọc 0đ thì khách không thanh toán được). */
@@ -171,7 +171,7 @@ export interface ParsedContent {
   packageId: string | null;
 }
 
-/** draft: lưu nháp (chỉ bắt buộc ngày). send: gửi hoặc cập nhật đơn (kiểm tra đủ, kiểm tra cọc). edit: sửa sau cọc (như send, không kiểm tra cọc). */
+/** draft: lưu nháp (chỉ bắt buộc ngày). send: gửi hoặc chỉnh sửa đơn (kiểm tra đủ, kiểm tra cọc). edit: sửa sau cọc (như send, không kiểm tra cọc). */
 export type ParseMode = 'draft' | 'send' | 'edit';
 
 /**
@@ -224,7 +224,7 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
   const percent = hasPercent ? Number(c.depositPercent) : 30;
   const percentOk = percent > 0 && percent < 100;
   if (hasPercent && !percentOk) errors.depositPercent = 'Tỷ lệ đặt cọc phải lớn hơn 0 và nhỏ hơn 100 (%).';
-  // Tối thiểu 10% áp cho cả lưu nháp lẫn gửi / cập nhật đơn (không để nháp 5% rồi mới bị chặn lúc gửi). Sửa sau cọc giữ nguyên tỷ lệ đã chốt (đơn cũ có thể dưới mức tối thiểu) nên bỏ qua.
+  // Tối thiểu 10% áp cho cả lưu nháp lẫn gửi / chỉnh sửa đơn (không để nháp 5% rồi mới bị chặn lúc gửi). Sửa sau cọc giữ nguyên tỷ lệ đã chốt (đơn cũ có thể dưới mức tối thiểu) nên bỏ qua.
   else if (hasPercent && mode !== 'edit' && percent < DEPOSIT_PERCENT_MIN) errors.depositPercent = `Tỷ lệ đặt cọc tối thiểu ${DEPOSIT_PERCENT_MIN}%.`;
 
   if (strict) {

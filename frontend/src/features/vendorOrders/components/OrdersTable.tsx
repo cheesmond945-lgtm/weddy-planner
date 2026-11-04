@@ -1,52 +1,29 @@
-import { Ban, Banknote, CheckCheck, ChevronLeft, ChevronRight, Copy, Eye, FilePen, FileText, MessageSquareX, Pencil, Undo2, type LucideIcon } from 'lucide-react'
-import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Badge } from '@/components/Badge'
-import { Button } from '@/components/ui/button'
 import { PersonAvatar } from '@/features/vendorChat/preview'
-import { RowMenu, type RowMenuItem } from '@/features/vendorPackages/components/RowMenu'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { PageMeta } from '@/types/api'
 import type { Order } from '@/types/vendorOrder'
-import { actionsOf, mainActionKey, type ActionKey } from '../actions'
 import { attentionOf, countdownText, msToDeadline, URGENT_HOURS } from '../summary'
 import { LateProgressBadge, OrderStatusBadge, PaidInFullBadge } from './OrderBadges'
 import { PaymentLines } from './PaymentLines'
 
-const ICON: Record<ActionKey, LucideIcon> = {
-  view: Eye,
-  continue: FilePen,
-  resend: Pencil,
-  edit: Pencil,
-  reject: MessageSquareX,
-  again: Copy,
-  complete: CheckCheck,
-  invoice: FileText,
-  viewInvoice: FileText,
-  cancel: Ban,
-  receiveRest: Banknote,
-  unreceiveRest: Undo2,
-}
-
 /*
  * Bảng đơn: từ 1280px đủ 7 cột; 1100 đến 1279px ẩn cột Ngày (ngày xuống dòng phụ dưới tên khách); dưới 1100px là danh sách thẻ.
- * Bảng không cuộn ngang: cột chia theo %, nội dung không xuống dòng.
+ * Bảng không cuộn ngang: cột chia theo %. Mỗi cột một ý:
+ * Đơn hàng (mã), Khách hàng (tên · SĐT), Ngày thực hiện, Tổng giá trị, Thanh toán (2 đợt, chỉ số tiền và đã thu hay chưa), Trạng thái.
  */
-const th = 'border-y border-line bg-surface-2 px-2.5 py-3 text-left align-bottom text-[11px] leading-tight font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase first:pl-4 last:pr-4'
-const td = 'border-b border-line px-2.5 py-3.5 align-middle text-[13px] leading-snug first:pl-4 last:pr-4'
+const th = 'border-y border-line bg-surface-2 px-4 py-3 text-left align-bottom text-[11.5px] leading-tight font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase first:pl-5 last:pr-5'
+const td = 'border-b border-line px-4 py-4 align-middle text-[13.5px] leading-snug first:pl-5 last:pr-5'
 const dateCol = 'max-[1279px]:hidden'
 
 /** Vạch màu bên trái dòng: cần xử lý (vàng), sắp hết hạn cọc (đỏ). */
 const ACCENT = {
   warn: 'shadow-[inset_3px_0_var(--gold)]',
   danger: 'shadow-[inset_3px_0_var(--warn)]',
-}
-
-/** Chặn bấm nút (hoặc phím) lan lên dòng/thẻ: bấm dòng mở chi tiết, nhưng nút bên trong có việc riêng. */
-const stop = {
-  onClick: (e: MouseEvent) => e.stopPropagation(),
-  onKeyDown: (e: KeyboardEvent) => e.stopPropagation(),
 }
 
 /** Pill đếm ngược hạn cọc của đơn Pending (đỏ khi còn dưới 6 giờ). */
@@ -57,76 +34,35 @@ function Countdown({ order: o }: { order: Order }) {
   return <Badge tone={urgent ? 'warn' : 'wait'}>{countdownText(ms)}</Badge>
 }
 
-/** Nút chính trên dòng: chữ ngắn hơn ở nút hẹp, đầy đủ trong menu "…". */
-const MAIN_LABEL: Partial<Record<ActionKey, string>> = { edit: 'Sửa theo yêu cầu' }
-
-/**
- * Nút chính (tối đa một nút mỗi dòng: Hoàn tất, Cập nhật đơn, Tạo lại đơn, Sửa theo yêu cầu, tùy trạng thái; dạng viền, cỡ nhỏ, chữ tự xuống dòng
- * nên không bị cắt) và menu "…" có Xem chi tiết cùng mọi thao tác (kể cả "Ghi nhận đã nhận tiền mặt", chưa phải nút chính).
- */
-function RowActions({ order: o, busy, onRun, chevron }: { order: Order; busy: boolean; onRun: (key: ActionKey, order: Order) => void; chevron?: boolean }) {
-  const actions = actionsOf(o, { withView: true })
-  const mainKey = mainActionKey(o)
-  const main = actions.find((a) => a.key === mainKey)
-  const menu: RowMenuItem[] = actions.map((a) => ({
-    label: a.label,
-    icon: ICON[a.key],
-    danger: a.danger,
-    disabled: a.disabledReason,
-    onClick: () => onRun(a.key, o),
-  }))
-  return (
-    <div className="flex items-center justify-end gap-1" {...stop}>
-      {main && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-auto min-h-8 w-[84px] flex-none border-line-strong px-1.5 py-1 text-[12px] leading-tight font-medium whitespace-normal"
-          disabled={busy && main.key === 'complete'}
-          onClick={() => onRun(main.key, o)}
-        >
-          {MAIN_LABEL[main.key] ?? main.label}
-        </Button>
-      )}
-      <RowMenu label={o.orderCode} items={menu} />
-      {chevron && <ChevronRight aria-hidden className="size-4 flex-none text-muted-foreground/50" />}
-    </div>
-  )
-}
-
 interface OrdersTableProps {
   orders: Order[]
   meta: PageMeta
-  busy: boolean
   onOpen: (orderId: string) => void
-  onRun: (key: ActionKey, order: Order) => void
   onPage: (page: number) => void
 }
 
 /** Bảng đơn (màn rộng) và danh sách thẻ rút gọn (màn nhỏ), cùng nguồn dữ liệu và thao tác với thẻ đơn trong chat. */
-export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: OrdersTableProps) {
+export function OrdersTable({ orders, meta, onOpen, onPage }: OrdersTableProps) {
   return (
     <>
       <div className="max-[1099px]:hidden">
         <table className="w-full table-fixed border-collapse">
           <colgroup>
-            <col className="w-[9%] max-[1279px]:w-[11%]" />
-            <col className="w-[17%] max-[1279px]:w-[20%]" />
-            <col className={cn('w-[9%]', dateCol)} />
-            <col className="w-[11%] max-[1279px]:w-[12%]" />
-            <col className="w-[25%] max-[1279px]:w-[27%]" />
-            <col className="w-[14%] max-[1279px]:w-[15%]" />
-            <col className="w-[15%]" />
+            <col className="w-[14%] max-[1279px]:w-[16%]" />
+            <col className="w-[22%] max-[1279px]:w-[25%]" />
+            <col className={cn('w-[15%]', dateCol)} />
+            <col className="w-[15%] max-[1279px]:w-[18%]" />
+            <col className="w-[18%] max-[1279px]:w-[20%]" />
+            <col className="w-[16%] max-[1279px]:w-[21%]" />
           </colgroup>
           <thead>
             <tr>
-              <th className={th}>Mã đơn</th>
-              <th className={th}>Khách</th>
+              <th className={th}>Đơn hàng</th>
+              <th className={th}>Khách hàng</th>
               <th className={cn(th, dateCol)}>Ngày thực hiện</th>
-              <th className={cn(th, 'text-right')}>Tổng giá trị</th>
+              <th className={th}>Tổng giá trị</th>
               <th className={th}>Thanh toán</th>
-              <th className={th}>Trạng thái đơn</th>
-              <th className={th} />
+              <th className={th}>Trạng thái</th>
             </tr>
           </thead>
           <tbody>
@@ -151,11 +87,11 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
                       </span>
                     </span>
                   </td>
-                  <td className={cn(td, 'whitespace-nowrap', dateCol)}>{formatDate(o.eventDate)}</td>
-                  <td className={cn(td, 'text-right font-semibold whitespace-nowrap tabular-nums')}>{formatMoney(o.totalAmount)}</td>
+                  <td className={cn(td, 'font-semibold whitespace-nowrap tabular-nums', dateCol)}>{formatDate(o.eventDate)}</td>
+                  <td className={cn(td, 'font-semibold whitespace-nowrap tabular-nums')}>{formatMoney(o.totalAmount)}</td>
                   <td className={td}>
                     <span className="block">
-                      <PaymentLines order={o} onReceive={o.restPayment?.status === 'Pending' ? () => onRun('receiveRest', o) : undefined} />
+                      <PaymentLines order={o} />
                     </span>
                   </td>
                   <td className={td}>
@@ -165,9 +101,6 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
                       <LateProgressBadge orderId={o.id} status={o.status} />
                       {o.status === 'Pending' && o.depositDueDate && <Countdown order={o} />}
                     </span>
-                  </td>
-                  <td className={td}>
-                    <RowActions order={o} busy={busy} onRun={onRun} chevron />
                   </td>
                 </tr>
               )
@@ -208,13 +141,10 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
                   <span className="min-w-0 text-[13px]">
                     <b className="text-[15px] font-semibold tabular-nums">{formatMoney(o.totalAmount)}</b>
                     <span className="mt-1.5 block">
-                      <PaymentLines order={o} onReceive={o.restPayment?.status === 'Pending' ? () => onRun('receiveRest', o) : undefined} />
+                      <PaymentLines order={o} />
                     </span>
                   </span>
-                  <span className="flex flex-col items-end gap-2">
-                    {o.status === 'Pending' && <Countdown order={o} />}
-                    <RowActions order={o} busy={busy} onRun={onRun} />
-                  </span>
+                  {o.status === 'Pending' && <Countdown order={o} />}
                 </div>
               </div>
             </li>

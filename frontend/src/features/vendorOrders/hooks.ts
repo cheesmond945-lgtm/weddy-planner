@@ -14,7 +14,7 @@ function useVendorId() {
   return user?.role === 'VENDOR' ? user.id : undefined
 }
 
-/** Sau khi đơn đổi: cập nhật đơn trong cache, tải lại tin, hội thoại, danh sách và số đếm. */
+/** Sau khi đơn đổi: chỉnh sửa đơn trong cache, tải lại tin, hội thoại, danh sách và số đếm. */
 export function useSyncOrder() {
   const uid = useVendorId()
   const qc = useQueryClient()
@@ -87,7 +87,7 @@ export type SaveOrderInput =
   | { kind: 'edit'; orderId: string; content: OrderContent; changeNote: string; expectedVersion?: string }
 
 /**
- * Lưu nháp, gửi đơn, "Cập nhật đơn" hoặc sửa sau cọc từ form đơn trong chat.
+ * Lưu nháp, gửi đơn, "Chỉnh sửa đơn" hoặc sửa sau cọc từ form đơn trong chat.
  * create: đơn mới (nháp hoặc gửi luôn). draft: lưu bản nháp. send: gửi bản nháp, hoặc sửa và gửi lại đơn đang chờ cọc / chờ chỉnh sửa.
  * edit: sửa đơn đã cọc.
  */
@@ -113,9 +113,9 @@ export function useSaveOrder() {
         draft
           ? `Đã lưu nháp ${o.orderCode}, chỉ bạn nhìn thấy, chưa gửi cho khách.`
           : i.kind === 'edit'
-            ? `Đã cập nhật đơn ${o.orderCode}.`
+            ? `Đã chỉnh sửa đơn ${o.orderCode}.`
             : i.kind === 'send' && i.resend
-              ? `Đã cập nhật đơn ${o.orderCode}, hạn cọc mới là 24 giờ.`
+              ? `Đã chỉnh sửa đơn ${o.orderCode}, hạn cọc mới là 24 giờ.`
               : `Đã gửi đơn ${o.orderCode} cho khách, hạn cọc 24 giờ.`,
       )
     },
@@ -188,12 +188,6 @@ export function useOrderTasks(orderId: string | null, enabled = true) {
 export function useOrderProgress() {
   const uid = useVendorId()
   return useQuery({ queryKey: vendorKeys.orderProgress(uid), queryFn: vendorOrdersApi.progress, enabled: !!uid, staleTime: 60_000 })
-}
-
-/** Bảng việc (kanban): mọi việc của các đơn đang thực hiện. */
-export function useTaskBoard() {
-  const uid = useVendorId()
-  return useQuery({ queryKey: vendorKeys.taskBoard(uid), queryFn: vendorOrdersApi.board, enabled: !!uid })
 }
 
 /** Lịch làm việc trong khoảng ngày của lưới tháng đang xem. */

@@ -74,7 +74,7 @@ export function AiWriteDialog({ open, onOpenChange, fieldName, styles, write, on
 
   return (
     <Dialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
-      <DialogContent className="flex max-h-[min(90dvh,760px)] max-w-[620px] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent bare className="flex max-h-[min(90dvh,760px)] max-w-[620px] flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="mb-0 border-b border-line bg-gold-soft px-6 pt-5 pr-14 pb-4">
           <DialogTitle className="flex items-center gap-2 text-[22px]">
             <Sparkles className="size-5 text-[#7c3aed]" />

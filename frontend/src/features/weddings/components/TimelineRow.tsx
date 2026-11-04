@@ -150,7 +150,7 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
         <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2" onClick={(e) => e.stopPropagation()}>
           <span className="flex flex-wrap items-center gap-2">
             <ServiceTag item={item} />
-            <DateChip dueDate={item.dueDate!} confirmed={item.dateStatus === 'CONFIRMED'} overdue={overdue} isDone={done} />
+            <DateChip dueDate={item.dueDate!} overdue={overdue} isDone={done} />
           </span>
           {askVendor && (
             <Button variant="outline" size="sm" className="ml-auto" onClick={() => onChat!(item)}>
@@ -221,7 +221,7 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
         )}
         {autoDone && done && conflictDate && (
           <div role="note" className="mt-1 text-[12.5px] text-warn">
-            Ngày thực hiện của đơn ({dmy(conflictDate)}) sau ngày cưới. Nhắn nhà cung cấp để cập nhật đơn.
+            Ngày thực hiện của đơn ({dmy(conflictDate)}) sau ngày cưới. Nhắn nhà cung cấp để chỉnh sửa đơn.
           </div>
         )}
         {autoDone && done && item.vendorProcessMissing && (

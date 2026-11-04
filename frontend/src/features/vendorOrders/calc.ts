@@ -80,8 +80,8 @@ export function toContent(v: OrderFormValues): OrderContent {
 /** Hai giá trị form có cùng nội dung không (bỏ khoảng trắng thừa, dòng trống). */
 export const sameValues = (a: OrderFormValues, b: OrderFormValues) => JSON.stringify(toContent(a)) === JSON.stringify(toContent(b))
 
-/** Trang Quản lý đơn hàng, mở sẵn đơn. */
-export const orderPageHref = (orderId: string) => `${paths.vendor.orders}?order=${encodeURIComponent(orderId)}`
+/** Trang chi tiết một đơn của NCC. */
+export const orderPageHref = (orderId: string) => paths.vendor.order(orderId)
 
 const VN_FORMAT = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 

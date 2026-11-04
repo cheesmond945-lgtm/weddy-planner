@@ -9,7 +9,6 @@ import { CANCEL_REASON } from '../constants'
 import { changesLabel, formatDay, formatDayTime, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
 import { OrderStatusBadge, PaidInFullBadge } from './OrderBadges'
-import { OrderProgressPanel } from './OrderProgressPanel'
 import type { OrderFormMode } from './OrderFormDialog'
 import { PanelDialog } from './PanelDialog'
 import { PaymentScheduleTable } from './PaymentScheduleTable'
@@ -65,7 +64,7 @@ function RevisionRow({ r }: { r: OrderRevision }) {
             ? r.requestNote
             : r.changes.length
               ? ''
-              : 'NCC tự sửa đơn (không có yêu cầu của khách).'}
+              : 'NCC tự chỉnh sửa đơn (không có yêu cầu của khách).'}
       </p>
       <p className="mt-1.5 tabular-nums">
         Tổng {formatMoney(r.oldTotalAmount)} → {r.newTotalAmount === null ? <span className="text-muted-foreground">chưa áp dụng</span> : <b className="font-semibold">{formatMoney(r.newTotalAmount)}</b>}
@@ -86,48 +85,14 @@ interface OrderDetailDialogProps {
 }
 
 /**
- * Màn "Xem chi tiết" đơn (docs/api/THE_DON_HANG.md mục 2): thông tin, bảng hạng mục đầy đủ, lịch thanh toán 2 đợt,
- * lịch sử chỉnh sửa (OrderRevisions), chứng từ (Invoices). Khách và NCC thấy cùng nội dung.
+ * Nội dung chi tiết đơn (docs/api/THE_DON_HANG.md mục 2): thông tin, bảng hạng mục đầy đủ, lịch thanh toán 2 đợt, lịch sử chỉnh sửa, chứng từ.
+ * Dùng chung cho hộp thoại (OrderDetailDialog) và trang chi tiết đơn của NCC.
  */
-export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice, viewer = 'vendor' }: OrderDetailDialogProps) {
-  const hint = orderHint(o)
-  const vendorView = viewer === 'vendor'
+export function OrderDetailSections({ order: o, vendorView, onViewInvoice }: { order: Order; vendorView: boolean; onViewInvoice: (order: Order, type: InvoiceType) => void }) {
   const th = 'border-y border-line bg-surface-2 px-3 py-2.5 text-left text-[11.5px] font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase'
   const td = 'px-3 py-2.5 align-top text-[13.5px]'
   return (
-    <PanelDialog
-      open
-      size="lg"
-      onRequestClose={onClose}
-      title={`Đơn dịch vụ ${o.orderCode}`}
-      subtitle={
-        <span className="inline-flex flex-wrap items-center gap-2">
-          <OrderStatusBadge status={o.status} />
-          <PaidInFullBadge order={o} />
-          <span>Tạo {formatDayTime(o.createdDate)}</span>
-        </span>
-      }
-      footer={
-        <>
-          {vendorView && (
-            <div className="mr-auto min-w-0 flex-1 max-sm:basis-full">
-              <p className={cn('text-[13px]', hint.tone === 'warn' ? 'text-warn' : hint.tone === 'ok' ? 'text-sage' : 'text-muted-foreground')}>{hint.text}</p>
-              <OrderActions
-                order={o}
-                onOpenForm={(mode) => {
-                  onClose()
-                  onOpenForm?.(mode)
-                }}
-                onViewInvoice={onViewInvoice}
-              />
-            </div>
-          )}
-          <Button variant="outline" className="border-line-strong" onClick={onClose}>
-            Đóng
-          </Button>
-        </>
-      }
-    >
+    <>
       <Section title="Thông tin đơn">
         <dl className="grid grid-cols-3 gap-x-4 gap-y-3 max-sm:grid-cols-1">
           {/* Khách xem đơn của chính mình: không lặp tên và số điện thoại của họ */}
@@ -145,14 +110,6 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
           </Item>
         </dl>
       </Section>
-
-      {vendorView && (o.status === 'Deposited' || o.status === 'Completed') && (
-        <>
-          <Section title="Tiến độ đơn">
-            <OrderProgressPanel orderId={o.id} customerName={o.customerName} readOnly={o.status !== 'Deposited'} />
-          </Section>
-        </>
-      )}
 
       <Section title="Hạng mục báo giá">
         <div className="overflow-x-auto rounded-md border border-line">
@@ -228,6 +185,52 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
           </p>
         )}
       </Section>
+    </>
+  )
+}
+
+/**
+ * Màn "Xem chi tiết" đơn (docs/api/THE_DON_HANG.md mục 2): thông tin, bảng hạng mục đầy đủ, lịch thanh toán 2 đợt,
+ * lịch sử chỉnh sửa (OrderRevisions), chứng từ (Invoices). Khách và NCC thấy cùng nội dung.
+ */
+export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice, viewer = 'vendor' }: OrderDetailDialogProps) {
+  const hint = orderHint(o)
+  const vendorView = viewer === 'vendor'
+  return (
+    <PanelDialog
+      open
+      size="lg"
+      onRequestClose={onClose}
+      title={`Đơn dịch vụ ${o.orderCode}`}
+      subtitle={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <OrderStatusBadge status={o.status} />
+          <PaidInFullBadge order={o} />
+          <span>Tạo {formatDayTime(o.createdDate)}</span>
+        </span>
+      }
+      footer={
+        <>
+          {vendorView && (
+            <div className="mr-auto min-w-0 flex-1 max-sm:basis-full">
+              <p className={cn('text-[13px]', hint.tone === 'warn' ? 'text-warn' : hint.tone === 'ok' ? 'text-sage' : 'text-muted-foreground')}>{hint.text}</p>
+              <OrderActions
+                order={o}
+                onOpenForm={(mode) => {
+                  onClose()
+                  onOpenForm?.(mode)
+                }}
+                onViewInvoice={onViewInvoice}
+              />
+            </div>
+          )}
+          <Button variant="outline" className="border-line-strong" onClick={onClose}>
+            Đóng
+          </Button>
+        </>
+      }
+    >
+      <OrderDetailSections order={o} vendorView={vendorView} onViewInvoice={onViewInvoice} />
     </PanelDialog>
   )
 }

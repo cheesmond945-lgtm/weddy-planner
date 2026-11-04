@@ -25,7 +25,7 @@ export interface OrderAction {
 
 /**
  * Thao tác của NCC trên một đơn, theo docs/api/THE_DON_HANG.md mục 4 (dùng chung cho thẻ đơn, màn chi tiết, bảng đơn):
- * Draft: Tiếp tục soạn. Pending: Cập nhật đơn. NeedRevision: Cập nhật đơn (chính). Expired, Cancelled: Tạo lại đơn (chính).
+ * Draft: Tiếp tục soạn. Pending: Chỉnh sửa đơn. NeedRevision: Chỉnh sửa đơn (chính). Expired, Cancelled: Tạo lại đơn (chính).
  * Deposited: Chỉnh sửa (chính khi khách đang yêu cầu chỉnh sửa, kèm Từ chối yêu cầu), Hoàn tất (luôn hiện; trước ngày sự kiện bị khóa
  * kèm chữ "Hoàn tất được từ <ngày>"), Ghi nhận / Bỏ ghi nhận tiền mặt (Bỏ ghi nhận khóa khi đã có hóa đơn cuối),
  * Xuất hóa đơn (khóa tới khi đã ghi nhận tiền mặt), Hủy đơn (chỉ khi còn trước ngày sự kiện).
@@ -37,8 +37,8 @@ export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAct
   const requested = o.status === 'Deposited' && !!openRevision(o)
   if (opts.withView) out.push({ key: 'view', label: 'Xem chi tiết', primary: false })
   if (o.status === 'Draft') out.push({ key: 'continue', label: 'Tiếp tục soạn', primary: false })
-  if (o.status === 'Pending') out.push({ key: 'resend', label: 'Cập nhật đơn', primary: false })
-  if (o.status === 'NeedRevision') out.push({ key: 'resend', label: 'Cập nhật đơn', primary: true })
+  if (o.status === 'Pending') out.push({ key: 'resend', label: 'Chỉnh sửa đơn', primary: false })
+  if (o.status === 'NeedRevision') out.push({ key: 'resend', label: 'Chỉnh sửa đơn', primary: true })
   if (o.status === 'Expired' || o.status === 'Cancelled') out.push({ key: 'again', label: 'Tạo lại đơn', primary: true })
   if (o.status === 'Deposited') out.push({ key: 'edit', label: requested ? 'Chỉnh sửa theo yêu cầu' : 'Chỉnh sửa', primary: requested })
   if (requested) out.push({ key: 'reject', label: 'Từ chối yêu cầu', primary: false })
@@ -59,7 +59,7 @@ export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAct
   return out
 }
 
-/** Nút chính trong bảng: chỉ đơn cần NCC xử lý mới có (Cập nhật đơn, Hoàn tất, Tạo lại đơn); đơn khác để trống. */
+/** Nút chính trong bảng: chỉ đơn cần NCC xử lý mới có (Chỉnh sửa đơn, Hoàn tất, Tạo lại đơn); đơn khác để trống. */
 export function mainActionKey(o: Order): ActionKey | null {
   if (o.status === 'Deposited' && openRevision(o)) return 'edit'
   if (o.status === 'Deposited' && eventPassed(o)) return 'complete'
@@ -78,7 +78,7 @@ interface RunnerOptions {
 
 /**
  * Chạy thao tác của NCC trên đơn. Hoàn tất, Xuất hóa đơn và Tạo lại đơn hỏi xác nhận trước (hộp thoại nằm ở `dialogs`,
- * cần render một lần cùng nơi dùng). Gửi đơn, Cập nhật đơn, Chỉnh sửa xác nhận ngay trong form đơn.
+ * cần render một lần cùng nơi dùng). Gửi đơn, Chỉnh sửa đơn, Chỉnh sửa xác nhận ngay trong form đơn.
  */
 export function useOrderActionRunner({ onOpenForm, onAgain, onView, onViewInvoice }: RunnerOptions): {
   run: (key: ActionKey, order: Order) => void

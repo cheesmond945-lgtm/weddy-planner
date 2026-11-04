@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ApiError } from '@/api'
 import { Button } from '@/components/ui/button'
+import { DateField } from '@/components/DateField'
 import { Input } from '@/components/ui/input'
 import { useHallDates } from '@/features/halls/hooks'
 import { useWeddingReminder } from '@/features/vendorChat/hooks'
@@ -32,7 +33,7 @@ import { OrderItemsEditor } from './OrderItemsEditor'
 import { PanelDialog } from './PanelDialog'
 
 /**
- * new: đơn mới. draft: mở lại bản nháp. resend: "Cập nhật đơn" (Pending, NeedRevision).
+ * new: đơn mới. draft: mở lại bản nháp. resend: "Chỉnh sửa đơn" (Pending, NeedRevision).
  * edit: sửa đơn đã cọc (khóa tỷ lệ và tiền cọc). again: "Tạo lại đơn" (đơn hết hạn).
  */
 export type OrderFormMode =
@@ -221,7 +222,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   const hallLineAt = hallLineIndex(values.items, values.packageId)
   const tablesError = !locked && hallLineAt >= 0 ? hallTablesError(values.items[hallLineAt], hallPkg ?? undefined) : undefined
 
-  // Quy tắc kiểm khi Gửi đơn / Cập nhật đơn / Chỉnh sửa; Lưu nháp chỉ cần ngày sự kiện
+  // Quy tắc kiểm khi Gửi đơn / Chỉnh sửa đơn / Chỉnh sửa; Lưu nháp chỉ cần ngày sự kiện
   const rules = {
     minTotal: locked ? order!.depositAmount : undefined,
     changeNote: locked ? changeNote : undefined,
@@ -326,7 +327,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
 
   const title =
     mode.kind === 'resend'
-      ? `Cập nhật đơn ${mode.order.orderCode}`
+      ? `Chỉnh sửa đơn ${mode.order.orderCode}`
       : mode.kind === 'edit'
         ? `Chỉnh sửa đơn ${mode.order.orderCode}`
         : mode.kind === 'again'
@@ -389,7 +390,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
               ) : mode.kind === 'edit' ? (
                 'Lưu chỉnh sửa'
               ) : mode.kind === 'resend' ? (
-                'Cập nhật đơn'
+                'Chỉnh sửa đơn'
               ) : (
                 'Gửi đơn'
               )}
@@ -473,13 +474,13 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                   ) : undefined
                 }
               >
-                <Input
+                <DateField
                   className={controlClass}
-                  type="date"
+                  min={todayVN()}
                   max={weddingDate && !locked ? weddingDate : undefined}
-                  aria-invalid={errors.eventDate ? true : undefined}
+                  invalid={!!errors.eventDate}
                   value={values.eventDate}
-                  onChange={(e) => set({ eventDate: e.target.value })}
+                  onValueChange={(v) => set({ eventDate: v })}
                 />
               </Field>
               <Field label="Ghi chú gửi khách" hint="Khách nhìn thấy ghi chú này trên đơn." full>
@@ -578,8 +579,8 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
       <ConfirmDialog
         open={confirmSend}
         onOpenChange={setConfirmSend}
-        title={mode.kind === 'edit' ? 'Chỉnh sửa đơn?' : mode.kind === 'resend' ? 'Cập nhật đơn?' : 'Gửi đơn?'}
-        confirmLabel={mode.kind === 'edit' ? 'Lưu chỉnh sửa' : mode.kind === 'resend' ? 'Cập nhật đơn' : 'Gửi đơn'}
+        title={mode.kind === 'edit' ? 'Chỉnh sửa đơn?' : mode.kind === 'resend' ? 'Chỉnh sửa đơn?' : 'Gửi đơn?'}
+        confirmLabel={mode.kind === 'edit' ? 'Lưu chỉnh sửa' : mode.kind === 'resend' ? 'Chỉnh sửa đơn' : 'Gửi đơn'}
         onConfirm={doSend}
       >
         <p>

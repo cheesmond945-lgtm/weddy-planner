@@ -26,7 +26,6 @@ import SetPasswordPage from '@/pages/auth/SetPasswordPage'
 import ChatPage from '@/pages/couple/ChatPage'
 import CoupleAccountPage from '@/pages/couple/CoupleAccountPage'
 import ComparePage from '@/pages/couple/ComparePage'
-import DealPage from '@/pages/couple/DealPage'
 import FavoritesPage from '@/pages/couple/FavoritesPage'
 import PlanBudgetPage from '@/pages/couple/PlanBudgetPage'
 import PlanLayoutPage from '@/pages/couple/PlanLayoutPage'
@@ -40,6 +39,7 @@ import VendorChatPage from '@/pages/vendor/VendorChatPage'
 import VendorCommissionsPage from '@/pages/vendor/VendorCommissionsPage'
 import VendorDashboardPage from '@/pages/vendor/VendorDashboardPage'
 import VendorCalendarPage from '@/pages/vendor/VendorCalendarPage'
+import VendorOrderDetailPage from '@/pages/vendor/VendorOrderDetailPage'
 import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
 import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
 import VendorProfilePage from '@/pages/vendor/VendorProfilePage'
@@ -81,7 +81,6 @@ export const router = createBrowserRouter([
                   { path: paths.planTab.budget, element: <PlanBudgetPage /> },
                 ],
               },
-              { path: '/plan/deal/:dealId', element: <DealPage /> },
               // Link cũ /timeline (trang Lập Timeline trước đây) sang tab Timeline của Kế hoạch
               { path: '/timeline', element: <RedirectKeepSearch to={paths.timeline} /> },
               { path: paths.chat, element: <ChatPage /> },
@@ -118,6 +117,7 @@ export const router = createBrowserRouter([
           { path: paths.vendor.packageNew, element: <VendorPackagePage /> },
           { path: '/vendor/catalog/:packageId', element: <VendorPackagePage /> },
           { path: paths.vendor.orders, element: <VendorOrdersPage /> },
+          { path: '/vendor/orders/:orderId', element: <VendorOrderDetailPage /> },
           { path: paths.vendor.calendar, element: <VendorCalendarPage /> },
           { path: paths.vendor.chat, element: <VendorChatPage /> },
           { path: paths.vendor.commissions, element: <VendorCommissionsPage /> },

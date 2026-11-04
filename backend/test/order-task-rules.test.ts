@@ -98,6 +98,14 @@ describe('chốt / đổi ngày', () => {
     assert.equal(scheduleDateIssue('2027-07-19', ctx)?.code, 'DUE_DATE_OUT_OF_RANGE');
   });
 
+  it('việc phải xong trước ngày thực hiện (beforeEvent): không trùng hoặc sau E, vẫn tính từ hôm nay', () => {
+    const before = { ...ctx, beforeEvent: true };
+    for (const d of ['2026-12-10', '2027-03-19']) assert.equal(scheduleDateIssue(d, before), null, d);
+    for (const d of ['2027-03-20', '2027-03-21', '2026-12-09']) assert.equal(scheduleDateIssue(d, before)?.code, 'DUE_DATE_OUT_OF_RANGE', d);
+    // việc khác (không beforeEvent) vẫn chọn được đúng ngày thực hiện
+    assert.equal(scheduleDateIssue('2027-03-20', ctx), null);
+  });
+
   it('sai định dạng: 400', () => {
     for (const d of ['', '20/03/2027', '2027-13-45', null, undefined, 5]) assert.equal(scheduleDateIssue(d, ctx)?.status, 400, String(d));
   });

@@ -6,7 +6,7 @@ import { notify } from '../chat/chat-messages';
 import { publish } from '../realtime/realtime.bus';
 import { CALENDAR_MAX_DAYS, calendarItems } from '../weddings/calendar-items';
 import { MAX_TASKS_PER_PACKAGE, MIN_OFFSET } from '../vendors/package-tasks';
-import { loadPackageMeta, ownersFrom, packagesOfOrder, type PackageTaskMeta } from '../weddings/package-task-meta';
+import { isBeforeEvent, loadPackageMeta, ownersFrom, packagesOfOrder, type PackageTaskMeta } from '../weddings/package-task-meta';
 import { dmyOf, orderProgress, ownerOf } from '../weddings/task-owner';
 import { initialStatus, isCustomOrderTaskCode, ordCode, ordCodeWithOwner, PKG_PREFIX, pkgTaskIdOf, taskTitle } from '../weddings/timeline-rows';
 import { DelayedNotices } from './delayed-notice';
@@ -69,8 +69,7 @@ export class OrderTasksService {
     const owner = ownerOf(t.task_code, ownersFrom(ctx.meta));
     const due = t.scheduled_date ? ymdOf(t.scheduled_date) : '';
     const done = t.status === 'Done';
-    const pid = pkgTaskIdOf(t.task_code);
-    const before = pid ? (ctx.meta.get(pid)?.offsetDays ?? 0) < 0 : false;
+    const before = isBeforeEvent(t.task_code, ctx.meta);
     return {
       id: t.id,
       title: t.title ?? '',
@@ -82,6 +81,8 @@ export class OrderTasksService {
       /** NCC đổi được trạng thái việc này (mọi việc chi tiết của đơn mình) */
       canTick: true,
       isPackageTask: !!t.task_code?.startsWith(PKG_PREFIX),
+      /** Việc của gói có mốc trước ngày thực hiện: ngày chốt / đổi phải trước ngày thực hiện */
+      beforeEvent: before,
       /** Việc riêng NCC thêm cho đúng đơn này ('ORD:'), không thuộc gói */
       isCustomOrderTask: isCustomOrderTaskCode(t.task_code),
       /** Việc "Thanh toán phần còn lại" (PAY:): Done = NCC đã nhận đủ tiền mặt (ghi nhận đợt 2) */
@@ -153,7 +154,7 @@ export class OrderTasksService {
   }
 
   /**
-   * Lịch làm việc của NCC trong khoảng [from, to] (tối đa CALENDAR_MAX_DAYS ngày): ngày thực hiện của các đơn đang chờ cọc / đã cọc / hoàn thành
+   * Lịch làm việc của NCC trong khoảng [from, to] (tối đa CALENDAR_MAX_DAYS ngày): ngày thực hiện của các đơn đã cọc / hoàn thành
    * và việc chi tiết của đơn đã cọc. Gom thành danh sách theo ngày ở weddings/calendar-items.ts.
    */
   async calendar(userId: string, from: unknown, to: unknown) {
@@ -172,14 +173,16 @@ export class OrderTasksService {
         select: { id: true, task_code: true, title: true, scheduled_date: true, status: true, task_confirmations: { select: { task_id: true } }, orders: { select: orderSel } },
       }),
     ]);
-    const owners = ownersFrom(await loadPackageMeta(this.prisma, tasks.map((t) => t.task_code)));
+    const meta = await loadPackageMeta(this.prisma, tasks.map((t) => t.task_code));
+    const owners = ownersFrom(meta);
+    const beforeOf = (code: string | null) => isBeforeEvent(code, meta);
     const asOrder = (o: (typeof orders)[number]) => ({ id: o.id, code: o.order_code ?? '', status: o.status ?? '', eventDate: o.event_date ? ymdOf(o.event_date) : '', customerName: o.customer_name ?? '' });
     return {
       items: calendarItems({
         orders: orders.map(asOrder),
         tasks: tasks
           .filter((t) => t.orders && t.scheduled_date)
-          .map((t) => ({ id: t.id, code: t.task_code, title: t.title ?? '', due: ymdOf(t.scheduled_date!), done: t.status === 'Done', status: t.status, confirmed: !!t.task_confirmations, owner: ownerOf(t.task_code, owners), order: asOrder(t.orders!) })),
+          .map((t) => ({ id: t.id, code: t.task_code, title: t.title ?? '', due: ymdOf(t.scheduled_date!), done: t.status === 'Done', status: t.status, confirmed: !!t.task_confirmations, owner: ownerOf(t.task_code, owners), beforeEvent: beforeOf(t.task_code), order: asOrder(t.orders!) })),
         from,
         to,
         today: todayVn(),
@@ -417,7 +420,8 @@ export class OrderTasksService {
   async confirmSchedule(userId: string, orderId: string, taskId: string, date?: unknown, opts: { undo?: boolean; confirmed?: boolean } = {}) {
     const { order, vendorName, task, ctx } = await this.editableTask(userId, orderId, taskId);
     const target = date === undefined || date === null ? (task.scheduled_date ? ymdOf(task.scheduled_date) : '') : date;
-    const issue = opts.undo ? (isYmd(target) ? null : scheduleDateIssue(target, { today: ctx.today, event: ctx.event })) : scheduleDateIssue(target, { today: ctx.today, event: ctx.event });
+    const beforeEvent = isBeforeEvent(task.task_code, ctx.meta);
+    const issue = opts.undo ? (isYmd(target) ? null : scheduleDateIssue(target, { today: ctx.today, event: ctx.event, beforeEvent })) : scheduleDateIssue(target, { today: ctx.today, event: ctx.event, beforeEvent });
     if (issue) return throwRule(issue);
 
     const day = new Date(`${target as string}T00:00:00Z`);
