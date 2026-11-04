@@ -143,12 +143,14 @@ export interface ContentInput {
   eventDate?: string;
   note?: string | null;
   depositPercent?: number | string | null;
-  items?: { itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string; packageId?: string | null }[];
+  items?: { id?: string | null; itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string; packageId?: string | null }[];
   /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tiệc cưới gửi / sửa đơn (docs/LICH_BAN_SANH.md); dịch vụ khác bỏ qua */
   packageId?: string | null;
 }
 
 export interface ParsedItem {
+  /** Id dòng hiện có (order_items.id) mà form gửi lên khi sửa sau cọc, để giữ gói của dòng theo id chứ không theo tên; dòng mới thì không có */
+  id?: string | null;
   itemName: string;
   unit: string;
   quantity: number;
@@ -203,7 +205,9 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
     const itemPackage = i.packageId === undefined || i.packageId === null || String(i.packageId).trim() === '' ? null : String(i.packageId).trim();
     if (itemPackage && !UUID.test(itemPackage)) errors[`items.${idx}.packageId`] = 'Gói không hợp lệ.';
     // Lưu nháp: ràng buộc của CSDL (số lượng > 0, đơn giá ≥ 0) vẫn phải đúng nên chuẩn hóa lại
+    const itemId = i.id && UUID.test(String(i.id).trim()) ? String(i.id).trim() : null;
     return {
+      id: itemId,
       packageId: itemPackage,
       itemName: i.itemName?.trim() ?? '',
       unit: (UNITS as readonly string[]).includes(unit) ? unit : 'Gói',
@@ -278,4 +282,22 @@ export function sameContent(a: ParsedContent, b: ParsedContent): boolean {
     a.items.length === b.items.length &&
     a.items.every((x, i) => x.itemName === b.items[i].itemName && x.unit === b.items[i].unit && x.quantity === b.items[i].quantity && x.unitPrice === b.items[i].unitPrice && (x.packageId ?? null) === (b.items[i].packageId ?? null))
   );
+}
+
+/**
+ * Sửa sau cọc: việc chi tiết đã sinh theo gói lúc cọc nên KHÔNG đổi gói của dòng. Gói của mỗi dòng lấy từ dòng hiện có CÙNG ID
+ * (order_items.id), không khớp theo tên nên đổi tên dòng không làm mất gói; dòng mới (không id, hoặc id lạ) không gắn gói.
+ * Riêng dòng đang gắn sảnh cũ của đơn khi sảnh đổi sang `hall.to` thì chuyển theo sảnh mới (dòng sảnh đổi theo sảnh).
+ */
+export function carryItemPackages<T extends { id?: string | null; packageId?: string | null }>(
+  items: readonly T[],
+  current: readonly { id?: string | null; packageId?: string | null }[],
+  hall?: { from: string | null; to: string | null },
+): (T & { packageId: string | null })[] {
+  return items.map((i) => {
+    const cur = i.id ? current.find((c) => c.id === i.id) : undefined;
+    let pkg = cur?.packageId ?? null;
+    if (pkg && hall?.to && hall.from && pkg === hall.from && hall.to !== hall.from) pkg = hall.to;
+    return { ...i, packageId: pkg };
+  });
 }

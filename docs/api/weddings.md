@@ -20,7 +20,7 @@ Role cho mọi endpoint: **COUPLE**. Mỗi cặp đôi có **một** đám cư�
   "guestCount": 300,
   "budget": 600000000,
   "styles": ["Sang trọng"],
-  "categorySlugs": ["nha-hang", "decor", "trang-phuc", "makeup", "chup-anh", "co-cuoi", "hoa-cuoi"]
+  "categorySlugs": ["nha-hang", "decor", "trang-phuc", "makeup", "chup-anh", "hoa-cuoi"]
 }
 ```
 

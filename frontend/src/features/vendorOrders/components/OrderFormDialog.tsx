@@ -1,5 +1,6 @@
 import { AlertCircle, BellRing, ChevronDown, LoaderCircle, MessageSquare } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
 import { ApiError } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +9,7 @@ import { useWeddingReminder } from '@/features/vendorChat/hooks'
 import { isVenue } from '@/features/vendorPackages/constants'
 import { usePackages } from '@/features/vendorPackages/hooks'
 import { RESTAURANT_SLUG } from '@/features/vendors/constants'
+import { useVendorProfile } from '@/features/vendors/hooks'
 import { controlClass, Field } from '@/features/vendors/components/FormParts'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { UnsavedChangesGuard } from '@/features/vendors/components/UnsavedChangesGuard'
@@ -16,14 +18,16 @@ import { formatDate } from '@/lib/date'
 import { DEPOSIT_MIN, DEPOSIT_PERCENT_MIN, DEPOSIT_ROUNDING, depositOf, depositPercentError } from '@/lib/deposit'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { paths } from '@/routes/paths'
 import type { VendorConversation } from '@/types/vendorConversation'
 import type { Order } from '@/types/vendorOrder'
-import { emptyValues, formatDay, filledItems, sameValues, toContent, totalOf, valuesFromOrder, valuesOfOrder, type OrderFormValues } from '../calc'
+import { emptyValues, formatDay, filledItems, newItemKey, sameValues, toContent, totalOf, valuesFromOrder, valuesOfOrder, type OrderFormValues } from '../calc'
 import { CHANGE_LABEL } from '../constants'
 import { eventDateAdvice } from '../eventDate'
 import { useSaveOrder, type SaveOrderInput } from '../hooks'
 import { validateDraft, validateOrder, type OrderErrors } from '../validation'
-import { OrderItemsEditor, type QuickFillPackage } from './OrderItemsEditor'
+import { applyHall, hallFieldState, hallLineEdited, hallLineIndex, hallTablesError, needsNoPackageConfirm, type LinkPackage } from '../orderLines'
+import { OrderItemsEditor } from './OrderItemsEditor'
 import { PanelDialog } from './PanelDialog'
 
 /**
@@ -187,11 +191,14 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
 
   // Ngày cưới của khách: ngày thực hiện không được sau ngày này (backend kiểm lại, 422 EVENT_DATE_AFTER_WEDDING)
   const weddingDate = customer.weddingDate ?? (order ?? (mode.kind === 'again' ? mode.from : null))?.weddingDate ?? null
-  const categorySlug = (order ?? (mode.kind === 'again' ? mode.from : null))?.category?.slug ?? packages?.[0]?.category?.slug ?? null
+  // Lĩnh vực lấy từ đơn, không có thì từ hồ sơ NCC (không suy từ gói đầu tiên: NCC chưa có gói nào vẫn đúng lĩnh vực)
+  const profile = useVendorProfile()
+  const categorySlug = (order ?? (mode.kind === 'again' ? mode.from : null))?.category?.slug ?? profile.data?.category?.slug ?? null
   // Trung tâm tiệc cưới: đơn phải chọn sảnh (gói đang đăng, hoặc đúng sảnh đơn đang có dù đã ẩn); sảnh bận ngày đó thì gửi bị từ chối
   const venue = categorySlug === RESTAURANT_SLUG
   const currentHall = order?.package?.id ?? (mode.kind === 'again' ? mode.from.package?.id : undefined)
   const halls = (packages ?? []).filter((p) => isVenue(p.category) && (p.status === 'PUBLISHED' || p.id === currentHall))
+  const [pendingHall, setPendingHall] = useState<string | null>(null)
   const hallDates = useHallDates(venue ? values.packageId : null, values.eventDate, values.eventDate)
   // Sửa đơn đã cọc giữ nguyên sảnh và ngày: sảnh "bận" chính vì đơn này, không cảnh báo
   const keepsHall = mode.kind === 'edit' && values.packageId === mode.order.package?.id && values.eventDate === mode.order.eventDate
@@ -201,6 +208,17 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   const items = filledItems(values.items)
   const total = totalOf(items)
   const deposit = locked ? order!.depositAmount : depositOf(total, values.depositPercent)
+  // Gói / sảnh của NCC dùng để gắn vào dòng báo giá. Trung tâm tiệc cưới chỉ gắn sảnh (ô Sảnh), lĩnh vực khác gắn gói ở từng dòng
+  const toLink = (p: NonNullable<typeof packages>[number]): LinkPackage => ({ id: p.id, name: p.name, price: p.price, unit: isVenue(p.category) ? 'Bàn' : 'Gói', taskCount: p.taskCount ?? 0, minTables: p.minTables ?? null })
+  const lookup = (packages ?? []).map(toLink)
+  const linkable = (packages ?? []).filter((p) => p.status === 'PUBLISHED' && !isVenue(p.category)).map(toLink)
+  const hallPkg = venue && values.packageId ? (lookup.find((p) => p.id === values.packageId) ?? null) : null
+  const hallStatus = (packages ?? []).find((p) => p.id === values.packageId)?.status
+  // Sảnh đang ẩn không nhận đơn mới (đơn tạo lại / cập nhật): báo ngay trên form, không đợi bấm Gửi
+  const hallHidden = venue && !!values.packageId && !locked && !!hallStatus && hallStatus !== 'PUBLISHED'
+  const hallLineAt = hallLineIndex(values.items, values.packageId)
+  const tablesError = !locked && hallLineAt >= 0 ? hallTablesError(values.items[hallLineAt], hallPkg ?? undefined) : undefined
+
   // Quy tắc kiểm khi Gửi đơn / Cập nhật đơn / Chỉnh sửa; Lưu nháp chỉ cần ngày sự kiện
   const rules = {
     minTotal: locked ? order!.depositAmount : undefined,
@@ -210,6 +228,8 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
     weddingDate,
     afterDeposit: locked,
     requireHall: venue,
+    hallHidden,
+    hallTablesError: tablesError ? { index: hallLineAt, message: tablesError } : undefined,
   }
   const advice = eventDateAdvice({ eventDate: values.eventDate, weddingDate, today: todayVN(), categorySlug })
   // Tỷ lệ cọc báo lỗi ngay khi gõ (không đợi bấm Gửi) và khoá nút Gửi / Lưu nháp khi sai; đơn đã cọc thì tỷ lệ đã khóa
@@ -221,11 +241,21 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   const request = order?.revisions.find((r) => r.status === 'Requested')
   const canDraft = mode.kind === 'new' || mode.kind === 'again' || mode.kind === 'draft'
 
-  const quickFill: QuickFillPackage[] = (packages ?? [])
-    .filter((p) => p.status === 'PUBLISHED')
-    .map((p) => ({ id: p.id, name: p.name, price: p.price, unit: isVenue(p.category) ? 'Bàn' : 'Gói', taskCount: p.taskCount ?? 0 }))
-
   const set = (patch: Partial<OrderFormValues>) => setValues((v) => ({ ...v, ...patch }))
+
+  /** Chọn / đổi sảnh: dòng 1 tự tạo hoặc đổi theo (đơn vị Bàn, giá và số bàn tối thiểu theo gói). */
+  function applyHallChoice(id: string) {
+    const next = lookup.find((p) => p.id === id)
+    if (!next) return
+    setValues((v) => ({ ...v, packageId: id, items: applyHall(v.items, next, v.packageId, newItemKey(), { inPlaceOnly: locked }) }))
+  }
+  function chooseHall(id: string) {
+    if (!id || id === values.packageId) return
+    const at = hallLineIndex(values.items, values.packageId)
+    // NCC đã sửa đơn giá / số bàn của dòng 1 thì hỏi trước khi ghi đè theo sảnh mới
+    if (hallPkg && at >= 0 && hallLineEdited(values.items[at], hallPkg)) setPendingHall(id)
+    else applyHallChoice(id)
+  }
 
   function run(input: SaveOrderInput, notify: boolean) {
     save.mutate(input, {
@@ -271,7 +301,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
       return
     }
     // Không dòng nào (và không sảnh) gắn gói: sau khi khách cọc sẽ không có công việc của gói. Sửa đơn sau cọc không đổi được gói nên không hỏi.
-    if (mode.kind !== 'edit' && !values.packageId && !filledItems(values.items).some((i) => i.packageId)) return setConfirmNoPackage(true)
+    if (mode.kind !== 'edit' && needsNoPackageConfirm(filledItems(values.items), venue)) return setConfirmNoPackage(true)
     setConfirmSend(true)
   }
 
@@ -446,36 +476,6 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                   onChange={(e) => set({ eventDate: e.target.value })}
                 />
               </Field>
-              {venue && (
-                <Field
-                  label="Sảnh *"
-                  error={errors.packageId}
-                  hint={
-                    hallBusy ? (
-                      <span className="block font-medium text-warn">
-                        Sảnh này đã bận ngày {formatDate(values.eventDate)} (đơn đã cọc hoặc bạn đã đánh dấu bận). Đổi sảnh hoặc ngày, xem ở Lịch làm việc &gt; Lịch bận.
-                      </span>
-                    ) : (
-                      'Sảnh bận vào ngày thực hiện khi khách đặt cọc.'
-                    )
-                  }
-                >
-                  <select
-                    className={controlClass}
-                    aria-invalid={errors.packageId || hallBusy ? true : undefined}
-                    value={values.packageId ?? ''}
-                    onChange={(e) => set({ packageId: e.target.value || null })}
-                  >
-                    <option value="">Chọn sảnh</option>
-                    {halls.map((h) => (
-                      <option key={h.id} value={h.id}>
-                        {h.name}
-                        {h.status !== 'PUBLISHED' ? ' (đang ẩn)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              )}
               <Field label="Ghi chú gửi khách" hint="Khách nhìn thấy ghi chú này trên đơn." full>
                 <textarea
                   rows={2}
@@ -489,7 +489,49 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
           </Section>
 
           <Section title="Báo giá chi tiết">
-            <OrderItemsEditor items={values.items} packages={quickFill} errors={errors} onChange={(next) => set({ items: next })} />
+            {venue && (
+              <div className="mb-3 max-w-[460px]">
+                <Field
+                  label="Sảnh *"
+                  error={errors.packageId}
+                  hint={
+                    hallHidden ? (
+                      <span className="block font-medium text-warn">Sảnh này đang ẩn, không nhận đơn mới. Chọn sảnh khác.</span>
+                    ) : hallBusy ? (
+                      <span className="block font-medium text-warn">
+                        Sảnh này đã bận ngày {formatDate(values.eventDate)} (đơn đã cọc hoặc bạn đã đánh dấu bận). Đổi sảnh hoặc ngày, xem ở Lịch làm việc &gt; Lịch bận.
+                      </span>
+                    ) : (
+                      <>
+                        <span className="block">Chọn sảnh một lần: dòng 1 của báo giá tự điền theo sảnh. Sảnh bận vào ngày thực hiện khi khách đặt cọc.</span>
+                        {locked && values.packageId !== mode.order.package?.id && <span className="mt-1 block text-gold-ink">Các việc trong timeline đã tạo theo sảnh cũ sẽ không tự thay đổi.</span>}
+                      </>
+                    )
+                  }
+                >
+                  <select className={controlClass} aria-invalid={errors.packageId || hallBusy || hallHidden ? true : undefined} value={values.packageId ?? ''} onChange={(e) => chooseHall(e.target.value)}>
+                    <option value="" disabled={!!values.packageId}>
+                      Chọn sảnh
+                    </option>
+                    {halls.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.name}
+                        {h.status !== 'PUBLISHED' ? ' (đang ẩn)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                {packages && hallFieldState(venue, halls.length) === 'empty' && (
+                  <p className="mt-1.5 text-[13px] text-warn">
+                    Bạn chưa có sảnh nào đang đăng.{' '}
+                    <Link to={paths.vendor.catalog} className="font-semibold underline underline-offset-2">
+                      Quản lý gói dịch vụ
+                    </Link>
+                  </p>
+                )}
+              </div>
+            )}
+            <OrderItemsEditor items={values.items} packages={venue ? [] : linkable} lookup={lookup} hall={hallPkg} lockPackages={locked} errors={errors} onChange={(next) => set({ items: next })} />
           </Section>
 
           <Section title="Đặt cọc và thanh toán" hint="Chỉ khoản cọc đi qua hệ thống (VietQR). Phần còn lại khách trả tiền mặt trực tiếp cho bạn.">
@@ -509,8 +551,22 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
         </fieldset>
       </PanelDialog>
 
+      <ConfirmDialog
+        open={pendingHall !== null}
+        onOpenChange={(o) => !o && setPendingHall(null)}
+        title="Đổi sảnh?"
+        confirmLabel="Đổi và ghi đè dòng 1"
+        cancelLabel="Giữ sảnh hiện tại"
+        onConfirm={() => {
+          if (pendingHall) applyHallChoice(pendingHall)
+          setPendingHall(null)
+        }}
+      >
+        <p>Bạn đã sửa số bàn hoặc đơn giá của dòng 1. Đổi sảnh sẽ thay dòng 1 theo sảnh mới (tên, đơn giá, số bàn tối thiểu). Tiếp tục?</p>
+      </ConfirmDialog>
+
       <ConfirmDialog open={confirmNoPackage} onOpenChange={setConfirmNoPackage} title="Đơn chưa gắn gói" confirmLabel="Vẫn gửi" cancelLabel="Quay lại chọn gói" onConfirm={() => setConfirmSend(true)}>
-        <p>Đơn chưa gắn gói — sau khi khách cọc sẽ không có công việc của gói. Vẫn gửi?</p>
+        <p>Đơn chưa gắn gói nào, khách sẽ không có công việc trong timeline sau khi cọc. Vẫn gửi?</p>
       </ConfirmDialog>
 
       <ConfirmDialog

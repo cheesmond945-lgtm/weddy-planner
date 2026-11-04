@@ -45,7 +45,7 @@ export function valuesOfOrder(o: Order): OrderFormValues {
     eventDate: o.eventDate,
     note: o.note,
     depositPercent: o.depositPercent,
-    items: withKeys(o.items.map(({ itemName, unit, quantity, unitPrice, packageId }) => ({ itemName, unit, quantity, unitPrice, packageId: packageId ?? null }))),
+    items: withKeys(o.items.map(({ id, itemName, unit, quantity, unitPrice, packageId }) => ({ id, itemName, unit, quantity, unitPrice, packageId: packageId ?? null }))),
     packageId: o.package?.id ?? null,
   }
 }
@@ -56,6 +56,8 @@ export function valuesOfOrder(o: Order): OrderFormValues {
  */
 export function valuesFromOrder(o: Order): OrderFormValues {
   const v = valuesOfOrder(o)
+  // Đơn mới: dòng mới hoàn toàn, không mang id dòng của đơn cũ
+  v.items = v.items.map(({ id: _id, ...rest }) => rest)
   const today = todayVN()
   const wedding = o.weddingDate && o.weddingDate > today ? o.weddingDate : ''
   const ok = v.eventDate >= today && (!o.weddingDate || v.eventDate <= o.weddingDate)
@@ -70,7 +72,7 @@ export function toContent(v: OrderFormValues): OrderContent {
     eventDate: v.eventDate,
     note: v.note?.trim() || null,
     depositPercent: v.depositPercent,
-    items: filledItems(v.items).map(({ itemName, unit, quantity, unitPrice, packageId }) => ({ itemName: itemName.trim(), unit, quantity, unitPrice, packageId: packageId ?? null })),
+    items: filledItems(v.items).map(({ id, itemName, unit, quantity, unitPrice, packageId }) => ({ ...(id && { id }), itemName: itemName.trim(), unit, quantity, unitPrice, packageId: packageId ?? null })),
     packageId: v.packageId ?? null,
   }
 }

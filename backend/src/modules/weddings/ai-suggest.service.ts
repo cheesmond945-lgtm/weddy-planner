@@ -3,7 +3,7 @@ import { ServicesService, estimateCost } from '../catalog/services.service';
 import { WeddingsService } from './weddings.service';
 
 /** Tỷ lệ ngân sách gợi ý theo hạng mục (docs/api/weddings.md mục 4). */
-const BUDGET_SHARE: Record<string, number> = { 'nha-hang': 0.22, decor: 0.14, 'co-cuoi': 0.14, 'chup-anh': 0.12, 'hoa-cuoi': 0.12, 'trang-phuc': 0.1, makeup: 0.08 };
+const BUDGET_SHARE: Record<string, number> = { 'nha-hang': 0.22, decor: 0.14, 'chup-anh': 0.12, 'hoa-cuoi': 0.12, 'trang-phuc': 0.1, makeup: 0.08 };
 
 const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);

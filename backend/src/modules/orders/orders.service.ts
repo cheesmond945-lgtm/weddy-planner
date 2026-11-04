@@ -40,6 +40,7 @@ import {
   eventAfterWedding,
   fail,
   money,
+  carryItemPackages,
   orderedUuid,
   parseContent,
   sameContent,
@@ -156,7 +157,7 @@ export class OrdersService {
       eventDate: ymd(o.event_date),
       note: o.note,
       depositPercent: Number(o.deposit_percent),
-      items: o.order_items.map((i) => ({ itemName: i.item_name ?? '', unit: i.unit ?? '', quantity: i.quantity ?? 0, unitPrice: Number(i.unit_price), packageId: i.package_id ?? null })),
+      items: o.order_items.map((i) => ({ id: i.id, itemName: i.item_name ?? '', unit: i.unit ?? '', quantity: i.quantity ?? 0, unitPrice: Number(i.unit_price), packageId: i.package_id ?? null })),
       total: Number(o.total_amount),
       packageId: o.package_id ?? null,
     };
@@ -698,8 +699,8 @@ export class OrdersService {
     // Đổi sảnh hoặc ngày thì sảnh mới phải trống ngày đó; giữ nguyên thì không kiểm lại (đơn cũ chưa có sảnh: phải chọn)
     const hall = await this.checkHall(vendor, p, { strict: true, exceptOrderId: id, keep: { packageId: order.package_id, eventDate: current.eventDate } });
     p.packageId = hall?.id ?? null;
-    // Việc chi tiết đã sinh theo gói lúc cọc: sửa sau cọc không đổi gói của dòng (dòng cùng tên giữ gói cũ, dòng mới không gắn gói)
-    for (const i of p.items) i.packageId = current.items.find((c) => c.itemName.trim().toLowerCase() === i.itemName.trim().toLowerCase())?.packageId ?? null;
+    // Việc chi tiết đã sinh theo gói lúc cọc: sửa sau cọc không đổi gói của dòng. Khớp theo id dòng (không theo tên); dòng sảnh đổi theo sảnh mới
+    p.items = carryItemPackages(p.items, current.items, { from: order.package_id ?? null, to: p.packageId });
     const deposit = Number(order.deposit_amount);
     if (p.total < deposit) return fail('ORDER_TOTAL_BELOW_DEPOSIT', `Tổng mới không được nhỏ hơn tiền đã cọc (${money(deposit)}).`, 400);
     if (sameContent(p, current)) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn hiện tại.', 400);

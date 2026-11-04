@@ -130,6 +130,8 @@ export interface Order {
 
 /** Một hạng mục NCC nhập (số tiền do backend tính). */
 export interface OrderItemInput {
+  /** Id dòng hiện có (order_items.id), chỉ khi sửa sau cọc: backend giữ gói của dòng theo id, không theo tên */
+  id?: string | null
   itemName: string
   unit: OrderUnit
   quantity: number

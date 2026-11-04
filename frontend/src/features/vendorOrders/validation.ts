@@ -35,11 +35,12 @@ export function validateDraft(v: OrderFormValues): OrderErrors {
  */
 export function validateOrder(
   v: OrderFormValues,
-  opts: { minTotal?: number; changeNote?: string; originalEventDate?: string; deposit?: boolean; weddingDate?: string | null; afterDeposit?: boolean; requireHall?: boolean } = {},
+  opts: { minTotal?: number; changeNote?: string; originalEventDate?: string; deposit?: boolean; weddingDate?: string | null; afterDeposit?: boolean; requireHall?: boolean; hallHidden?: boolean; hallTablesError?: { index: number; message: string } } = {},
 ): OrderErrors {
   const e: OrderErrors = {}
   if (opts.changeNote !== undefined && !opts.changeNote.trim()) e.changeNote = 'Ghi nội dung thay đổi để khách biết đơn đã đổi gì.'
   if (opts.requireHall && !v.packageId) e.packageId = 'Chọn sảnh cho đơn.'
+  else if (opts.hallHidden) e.packageId = 'Sảnh này đang ẩn, không nhận đơn mới. Chọn sảnh khác.'
   if (!v.customerName.trim()) e.customerName = 'Nhập tên khách hàng.'
   if (!PHONE_RE.test(v.customerPhone.trim())) e.customerPhone = 'Nhập số điện thoại hợp lệ (9–15 chữ số).'
   const date = eventDateError(v.eventDate)
@@ -61,6 +62,7 @@ export function validateOrder(
     if (!(Number.isInteger(it.quantity) && it.quantity > 0)) e[`item:${index}:quantity`] = 'Số lượng là số nguyên > 0.'
     if (!(it.unitPrice >= 0)) e[`item:${index}:unitPrice`] = 'Đơn giá không âm.'
   }
+  if (opts.hallTablesError) e[`item:${opts.hallTablesError.index}:quantity`] ??= opts.hallTablesError.message
   const total = totalOf(filledItems(v.items))
   if (opts.deposit !== false && rows.length && isDepositTooLarge(total, v.depositPercent) && !e.depositPercent) e.deposit = 'Tổng đơn quá nhỏ để đặt cọc.'
   if (rows.length && total <= 0) e.items ??= 'Tổng giá trị đơn phải lớn hơn 0.'
