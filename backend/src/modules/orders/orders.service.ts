@@ -41,6 +41,9 @@ import {
   fail,
   money,
   carryItemPackages,
+  assertOrderFresh,
+  hallTablesIssue,
+  orderVersionOf,
   orderedUuid,
   parseContent,
   sameContent,
@@ -172,12 +175,12 @@ export class OrdersService {
     vendor: { id: string; category_id: string | null },
     p: ParsedContent,
     opts: { strict: boolean; exceptOrderId?: string; keep?: { packageId: string | null; eventDate: string } },
-  ): Promise<{ id: string; name: string } | null> {
+  ): Promise<{ id: string; name: string; minTables: number | null } | null> {
     if (!(await usesHalls(this.prisma, vendor.category_id))) return null;
     if (!p.packageId) return opts.strict ? fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, { packageId: 'Chọn sảnh cho đơn.' }) : null;
-    const pkg = await this.prisma.service_packages.findFirst({ where: { id: p.packageId, vendor_id: vendor.id }, select: { id: true, name: true, status: true } });
+    const pkg = await this.prisma.service_packages.findFirst({ where: { id: p.packageId, vendor_id: vendor.id }, select: { id: true, name: true, status: true, min_tables: true } });
     if (!pkg) return fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, { packageId: 'Sảnh không thuộc nhà cung cấp này.' });
-    const hall = { id: pkg.id, name: pkg.name ?? '' };
+    const hall = { id: pkg.id, name: pkg.name ?? '', minTables: pkg.min_tables ?? null };
     if (!opts.strict || (opts.keep?.packageId === pkg.id && opts.keep.eventDate === p.eventDate)) return hall;
     if (pkg.status !== 'Approved' && opts.keep?.packageId !== pkg.id) return fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, { packageId: 'Sảnh này đang ẩn hoặc chưa được duyệt.' });
     const busy = await findHallConflict(this.prisma, pkg.id, p.eventDate, opts.exceptOrderId);
@@ -186,6 +189,13 @@ export class OrdersService {
       return fail('HALL_BUSY', message, 409, { packageId: message, eventDate: message });
     }
     return hall;
+  }
+
+  /** Dòng gắn sảnh không thấp hơn số bàn tối thiểu của sảnh (400); xem hallTablesIssue. `prior`: sửa đơn, chỉ kiểm khi dòng sảnh bị đổi. */
+  private checkHallTables(hall: { id: string; name: string; minTables: number | null } | null, p: ParsedContent, prior?: { hallId: string | null; items: readonly { id?: string | null; quantity: number }[] }) {
+    if (!hall) return;
+    const issue = hallTablesIssue(p.items, hall, prior);
+    if (issue) fail('VALIDATION_ERROR', issue.message, 400, { [`items.${issue.index}.quantity`]: issue.message });
   }
 
   /** Cột của đơn từ nội dung đã kiểm tra. Bản nháp mà tiền cọc không nhỏ hơn tổng thì lưu cọc 0 (CSDL chỉ cho Draft cọc 0). */
@@ -592,6 +602,7 @@ export class OrdersService {
     const hall = await this.checkHall(v, p, { strict: send });
     p.packageId = hall?.id ?? null;
     await this.checkItemPackages(v.id, p);
+    this.checkHallTables(hall, p);
     const code = await this.nextCode('DH');
     const created = await this.prisma.$transaction(async (tx) => {
       const o = await tx.orders.create({ data: { ...this.orderData(p), vendor_id: v.id, wedding_id: wedding.id, order_code: code, status: 'Draft' } });
@@ -602,12 +613,15 @@ export class OrdersService {
     return this.dtoOf(created.id);
   }
 
-  async saveDraft(userId: string, id: string, content: ContentInput) {
+  async saveDraft(userId: string, id: string, content: ContentInput, expectedVersion?: string) {
     const { vendor, order } = await this.ownedByVendor(userId, id);
     if (order.status !== 'Draft') return fail('ORDER_NOT_DRAFT', 'Chỉ lưu nháp được đơn chưa gửi. Đơn đã gửi chỉ cập nhật và gửi lại.', 409);
+    assertOrderFresh(expectedVersion, orderVersionOf(order));
     const p = parseContent(content ?? {}, 'draft');
-    p.packageId = (await this.checkHall(vendor, p, { strict: false }))?.id ?? null;
+    const hall = await this.checkHall(vendor, p, { strict: false });
+    p.packageId = hall?.id ?? null;
     await this.checkItemPackages(vendor.id, p);
+    this.checkHallTables(hall, p);
     await this.prisma.$transaction([
       this.prisma.orders.update({ where: { id }, data: this.orderData(p) }),
       this.prisma.order_items.deleteMany({ where: { order_id: id } }),
@@ -617,8 +631,9 @@ export class OrdersService {
   }
 
   /** Gửi đơn Draft lần đầu, hoặc "Cập nhật đơn" khi Pending / NeedRevision (hạn cọc đặt lại 24 giờ, thẻ mới trong chat). */
-  async send(userId: string, id: string, body: { content?: ContentInput }) {
+  async send(userId: string, id: string, body: { content?: ContentInput; expectedVersion?: string }) {
     const { vendor, order } = await this.ownedByVendor(userId, id);
+    assertOrderFresh(body.expectedVersion, orderVersionOf(order));
     if (vendor.status === 'Hidden') return fail('VENDOR_HIDDEN', 'Hồ sơ đang bị ẩn nên chưa gửi đơn mới được. Vui lòng liên hệ Forever.', 409);
     if (!['Draft', 'Pending', 'NeedRevision'].includes(order.status ?? '')) {
       return fail('ORDER_NOT_SENDABLE', 'Chỉ gửi được đơn nháp, hoặc cập nhật đơn đang chờ đặt cọc / chờ chỉnh sửa.', 409);
@@ -630,6 +645,7 @@ export class OrdersService {
     const hall = await this.checkHall(vendor, p, { strict: true, exceptOrderId: order.id });
     p.packageId = hall?.id ?? null;
     await this.checkItemPackages(vendor.id, p);
+    this.checkHallTables(hall, p);
     if (order.status !== 'Draft' && sameContent(p, this.currentOf(order))) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn đang gửi.', 400);
     await this.applySend(userId, order, p, hall?.name);
     return this.dtoOf(id);
@@ -688,8 +704,9 @@ export class OrdersService {
    * Bắt buộc "Nội dung thay đổi" (khách thấy). Ghi OrderRevisions AfterDeposit trạng thái Applied; đơn vẫn Deposited.
    * Khách đang có yêu cầu chỉnh sửa (AfterDeposit, Requested) thì yêu cầu đó cũng thành Applied.
    */
-  async editDeposited(userId: string, id: string, body: { content?: ContentInput; changeNote?: string }) {
+  async editDeposited(userId: string, id: string, body: { content?: ContentInput; changeNote?: string; expectedVersion?: string }) {
     const { vendor, order } = await this.ownedByVendor(userId, id);
+    assertOrderFresh(body.expectedVersion, orderVersionOf(order));
     if (order.status !== 'Deposited') return fail('ORDER_NOT_EDITABLE', 'Chỉ sửa được đơn đã đặt cọc.', 409);
     const changeNote = (body.changeNote ?? '').trim();
     if (!changeNote) return fail('VALIDATION_ERROR', 'Nhập nội dung thay đổi để khách biết.', 400, { changeNote: 'Nhập nội dung thay đổi để khách biết.' });
@@ -701,6 +718,8 @@ export class OrdersService {
     p.packageId = hall?.id ?? null;
     // Việc chi tiết đã sinh theo gói lúc cọc: sửa sau cọc không đổi gói của dòng. Khớp theo id dòng (không theo tên); dòng sảnh đổi theo sảnh mới
     p.items = carryItemPackages(p.items, current.items, { from: order.package_id ?? null, to: p.packageId });
+    // Số bàn tối thiểu của sảnh: chỉ kiểm khi đổi sảnh hoặc số lượng dòng sảnh bị thay đổi (đơn cũ không đổi dòng sảnh thì bỏ qua)
+    this.checkHallTables(hall, p, { hallId: order.package_id ?? null, items: current.items });
     const deposit = Number(order.deposit_amount);
     if (p.total < deposit) return fail('ORDER_TOTAL_BELOW_DEPOSIT', `Tổng mới không được nhỏ hơn tiền đã cọc (${money(deposit)}).`, 400);
     if (sameContent(p, current)) return fail('ORDER_NO_CHANGES', 'Chưa có thay đổi nào so với đơn hiện tại.', 400);

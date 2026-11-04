@@ -285,7 +285,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
       return
     }
     const content = toContent(values)
-    run(mode.kind === 'draft' ? { kind: 'draft', orderId: mode.order.id, content } : { kind: 'create', conversationId, content, send: false }, false)
+    run(mode.kind === 'draft' ? { kind: 'draft', orderId: mode.order.id, content, expectedVersion: mode.order.version } : { kind: 'create', conversationId, content, send: false }, false)
   }
 
   function submit() {
@@ -307,9 +307,9 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
 
   function doSend() {
     const content = toContent(values)
-    if (mode.kind === 'edit') run({ kind: 'edit', orderId: mode.order.id, content, changeNote: changeNote.trim() }, true)
-    else if (mode.kind === 'resend') run({ kind: 'send', orderId: mode.order.id, content, resend: true }, true)
-    else if (mode.kind === 'draft') run({ kind: 'send', orderId: mode.order.id, content, resend: false }, true)
+    if (mode.kind === 'edit') run({ kind: 'edit', orderId: mode.order.id, content, changeNote: changeNote.trim(), expectedVersion: mode.order.version }, true)
+    else if (mode.kind === 'resend') run({ kind: 'send', orderId: mode.order.id, content, resend: true, expectedVersion: mode.order.version }, true)
+    else if (mode.kind === 'draft') run({ kind: 'send', orderId: mode.order.id, content, resend: false, expectedVersion: mode.order.version }, true)
     else run({ kind: 'create', conversationId, content, send: true }, true)
   }
 

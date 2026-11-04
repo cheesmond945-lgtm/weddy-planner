@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 /*
  * Quy tắc nghiệp vụ đơn hàng dùng chung (docs/CHOT_NGHIEP_VU_NCC.md mục 4, docs/api/orders.md phần NCC).
@@ -300,4 +300,54 @@ export function carryItemPackages<T extends { id?: string | null; packageId?: st
     if (pkg && hall?.to && hall.from && pkg === hall.from && hall.to !== hall.from) pkg = hall.to;
     return { ...i, packageId: pkg };
   });
+}
+
+/**
+ * Số bàn tối thiểu của sảnh cho dòng gắn sảnh (400 "Sảnh <tên> đặt tối thiểu N bàn."). Dòng gắn sảnh = dòng có packageId trùng sảnh.
+ * Tạo / lưu nháp / gửi đơn: kiểm mọi dòng sảnh. Sửa đơn (`prior`): chỉ kiểm khi đổi sảnh hoặc số lượng dòng sảnh bị thay đổi
+ * so với dòng cùng id trước đó; đơn cũ không đổi dòng sảnh thì không kiểm (có thể đã dưới mức tối thiểu từ trước).
+ * Trả vị trí dòng và thông báo của dòng sai đầu tiên, hoặc null.
+ */
+export function hallTablesIssue(
+  items: readonly { id?: string | null; quantity: number; packageId?: string | null }[],
+  hall: { id: string; name: string; minTables: number | null },
+  prior?: { hallId: string | null; items: readonly { id?: string | null; quantity: number }[] },
+): { index: number; message: string } | null {
+  const min = hall.minTables;
+  if (!min || min <= 0) return null;
+  for (let index = 0; index < items.length; index++) {
+    const it = items[index];
+    if (it.packageId !== hall.id || it.quantity >= min) continue;
+    const before = prior && prior.hallId === hall.id && it.id ? prior.items.find((p) => p.id === it.id) : undefined;
+    if (before && before.quantity === it.quantity) continue; // đơn cũ, không đổi dòng sảnh
+    return { index, message: `Sảnh ${hall.name} đặt tối thiểu ${min} bàn.` };
+  }
+  return null;
+}
+
+/**
+ * "Phiên bản" của đơn để chặn lưu đè khi đơn đã bị sửa từ nơi khác (hai tab, NCC và khách cùng lúc). Bảng orders không có updated_at / version
+ * nên dùng dấu vân tay nội dung: băm trạng thái, thông tin khách, ngày, ghi chú, tỷ lệ cọc, sảnh, tổng tiền và các dòng (id, tên, đơn vị, số lượng, giá, gói).
+ * Mỗi lần sửa đơn các dòng được tạo lại với id mới nên sửa nào cũng đổi phiên bản.
+ */
+export function orderVersionOf(o: {
+  status: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  event_date: Date | null;
+  note: string | null;
+  deposit_percent: unknown;
+  package_id: string | null;
+  total_amount: unknown;
+  order_items: readonly { id: string; item_name: string | null; unit: string | null; quantity: number | null; unit_price: unknown; package_id: string | null }[];
+}): string {
+  const items = [...o.order_items].sort((a, b) => a.id.localeCompare(b.id)).map((i) => [i.id, i.item_name ?? '', i.unit ?? '', i.quantity ?? 0, Number(i.unit_price), i.package_id ?? null]);
+  const body = JSON.stringify([o.status, o.customer_name ?? '', o.customer_phone ?? '', o.event_date ? o.event_date.toISOString().slice(0, 10) : '', o.note ?? '', Number(o.deposit_percent), o.package_id ?? null, Number(o.total_amount), items]);
+  return createHash('sha1').update(body).digest('hex').slice(0, 16);
+}
+
+/** Phiên bản mà form mở ra (`expected`) khác phiên bản hiện tại của đơn: 409 ORDER_STALE. Không gửi `expected` thì không kiểm. */
+export function assertOrderFresh(expected: unknown, current: string): void {
+  if (expected === undefined || expected === null || expected === '') return;
+  if (expected !== current) fail('ORDER_STALE', 'Đơn đã được cập nhật ở nơi khác, vui lòng mở lại.', 409);
 }

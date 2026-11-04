@@ -148,20 +148,20 @@ export class VendorOrdersController {
   }
 
   @Put(':id/draft')
-  saveDraft(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput }) {
-    return this.orders.saveDraft(req.user.sub, id, body?.content ?? {});
+  saveDraft(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput; expectedVersion?: string }) {
+    return this.orders.saveDraft(req.user.sub, id, body?.content ?? {}, body?.expectedVersion);
   }
 
   /** Gửi đơn nháp, hoặc "Cập nhật đơn" (Pending, NeedRevision). */
   @HttpCode(200)
   @Post(':id/send')
-  send(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput }) {
+  send(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput; expectedVersion?: string }) {
     return this.orders.send(req.user.sub, id, body ?? {});
   }
 
   /** Sửa đơn sau cọc (Deposited). */
   @Patch(':id')
-  edit(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput; changeNote?: string }) {
+  edit(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput; changeNote?: string; expectedVersion?: string }) {
     return this.orders.editDeposited(req.user.sub, id, body ?? {});
   }
 

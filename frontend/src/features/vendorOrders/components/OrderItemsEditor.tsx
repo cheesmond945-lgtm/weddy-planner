@@ -155,6 +155,8 @@ export function OrderItemsEditor({ items, onChange, errors, packages, lookup, ha
                 onChange={(e) => update(it.key, { quantity: Number(e.target.value) || 0 })}
               />
               {err(errors[`item:${i}:quantity`])}
+              {/* Dòng sảnh: luôn hiện số bàn tối thiểu của gói, không đợi nhập sai */}
+              {isHall && hall?.minTables && !errors[`item:${i}:quantity`] ? <span className="mt-0.5 block text-xs text-muted-foreground">Tối thiểu {hall.minTables} bàn</span> : null}
             </div>
             <div className="min-w-0 max-md:[grid-area:price]">
               <MoneyInput

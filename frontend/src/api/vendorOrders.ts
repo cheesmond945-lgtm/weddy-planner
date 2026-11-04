@@ -71,16 +71,16 @@ export const vendorOrdersApi = {
     http.post('/vendors/me/orders', body),
 
   /** Lưu bản nháp của đơn Draft. */
-  saveDraft: (orderId: string, content: OrderContent): Promise<Order> =>
-    http.put(`/vendors/me/orders/${orderId}/draft`, { content }),
+  saveDraft: (orderId: string, content: OrderContent, expectedVersion?: string): Promise<Order> =>
+    http.put(`/vendors/me/orders/${orderId}/draft`, { content, expectedVersion }),
 
   /** Gửi đơn Draft lần đầu, hoặc "Cập nhật đơn" đơn Pending / NeedRevision (đặt lại hạn cọc 1 ngày). */
-  send: (orderId: string, content: OrderContent): Promise<Order> =>
-    http.post(`/vendors/me/orders/${orderId}/send`, { content }),
+  send: (orderId: string, content: OrderContent, expectedVersion?: string): Promise<Order> =>
+    http.post(`/vendors/me/orders/${orderId}/send`, { content, expectedVersion }),
 
   /** Sửa đơn đã cọc: hạng mục, ngày, ghi chú. Khóa tỷ lệ cọc và tiền cọc. */
-  edit: (orderId: string, content: OrderContent, changeNote: string): Promise<Order> =>
-    http.patch(`/vendors/me/orders/${orderId}`, { content, changeNote }),
+  edit: (orderId: string, content: OrderContent, changeNote: string, expectedVersion?: string): Promise<Order> =>
+    http.patch(`/vendors/me/orders/${orderId}`, { content, changeNote, expectedVersion }),
 
   /** NCC hủy đơn đã cọc, chỉ khi hôm nay còn trước ngày sự kiện. reason: CUSTOMER_REQUEST (khách mất cọc) hoặc VENDOR_UNABLE (NCC hoàn cọc ngoài hệ thống). */
   cancel: (orderId: string, body: { reason: CancelReason; note?: string }): Promise<Order> =>

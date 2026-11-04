@@ -39,7 +39,6 @@ export const CATEGORY_BUDGET_SHARE: Record<string, number> = {
   'trang-phuc': 0.1,
   makeup: 0.08,
   'chup-anh': 0.12,
-  'quay-phong-su': 0.08,
   'hoa-cuoi': 0.12,
 }
 

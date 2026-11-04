@@ -82,9 +82,9 @@ export function useOrder(orderId: string | null) {
 
 export type SaveOrderInput =
   | { kind: 'create'; conversationId: string; content: OrderContent; send: boolean }
-  | { kind: 'draft'; orderId: string; content: OrderContent }
-  | { kind: 'send'; orderId: string; content: OrderContent; resend: boolean }
-  | { kind: 'edit'; orderId: string; content: OrderContent; changeNote: string }
+  | { kind: 'draft'; orderId: string; content: OrderContent; expectedVersion?: string }
+  | { kind: 'send'; orderId: string; content: OrderContent; resend: boolean; expectedVersion?: string }
+  | { kind: 'edit'; orderId: string; content: OrderContent; changeNote: string; expectedVersion?: string }
 
 /**
  * Lưu nháp, gửi đơn, "Cập nhật đơn" hoặc sửa sau cọc từ form đơn trong chat.
@@ -99,11 +99,11 @@ export function useSaveOrder() {
         case 'create':
           return vendorOrdersApi.create({ conversationId: i.conversationId, content: i.content, send: i.send })
         case 'draft':
-          return vendorOrdersApi.saveDraft(i.orderId, i.content)
+          return vendorOrdersApi.saveDraft(i.orderId, i.content, i.expectedVersion)
         case 'send':
-          return vendorOrdersApi.send(i.orderId, i.content)
+          return vendorOrdersApi.send(i.orderId, i.content, i.expectedVersion)
         case 'edit':
-          return vendorOrdersApi.edit(i.orderId, i.content, i.changeNote)
+          return vendorOrdersApi.edit(i.orderId, i.content, i.changeNote, i.expectedVersion)
       }
     },
     onSuccess: (o, i) => {

@@ -87,6 +87,8 @@ export interface Invoice {
 /** Đơn dịch vụ (Orders) kèm hạng mục, thanh toán cọc, lịch sử chỉnh sửa, chứng từ. */
 export interface Order {
   id: string
+  /** Dấu vân tay nội dung đơn: gửi lại khi lưu để backend chặn lưu đè nếu đơn đã đổi ở nơi khác (409 ORDER_STALE) */
+  version?: string
   /** Mã hiển thị, ví dụ "DH26100004", không đổi dù sửa nhiều lần */
   orderCode: string
   conversationId: string

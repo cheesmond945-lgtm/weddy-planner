@@ -8,6 +8,7 @@
  */
 import type { Prisma } from '../../generated/prisma/client';
 import { categorySlug } from '../catalog/services.service';
+import { orderVersionOf } from './order-rules';
 import { restPaymentOf } from './rest-payment';
 
 export const ORDER_INCLUDE = {
@@ -47,6 +48,8 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
   const cat = o.vendor_profiles!.service_categories!;
   return {
     id: o.id,
+    /** Dấu vân tay nội dung đơn: form sửa gửi lại để chặn lưu đè khi đơn đã đổi ở nơi khác (orderVersionOf) */
+    version: orderVersionOf(o),
     orderCode: o.order_code,
     conversationId,
     serviceId: o.vendor_profiles!.id,

@@ -313,3 +313,8 @@ Phiên bản đơn (`versions`, v1/v2), đợt thanh toán tùy chỉnh (`instal
 
 - **Đã làm:** 4 thẻ số liệu của trang Quản lý đơn hàng do backend tính trên **toàn bộ** đơn của NCC, trả trong `GET /vendors/me/orders/counts` (trường `tiles`, định nghĩa ở mục đó). Thẻ "Đặt cọc trong tháng" đã bỏ.
 - **Đã làm (lọc ở CSDL, phân trang):** danh sách đơn lọc theo `status`, `from`/`to` (ngày sự kiện), `depositFrom`/`depositTo` (ngày cọc, giờ VN), `conversationId`, và tìm `q` theo mã đơn, tên khách, số điện thoại (số điện thoại tìm theo chuỗi lưu trong CSDL, khớp cả khi gõ liền số nếu số lưu liền). `GET /vendors/me/orders/counts` trả đủ 7 trạng thái cùng `tiles`.
+
+## Số bàn tối thiểu của sảnh và chống lưu đè (cập nhật 04/11/2026)
+
+- **Số bàn tối thiểu:** dòng gắn sảnh (`items[].packageId` = sảnh của đơn) không được thấp hơn `service_packages.min_tables`. Tạo, lưu nháp, gửi / cập nhật đơn: kiểm mọi dòng sảnh. Sửa sau cọc (`PATCH`): chỉ kiểm khi đổi sảnh hoặc số lượng dòng sảnh bị đổi. Lỗi `400 VALIDATION_ERROR`, thông báo "Sảnh <tên> đặt tối thiểu N bàn.", `details["items.<i>.quantity"]`.
+- **Chống lưu đè:** đơn trả thêm `version` (dấu vân tay nội dung, bảng `orders` không có `updated_at`). `PUT /:id/draft`, `POST /:id/send`, `PATCH /:id` nhận `expectedVersion` (tùy chọn); khác phiên bản hiện tại thì `409 ORDER_STALE` "Đơn đã được cập nhật ở nơi khác, vui lòng mở lại." Không gửi `expectedVersion` thì không kiểm.
