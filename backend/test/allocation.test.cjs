@@ -178,7 +178,7 @@ test('14. chọn 4 dịch vụ đắt rồi chọn tiệc: không chặn, có h�
   assert.equal(first.status, 'OVER_BUDGET');
   const c = a.consequenceOf(input({ categories, planVendors: services }), v.id, 232 * M);
   assert.equal(c.shortfall > 0, true);
-  assert.match(c.message, /^Chọn gói này, 1 dịch vụ còn lại còn tối đa .* thiếu /);
+  assert.match(c.message, /^Gói này làm 1 dịch vụ còn lại thiếu khoảng .*đ so với gói rẻ nhất của chúng.$/);
 });
 
 test('15. không gói tiệc nào trong giới hạn: gói rẻ nhất kèm "Vượt Y", quỹ dịch vụ trừ theo gói đó', () => {
@@ -279,13 +279,19 @@ test('T30, T46 giới hạn gợi ý của hạng mục đã chọn không phụ
   assert.equal(row(at(d.packages[2], { orderTotal: 30 * M, orderDeposited: 9 * M }), 'decor').limit, null);
 });
 
-test('T31, T54 đổi tổng ngân sách / chi phí ngoài nền tảng: tỷ lệ giữ nguyên, tiền tính lại', () => {
+test('T31, T54 đổi tổng ngân sách / chi phí ngoài nền tảng: tỷ lệ Tùy chỉnh giữ nguyên, tiền tính lại', () => {
+  // Phương án có sẵn cắt về giá gói cao nhất theo quỹ (fitToMax) nên tỷ lệ có thể đổi theo quỹ; Tùy chỉnh thì giữ nguyên
   const a2 = a.allocate(t27(2 * M));
-  const a12 = a.allocate(t27(12 * M));
-  assert.equal(a12.fund.serviceBudget, 148 * M);
-  assert.deepEqual(a12.rows.map((x) => x.ratio), a2.rows.map((x) => x.ratio));
-  const ca = row(a12, 'chup-anh');
+  const saved = { baseMode: 'BALANCED', excluded: [], capAmount: null, items: a2.rows.filter((x) => x.ratio !== null).map((x) => ({ id: x.categoryId, slug: x.slug, ratio: x.ratio, locked: false })) };
+  const c2 = a.allocate({ ...t27(2 * M), preset: 'CUSTOM', split: saved });
+  const c12 = a.allocate({ ...t27(12 * M), preset: 'CUSTOM', split: saved });
+  assert.equal(c12.fund.serviceBudget, 148 * M);
+  assert.deepEqual(c12.rows.map((x) => x.ratio), c2.rows.map((x) => x.ratio));
+  const ca = row(c12, 'chup-anh');
   assert.equal(ca.limit, Math.round((148 * M * ca.ratio) / 10000));
+  // Phương án có sẵn: không hạng mục nào được chia quá giá gói cao nhất
+  const p12 = a.allocate(t27(12 * M));
+  assert.ok(p12.rows.every((x) => x.ratio === null || x.maxPackagePrice === null || x.limit <= x.maxPackagePrice));
 });
 
 test('T55 chi phí ngoài nền tảng làm quỹ âm: quỹ 0, tỷ lệ vẫn tổng 100', () => {

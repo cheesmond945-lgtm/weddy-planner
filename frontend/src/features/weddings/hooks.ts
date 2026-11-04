@@ -157,10 +157,30 @@ function useAfterBudgetWrite() {
 
 /** Mức chia / tiệc tự lo, chi phí khác. API trả ngân sách mới, ghi thẳng vào cache. */
 export function useBudgetMutations() {
+  const uid = useCoupleId()
+  const qc = useQueryClient()
   const version = useVersion()
   const after = useAfterBudgetWrite()
   return {
-    settings: useMutation({ mutationFn: (body: BudgetSettings) => weddingsApi.updateBudgetSettings({ ...body, version: version() }), ...after }),
+    // Đổi sang một mức có sẵn: bảng chia và gói gợi ý tính lại ở client (splitView) nên đổi ngay trên cache, không chờ máy chủ
+    // (vài giây); máy chủ trả về thì ghi đè bằng số chính xác, lỗi thì trả về như cũ. Vào Tùy chỉnh vẫn chờ máy chủ tạo cấu hình.
+    settings: useMutation({
+      mutationFn: (body: BudgetSettings) => weddingsApi.updateBudgetSettings({ ...body, version: version() }),
+      onMutate: async (body) => {
+        const preset = body.budgetPreset
+        if (!preset || preset === 'CUSTOM') return undefined
+        const key = planningKeys.budget(uid)
+        await qc.cancelQueries({ queryKey: key })
+        const before = qc.getQueryData<Budget>(key)
+        if (before) qc.setQueryData<Budget>(key, { ...before, preset, split: { ...before.split, mode: preset, baseMode: preset } })
+        return { before }
+      },
+      onSuccess: after.onSuccess,
+      onError: (e: Error, _body, ctx) => {
+        if (ctx?.before) qc.setQueryData(planningKeys.budget(uid), ctx.before)
+        after.onError(e)
+      },
+    }),
     addExtraCost: useMutation({ mutationFn: (body: { name: string; amount: number }) => weddingsApi.addExtraCost({ ...body, version: version() }), onSuccess: after.onSuccess }),
     updateExtraCost: useMutation({
       mutationFn: ({ id, ...body }: { id: string; name?: string; amount?: number }) => weddingsApi.updateExtraCost(id, { ...body, version: version() }),

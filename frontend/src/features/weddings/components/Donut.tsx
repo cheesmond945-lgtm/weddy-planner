@@ -51,4 +51,7 @@ export function Donut({ slices, center, label, size = 150 }: { slices: DonutSlic
   )
 }
 
-export const CHART_COLORS = ['var(--c1)', 'var(--c2)', 'var(--c3)', 'var(--c4)', 'var(--c5)', 'var(--c6)']
+/** Màu lát biểu đồ: bảng pastel của Kế hoạch (plan-theme.css --chart-*), ngoài Kế hoạch thì dùng màu danh mục */
+export const CHART_COLORS = [1, 2, 3, 4, 5, 6].map((i) => `var(--chart-${i}, var(--c${i}))`)
+/** Lát "Chi phí khác" */
+export const CHART_OTHER = 'var(--chart-other, var(--line-strong))'

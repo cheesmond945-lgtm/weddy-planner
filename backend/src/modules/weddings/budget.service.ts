@@ -4,7 +4,7 @@ import { BUDGET_PRESETS, PRESET_LABEL, VENUE_SLUG, type BudgetPreset } from './a
 import { consequenceOf, costOf, venueFits, type AllocRow, type ChosenItem } from './allocation';
 import { BudgetCalcService, parseSplitConfig, serializeSplit } from './budget-calc.service';
 import { tableCount } from './budget-engine';
-import { BASE_MODES, initFromMode, isValidSplit, TOTAL, type BaseMode, type SplitState } from './budget-split';
+import { BASE_MODES, fitToMax, initFromMode, isValidSplit, markersOf, TOTAL, type BaseMode, type SplitState } from './budget-split';
 import { bumpVersion, versionOf } from './wedding-version';
 import { requireDbFeature } from '../../prisma/db-features';
 import { WeddingsService } from './weddings.service';
@@ -235,7 +235,11 @@ export class BudgetService {
       const { input, result } = await this.calc.compute(w.id);
       if (!input.stored) {
         const baseMode: BaseMode = input.preset === 'CUSTOM' ? 'BALANCED' : input.preset;
-        const state: SplitState = { baseMode, excluded: [], capAmount: null, items: initFromMode(result.split.members, baseMode) };
+        // Cùng tỷ lệ khách đang thấy ở phương án đó (đã cắt về giá gói cao nhất, phần thừa ở Dự phòng nếu quỹ dư)
+        const maxOf = (id: string) => result.rows.find((r) => r.categoryId === id)?.maxPackagePrice ?? null;
+        const members = result.split.members;
+        const items = fitToMax(initFromMode(members, baseMode), markersOf(members.map((m) => m.id), maxOf, result.fund.serviceBudget));
+        const state: SplitState = { baseMode, excluded: [], capAmount: null, items };
         data.custom_weights = serializeSplit(state, 1, null);
       }
     }
@@ -286,7 +290,9 @@ export class BudgetService {
     if (ids.size !== items.length || ids.size !== group.length || group.some((r) => !ids.has(r.categoryId))) {
       return invalidSplit('Cấu hình chỉ được chứa đúng các hạng mục đang nằm trong phần chia.');
     }
-    if (items.length && sum(items.map((i) => i.ratio)) !== TOTAL) return invalidSplit('Tổng tỷ lệ phải bằng 100%.');
+    // Tổng dưới 100% là Dự phòng (từ 2 hạng mục); một hạng mục luôn 100%, dùng giá trần thay cho Dự phòng
+    const ratioSum = sum(items.map((i) => i.ratio));
+    if (items.length === 1 ? ratioSum !== TOTAL : ratioSum > TOTAL) return invalidSplit(items.length === 1 ? 'Tổng tỷ lệ phải bằng 100%.' : 'Tổng tỷ lệ không được vượt 100%.');
     const valid = items as { id: string; slug: string; ratio: number; locked: boolean }[];
     if (valid.length >= 2 && valid.every((i) => i.locked)) return invalidSplit('Cần giữ ít nhất một hạng mục mở khóa để hệ thống cân đối tỷ lệ.');
     if (!isValidSplit(valid)) return invalidSplit('Cấu hình tỷ lệ không hợp lệ.');

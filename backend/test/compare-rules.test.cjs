@@ -165,7 +165,7 @@ test('đã cọc một NCC: lịch "Đã giữ … cho bạn", khóa ô chọn g
   // Một bên là giá đơn thật: không so "rẻ hơn", không gắn "Chi phí thấp nhất"
   assert.ok(r.columns.every((x) => !x.labels.cheapest));
   assert.deepEqual(r.summary, []);
-  assert.equal(r.lockNote, 'Bạn đã cọc Trống Đồng ngày 28/11, nên chưa thêm được nhà cung cấp khác ở đây. Đổi sang nhà cung cấp khác có thể mất tiền cọc 2.000.000đ (tùy chính sách nhà cung cấp; dòng "Nếu đổi nhà cung cấp" đã tính khoản này). Muốn đổi, hãy nhắn Trống Đồng hoặc hủy đơn ở tab Dịch vụ.');
+  assert.equal(r.lockNote, 'Bạn đã cọc Trống Đồng cho ngày cưới 28/11 nên chưa thêm được nhà cung cấp khác. Đổi nhà cung cấp có thể mất 2.000.000đ tiền cọc. Muốn đổi, hãy nhắn Trống Đồng hoặc hủy đơn.');
 });
 
 test('mọi bên cao hơn mức gợi ý: một dòng chung; hệ quả "Chọn gói này thì còn X" làm tròn 10.000đ; dòng giống nhau được gộp', () => {

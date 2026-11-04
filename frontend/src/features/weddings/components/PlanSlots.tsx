@@ -1,15 +1,13 @@
 import { Trash2 } from 'lucide-react'
-import type { CSSProperties } from 'react'
 import { Link } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
-import { CategoryIcon, categoryColor } from '@/features/catalog/categoryIcons'
+import { CategoryIcon } from '@/features/catalog/categoryIcons'
 import { RatingMeta } from '@/features/catalog/components/RatingMeta'
 import { useCategories } from '@/features/catalog/hooks'
 import { CategoryOrders } from '@/features/orders/components/CategoryOrders'
 import { formatMoney } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { Order } from '@/types/order'
 import type { PlanItem } from '@/types/wedding'
@@ -75,17 +73,21 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, 
         const catItems = items.filter((i) => i.service.category.slug === slug)
         const extra = extraSlugs.includes(slug)
         return (
-          <section key={slug} className="mb-[26px]" style={{ '--cc': categoryColor(slug) } as CSSProperties}>
-            <h2 className="mb-2.5 flex items-center gap-2.5 text-lg">
-              <CategoryIcon slug={slug} size={20} className="text-(--cc)" />
+          <section key={slug} className="mb-9">
+            {/* Tiêu đề hạng mục: biểu tượng một màu xanh rêu trong vòng tròn nhạt (không dùng màu riêng từng hạng mục), đường kẻ mảnh kéo dài */}
+            <h2 className="mb-3.5 flex items-center gap-3">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-[var(--moss-700)]">
+                <CategoryIcon slug={slug} size={18} />
+              </span>
               {name}
+              <span aria-hidden className="h-px flex-1 bg-line" />
             </h2>
             {catItems.length ? (
               <div className="flex flex-col gap-2.5">
                 {catItems.map((item) => (
-                  <div key={item.id} className="flex flex-wrap items-center gap-4 rounded-lg border border-line bg-surface px-[18px] py-4">
+                  <article key={item.id} className="flex flex-wrap items-center gap-4 rounded-lg border border-line bg-surface px-[22px] py-[18px]">
                     <div className="min-w-[200px] flex-1">
-                      <b className="font-serif text-base font-semibold">{item.service.name}</b>
+                      <b className="font-serif text-[19px] font-semibold">{item.service.name}</b>
                       <RatingMeta service={item.service} />
                       <PackageSwitcher item={item} guestCount={guestCount} />
                     </div>
@@ -100,9 +102,9 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, 
                       </Button>
                       {(item.status === 'PLANNED' || item.status === 'DISCUSSING') && (
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="icon"
-                          className="size-8"
+                          className="size-8 text-muted-foreground hover:text-warn"
                           aria-label={`Bỏ ${item.service.name} khỏi kế hoạch`}
                           disabled={remove.isPending}
                           onClick={() => remove.mutate(item.id)}
@@ -111,12 +113,12 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, 
                         </Button>
                       )}
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             ) : extra ? null : (
-              <div className={cn('flex flex-wrap items-center gap-4 rounded-lg border border-dashed border-line px-[18px] py-4')}>
-                <div className="min-w-[200px] flex-1 text-muted-foreground">Chưa chọn dịch vụ cho hạng mục này.</div>
+              <div className="flex flex-wrap items-center gap-4 rounded-lg border border-dashed border-line-strong/60 px-[22px] py-[18px]">
+                <div className="min-w-[200px] flex-1 text-[15px] text-muted-foreground">Chưa chọn dịch vụ cho hạng mục này.</div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button asChild variant="outline" size="sm">
                     <Link to={`${paths.services}?category=${slug}`}>Xem dịch vụ</Link>

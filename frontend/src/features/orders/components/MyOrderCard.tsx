@@ -1,7 +1,12 @@
 import { MessageCircle } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
+import { chatApi } from '@/api/chat'
 import { Badge } from '@/components/Badge'
+import { chatPanel } from '@/features/chat/chatPanel'
+import { planningKeys } from '@/features/weddings/hooks'
+import { useAuth } from '@/store/auth'
 import { Button } from '@/components/ui/button'
 import { canRequestRevision, depositDeadline, formatDayTime } from '@/features/vendorOrders/calc'
 import { REST_TONE_CLASS, restLabel } from '@/features/vendorOrders/restPayment'
@@ -34,8 +39,28 @@ const row = (label: string, value: ReactNode) => (
 export function MyOrderCard({ order: o, onRevise }: { order: Order; onRevise: (o: Order) => void }) {
   useNow()
   const navigate = useNavigate()
+  const qc = useQueryClient()
+  const { user } = useAuth()
   const [detail, setDetail] = useState(false)
   const [invoice, setInvoice] = useState<InvoiceType | null>(null)
+  const [opening, setOpening] = useState(false)
+
+  // "Nhắn NCC": mở khung chat trượt bên phải (như nút Nhắn tin ở thẻ dịch vụ) thay vì chuyển sang trang Tin nhắn;
+  // không tìm thấy hội thoại (danh sách chưa tải được) thì mới mở trang Tin nhắn
+  const openChat = async (conversationId: string) => {
+    const page = () => navigate(`${paths.chat}?c=${encodeURIComponent(conversationId)}`)
+    setOpening(true)
+    try {
+      const list = await qc.fetchQuery({ queryKey: planningKeys.conversations(user?.id), queryFn: chatApi.listConversations, staleTime: 30_000 })
+      const conversation = list.find((c) => c.id === conversationId)
+      if (conversation) chatPanel.open({ conversation, draft: '', packageName: null })
+      else page()
+    } catch {
+      page()
+    } finally {
+      setOpening(false)
+    }
+  }
 
   const status = ORDER_STATUS[o.status]
   const dueMs = o.depositDueDate ? new Date(o.depositDueDate).getTime() - Date.now() : null
@@ -105,9 +130,9 @@ export function MyOrderCard({ order: o, onRevise }: { order: Order; onRevise: (o
           </Button>
         )}
         {o.conversationId && (
-          <Button variant="ghost" size="sm" onClick={() => navigate(`${paths.chat}?c=${encodeURIComponent(o.conversationId)}`)}>
+          <Button variant="ghost" size="sm" disabled={opening} onClick={() => void openChat(o.conversationId!)}>
             <MessageCircle />
-            Nhắn NCC
+            {opening ? 'Đang mở…' : 'Nhắn NCC'}
           </Button>
         )}
       </div>

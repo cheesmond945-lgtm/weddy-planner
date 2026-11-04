@@ -11,12 +11,12 @@
   letter-spacing: -0.005em;
 }
 
-.budget-theme :is(h2, h3, strong, b, th, button, label, dt, dd, .font-medium, .font-semibold) {
+.budget-theme :is(strong, b, th, button, label, dt, dd, .font-medium, .font-semibold):not(h1, h2, h3) {
   font-family: var(--budget-font);
 }
 
 /* Số liệu: bỏ serif của thẻ số, dùng Lexend chữ số đều nhau */
-.budget-theme .font-serif {
+.budget-theme .font-serif:not(h1, h2, h3) {
   font-family: var(--budget-font);
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -24,14 +24,6 @@
 .budget-theme .tabular-nums,
 .budget-theme input {
   font-variant-numeric: tabular-nums;
-}
-
-/* Tiêu đề khối: gọn, không serif (đè kiểu tạp chí của .plan-theme) */
-.budget-theme h2 {
-  font-size: 1.05rem;
-  font-weight: 500;
-  letter-spacing: 0;
-  line-height: 1.3;
 }
 
 /* Thẻ: bo lớn, viền nhạt */
@@ -143,13 +135,16 @@
   backdrop-filter: blur(4px);
 }
 
-/* Tiêu đề khối: chữ có chân thanh mảnh, nghiêng nhẹ (như "WEDNESDAY 9 JULY") */
-.budget-theme h2 {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: 1.55rem;
+/* Tiêu đề khối: Playfair Display đứng (cùng font tiêu đề toàn web, như "Dịch vụ yêu thích") */
+.budget-theme :is(h1, h2, h3) {
+  font-family: var(--serif);
+  font-style: normal;
   font-weight: 600;
-  font-style: italic;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.015em;
+}
+.budget-theme h2 {
+  font-size: 1.55rem;
+  line-height: 1.25;
 }
 
 
@@ -176,52 +171,40 @@
 }
 
 /* Danh sách mức chi khi ba mức có sẵn bị khóa: mỗi dịch vụ một màu pastel (chấm, thanh, nền khi rê chuột) */
-.budget-spend li {
-  --dot: #9dbf82;
-  --dot-soft: #eef4e5;
-  transition: background-color 0.15s ease;
+/*
+ * Danh sách mức chi khi quỹ dư (chỉ đọc): một tông ô liu cùng thanh quỹ thay cho mỗi dịch vụ một màu, thanh mảnh, dòng phân cách
+ * bằng đường kẻ. Thanh dài theo mức chi so với dịch vụ chi nhiều nhất.
+ */
+.budget-spend {
+  --spend: #8a8e56;
+  --spend-soft: #b4b682;
+  --spend-track: color-mix(in srgb, #8a8e56 11%, transparent);
 }
-.budget-spend li:nth-child(5n + 2) {
-  --dot: #efa98a;
-  --dot-soft: #fcefe6;
+:root[data-theme='dark'] .budget-spend {
+  --spend: #c2c48c;
+  --spend-soft: #8f9160;
+  --spend-track: color-mix(in srgb, #c2c48c 14%, transparent);
 }
-.budget-spend li:nth-child(5n + 3) {
-  --dot: #a99adb;
-  --dot-soft: #f1eef9;
-}
-.budget-spend li:nth-child(5n + 4) {
-  --dot: #e6c35c;
-  --dot-soft: #fbf5df;
-}
-.budget-spend li:nth-child(5n + 5) {
-  --dot: #e79aa8;
-  --dot-soft: #fcecef;
-}
-.budget-spend li:hover {
-  background: var(--dot-soft);
-}
-:root[data-theme='dark'] .budget-spend li:hover {
-  background: color-mix(in srgb, var(--dot) 12%, transparent);
-}
-.budget-dot {
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--dot);
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .budget-spend {
+    --spend: #c2c48c;
+    --spend-soft: #8f9160;
+    --spend-track: color-mix(in srgb, #c2c48c 14%, transparent);
+  }
 }
 .budget-bar {
   display: block;
-  height: 8px;
+  height: 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--dot) 18%, transparent);
+  background: var(--spend-track);
   overflow: hidden;
 }
 .budget-bar > i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--dot);
+  background: linear-gradient(90deg, var(--spend-soft), var(--spend));
+  transition: width 0.3s ease;
 }
 
 /* Thanh quỹ dịch vụ (chỉ đọc, khác thanh kéo): phần chi tối đa màu ô liu đặc, phần còn dư sọc chéo nhạt; không có núm */

@@ -1,15 +1,14 @@
 import { Ban, CalendarDays, Check, Clock, Hourglass, Lock, MessageSquareText, Pencil, RotateCcw, Trash2 } from 'lucide-react'
-import type { KeyboardEvent } from 'react'
-import { Link } from 'react-router'
+import { useState, type KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { DateChip } from '@/features/vendorOrders/components/TaskDateRow'
 import { TaskTitle } from '@/features/vendorOrders/components/TaskTitle'
 import { daysBetween, formatDate, parseDate, today } from '@/lib/date'
 import { TASK_LABELS } from '@/lib/taskLabels'
 import { cn } from '@/lib/utils'
-import { paths } from '@/routes/paths'
 import type { TimelineItem } from '@/types/wedding'
 import { DUE_SOON_DAYS } from '../timelineFilter'
+import { SuggestionsDialog } from './SuggestionsPanel'
 
 /** Tên hạng mục dùng trong chữ ("Gợi ý nhà hàng", "Việc chi tiết của nhà hàng"); danh mục lạ thì dùng tên từ API. */
 export const SERVICE_LABEL: Record<string, string> = {
@@ -104,6 +103,7 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
   const grayDone = done && vendorOwned
   // Nút "Gợi ý {dịch vụ}" theo cờ `suggest` của backend (việc Chọn NCC đầu tiên của dịch vụ; Mốc chốt Todo có đơn đã hủy). Việc đã tick xong vẫn giữ nút.
   const suggests = item.suggest && !!item.category
+  const [suggesting, setSuggesting] = useState(false)
   const label = serviceLabel(item)
   const hintId = `hint-${item.id}`
 
@@ -231,12 +231,13 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
       {/* Bấm nút trong thẻ không mở hộp xác nhận */}
       <div className="flex flex-wrap items-center gap-2 max-[640px]:w-full max-[640px]:pl-[42px]" onClick={(e) => e.stopPropagation()}>
         {suggests && item.category && (
-          <Button asChild variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5">
-            {/* ai=1: trang Dịch vụ bật khung gợi ý (tối đa 3 nhà cung cấp) như nút gợi ý ở Kế hoạch (useAiSuggest) */}
-            <Link to={`${paths.services}?category=${item.category.slug}&ai=1`}>
+          <>
+            {/* Popup 3 nhà cung cấp gợi ý ngay trên Timeline; "Xem thêm" mới sang trang Dịch vụ cưới */}
+            <Button variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5" onClick={() => setSuggesting(true)}>
               <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${label}`} →</span>
-            </Link>
-          </Button>
+            </Button>
+            <SuggestionsDialog categorySlug={item.category.slug} categoryName={item.category.name} open={suggesting} onOpenChange={setSuggesting} />
+          </>
         )}
         {!done && item.isCustom && (
           <span className="flex gap-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">

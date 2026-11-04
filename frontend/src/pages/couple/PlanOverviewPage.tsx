@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
-import { CHART_COLORS, Donut } from '@/features/weddings/components/Donut'
+import { CHART_COLORS, CHART_OTHER, Donut } from '@/features/weddings/components/Donut'
 import { usePlanContext } from '@/features/weddings/components/PlanHub'
 import { StackBar, StatCard, StatGrid } from '@/features/weddings/components/StatCard'
 import { SpendingServicesCard } from '@/features/weddings/components/SpendingServicesCard'
@@ -185,7 +185,7 @@ function CostCard({ budget }: { budget: NonNullable<Overview['budget']> }) {
             key: s.slug,
             label: s.name,
             value: s.amount,
-            color: s.slug === 'other' ? 'var(--line-strong)' : CHART_COLORS[i % CHART_COLORS.length],
+            color: s.slug === 'other' ? CHART_OTHER : CHART_COLORS[i % CHART_COLORS.length],
             note: formatMoney(s.amount),
             warn: s.isOver,
           }))}

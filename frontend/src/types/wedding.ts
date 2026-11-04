@@ -256,7 +256,7 @@ export interface BudgetPackageOption {
   cost: number
   chargedTables: number | null
   fits: boolean
-  /** "Chọn gói này, 5 dịch vụ còn lại còn tối đa X so với gói rẻ nhất cần Y, thiếu Z."; null khi không thiếu */
+  /** "Gói này làm 5 dịch vụ còn lại thiếu khoảng Z so với gói rẻ nhất của chúng." (làm tròn 10.000đ); null khi không thiếu */
   consequence: string | null
 }
 
@@ -549,6 +549,8 @@ export interface AiSuggestion {
   /** Dưới ngưỡng số lượt đánh giá: nhãn "Ít đánh giá" */
   fewReviews?: boolean
   package?: AiSuggestedPackage
+  /** Cùng phường/xã với nơi tổ chức (gợi ý xếp những NCC này trước); dữ liệu giả có thể không có */
+  sameWard?: boolean
 }
 
 export interface AiSuggestionResult {

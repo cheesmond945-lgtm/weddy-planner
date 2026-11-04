@@ -1,6 +1,7 @@
-import { CalendarCheck, CalendarX, CalendarClock, TriangleAlert } from 'lucide-react'
+import { CalendarCheck, CalendarX, CalendarClock } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
+import { VENUE_SLUG } from '@/features/availability/status'
 import { Button } from '@/components/ui/button'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -22,12 +23,12 @@ interface CompareTableProps {
 
 /** Nhãn theo dòng (chỉ khi các bên khác nhau, BE quyết định) */
 function RowBadge({ children }: { children: ReactNode }) {
-  return <span className="mt-1.5 inline-flex rounded-pill bg-sage-soft px-2.5 py-[3px] text-xs font-semibold whitespace-nowrap text-sage">{children}</span>
+  return <span className="mt-1.5 inline-flex rounded-pill bg-sage-soft px-3 py-1 text-[13px] font-semibold whitespace-nowrap text-sage">{children}</span>
 }
 
 const Muted = ({ children }: { children: ReactNode }) => <span className="text-muted-foreground">{children}</span>
 const Small = ({ children, className }: { children: ReactNode; className?: string }) => (
-  <div className={cn('mt-1 text-[13px] text-muted-foreground', className)}>{children}</div>
+  <div className={cn('mt-1 text-[14px] text-muted-foreground', className)}>{children}</div>
 )
 
 /** Lịch ngày cưới ngay dưới tên NCC: Còn trống (xanh), Đã kín (đỏ), Chưa xác nhận (xám) */
@@ -41,7 +42,7 @@ const DAY_STYLE = {
 function DayBadge({ a }: { a: NonNullable<CompareColumn['availability']> }) {
   const { icon: Icon, cls } = DAY_STYLE[a.status]
   return (
-    <span className={cn('mt-1.5 inline-flex items-center gap-1.5 rounded-pill px-2.5 py-[3px] text-xs font-semibold', cls)}>
+    <span className={cn('mt-1.5 inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-[13px] font-semibold', cls)}>
       <Icon className="size-3.5" aria-hidden />
       {a.text}
     </span>
@@ -54,14 +55,16 @@ type Row =
 
 /**
  * Bảng so sánh 2–3 dịch vụ cùng hạng mục (3.4). Hàng đầu cố định khi cuộn: tên NCC, lịch ngày cưới, nút.
- * Thứ tự dòng: Chọn gói (đã cọc: khóa); Tổng chi phí ước tính; So với mức gợi ý; Nếu chọn gói này / Nếu đổi nhà cung cấp; Giống nhau (dòng gộp); Số bàn tính phí (tiệc);
+ * Thứ tự dòng: Chọn gói (đã cọc: khóa); Tổng chi phí ước tính; Giống nhau (dòng gộp); Số bàn tính phí (tiệc);
  * Vị trí; Sức chứa (tiệc); Đánh giá; Điểm nổi bật. NCC đã kín ngày cưới thì làm mờ cột. Không có đề xuất, chỉ nhãn theo dòng.
  */
 export function CompareTable({ result, onPick, updating, renderAdd, renderQuote }: CompareTableProps) {
-  const { columns, rows: show, budgetNote, sameNote, consequenceLabel, locationNote } = result.comparison
+  const { columns, rows: show, sameNote, locationNote } = result.comparison
   const services = result.items
   const pairs = columns.map((c) => ({ c, s: services.find((x) => x.id === c.id)! }))
-  const faded = (c: CompareColumn) => c.availability?.status === 'FULL'
+  // Lịch ngày cưới chỉ nhà cung cấp tiệc cập nhật; các hạng mục khác không có lịch nên không so (luôn "Chưa xác nhận")
+  const withDay = result.category.slug === VENUE_SLUG
+  const faded = (c: CompareColumn) => withDay && c.availability?.status === 'FULL'
 
   const rows: Row[] = [
     {
@@ -110,7 +113,7 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
         if (c.total === null) return <Muted>{formatMoney(c.package.price)} × số bàn</Muted>
         return (
           <>
-            <b className="font-semibold">{formatMoney(c.total)}</b>
+            <b className="compare-total font-semibold">{formatMoney(c.total)}</b>
             {c.formula && <Small>{c.formula}</Small>}
             {c.assumption && <Small>{c.assumption}</Small>}
             {c.labels.cheapest && (
@@ -122,47 +125,7 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
         )
       },
     },
-    // Mọi bên đều cao hơn mức gợi ý: một dòng chung thay cho chữ đỏ lặp lại ở từng cột
-    ...(show.budget
-      ? [
-          budgetNote
-            ? {
-                label: 'So với mức gợi ý',
-                span: (
-                  <span className="inline-flex items-start gap-1.5 text-warn">
-                    <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    {budgetNote}
-                  </span>
-                ),
-              }
-            : {
-                label: 'So với mức gợi ý',
-                cell: (c: CompareColumn) =>
-                  !c.budget ? (
-                    <Muted>—</Muted>
-                  ) : (
-                    <span className={c.budget.kind === 'OVER' ? 'text-warn' : c.budget.kind === 'LEFT' ? 'text-sage' : 'text-ink'}>{c.budget.text}</span>
-                  ),
-              },
-        ]
-      : []),
-    ...(show.consequence
-      ? [
-          {
-            label: consequenceLabel,
-            cell: (c: CompareColumn) =>
-              !c.consequence ? (
-                <Muted>—</Muted>
-              ) : (
-                <>
-                  <span className={cn('font-medium')}>{c.consequence.text}</span>
-                  {/* Phép tính đầy đủ (làm tròn 10.000đ như tab Ngân sách) để con số minh bạch */}
-                  <Small className="text-[12px]">{c.consequence.detail}</Small>
-                </>
-              ),
-          },
-        ]
-      : []),
+    // Không có dòng "So với mức gợi ý" và "Nếu chọn gói này": bảng chỉ để đối chiếu các bên; mức gợi ý đã ghi một lần trên bảng
     ...(sameNote ? [{ label: 'Giống nhau', span: <span>{sameNote.replace(/^Giống nhau: /, '')}</span> }] : []),
     ...(show.tables
       ? [
@@ -234,22 +197,21 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
   return (
     // Màn rộng không cuộn ngang trong bảng để hàng đầu (tên NCC, lịch, nút) dính được khi cuộn trang
     <div
-      className={cn('overflow-x-auto rounded-lg border border-line bg-surface transition-opacity lg:overflow-visible', updating && 'opacity-60')}
+      className={cn('compare-card overflow-x-auto rounded-lg border border-line bg-surface transition-opacity lg:overflow-visible', updating && 'opacity-60')}
       aria-busy={updating || undefined}
     >
-      <table className="w-full min-w-[620px] border-collapse text-[14px]">
+      <table className="w-full min-w-[620px] border-collapse text-[16px]">
         <thead className="sticky top-[76px] z-10 bg-surface shadow-[0_6px_10px_-8px_rgb(var(--shadow-rgb)/0.25)]">
           <tr>
             <th className="w-[160px] px-4 pt-[13px] pb-2.5">
               <span className="sr-only">Tiêu chí</span>
             </th>
-            {pairs.map(({ c, s }) => (
-              <th key={c.id} scope="col" className="px-4 pt-[13px] pb-2.5 text-left align-top font-normal">
+            {pairs.map(({ c }) => (
+              <th key={c.id} scope="col" className="compare-vendor px-4 pt-[18px] pb-2.5 text-left align-top font-normal">
                 <div className={cn(faded(c) && 'opacity-55')}>
-                  <span className="font-serif text-[17px] font-semibold">{c.name}</span>
-                  <div className="mt-0.5 text-[13px] font-medium text-muted-foreground">{s.location}</div>
+                  <span className="compare-vendor-name font-serif text-[17px] font-semibold">{c.name}</span>
                 </div>
-                {c.availability && (
+                {withDay && c.availability && (
                   <div>
                     <DayBadge a={c.availability} />
                   </div>
@@ -269,13 +231,16 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
                   {!s.packages.length ? (
                     renderQuote?.(s)
                   ) : c.canAdd ? (
-                    renderAdd(s)
+                    <span className="compare-primary contents">{renderAdd(s)}</span>
                   ) : (
-                    <Button size="sm" disabled title={c.blockReason ?? undefined}>
-                      Thêm vào kế hoạch
-                    </Button>
+                    // Bị khóa (đã cọc NCC khác, đã kín ngày, không đủ chỗ): cùng nút đen, mờ đi
+                    <span className="compare-primary contents">
+                      <Button size="sm" disabled title={c.blockReason ?? undefined}>
+                        Thêm vào kế hoạch
+                      </Button>
+                    </span>
                   )}
-                  <Button asChild variant="outline" size="sm" className="border-gold-500 text-gold-800 hover:bg-gold-100">
+                  <Button asChild variant="outline" size="sm" className="compare-secondary border-gold-500 text-gold-800 hover:bg-gold-100">
                     <Link to={paths.serviceDetail(c.id)}>Xem chi tiết</Link>
                   </Button>
                 </div>
@@ -289,7 +254,7 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
             <tr key={r.label}>
               <th scope="row" className={cn(cell, 'text-left font-medium text-muted-foreground')}>
                 {r.label}
-                {r.hint && <span className="mt-0.5 block text-[12px] font-normal">{r.hint}</span>}
+                {r.hint && <span className="mt-0.5 block text-[13px] font-normal">{r.hint}</span>}
               </th>
               {'span' in r ? (
                 <td colSpan={pairs.length} className={cn(cell, 'bg-surface-2/60')}>

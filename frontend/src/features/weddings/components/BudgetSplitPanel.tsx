@@ -1,4 +1,4 @@
-import { AlertTriangle, Info, Lock, LockOpen, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, Info, Lock, LockOpen, PiggyBank, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import { MoneyInput } from '@/components/MoneyInput'
 import { Button } from '@/components/ui/button'
@@ -7,20 +7,24 @@ import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { Budget } from '@/types/wedding'
 import {
+  clampToMax,
+  DISPLAY_ROUND_UNIT,
   displayMoney,
   excludeCategory,
+  fitToMax,
   includeCategory,
   parsePercent,
   ratioFromAmount,
   ratioText,
-  rebalance,
   resetToBase,
   setLock,
+  setReserve,
+  setServiceRatio,
   TOTAL,
-  trimToMax,
+  type SplitItem,
   type SplitState,
 } from '../budgetSplit'
-import { type SplitRowView, type SplitView } from '../budgetSplitView'
+import { presetMarkers, presetsSame, type SplitRowView, type SplitView } from '../budgetSplitView'
 import { useBudgetMutations, useSaveWedding, useWedding } from '../hooks'
 import { PRESET_LABEL } from '../presets'
 import type { useBudgetSplit } from '../useBudgetSplit'
@@ -44,9 +48,16 @@ const MSG = {
   negative: 'Tỷ lệ không được âm, đã đưa về 0%.',
   capMax: (fund: number) => `Giá trần tối đa là ${money(fund)}.`,
   overMax: (name: string, max: number) => `Đã dừng ở giá gói đắt nhất của ${name} (${money(max)}), chia thêm cũng không dùng được.`,
+  reserveMin: (ratio: number) => `Mọi dịch vụ đã đủ gói đắt nhất, Dự phòng còn ít nhất ${ratioText(ratio)}%.`,
 }
 
 type Split = ReturnType<typeof useBudgetSplit>
+
+/**
+ * Lưới chung của các dòng chia (dịch vụ và Dự phòng): tên, thanh kéo, ô % quỹ, ô số tiền, cột nút. Cột nút rộng cố định để dòng
+ * không có nút (Dự phòng, mức có sẵn) vẫn thẳng cột với dòng có nút khóa / Tự lo.
+ */
+const ROW_GRID = 'grid grid-cols-[140px_1fr_118px_150px_96px] items-center gap-3 text-sm max-[760px]:grid-cols-[1fr_110px_130px]'
 
 /**
  * Phần chia ngân sách cho dịch vụ (tài liệu "Luồng Tùy chỉnh ngân sách" v1.2, mục 3–7):
@@ -73,12 +84,13 @@ export function BudgetSplitPanel({
   /** Quỹ đủ cho gói đắt nhất của mọi dịch vụ (presetsLocked, tính ở trang): ẩn ba mức và Tùy chỉnh */
   surplus: boolean
 }) {
-  const { settings } = useBudgetMutations()
+  const { settings, removeExtraCost } = useBudgetMutations()
   const [cost, setCost] = useState<number | null>(null)
   const st = split.draft
   const custom = view.custom && !!st
   const sb = b.fund.serviceBudget
-  const hasVenue = b.categories.some((c) => c.kind === 'VENUE')
+  // Tên hạng mục tiệc cho dòng "Tự lo" (kế hoạch không có hạng mục tiệc mà vẫn tự lo thì ghi chung)
+  const venueName = b.categories.find((c) => c.kind === 'VENUE')?.name ?? 'Tiệc cưới'
   const wedding = useWedding().data
   const save = useSaveWedding()
   // "Thêm trung tâm tiệc": thêm hạng mục tiệc vào "Dịch vụ muốn sử dụng" (giữ nguyên các thông tin khác, không gửi mức chia / giờ chính)
@@ -92,25 +104,25 @@ export function BudgetSplitPanel({
   }
   const nameOf = (id: string) => b.categories.find((c) => c.categoryId === id)?.name ?? ''
 
-  // Một thao tác của khách trên cấu hình Tùy chỉnh
-  const edit = (next: SplitState, save = true) => {
+  // Một thao tác của khách trên cấu hình Tùy chỉnh: chỉ đổi bản nháp, bấm "Lưu" mới gửi
+  const edit = (next: SplitState) => {
     onTouch()
-    split.update(next, save)
+    split.update(next)
   }
+  const markers = Object.fromEntries(view.rows.map((x) => [x.item.id, x.marker]))
+  // Kéo / nhập một dịch vụ: không quá gói đắt nhất (tiền vượt không mua được gì); giảm thì vào Dự phòng, tăng thì lấy Dự phòng trước
   const setRatio = (id: string, wanted: number, save: boolean) => {
     if (!st) return
-    // Không cho chia quá giá gói đắt nhất khi còn dịch vụ khác nhận được phần đó (tiền vượt gói đắt nhất không mua được gì).
-    // Mọi dịch vụ khác đều đã đủ (quỹ dư) thì vẫn cho, phần vượt tính vào "Còn dư".
-    const marker = view.rows.find((x) => x.item.id === id)?.marker ?? null
-    const markerOf = (x: string) => view.rows.find((v) => v.item.id === x)?.marker ?? null
-    const room = st.items.some((c) => c.id !== id && !c.locked && (markerOf(c.id) === null || c.ratio < markerOf(c.id)!))
-    if (marker !== null && wanted > marker && room) {
-      if (save) toast(MSG.overMax(nameOf(id), b.categories.find((c) => c.categoryId === id)?.maxPackagePrice ?? 0))
-      wanted = marker
-    }
-    const r = rebalance(st.items, id, wanted)
-    if (r.clamped && save) toast(MSG.max(r.max))
-    edit({ ...st, items: r.items }, save)
+    const r = setServiceRatio(st.items, id, wanted, markers)
+    if (save && r.limit === 'MARKER') toast(MSG.overMax(nameOf(id), b.categories.find((c) => c.categoryId === id)?.maxPackagePrice ?? 0))
+    if (save && r.limit === 'SHARE') toast(MSG.max(r.max))
+    edit({ ...st, items: r.items })
+  }
+  const setReserveRatio = (wanted: number, save: boolean) => {
+    if (!st) return
+    const r = setReserve(st.items, wanted, markers)
+    if (save && r.limited) toast(MSG.reserveMin(r.reserve))
+    edit({ ...st, items: r.items })
   }
   const exclude = (id: string) => {
     if (!st) return
@@ -118,11 +130,20 @@ export function BudgetSplitPanel({
     if (r.unlocked) toast(MSG.unlocked(nameOf(r.unlocked)), 6000)
     edit(r.state)
   }
+  // "Thêm lại": dịch vụ hết tự lo nên xóa luôn khoản chi phí tự lo cùng tên trong "Chi phí khác"; khoản đó xóa ngay trên máy chủ
+  // nên phần chia cũng lưu ngay (không chờ nút Lưu), để "Hủy" không để lại dịch vụ tự lo mà mất chi phí
   const include = (id: string) => {
     const e = b.split.eligible.find((x) => x.categoryId === id)
     if (!st || !e) return
     const group = [...view.group, { id, slug: e.slug, median: e.median }]
     edit(includeCategory(st, { id, slug: e.slug, median: e.median }, group))
+    const name = nameOf(id)
+    const cost = ownCostRow(b, name)
+    if (!cost) return split.save()
+    removeExtraCost.mutate(cost.id, {
+      onSuccess: () => (toast(`Đã thêm lại ${name} và bỏ chi phí tự lo ${money(cost.amount)} khỏi Chi phí khác`), split.save()),
+      onError: () => split.save(),
+    })
   }
   const lock = (id: string, value: boolean) => {
     if (!st) return
@@ -136,18 +157,23 @@ export function BudgetSplitPanel({
   const unlockedCount = view.rows.filter((r) => !r.item.locked).length
   // Quỹ dư (tính ở trang, dùng chung với bảng): ẩn ba mức và Tùy chỉnh, mỗi dịch vụ một dòng "tối đa = gói đắt nhất"
   const presetLocked = surplus
-  // Tùy chỉnh mà mọi dịch vụ đều vượt gói đắt nhất: một dòng chung thay cho cảnh báo từng dòng
-  const allWarn = view.rows.length > 1 && view.rows.every((r) => r.warn)
-  // Một nút chung thay cho nút "Về mức gói cao nhất" ở từng dòng: chỉ hiện khi còn dịch vụ dưới vạch để nhận phần thừa
-  const trimmed = custom && st ? trimToMax(st.items, Object.fromEntries(view.rows.map((r) => [r.item.id, r.marker]))) : null
-  const canTrim = !!trimmed && trimmed.some((c, i) => c.ratio !== st!.items[i].ratio)
-  const overCount = view.rows.filter((r) => r.warn).length
+  // Ba mức cho cùng số tiền (quỹ gần đủ cho gói đắt nhất): ẩn ba thẻ nhưng vẫn cho Tùy chỉnh. Đang Tùy chỉnh thì vẫn hiện để quay lại.
+  const same = !surplus && !custom && presetsSame(b)
+  const many = custom && !!st && view.rows.length > 1
+  // Tùy chỉnh mà quỹ lớn hơn tổng giá gói đắt nhất: một dòng thông tin chung. `spare` là phần thừa tối thiểu (nằm ở Dự phòng).
+  const roomy = many && view.surplus
+  const spare = roomy ? sb - view.rows.reduce((t, r) => t + (r.category.maxPackagePrice ?? 0), 0) : 0
+  const changed = (xs: SplitItem[]) => xs.some((c, i) => c.ratio !== st!.items[i].ratio)
+  // Dịch vụ đang vượt vạch (quỹ tăng làm vạch thấp xuống, hoặc vừa chuyển từ mức có sẵn): đưa về vạch, phần vượt vào Dự phòng
+  const clamped = many ? clampToMax(st!.items, markers) : null
+  // Quỹ dư: mọi dịch vụ đúng gói đắt nhất, phần còn lại ở Dự phòng
+  const filled = roomy && clamped ? setReserve(clamped, 0, markers).items : null
 
   return (
     <section ref={panelRef} className="mb-5 flex flex-col gap-4 rounded-lg border border-line bg-surface px-[22px] py-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          {presetLocked ? (
+          {presetLocked || same ? (
             <h2 className="leading-tight">Mức chia ngân sách</h2>
           ) : (
             <BudgetPresetPicker
@@ -175,7 +201,7 @@ export function BudgetSplitPanel({
           {custom ? (
             <>
               <span className="text-[12px] text-muted-foreground">Đang dùng tỷ lệ của bạn</span>
-              <SaveStatus status={split.status} />
+              <SaveStatus status={split.status} unsaved={split.unsaved} />
             </>
           ) : (
             settings.isPending && <span className="text-[12px] text-muted-foreground">Đang đổi mức chia…</span>
@@ -189,7 +215,7 @@ export function BudgetSplitPanel({
         fundNotice={fundNotice}
         busy={save.isPending || settings.isPending || !wedding}
         onAddVenue={addVenue}
-        onOwnVenue={() => settings.mutate({ ownVenue: true }, { onSuccess: () => toast('Đã chuyển sang tự lo tiệc. Nhập chi phí tự lo ở cuối khung này.') })}
+        onOwnVenue={() => settings.mutate({ ownVenue: true }, { onSuccess: () => toast('Đã chuyển sang tự lo tiệc. Nhập chi phí ở mục Tự lo trong khung này.') })}
       />
 
       {view.rows.length === 0 ? (
@@ -201,10 +227,38 @@ export function BudgetSplitPanel({
           <SpendSummary
             sb={sb}
             presetLocked={presetLocked}
+            same={same}
             keptCustom={surplus && !!st}
-            allWarn={custom && allWarn}
-            trim={canTrim ? { count: overCount, apply: () => edit({ ...st!, items: trimmed! }) } : null}
+            spare={roomy ? spare : null}
+            fill={filled && changed(filled) ? () => edit({ ...st!, items: filled }) : null}
+            clamp={!roomy && clamped && changed(clamped) ? () => edit({ ...st!, items: clamped }) : null}
           />
+          {/* Tiêu đề khu chia: nhãn nhỏ in hoa thẳng cột với ô % và ô số tiền; "Đặt lại" (Tùy chỉnh) nằm cùng khu nó tác động */}
+          {!presetLocked && (
+            <div className={cn(ROW_GRID, 'border-b border-line pb-1.5 max-[760px]:hidden')}>
+              <span className="budget-eyebrow col-span-2 flex items-center gap-3 text-muted-foreground">
+                Chia cho từng dịch vụ
+                {custom && st && view.rows.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Như phương án nền đang thấy: đã cắt về giá gói đắt nhất
+                      const r = resetToBase(st, view.group)
+                      edit({ ...r, items: fitToMax(r.items, presetMarkers(view.group, b)) })
+                    }}
+                    title={`Đặt lại theo phương án nền (${PRESET_LABEL[st.baseMode]})`}
+                    className="inline-flex items-center gap-1 rounded-sm text-[11px] font-medium tracking-normal normal-case hover:text-gold-700"
+                  >
+                    <RotateCcw className="size-3" aria-hidden />
+                    Đặt lại theo {PRESET_LABEL[st.baseMode]}
+                  </button>
+                )}
+              </span>
+              <span className="budget-eyebrow pr-2 text-right text-muted-foreground">% quỹ</span>
+              <span className="budget-eyebrow pr-2.5 text-right text-muted-foreground">Số tiền</span>
+              <span />
+            </div>
+          )}
           {presetLocked ? (
             <SpendList view={view} />
           ) : (
@@ -214,78 +268,124 @@ export function BudgetSplitPanel({
                 r={r}
                 sb={sb}
                 editable={custom}
-                quietWarn={allWarn}
                 single={single}
                 onlyUnlocked={!single && !r.item.locked && unlockedCount === 1}
                 onDrag={(ratio) => setRatio(r.item.id, ratio, false)}
-                onCommit={() => (onTouch(), split.commit())}
+                onCommit={onTouch}
                 onRatio={(ratio) => setRatio(r.item.id, ratio, true)}
                 onLock={(v) => lock(r.item.id, v)}
                 onExclude={() => exclude(r.item.id)}
               />
             ))
           )}
+          {many && <ReserveRow ratio={view.reserve} amount={view.leftover} sb={sb} onDrag={(x) => setReserveRatio(x, false)} onCommit={onTouch} onRatio={(x) => setReserveRatio(x, true)} />}
           {single && custom && st && <CapRow st={st} sb={sb} leftover={view.leftover} onCap={(capAmount) => edit({ ...st, capAmount })} />}
         </div>
       )}
 
-      {st && view.excluded.length > 0 && (
-        <div className="flex flex-col gap-1.5 border-t border-line pt-3 text-sm">
-          <span className="text-[13px] font-medium text-muted-foreground">Tự lo (không chia tiền, không gợi ý gói)</span>
-          {view.excluded.map((c) => (
-            <div key={c.categoryId} className="flex items-center justify-between gap-3">
-              <span>{c.name}</span>
+      {/* Mọi thứ khách tự lo ở một chỗ: tiệc tự lo (chỉ bật được khi kế hoạch không có hạng mục tiệc, nút ở phần quỹ) và dịch vụ bỏ khỏi phần chia */}
+      {((st && view.excluded.length > 0) || b.ownVenue) && (
+        <div className="flex flex-col gap-2 border-t border-line pt-4 text-sm">
+          <span className="flex flex-wrap items-baseline gap-x-2.5">
+            <span className="budget-eyebrow text-muted-foreground">Tự lo</span>
+            <span className="text-[12px] text-muted-foreground">Không chia tiền, không gợi ý gói</span>
+          </span>
+          {b.ownVenue && (
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <span className="flex-1 text-[15px] font-medium text-ink">{venueName}</span>
+              <label className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
+                Chi phí tự lo
+                <MoneyInput
+                  aria-label="Chi phí tiệc tự lo"
+                  placeholder="Không bắt buộc"
+                  value={cost ?? b.ownVenueCost ?? 0}
+                  disabled={settings.isPending}
+                  onChange={setCost}
+                  onBlur={() => {
+                    if (cost !== null && cost !== (b.ownVenueCost ?? 0)) settings.mutate({ ownVenueCost: cost || null })
+                    setCost(null)
+                  }}
+                  onKeyDown={blurOnEnter}
+                  className="w-[150px] px-2.5 py-1.5 text-right text-sm text-ink"
+                />
+              </label>
+              <Button variant="outline" size="sm" disabled={settings.isPending} onClick={() => settings.mutate({ ownVenue: false, ownVenueCost: null })}>
+                Thêm lại
+              </Button>
+            </div>
+          )}
+          {st && view.excluded.map((c) => (
+            <div key={c.categoryId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <span className="flex-1 text-[15px] font-medium text-ink">{c.name}</span>
+              <OwnServiceCost b={b} name={c.name} />
               <Button variant="outline" size="sm" onClick={() => include(c.categoryId)}>
                 Thêm lại
               </Button>
             </div>
           ))}
+          <span className="text-[12px] text-muted-foreground">
+            Chi phí tự lo được trừ khỏi quỹ dịch vụ{st && view.excluded.length > 0 && ' (dịch vụ tự lo ghi vào "Chi phí khác ngoài Forever")'}.
+          </span>
         </div>
       )}
 
-      {custom && st && view.rows.length > 1 && (
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={() => edit(resetToBase(st, view.group))}>
-            <RotateCcw />
-            Đặt lại theo phương án nền ({PRESET_LABEL[st.baseMode]})
-          </Button>
-        </div>
-      )}
-
-      {(hasVenue || b.ownVenue) && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3.5 text-sm">
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={b.ownVenue}
-              disabled={settings.isPending}
-              onChange={(e) => settings.mutate({ ownVenue: e.target.checked })}
-              className="size-4 accent-[var(--gold-700)]"
-            />
-            Tự lo tiệc ngoài nền tảng
-          </label>
-          {b.ownVenue && (
-            <label className="inline-flex items-center gap-2 text-muted-foreground">
-              Chi phí tự lo (không bắt buộc)
-              <MoneyInput
-                aria-label="Chi phí tiệc tự lo"
-                value={cost ?? b.ownVenueCost ?? 0}
-                onChange={setCost}
-                onBlur={() => {
-                  if (cost !== null && cost !== (b.ownVenueCost ?? 0)) settings.mutate({ ownVenueCost: cost || null })
-                  setCost(null)
-                }}
-                className="w-[160px] px-2.5 py-1.5 text-right text-sm text-ink"
-              />
-            </label>
-          )}
+      {/* Thanh lưu dính đáy màn hình khi còn thay đổi chưa lưu: luôn thấy nút Lưu dù đang kéo ở đâu trong khung */}
+      {custom && st && (split.unsaved || split.status === 'saving') && (
+        <div className="sticky bottom-3 z-20 -mx-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gold/40 bg-[color-mix(in_srgb,var(--surface)_94%,transparent)] px-4 py-2.5 shadow-[0_10px_28px_-12px_rgb(40_30_10/0.35)] backdrop-blur-[6px]">
+          <span className="text-[13px] font-medium text-gold-700">{split.status === 'saving' ? 'Đang lưu tỷ lệ…' : 'Bạn có thay đổi chưa lưu'}</span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" disabled={split.status === 'saving'} onClick={split.discard}>
+              Hủy
+            </Button>
+            <Button size="sm" disabled={split.status === 'saving'} onClick={split.save}>
+              {split.status === 'saving' ? 'Đang lưu…' : 'Lưu thay đổi'}
+            </Button>
+          </div>
         </div>
       )}
     </section>
   )
 }
 
-function SaveStatus({ status }: { status: Split['status'] }) {
+/**
+ * Chi phí của dịch vụ Tự lo (không bắt buộc): một khoản "Chi phí khác" cùng tên dịch vụ, nên được trừ khỏi quỹ dịch vụ.
+ * Nhập số mới thì thêm hoặc sửa khoản đó, xóa về 0 thì xóa khoản.
+ */
+/** Khoản "Chi phí khác" ghi chi phí tự lo của một dịch vụ: cùng tên dịch vụ, không phân biệt hoa thường */
+const ownCostRow = (b: Budget, name: string) => b.extraCosts.find((e) => e.name.trim().toLowerCase() === name.trim().toLowerCase()) ?? null
+
+function OwnServiceCost({ b, name }: { b: Budget; name: string }) {
+  const { addExtraCost, updateExtraCost, removeExtraCost } = useBudgetMutations()
+  const [cost, setCost] = useState<number | null>(null)
+  const row = ownCostRow(b, name)
+  const busy = addExtraCost.isPending || updateExtraCost.isPending || removeExtraCost.isPending
+  const commit = () => {
+    const next = cost
+    setCost(null)
+    if (next === null || next === (row?.amount ?? 0)) return
+    if (!row) addExtraCost.mutate({ name, amount: next }, { onSuccess: () => toast(`Đã ghi chi phí tự lo ${name}`) })
+    else if (next > 0) updateExtraCost.mutate({ id: row.id, amount: next })
+    else removeExtraCost.mutate(row.id)
+  }
+  return (
+    <label className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
+      Chi phí tự lo
+      <MoneyInput
+        aria-label={`Chi phí tự lo ${name}`}
+        placeholder="Không bắt buộc"
+        value={cost ?? row?.amount ?? 0}
+        disabled={busy}
+        onChange={setCost}
+        onBlur={commit}
+        onKeyDown={blurOnEnter}
+        className="w-[150px] px-2.5 py-1.5 text-right text-sm text-ink"
+      />
+    </label>
+  )
+}
+
+function SaveStatus({ status, unsaved }: { status: Split['status']; unsaved: boolean }) {
+  if (unsaved) return <span className="text-[12px] font-medium text-gold-700">Có thay đổi chưa lưu</span>
   if (status === 'idle') return null
   const text = { saving: 'Đang lưu…', saved: 'Đã lưu', error: 'Chưa lưu được' }[status]
   return (
@@ -331,19 +431,23 @@ function FundArea({
         Tiệc đã chọn / đã cọc đã có ở 4 thẻ đầu trang nên không nhắc lại; chỉ ghi khi tiệc là gói đề xuất (đã trừ khỏi quỹ).
       */}
       <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <span className="flex items-center gap-1.5">
-            Quỹ dịch vụ <strong className="text-[17px] tabular-nums">{money(f.serviceBudget)}</strong>
-            <button
-              type="button"
-              aria-expanded={open}
-              aria-label="Chi tiết quỹ dịch vụ"
-              onClick={() => setOpen((x) => !x)}
-              className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent-soft hover:text-gold-700"
-            >
-              <Info className="size-4" />
-            </button>
-          </span>
+        {/* Con số chính của khung: nhãn nhỏ in hoa, số tiền to đậm */}
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+          <div className="flex flex-col gap-1">
+            <span className="budget-eyebrow text-muted-foreground">Quỹ dịch vụ</span>
+            <span className="flex items-center gap-2">
+              <strong className="text-[28px] leading-none font-semibold tracking-[-0.02em] text-ink tabular-nums">{money(f.serviceBudget)}</strong>
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-label="Chi tiết quỹ dịch vụ"
+                onClick={() => setOpen((x) => !x)}
+                className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent-soft hover:text-gold-700"
+              >
+                <Info className="size-4" />
+              </button>
+            </span>
+          </div>
           {v.status === 'SUGGESTED' && (
             <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
               {v.amount === null ? 'Chưa có gói tiệc phù hợp' : `Đã trừ gói tiệc đề xuất ${money(v.amount)}`}
@@ -357,7 +461,7 @@ function FundArea({
           </div>
         )}
         {spend && (
-          <p className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
+          <p className="flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <i className="fund-dot fund-dot--spend" aria-hidden />
               Chi tối đa theo giá gói đắt nhất <strong className="text-ink tabular-nums">{money(spend.max)}</strong>
@@ -416,22 +520,32 @@ function FundArea({
 /**
  * Số tổng khách cần nhất: "Dự kiến chi tối đa / Còn dư" (mỗi hạng mục tiêu tối đa đến giá gói đắt nhất), in to.
  * Ba mức có sẵn không ảnh hưởng gợi ý: hộp thông báo (tông xanh, khác thẻ chọn) chỉ cách giới hạn chi bằng Tùy chỉnh.
- * Tùy chỉnh mà mọi dịch vụ đều vượt gói đắt nhất: một dòng chung thay cho cảnh báo từng dòng.
+ * Ba mức cho cùng kết quả (quỹ gần đủ): hộp thông báo cùng kiểu, Tùy chỉnh vẫn dùng được.
+ * Ba mức cho cùng kết quả (quỹ gần đủ): hộp thông báo cùng kiểu, Tùy chỉnh vẫn dùng được.
+ * Tùy chỉnh mà quỹ lớn hơn tổng giá gói đắt nhất: một dòng thông tin chung, kèm nút đặt mọi dịch vụ đúng gói đắt nhất nếu chưa.
+ * Tùy chỉnh có dịch vụ vượt gói đắt nhất: nút đưa phần vượt vào Dự phòng.
  */
 function SpendSummary({
   sb,
   presetLocked,
+  same,
   keptCustom,
-  allWarn,
-  trim,
+  spare,
+  fill,
+  clamp,
 }: {
   sb: number
   presetLocked: boolean
+  /** Ba mức cho cùng kết quả (quỹ gần đủ cho gói đắt nhất), không phải quỹ dư */
+  same: boolean
   /** Khách đang ở Tùy chỉnh: tỷ lệ đã đặt vẫn giữ, dùng lại khi quỹ hết dư */
   keptCustom: boolean
-  allWarn: boolean
-  /** Có dịch vụ vượt gói đắt nhất và còn dịch vụ khác nhận được phần thừa */
-  trim: { count: number; apply: () => void } | null
+  /** Tùy chỉnh, quỹ lớn hơn tổng giá gói đắt nhất: phần thừa tối thiểu (null: không phải trường hợp này) */
+  spare: number | null
+  /** Quỹ dư, còn dịch vụ chưa đúng gói đắt nhất: đặt mọi dịch vụ đúng vạch, phần còn lại vào Dự phòng */
+  fill: (() => void) | null
+  /** Có dịch vụ vượt gói đắt nhất: đưa về vạch, phần vượt vào Dự phòng */
+  clamp: (() => void) | null
 }) {
   if (!(sb > 0)) return null
   // Khi ba mức có sẵn bị khóa: một dòng hướng dẫn dùng Tùy chỉnh (hộp tím nhạt); Tùy chỉnh: một dòng chung về phần thừa
@@ -446,12 +560,39 @@ function SpendSummary({
           </span>
         </p>
       )}
-      {allWarn && <Warn>Mọi dịch vụ đều đang được chia nhiều hơn gói đắt nhất, phần thừa đã tính vào "Còn dư".</Warn>}
-      {trim && !allWarn && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <Warn>{trim.count} dịch vụ đang được chia nhiều hơn gói đắt nhất.</Warn>
-          <Button variant="outline" size="sm" onClick={trim.apply}>
-            Chuyển phần thừa sang dịch vụ khác
+      {same && (
+        <p role="status" className="budget-note flex items-start gap-2 text-[13px]">
+          <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            Quỹ gần đủ cho gói đắt nhất của mọi dịch vụ nên ba mức chia cho cùng kết quả. Muốn tự chia, ví dụ để dành một phần vào Dự phòng, bấm
+            Tùy chỉnh.
+          </span>
+        </p>
+      )}
+      {spare !== null && (
+        <div className="budget-note flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
+          <p role="status" className="flex min-w-0 flex-1 items-start gap-2">
+            <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>
+              Quỹ đủ cho gói đắt nhất của mọi dịch vụ, chia thế nào cũng dư ít nhất {money(spare)} ở Dự phòng. Muốn tiết kiệm, giảm tổng ngân
+              sách hoặc chọn gói rẻ hơn.
+            </span>
+          </p>
+          {fill && (
+            <Button variant="outline" size="sm" onClick={fill}>
+              Đặt mọi dịch vụ đúng gói đắt nhất
+            </Button>
+          )}
+        </div>
+      )}
+      {clamp && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-ink-2">
+          <span className="flex items-start gap-1.5">
+            <Info className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            Có dịch vụ đang được chia nhiều hơn gói đắt nhất.
+          </span>
+          <Button variant="outline" size="sm" onClick={clamp}>
+            Chuyển phần vượt vào Dự phòng
           </Button>
         </div>
       )}
@@ -463,24 +604,20 @@ function SpendSummary({
 function SpendList({ view }: { view: SplitView }) {
   const spend = view.rows.map((r) => Math.min(r.amount, r.category.maxPackagePrice ?? r.amount))
   const top = Math.max(1, ...spend)
-  // Mỗi dịch vụ một màu pastel (budget-theme.css .budget-spend), thanh dài theo mức chi so với dịch vụ chi nhiều nhất
+  // Một tông ô liu cùng thanh quỹ (budget-theme.css .budget-spend), thanh dài theo mức chi so với dịch vụ chi nhiều nhất.
+  // Đã cắt về vạch nên mức chi bằng giá gói đắt nhất (lệch vài đồng do làm tròn tỷ lệ) thì ghi "Gói đắt nhất".
+  const atMax = (r: SplitView['rows'][number], x: number) => r.category.maxPackagePrice !== null && x >= r.category.maxPackagePrice - DISPLAY_ROUND_UNIT / 2
   return (
-    <ul className="budget-spend flex flex-col gap-1.5 text-sm">
+    <ul className="budget-spend flex flex-col divide-y divide-line text-sm">
       {view.rows.map((r, i) => (
-        <li
-          key={r.item.id}
-          className="grid grid-cols-[minmax(96px,150px)_1fr_auto] items-center gap-x-4 gap-y-1 rounded-xl px-3 py-2 max-sm:grid-cols-[1fr_auto]"
-        >
-          <span className="flex items-center gap-2 font-medium">
-            <i className="budget-dot" aria-hidden />
-            {r.category.name}
-          </span>
+        <li key={r.item.id} className="grid grid-cols-[minmax(96px,150px)_1fr_auto] items-center gap-x-5 gap-y-2 py-3 first:pt-1 last:pb-1 max-sm:grid-cols-[1fr_auto]">
+          <span className="font-medium text-ink">{r.category.name}</span>
           <span className="budget-bar max-sm:order-last max-sm:col-span-2" aria-hidden>
             <i style={{ width: `${(spend[i] / top) * 100}%` }} />
           </span>
-          <span className="text-right tabular-nums">
-            <span className="font-medium">{money(spend[i])}</span>
-            <span className="ml-1.5 text-[12px] text-muted-foreground">{r.warn ? 'gói đắt nhất' : 'theo mức chia'}</span>
+          <span className="flex flex-col items-end leading-tight tabular-nums">
+            <span className="font-semibold text-ink">{money(spend[i])}</span>
+            <span className="text-[11px] tracking-wide text-muted-foreground uppercase">{atMax(r, spend[i]) ? 'Gói đắt nhất' : 'Theo mức chia'}</span>
           </span>
         </li>
       ))}
@@ -499,13 +636,12 @@ function Warn({ children }: { children: ReactNode }) {
 
 /**
  * Một hạng mục trong nhóm chia: thanh kéo (đơn vị 0,01%) có vạch giá gói cao nhất, ô "% quỹ", ô số tiền, nút khóa, "Tự lo";
- * dưới thanh là cảnh báo khi tiền vượt giá gói cao nhất (nút chung "Chuyển phần thừa sang dịch vụ khác" nằm ở SpendSummary).
+ * dưới thanh là ghi chú khi tiền vượt giá gói cao nhất (gợi ý chuyển phần thừa nằm ở SpendSummary).
  */
 function SplitRow({
   r,
   sb,
   editable,
-  quietWarn,
   single,
   onlyUnlocked,
   onDrag,
@@ -517,8 +653,6 @@ function SplitRow({
   r: SplitRowView
   sb: number
   editable: boolean
-  /** Mọi dịch vụ đều vượt gói đắt nhất: không cảnh báo từng dòng (đã có dòng chung) */
-  quietWarn: boolean
   single: boolean
   onlyUnlocked: boolean
   onDrag: (ratio: number) => void
@@ -554,8 +688,8 @@ function SplitRow({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="grid grid-cols-[140px_1fr_118px_150px_auto] items-center gap-3 text-sm max-[760px]:grid-cols-[1fr_110px_130px]">
-        <span className={cn('inline-flex items-center gap-1.5 font-medium max-[760px]:col-span-3', item.locked && 'text-muted-foreground')}>
+      <div className={ROW_GRID}>
+        <span className={cn('inline-flex items-center gap-1.5 text-[15px] font-medium text-ink max-[760px]:col-span-3', item.locked && 'text-muted-foreground')}>
           {item.locked && <Lock className="size-3.5" aria-hidden />}
           {name}
         </span>
@@ -592,7 +726,7 @@ function SplitRow({
             onChange={(e) => setPct(e.target.value)}
             onBlur={commitPct}
             onKeyDown={blurOnEnter}
-            className="w-full min-w-0 border-0 bg-transparent text-right text-sm tabular-nums outline-none disabled:text-muted-foreground"
+            className="w-full min-w-0 border-0 bg-transparent text-right text-sm text-ink-2 tabular-nums outline-none disabled:text-muted-foreground"
           />
           <span className="text-[12px] whitespace-nowrap text-muted-foreground">% quỹ</span>
         </label>
@@ -603,7 +737,7 @@ function SplitRow({
           onChange={setAmount}
           onBlur={commitAmount}
           onKeyDown={blurOnEnter}
-          className="px-2.5 py-1.5 text-right text-sm tabular-nums disabled:opacity-60"
+          className="px-2.5 py-1.5 text-right text-[15px] font-semibold text-ink tabular-nums disabled:opacity-60"
         />
         {editable ? (
           <div className="flex items-center gap-1 max-[760px]:col-span-3 max-[760px]:justify-end">
@@ -632,20 +766,103 @@ function SplitRow({
           <span className="max-[760px]:hidden" />
         )}
       </div>
+      {/* Vượt vạch không phải lỗi: phần vượt chỉ thành "Còn dư", nên chữ xám thay cho cảnh báo đỏ */}
       {r.warn && (
-        <div className={cn('flex flex-wrap items-center gap-2 pl-[152px] text-[12px] max-[760px]:pl-0', quietWarn ? 'text-muted-foreground' : 'text-warn')}>
-          {quietWarn ? (
-            <span>Gói đắt nhất {money(category.maxPackagePrice ?? 0)}.</span>
-          ) : (
-            <>
-              <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
-              <span>
-                Gói đắt nhất {money(category.maxPackagePrice ?? 0)}, thừa khoảng {money(r.unused)}.
-              </span>
-            </>
-          )}
-        </div>
+        <p className="pl-[152px] text-[12px] text-muted-foreground max-[760px]:pl-0">
+          Gói đắt nhất {money(category.maxPackagePrice ?? 0)}, phần vượt {money(r.unused)} tính vào "Còn dư".
+        </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Dòng Dự phòng (Tùy chỉnh, từ 2 hạng mục): phần quỹ chưa giao cho dịch vụ nào, cùng bố cục với SplitRow.
+ * Tăng thì bớt các dịch vụ mở khóa theo tương quan; giảm thì rót vào dịch vụ còn dưới gói đắt nhất.
+ */
+function ReserveRow({
+  ratio,
+  amount,
+  sb,
+  onDrag,
+  onCommit,
+  onRatio,
+}: {
+  ratio: number
+  /** Tiền của Dự phòng (số chính xác) */
+  amount: number
+  sb: number
+  onDrag: (ratio: number) => void
+  onCommit: () => void
+  onRatio: (ratio: number) => void
+}) {
+  const [pct, setPct] = useState<string | null>(null)
+  const [money_, setMoney] = useState<number | null>(null)
+  const commitPct = () => {
+    const text = pct
+    setPct(null)
+    if (text === null) return
+    const p = parsePercent(text)
+    if (p.kind === 'empty') return
+    if (p.kind === 'invalid') return toast(MSG.invalid)
+    if (p.negative) toast(MSG.negative)
+    if (p.ratio !== ratio || p.negative) onRatio(p.ratio)
+  }
+  const commitMoney = () => {
+    const a = money_
+    setMoney(null)
+    if (a === null) return
+    const wanted = ratioFromAmount(a, sb)
+    if (wanted !== null) onRatio(wanted)
+  }
+  return (
+    // Khối riêng (nền kem, viền nét đứt, biểu tượng heo đất) để khác dòng dịch vụ; lùi lề âm bằng đệm nên các ô vẫn thẳng cột
+    <div className="-mx-3 flex flex-col gap-1.5 rounded-xl border border-dashed border-line-strong bg-[color-mix(in_srgb,var(--gold-100)_45%,transparent)] px-[11px] py-2.5">
+      <div className={ROW_GRID}>
+        <span className="inline-flex items-center gap-1.5 font-medium text-ink-2 max-[760px]:col-span-3">
+          <PiggyBank className="size-4 shrink-0 text-gold-700" aria-hidden />
+          Dự phòng
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={TOTAL}
+          step={1}
+          value={ratio}
+          onChange={(e) => onDrag(Number(e.target.value))}
+          onPointerUp={onCommit}
+          onKeyUp={onCommit}
+          aria-label="Tỷ lệ Dự phòng (% quỹ)"
+          className="w-full accent-[#b8a06a] max-[760px]:col-span-3"
+        />
+        <label className="flex items-center gap-1 rounded-sm border border-input bg-surface px-2 py-1.5 focus-within:border-ring">
+          <input
+            inputMode="decimal"
+            aria-label="Tỷ lệ % quỹ Dự phòng"
+            value={pct ?? ratioText(ratio)}
+            onFocus={() => setPct(ratioText(ratio))}
+            onChange={(e) => setPct(e.target.value)}
+            onBlur={commitPct}
+            onKeyDown={blurOnEnter}
+            className="w-full min-w-0 border-0 bg-transparent text-right text-sm text-ink-2 tabular-nums outline-none"
+          />
+          <span className="text-[12px] whitespace-nowrap text-muted-foreground">% quỹ</span>
+        </label>
+        <MoneyInput
+          aria-label="Số tiền Dự phòng"
+          placeholder="0"
+          value={money_ ?? displayMoney(amount)}
+          disabled={sb <= 0}
+          onChange={setMoney}
+          onBlur={commitMoney}
+          onKeyDown={blurOnEnter}
+          className="px-2.5 py-1.5 text-right text-[15px] font-semibold text-ink tabular-nums disabled:opacity-60"
+        />
+        <span className="max-[760px]:hidden" />
+      </div>
+      <p className="pl-[152px] text-[12px] text-muted-foreground max-[760px]:pl-0">
+        Phần quỹ chưa giao cho dịch vụ nào. Giảm một dịch vụ thì tiền vào đây, tăng thì lấy từ đây trước.
+      </p>
     </div>
   )
 }

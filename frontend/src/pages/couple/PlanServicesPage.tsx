@@ -19,7 +19,8 @@ export default function PlanServicesPage() {
   const [revising, setRevising] = useState<Order | null>(null)
 
   return (
-    <>
+    // Cùng bộ giao diện với tab Tổng quan / Ngân sách (plan-theme: nút xanh rêu, thẻ giấy, tiêu đề Playfair)
+    <div className="plan-theme services-page">
       {plan.isPending ? (
         <div className="h-[360px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải" />
       ) : plan.isError ? (
@@ -36,6 +37,6 @@ export default function PlanServicesPage() {
         <PlanSlots categorySlugs={plan.data.categorySlugs} items={plan.data.items} hasWedding orders={orders.data ?? []} onRevise={setRevising} guestCount={wedding.guestCount ?? 0} />
       )}
       <ReviseOrderDialog order={revising} onClose={() => setRevising(null)} />
-    </>
+    </div>
   )
 }

@@ -1,34 +1,35 @@
-import { ArrowRight, ChevronDown, Lock } from 'lucide-react'
-import { Link } from 'react-router'
+import { ChevronDown, Lock, Sparkles } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
-import { paths } from '@/routes/paths'
 import type { Budget, BudgetVendor, PlanItem } from '@/types/wedding'
 import { chargedTables } from '@/features/catalog/price'
 import { packageLabel, packageOptionText } from '../budgetView'
 import { useChoosePackage, usePatchWedding } from '../hooks'
+import { SuggestionsDialog } from './SuggestionsPanel'
 
 /**
  * Ô "Gói" trên một dòng của bảng Ngân sách: bấm để đổi gói (cùng danh sách gói với tab Dịch vụ).
  * `withTables` (nhà hàng, gói tính theo bàn): số bàn hiện trong ô và sửa được ở đầu danh sách gói.
- * `changeVendorSlug`: cuối danh sách gói có link "Đổi sang nhà cung cấp khác" (Dịch vụ cưới của hạng mục). Đã có đơn thì khóa. Gói tiệc vượt sức chứa bị vô hiệu; gói khác chọn được kể cả vượt ngân sách, kèm hệ quả ngay dưới gói.
+ * `changeVendor`: cuối danh sách gói có dòng "Xem gợi ý nhà cung cấp khác", mở popup "Gợi ý cho bạn" của hạng mục (3 NCC trong
+ * ngân sách gợi ý, không gồm NCC đang chọn; bấm dấu cộng là thay NCC, có hỏi trước). Đã có đơn thì khóa. Gói tiệc vượt sức chứa bị vô hiệu; gói khác chọn được kể cả vượt ngân sách, kèm hệ quả ngay dưới gói.
  */
 export function BudgetPackagePicker({
   vendor,
   item,
   budget,
   withTables,
-  changeVendorSlug,
+  changeVendor,
 }: {
   vendor?: BudgetVendor
   item?: PlanItem
   budget: Budget
   withTables: boolean
-  changeVendorSlug?: string
+  changeVendor?: { slug: string; name: string }
 }) {
+  const [suggesting, setSuggesting] = useState(false)
   const choose = useChoosePackage()
   const patch = usePatchWedding()
   const [open, setOpen] = useState(false)
@@ -213,17 +214,19 @@ export function BudgetPackagePicker({
               })}
             </ul>
           )}
-          {changeVendorSlug && (
-            <Link
-              to={`${paths.services}?category=${changeVendorSlug}&ai=1`}
-              className="flex items-center gap-1 border-t border-line px-3.5 py-2 text-[13px] font-medium text-gold-700 hover:bg-accent-soft"
+          {changeVendor && (
+            <button
+              type="button"
+              onClick={() => (setOpen(false), setSuggesting(true))}
+              className="flex w-full items-center gap-1.5 border-t border-line px-3.5 py-2 text-left text-[13px] font-medium text-gold-700 hover:bg-accent-soft"
             >
-              Đổi sang nhà cung cấp khác
-              <ArrowRight className="size-3.5" aria-hidden />
-            </Link>
+              <Sparkles className="size-3.5" aria-hidden />
+              Xem gợi ý nhà cung cấp khác
+            </button>
           )}
         </div>
       )}
+      {changeVendor && <SuggestionsDialog categorySlug={changeVendor.slug} categoryName={changeVendor.name} open={suggesting} onOpenChange={setSuggesting} />}
     </div>
   )
 }

@@ -1,0 +1,254 @@
+/*
+ * Trang So sánh dịch vụ (.compare-theme): giấy ngà, chữ đen than, xanh rêu trầm. Font như trang chi tiết dịch vụ: tiêu đề, tên NCC,
+ * số tiền Playfair Display (--serif); chữ thường Be Vietnam Pro (font chung của web).
+ * - Đầu trang: "So sánh" nghiêng + tên hạng mục in hoa lớn, mức gợi ý, quay lại; ảnh ngang nhỏ (public/images/compare-hero.jpg,
+ *   đã cắt bỏ logo của ảnh gốc). Không lặp lại thứ bảng đã có.
+ * - Bảng: không khung, không bóng; đường kẻ mảnh, nhãn dòng chữ nhỏ in hoa, tên NCC và số tiền chữ có chân.
+ * - Nút giống Kế hoạch của tôi: chính xanh rêu chữ ngà, phụ viền xanh rêu.
+ */
+.compare-theme {
+  --ed-ink: #1f1d1a;
+  --ed-mute: #7a7469;
+  --ed-moss: #5d6b45;
+  /* Màu nút giống Kế hoạch của tôi (plan-theme.css --accent / --accent-hover / --accent-ink / --accent-soft) */
+  --cmp-accent: #55633f;
+  --cmp-accent-hover: #47542f;
+  --cmp-accent-ink: #fbf7ec;
+  --cmp-accent-soft: #e8ebd9;
+  --ed-paper: #faf7f0;
+  --ed-line: rgb(31 29 26 / 0.12);
+  /* Cùng font tiêu đề của web (Playfair Display), như trang chi tiết dịch vụ */
+  --ed-serif: var(--serif);
+  color: var(--ed-ink);
+}
+:root[data-theme='dark'] .compare-theme {
+  --ed-ink: #efe9dc;
+  --ed-mute: #a69f92;
+  --ed-moss: #a8b88a;
+  --ed-paper: var(--surface);
+  --ed-line: rgb(239 233 220 / 0.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .compare-theme {
+    --ed-ink: #efe9dc;
+    --ed-mute: #a69f92;
+    --ed-moss: #a8b88a;
+    --ed-paper: var(--surface);
+    --ed-line: rgb(239 233 220 / 0.14);
+  }
+}
+
+/*
+ * Tờ giấy chứa toàn bộ nội dung: trắng ngà, vân giấy rất nhẹ, viền mảnh xám ấm, bóng mềm; kẹp càng nhỏ champagne mờ ở mép trên
+ * (.compare-clip, SVG). Lớp ngoài (.compare-sheet-wrap) chỉ chừa chỗ cho kẹp. Không cắt tràn để hàng đầu bảng vẫn dính khi cuộn.
+ */
+.compare-sheet-wrap {
+  position: relative;
+  padding-top: 20px;
+}
+.compare-sheet {
+  --ed-paper: #fdfaf5;
+  padding: clamp(34px, 4.5vw, 58px) clamp(22px, 4.5vw, 60px) clamp(36px, 4.5vw, 56px);
+  border: 1px solid rgb(150 135 115 / 0.22);
+  border-radius: 12px;
+  background-color: var(--ed-paper);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27200%27 height=%27200%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.8%27 numOctaves=%273%27 stitchTiles=%27stitch%27/%3E%3CfeColorMatrix values=%270 0 0 0 0.45 0 0 0 0 0.4 0 0 0 0 0.35 0 0 0 0.04 0%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27/%3E%3C/svg%3E");
+  box-shadow: 0 18px 44px -28px rgb(60 45 25 / 0.3);
+}
+/* Kẹp càng nhỏ champagne mờ ở giữa mép trên */
+.compare-clip {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  z-index: 2;
+  width: 58px;
+  height: 44px;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 2px 2px rgb(60 45 25 / 0.2));
+}
+:root[data-theme='dark'] .compare-sheet {
+  --ed-paper: #2a2622;
+  background-image: none;
+  border-color: var(--ed-line);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .compare-sheet {
+    --ed-paper: #2a2622;
+    background-image: none;
+    border-color: var(--ed-line);
+  }
+}
+
+/*
+ * Đầu trang kiểu bìa gọn: khối chữ bên trái cao đúng bằng ảnh bên phải ("So sánh" + tên hạng mục sát mép trên, mức gợi ý và
+ * "Quay lại" sát mép dưới); ảnh ngang cố định chiều cao; màn hẹp thì ẩn ảnh.
+ */
+.compare-hero {
+  display: grid;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 35px, rgb(140 160 185 / 0.18) 35px 36px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
+  align-items: stretch;
+  gap: clamp(24px, 4vw, 56px);
+  margin-bottom: 32px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--ed-line);
+}
+@media (max-width: 760px) {
+  .compare-hero {
+    grid-template-columns: 1fr;
+  }
+  .compare-photo {
+    display: none;
+  }
+}
+.compare-hero > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+.compare-hero h1 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--ed-serif);
+  font-weight: 500;
+  color: var(--ed-ink);
+}
+/* "So sánh": Playfair nghiêng nhỏ màu xám, cùng họ font với tên hạng mục bên dưới */
+.compare-hero h1 em {
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 500;
+  color: var(--ed-mute);
+  line-height: 1;
+}
+.compare-hero h1 span {
+  font-size: clamp(38px, 5vw, 60px);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+.compare-budget {
+  margin-top: auto;
+  font-size: 17px;
+  color: var(--ed-mute);
+}
+.compare-budget b {
+  margin-left: 6px;
+  font-family: var(--ed-serif);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--ed-ink);
+}
+.compare-back {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 2px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ed-ink);
+}
+.compare-back:hover {
+  color: var(--ed-moss);
+}
+/* Ảnh dán kiểu polaroid: viền trắng, nghiêng nhẹ, băng giấy ngà trong mờ ở mép trên; ảnh giữ màu gốc cho nét */
+.compare-photo {
+  position: relative;
+  align-self: center;
+  margin: 0;
+  padding: 10px 10px 30px;
+  background: #fff;
+  box-shadow: 0 10px 22px -10px rgb(60 40 10 / 0.4);
+  transform: rotate(1.6deg);
+}
+.compare-photo img {
+  display: block;
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+}
+.compare-tape {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  z-index: 1;
+  width: 112px;
+  height: 28px;
+  background: rgb(246 240 230 / 0.78);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  backdrop-filter: blur(1px);
+  transform: translateX(-50%) rotate(-4deg);
+}
+
+/* Bảng: không khung, đường kẻ mảnh */
+.compare-card {
+  border: 0 !important;
+  border-top: 1px solid var(--cmp-accent) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.compare-card thead {
+  background: var(--ed-paper) !important;
+  box-shadow: 0 1px 0 var(--ed-line) !important;
+}
+.compare-card :is(th, td) {
+  border-color: var(--ed-line) !important;
+}
+.compare-vendor-name {
+  font-family: var(--ed-serif) !important;
+  font-size: 26px !important;
+  font-weight: 600 !important;
+  line-height: 1.1;
+  color: var(--ed-ink);
+}
+.compare-card tbody th {
+  font-size: 15px;
+  font-weight: 500 !important;
+  color: var(--ed-mute) !important;
+}
+.compare-card tbody th > span {
+  margin-top: 4px;
+  font-size: 13.5px !important;
+  font-weight: 400;
+}
+.compare-total {
+  font-family: var(--ed-serif);
+  font-size: 28px;
+  font-weight: 600 !important;
+  color: var(--ed-ink);
+}
+
+/* Nút: chính xanh rêu, phụ viền xanh rêu (giống Kế hoạch của tôi); cỡ lớn hơn nút nhỏ mặc định cho dễ bấm, dễ đọc */
+.compare-primary :is(button, a),
+.compare-secondary {
+  height: 40px !important;
+  padding-inline: 18px !important;
+  font-size: 14.5px !important;
+}
+.compare-primary :is(button, a) {
+  border: 1px solid var(--cmp-accent) !important;
+  border-radius: 999px !important;
+  background: var(--cmp-accent) !important;
+  color: var(--cmp-accent-ink) !important;
+  box-shadow: none !important;
+}
+.compare-primary :is(button, a):disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.compare-primary :is(button, a):not(:disabled):hover {
+  background: var(--cmp-accent-hover) !important;
+  border-color: var(--cmp-accent-hover) !important;
+}
+.compare-secondary {
+  border-color: var(--cmp-accent) !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: var(--cmp-accent) !important;
+}
+.compare-secondary:hover {
+  background: var(--cmp-accent-soft) !important;
+}

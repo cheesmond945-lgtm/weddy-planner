@@ -1,6 +1,6 @@
 /*
  * Luồng Tùy chỉnh ngân sách (tài liệu triển khai v1.2, mục 3–5): tỷ lệ là số nguyên theo 0,01% (TOTAL = 10000),
- * tự cân bằng, khóa, nhóm chia thay đổi, giới hạn gợi ý (tỷ lệ ảo), cảnh báo giá gói cao nhất. Hàm thuần, không gọi AI.
+ * tự cân bằng, khóa, nhóm chia thay đổi, Dự phòng (tổng tỷ lệ dưới 10000, phần thiếu chưa giao cho hạng mục nào), giới hạn gợi ý (tỷ lệ ảo), cảnh báo giá gói cao nhất. Hàm thuần, không gọi AI.
  * Phép chia tỷ lệ dùng BigInt, không dùng số thực, để client và backend ra cùng kết quả từng đơn vị.
  *
  * HAI BẢN GIỐNG NHAU: frontend/src/features/weddings/budgetSplit.ts và backend/src/modules/weddings/budget-split.ts.
@@ -18,11 +18,15 @@ export const SPLIT_ORDER = ['decor', 'chup-anh', 'trang-phuc', 'makeup', 'hoa-cu
 export type BaseMode = 'BALANCED' | 'SPACE' | 'VISUAL'
 export const BASE_MODES: BaseMode[] = ['BALANCED', 'SPACE', 'VISUAL']
 
-/** Hệ số h nhân 10 (để tính bằng số nguyên); slug không có trong bảng thì h = 1 (10) */
+/**
+ * Hệ số h nhân 10 (để tính bằng số nguyên); slug không có trong bảng thì h = 1 (10). Mỗi mức là một sự đánh đổi: dịch vụ được
+ * ưu tiên tăng mạnh, dịch vụ còn lại giảm, để chênh lệch đủ vượt mốc giá gói và ra gói / nhà cung cấp khác. Không gian gồm
+ * trang trí và hoa cưới (mức này vẫn có tác dụng khi trang trí đã chọn).
+ */
 export const H10: Record<BaseMode, Record<string, number>> = {
   BALANCED: {},
-  SPACE: { decor: 13 },
-  VISUAL: { 'chup-anh': 15, 'trang-phuc': 13, makeup: 12 },
+  SPACE: { decor: 18, 'hoa-cuoi': 16, 'chup-anh': 8, 'trang-phuc': 8, makeup: 8 },
+  VISUAL: { 'chup-anh': 18, 'trang-phuc': 15, makeup: 14, decor: 8, 'hoa-cuoi': 8 },
 }
 
 /** Một hạng mục trong nhóm chia (cấu hình lưu): id là categoryId */
@@ -101,21 +105,21 @@ export function initFromMode(group: GroupMember[], mode: BaseMode): SplitItem[] 
 }
 
 /**
- * 4.3. Khách đặt hạng mục `id` (mở khóa) thành `wanted`: kẹp về [0, 10000 − L], các hạng mục mở khóa khác chia phần còn lại
- * theo tương quan hiện tại. `clamped`: giá trị bị kéo về mức tối đa `max` (hiện thông báo).
- * Không còn hạng mục nào để hấp thụ thì hạng mục này luôn bằng 10000 − L.
+ * 4.3. Khách đặt hạng mục `id` (mở khóa) thành `wanted`: kẹp về [0, T − L], các hạng mục mở khóa khác chia phần còn lại
+ * theo tương quan hiện tại. T = tổng tỷ lệ hiện có (Dự phòng giữ nguyên). `clamped`: giá trị bị kéo về mức tối đa `max`.
+ * Không còn hạng mục nào để hấp thụ thì hạng mục này luôn bằng T − L.
  */
 export function rebalance(items: SplitItem[], id: string, wanted: number) {
   const k = items.find((c) => c.id === id)
   const L = sumRatio(items.filter((c) => c.locked && c.id !== id))
-  const max = TOTAL - L
+  const max = sumRatio(items) - L
   if (!k || k.locked) return { items, clamped: false, max }
   const F = items.filter((c) => c.id !== id && !c.locked)
   if (!F.length) return { items: items.map((c) => (c.id === id ? { ...c, ratio: max } : c)), clamped: false, max }
   const w = Math.trunc(Number.isFinite(wanted) ? wanted : 0)
   const p = Math.min(Math.max(w, 0), max)
   const shares = distribute(
-    TOTAL - L - p,
+    max - p,
     F.map((c) => ({ id: c.id, slug: c.slug, weight: c.ratio })),
   )
   return {
@@ -146,7 +150,10 @@ export function pickToUnlock(items: SplitItem[]) {
   return sorted(items).reduce((best, c) => (c.ratio > best.ratio ? c : best))
 }
 
-/** 4.5. Hạng mục rời nhóm (chọn gói, có đơn, đặt cọc, bỏ khỏi phần chia). `unlocked`: id hạng mục hệ thống tự mở khóa. */
+/**
+ * 4.5. Hạng mục rời nhóm (chọn gói, có đơn, đặt cọc, bỏ khỏi phần chia): phần của nó chia cho các hạng mục mở khóa còn lại,
+ * Dự phòng giữ nguyên. `unlocked`: id hạng mục hệ thống tự mở khóa.
+ */
 export function onRemove(items: SplitItem[], id: string): { items: SplitItem[]; unlocked: string | null } {
   let rest = items.filter((c) => c.id !== id)
   if (rest.length === items.length) return { items, unlocked: null }
@@ -159,7 +166,7 @@ export function onRemove(items: SplitItem[], id: string): { items: SplitItem[]; 
   }
   const L = sumRatio(rest.filter((c) => c.locked))
   const shares = distribute(
-    TOTAL - L,
+    sumRatio(items) - L,
     rest.filter((c) => !c.locked).map((c) => ({ id: c.id, slug: c.slug, weight: c.ratio })),
   )
   return { items: rest.map((c) => (c.id in shares ? { ...c, ratio: shares[c.id] } : c)), unlocked }
@@ -181,11 +188,11 @@ export function onAdd(items: SplitItem[], member: GroupMember, medianOf: (id: st
   return rebalance(next, member.id, start).items
 }
 
-/** Bất biến: tổng 10000, mỗi tỷ lệ là số nguyên 0..10000, nhóm từ 2 hạng mục còn ít nhất một hạng mục mở khóa */
+/** Bất biến: tổng ≤ 10000 (phần thiếu là Dự phòng), mỗi tỷ lệ là số nguyên 0..10000, nhóm từ 2 hạng mục còn ít nhất một hạng mục mở khóa */
 export function isValidSplit(items: SplitItem[]) {
   if (!items.length) return true
   if (items.some((c) => !Number.isInteger(c.ratio) || c.ratio < 0 || c.ratio > TOTAL)) return false
-  if (sumRatio(items) !== TOTAL) return false
+  if (sumRatio(items) > TOTAL) return false
   return items.length === 1 || items.some((c) => !c.locked)
 }
 
@@ -238,22 +245,23 @@ export function includeCategory(state: SplitState, member: GroupMember, group: G
 export const resetToBase = (state: SplitState, group: GroupMember[]): SplitState => ({ ...state, capAmount: null, items: initFromMode(group, state.baseMode) })
 
 /**
- * "Chuyển phần thừa sang dịch vụ khác" (chỉ ở client, thay cho nút từng dòng): hạng mục mở khóa đang vượt vạch giá gói cao nhất
- * về đúng vạch, phần thừa chia cho các hạng mục mở khóa còn dưới vạch theo tương quan hiện tại. Lặp vì nhận thêm có thể làm
- * hạng mục khác vượt; hết chỗ nhận thì phần thừa ở lại (thành "Còn dư" khi hiển thị). Tổng tỷ lệ giữ nguyên.
- * `markers`: vạch theo id (null: không giới hạn).
+ * Ba mức có sẵn (và lúc khởi tạo / đặt lại Tùy chỉnh): không hạng mục nào được chia quá giá gói cao nhất. Hạng mục mở khóa
+ * vượt vạch về đúng vạch, phần thừa chia cho các hạng mục mở khóa còn dưới vạch theo tương quan (tức theo trọng số phương án);
+ * lặp vì nhận thêm có thể làm vượt. Mọi hạng mục đã chạm vạch thì phần còn lại thành Dự phòng (tổng dưới 10000).
+ * `markers`: vạch theo id (priceMarker; null: không giới hạn). Một hạng mục: giữ nguyên (dùng giá trần).
  */
-export function trimToMax(items: SplitItem[], markers: Record<string, number | null>): SplitItem[] {
+export function fitToMax(items: SplitItem[], markers: Record<string, number | null>): SplitItem[] {
+  if (items.length < 2) return items
+  const cap = (c: SplitItem) => markers[c.id] ?? null
   let cur = items
   for (let n = 0; n < items.length; n++) {
-    const cap = (c: SplitItem) => markers[c.id] ?? null
     const over = cur.filter((c) => !c.locked && cap(c) !== null && c.ratio > cap(c)!)
+    if (!over.length) break
     const room = cur.filter((c) => !c.locked && (cap(c) === null || c.ratio < cap(c)!))
-    if (!over.length || !room.length) break
     const freed = sumRatio(over.map((c) => ({ ...c, ratio: c.ratio - cap(c)! })))
     const allZero = room.every((c) => c.ratio === 0)
     const shares = distribute(
-      freed,
+      room.length ? freed : 0,
       room.map((c) => ({ id: c.id, slug: c.slug, weight: allZero ? 1 : c.ratio })),
     )
     cur = cur.map((c) => (over.includes(c) ? { ...c, ratio: cap(c)! } : c.id in shares ? { ...c, ratio: c.ratio + shares[c.id] } : c))
@@ -261,9 +269,98 @@ export function trimToMax(items: SplitItem[], markers: Record<string, number | n
   return cur
 }
 
+/** Vạch giá gói cao nhất (priceMarker) theo id cho fitToMax */
+export const markersOf = (ids: string[], maxOf: (id: string) => number | null, serviceBudget: number): Record<string, number | null> =>
+  Object.fromEntries(ids.map((id) => [id, priceMarker(0, maxOf(id), serviceBudget).marker]))
+
+/** Dự phòng (chỉ ở Tùy chỉnh): phần 10000 chưa giao cho hạng mục nào */
+export const reserveOf = (items: SplitItem[]) => (items.length > 1 ? TOTAL - sumRatio(items) : 0)
+
+/** Thêm `amount` cho các hạng mục `room` theo tương quan, mỗi hạng mục không quá vạch (null: không giới hạn). Trả phần không rót được. */
+function fillUpTo(next: Map<string, number>, room: SplitItem[], amount: number, cap: (c: SplitItem) => number | null) {
+  let pool = amount
+  for (let n = 0; n < room.length && pool > 0; n++) {
+    const open = room.filter((c) => cap(c) === null || next.get(c.id)! < cap(c)!)
+    if (!open.length) break
+    const allZero = open.every((c) => next.get(c.id) === 0)
+    const shares = distribute(
+      pool,
+      open.map((c) => ({ id: c.id, slug: c.slug, weight: allZero ? 1 : next.get(c.id)! })),
+    )
+    pool = 0
+    for (const c of open) {
+      let v = next.get(c.id)! + shares[c.id]
+      if (cap(c) !== null && v > cap(c)!) {
+        pool += v - cap(c)!
+        v = cap(c)!
+      }
+      next.set(c.id, v)
+    }
+  }
+  return pool
+}
+
+/** Bớt `amount` từ các hạng mục `from` theo tương quan (tổng của chúng phải ≥ amount) */
+function takeFrom(next: Map<string, number>, from: SplitItem[], amount: number) {
+  const shares = distribute(
+    from.reduce((s, c) => s + next.get(c.id)!, 0) - amount,
+    from.map((c) => ({ id: c.id, slug: c.slug, weight: next.get(c.id)! })),
+  )
+  for (const c of from) next.set(c.id, shares[c.id])
+}
+
+const applyMap = (items: SplitItem[], next: Map<string, number>) => items.map((c) => (next.has(c.id) ? { ...c, ratio: next.get(c.id)! } : c))
+
+/**
+ * Kéo / nhập tỷ lệ một hạng mục ở Tùy chỉnh (chỉ ở client, nhóm từ 2 hạng mục). Không vượt vạch giá gói cao nhất của chính nó.
+ * Giảm: phần nhả ra vào Dự phòng, hạng mục khác giữ nguyên. Tăng: lấy từ Dự phòng trước, thiếu mới lấy từ các hạng mục mở khóa khác
+ * theo tương quan. `limit`: giá trị bị kẹp vì vạch ('MARKER') hay vì hết tỷ lệ ('SHARE', tối đa `max`).
+ * `markers`: vạch theo id (null: không giới hạn).
+ */
+export function setServiceRatio(items: SplitItem[], id: string, wanted: number, markers: Record<string, number | null>) {
+  const k = items.find((c) => c.id === id)
+  const F = items.filter((c) => c.id !== id && !c.locked)
+  const R = reserveOf(items)
+  const max = R + (k?.ratio ?? 0) + sumRatio(F)
+  if (!k || k.locked) return { items, limit: null, max }
+  const marker = markers[id] ?? null
+  const w = Math.trunc(Number.isFinite(wanted) ? wanted : 0)
+  const p = Math.min(Math.max(w, 0), max, marker ?? TOTAL)
+  const limit = w > p ? (marker !== null && marker < max ? ('MARKER' as const) : ('SHARE' as const)) : null
+  const next = new Map(F.map((c) => [c.id, c.ratio]))
+  const need = p - k.ratio - R
+  if (need > 0) takeFrom(next, F, need)
+  next.set(id, p)
+  return { items: applyMap(items, next), limit, max }
+}
+
+/**
+ * Kéo / nhập Dự phòng (chỉ ở client): tăng thì bớt các hạng mục mở khóa theo tương quan; giảm thì rót vào các hạng mục mở khóa
+ * còn dưới vạch (đầy tới vạch), hết chỗ thì dừng. `reserve`: Dự phòng sau khi đặt, `limited`: không giảm được tới mức muốn.
+ */
+export function setReserve(items: SplitItem[], wanted: number, markers: Record<string, number | null>) {
+  const F = items.filter((c) => !c.locked)
+  const R = reserveOf(items)
+  const w = Math.trunc(Number.isFinite(wanted) ? wanted : 0)
+  const target = Math.min(Math.max(w, 0), R + sumRatio(F))
+  const next = new Map(F.map((c) => [c.id, c.ratio]))
+  let left = 0
+  if (target > R) takeFrom(next, F, target - R)
+  else if (target < R) left = fillUpTo(next, F, R - target, (c) => markers[c.id] ?? null)
+  const out = applyMap(items, next)
+  return { items: out, reserve: reserveOf(out), limited: left > 0 }
+}
+
+/**
+ * "Chuyển phần vượt vào Dự phòng" (chỉ ở client): hạng mục mở khóa đang vượt vạch giá gói cao nhất về đúng vạch, phần vượt vào Dự phòng.
+ * Xảy ra khi quỹ tăng làm vạch thấp xuống, hoặc vừa chuyển từ mức có sẵn (đủ 100%) sang Tùy chỉnh. `markers`: vạch theo id.
+ */
+export const clampToMax = (items: SplitItem[], markers: Record<string, number | null>) =>
+  items.length > 1 ? items.map((c) => (!c.locked && markers[c.id] != null && c.ratio > markers[c.id]! ? { ...c, ratio: markers[c.id]! } : c)) : items
+
 /**
  * Mục 3. Tiền của các hạng mục trong nhóm (số chính xác, chưa làm tròn) và "Còn dư".
- * Từ 2 hạng mục: quỹ × tỷ lệ; một hạng mục: min(giá trần, quỹ); nhóm rỗng: cả quỹ là "Còn dư".
+ * Từ 2 hạng mục: quỹ × tỷ lệ, Dự phòng (10000 − tổng tỷ lệ) là "Còn dư"; một hạng mục: min(giá trần, quỹ); nhóm rỗng: cả quỹ là "Còn dư".
  */
 export function splitAmounts(items: SplitItem[], serviceBudget: number, capAmount: number | null) {
   const sb = Math.max(0, serviceBudget)
@@ -272,7 +369,10 @@ export function splitAmounts(items: SplitItem[], serviceBudget: number, capAmoun
     const b = capAmount === null ? sb : Math.min(Math.max(0, capAmount), sb)
     return { amounts: { [items[0].id]: b } as Record<string, number>, leftover: sb - b }
   }
-  return { amounts: Object.fromEntries(items.map((c) => [c.id, (sb * c.ratio) / TOTAL])) as Record<string, number>, leftover: 0 }
+  return {
+    amounts: Object.fromEntries(items.map((c) => [c.id, (sb * c.ratio) / TOTAL])) as Record<string, number>,
+    leftover: (sb * (TOTAL - sumRatio(items))) / TOTAL,
+  }
 }
 
 /** Số tiền khách nhập → tỷ lệ mong muốn: floor(số tiền × 10000 / quỹ). Quỹ ≤ 0 thì không quy đổi được. */
@@ -320,6 +420,34 @@ export interface SplitPackage {
   overlap: number
 }
 
+/** Thứ tự gợi ý trong giới hạn: cùng khu vực, chi phí gần giới hạn, đánh giá, lượt đánh giá, phong cách trùng, rẻ hơn, id */
+const byFit =
+  (limit: number) =>
+  (a: SplitPackage, b: SplitPackage): number =>
+    a.place - b.place ||
+    limit - a.cost - (limit - b.cost) ||
+    (b.rating ?? -1) - (a.rating ?? -1) ||
+    b.reviewCount - a.reviewCount ||
+    b.overlap - a.overlap ||
+    a.cost - b.cost ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+
+/**
+ * Gợi ý theo nhà cung cấp, dùng chung cho ô gợi ý ở tab Ngân sách và "Gợi ý cho bạn" (Timeline, Dịch vụ cưới): mỗi NCC lấy gói tốt
+ * nhất trong giới hạn (như pickPackage), xếp NCC theo gói đó, lấy `n` NCC đầu. NCC không có gói nào trong giới hạn thì bỏ.
+ * NCC đầu tiên luôn là NCC của gói pickPackage chọn.
+ */
+export function topVendors<T extends SplitPackage & { vendorId: string }>(packages: T[], limit: number, n: number): T[] {
+  const cmp = byFit(limit)
+  const best = new Map<string, T>()
+  for (const p of packages) {
+    if (p.cost > limit) continue
+    const cur = best.get(p.vendorId)
+    if (!cur || cmp(p, cur) < 0) best.set(p.vendorId, p)
+  }
+  return [...best.values()].sort(cmp).slice(0, n)
+}
+
 /**
  * Gói gợi ý: có gói trong giới hạn thì chọn gói tốt nhất (cùng khu vực trước, chi phí gần giới hạn, đánh giá, lượt đánh giá,
  * phong cách trùng); không có thì gói rẻ nhất kèm số "Vượt"; không có gói thì null.
@@ -327,19 +455,7 @@ export interface SplitPackage {
 export function pickPackage<T extends SplitPackage>(packages: T[], limit: number): { pkg: T; over: number | null } | null {
   if (!packages.length) return null
   const within = packages.filter((p) => p.cost <= limit)
-  if (within.length) {
-    const best = [...within].sort(
-      (a, b) =>
-        a.place - b.place ||
-        limit - a.cost - (limit - b.cost) ||
-        (b.rating ?? -1) - (a.rating ?? -1) ||
-        b.reviewCount - a.reviewCount ||
-        b.overlap - a.overlap ||
-        a.cost - b.cost ||
-        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-    )[0]
-    return { pkg: best, over: null }
-  }
+  if (within.length) return { pkg: [...within].sort(byFit(limit))[0], over: null }
   const cheapest = [...packages].sort((a, b) => a.cost - b.cost || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0]
   return { pkg: cheapest, over: Math.round(cheapest.cost - Math.max(0, limit)) }
 }

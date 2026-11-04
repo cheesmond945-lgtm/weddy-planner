@@ -54,12 +54,12 @@
     0 14px 30px -22px rgb(52 62 34 / 0.45);
 }
 
-/* Tiêu đề trong nội dung kế hoạch: serif kiểu tạp chí */
+/* Tiêu đề trong nội dung kế hoạch: Playfair Display (cùng font tiêu đề toàn web) */
 .plan-theme h2,
 .plan-theme h3 {
-  font-family: var(--editorial);
+  font-family: var(--serif);
   font-weight: 600;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.015em;
 }
 .plan-theme h2 {
   font-size: 1.45rem;
@@ -387,4 +387,43 @@
   height: 100%;
   border-radius: inherit;
   background: #6f7444;
+}
+
+/* Biểu đồ trong Kế hoạch (Donut, CHART_COLORS): pastel tươi trên nền kem, "Chi phí khác" màu be nhạt */
+.plan-theme {
+  --chart-1: #f29bb2;
+  --chart-2: #7fd1b0;
+  --chart-3: #f8b686;
+  --chart-4: #93c3ee;
+  --chart-5: #b7a3ec;
+  --chart-6: #f1d06f;
+  --chart-other: #e2dccb;
+}
+:root[data-theme='dark'] .plan-theme {
+  --chart-other: #5b584c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .plan-theme {
+    --chart-other: #5b584c;
+  }
+}
+
+/*
+ * Tab Dịch vụ (.services-page): thẻ giấy trắng sáng hơn nền trang (như tab Ngân sách) để nổi, bỏ vân giấy trên thẻ, viền ấm rõ hơn,
+ * bóng nhấc nhẹ; ô hạng mục chưa chọn nền trắng mờ để không chìm vào nền.
+ */
+:root:not([data-theme='dark']) .services-page {
+  --surface: #fffefb;
+  --line: #e4ddcd;
+}
+:root:not([data-theme='dark']) .services-page .bg-surface {
+  background-image: none;
+}
+:root:not([data-theme='dark']) .services-page :is(article.border, li > button.border) {
+  box-shadow:
+    0 1px 2px rgb(60 45 25 / 0.06),
+    0 12px 26px -20px rgb(60 45 25 / 0.35);
+}
+:root:not([data-theme='dark']) .services-page .border-dashed {
+  background-color: rgb(255 254 251 / 0.6);
 }

@@ -9,23 +9,19 @@ import type { SplitState } from './budgetSplit'
 import { configBody, stateFromConfig } from './budgetSplitView'
 import { planningKeys } from './hooks'
 
-/**
- * Cờ hành vi tự lưu (tài liệu triển khai v1.2, mục 7 và 9): đổi ở đây, không sửa nhiều nơi.
- * - DEBOUNCE_MS: các thao tác trong khoảng này chỉ gửi trạng thái cuối
- * - RETRY_MS: lỗi mạng thì thử lại sau các khoảng này (2 lần), vẫn lỗi thì trả về bản đã lưu
- */
-export const SPLIT_AUTOSAVE = { DEBOUNCE_MS: 800, RETRY_MS: [1000, 2000] }
+/** Lỗi mạng khi lưu thì thử lại sau các khoảng này (2 lần), vẫn lỗi thì trả về bản đã lưu */
+export const SPLIT_AUTOSAVE = { RETRY_MS: [1000, 2000] }
 
 export type SplitSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
- * Cấu hình Tùy chỉnh đang sửa và tự lưu (mục 7). Kéo / nhập chỉ đổi bản nháp ở client (`update(next, false)`), không gọi API;
- * nhả thanh, rời ô, khóa, bỏ / thêm lại, giá trần, đặt lại thì `update(next, true)`: lưu sau DEBOUNCE_MS, gửi toàn bộ cấu hình kèm version.
+ * Cấu hình Tùy chỉnh đang sửa (mục 7). Mọi thao tác chỉ đổi bản nháp ở client (`update`), không gọi API; khách bấm "Lưu" (`save`)
+ * mới gửi toàn bộ cấu hình kèm version, "Hủy" (`discard`) trả về bản đã lưu. `unsaved`: còn thay đổi chưa lưu.
  * Các lần lưu nối tiếp nhau (không chồng), mỗi lần mang seq tăng dần, chỉ áp dụng phản hồi mới nhất.
  * 422 / mất mạng (sau 2 lần thử lại): trả về cấu hình đã lưu gần nhất và báo. 409: nhận cấu hình mới nhất và báo.
- * Rời màn hình khi còn thay đổi chưa gửi: gửi ngay (keepalive); không gửi được thì thay đổi không được giữ.
+ * Đổi mức chia hoặc rời màn hình khi còn thay đổi chưa lưu: gửi ngay (`flush`, keepalive khi rời trang) để không mất.
  */
 export function useBudgetSplit(b: Budget) {
   const { user } = useAuth()
@@ -36,11 +32,15 @@ export function useBudgetSplit(b: Budget) {
 
   const [draft, setDraft] = useState<SplitState | null>(() => (server ? stateFromConfig(server, b) : null))
   const [status, setStatus] = useState<SplitSaveStatus>('idle')
+  const [unsaved, setUnsaved] = useState(false)
   const draftRef = useRef(draft)
   const versionRef = useRef(server?.version ?? 0)
   /** Có thay đổi ở client chưa được backend xác nhận */
   const dirty = useRef(false)
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const markDirty = (v: boolean) => {
+    dirty.current = v
+    setUnsaved(v)
+  }
   const inFlight = useRef(false)
   const again = useRef(false)
   const seq = useRef(0)
@@ -102,14 +102,14 @@ export function useBudgetSplit(b: Budget) {
         return send()
       }
       if (my === seq.current) {
-        dirty.current = false
+        markDirty(false)
         setStatus('saved')
         apply(result)
       }
       return
     }
     again.current = false
-    dirty.current = false
+    markDirty(false)
     setStatus('error')
     const latest = error instanceof ApiError && error.status === 409 ? (error.details as { budget?: Budget } | undefined)?.budget : undefined
     if (latest) {
@@ -126,36 +126,35 @@ export function useBudgetSplit(b: Budget) {
     if (error instanceof ApiError && error.status === 409) void qc.invalidateQueries({ queryKey: planningKeys.budget(uid) })
   }
 
-  const schedule = () => {
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => {
-      timer.current = undefined
-      void send()
-    }, SPLIT_AUTOSAVE.DEBOUNCE_MS)
-  }
-
-  /** Đổi bản nháp; `save` = true thì tự lưu (debounce) */
-  const update = (next: SplitState, save: boolean) => {
-    dirty.current = true
+  /** Đổi bản nháp (chưa lưu) */
+  const update = (next: SplitState) => {
+    markDirty(true)
+    setStatus('idle')
     draftRef.current = next
     setDraft(next)
-    if (save) schedule()
   }
 
-  /** Lưu bản nháp hiện tại (nhả thanh kéo sau khi kéo) */
-  const commit = () => {
-    if (dirty.current) schedule()
+  /** Nút "Lưu": gửi bản nháp hiện tại */
+  const save = () => {
+    if (dirty.current) void send()
   }
 
-  /** Gửi ngay thay đổi đang chờ (trước khi đổi mức chia / rời trang) */
+  /** Nút "Hủy": bỏ thay đổi chưa lưu, trả về cấu hình đã lưu */
+  const discard = () => {
+    if (inFlight.current) return
+    const saved = qc.getQueryData<Budget>(planningKeys.budget(uid))
+    const back = saved?.preset === 'CUSTOM' && saved.split.config ? stateFromConfig(saved.split.config, saved) : null
+    markDirty(false)
+    draftRef.current = back
+    setDraft(back)
+  }
+
+  /** Gửi ngay thay đổi chưa lưu (trước khi đổi mức chia / rời trang) */
   const flush = (keepalive = false) => {
-    if (timer.current === undefined) return
-    clearTimeout(timer.current)
-    timer.current = undefined
-    void send(keepalive)
+    if (dirty.current && !inFlight.current) void send(keepalive)
   }
 
-  // Rời màn hình (đổi tab, đóng trang) khi đang chờ debounce: gửi ngay
+  // Rời màn hình (đổi tab, đóng trang) khi còn thay đổi chưa lưu: gửi ngay
   const flushRef = useRef(flush)
   flushRef.current = flush
   useEffect(() => {
@@ -167,5 +166,5 @@ export function useBudgetSplit(b: Budget) {
     }
   }, [])
 
-  return { draft, status, update, commit, flush }
+  return { draft, status, unsaved, update, save, discard, flush }
 }

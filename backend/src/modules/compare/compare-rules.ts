@@ -394,7 +394,7 @@ export function compareServices(items: CmpItem[], ctx: CmpContext, picked: Recor
     /** Ghi một lần dưới nhãn dòng Vị trí: "Nơi tổ chức: {phường/xã}" (các ô chỉ ghi phường/xã của NCC) */
     locationNote: ctx.weddingWard ? `Nơi tổ chức: ${shortWard(ctx.weddingWard)}` : null,
     lockNote: ctx.lockedBy
-      ? `Bạn đã cọc ${ctx.lockedBy}${ctx.weddingDate ? ` ngày ${dayMonth(ctx.weddingDate)}` : ''}, nên chưa thêm được nhà cung cấp khác ở đây. Đổi sang nhà cung cấp khác có thể mất tiền cọc ${vnd(round10k(ctx.lockedDeposit ?? 0))} (tùy chính sách nhà cung cấp; dòng "Nếu đổi nhà cung cấp" đã tính khoản này). Muốn đổi, hãy nhắn ${ctx.lockedBy} hoặc hủy đơn ở tab Dịch vụ.`
+      ? `Bạn đã cọc ${ctx.lockedBy}${ctx.weddingDate ? ` cho ngày cưới ${dayMonth(ctx.weddingDate)}` : ''} nên chưa thêm được nhà cung cấp khác. Đổi nhà cung cấp có thể mất ${vnd(round10k(ctx.lockedDeposit ?? 0))} tiền cọc. Muốn đổi, hãy nhắn ${ctx.lockedBy} hoặc hủy đơn.`
       : null,
     /** Dòng gộp các tiêu chí giống nhau ở mọi bên ("Giống nhau: 30 bàn, đủ cho 300 khách"); các dòng đó ẩn đi */
     sameNote,

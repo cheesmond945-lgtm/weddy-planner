@@ -8,7 +8,7 @@ import type { BudgetPreset } from '@/types/wedding'
 /** Ba mức chọn ở form và tab Ngân sách; "Tùy chỉnh" (thanh kéo) chỉ có ở tab Ngân sách */
 export const PRESET_OPTIONS: { value: Exclude<BudgetPreset, 'CUSTOM'>; label: string; description: string }[] = [
   { value: 'BALANCED', label: 'Cân bằng', description: 'Chia theo mặt bằng giá của từng dịch vụ.' },
-  { value: 'SPACE', label: 'Ưu tiên không gian', description: 'Dành thêm cho trang trí.' },
+  { value: 'SPACE', label: 'Ưu tiên không gian', description: 'Dành thêm cho trang trí, hoa cưới.' },
   { value: 'VISUAL', label: 'Ưu tiên hình ảnh', description: 'Dành thêm cho chụp ảnh, trang phục, trang điểm.' },
 ]
 

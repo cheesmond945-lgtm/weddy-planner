@@ -8,6 +8,7 @@ import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { BudgetCandidatePackage } from '@/types/wedding'
+import { topVendors } from '../budgetSplit'
 import { useRefreshPlanning } from '../hooks'
 
 /** Gói gợi ý đang hiện trên dòng (nhóm chia: tính ở client; tiệc: backend) */
@@ -20,28 +21,22 @@ export interface ShownSuggestion {
   cost: number
 }
 
-/** Số phương án khác hiện kèm gợi ý chính (mỗi NCC một gói); muốn xem hết thì sang Dịch vụ cưới */
-const ALTERNATIVES = 2
+/** Số nhà cung cấp trong ô gợi ý, bằng số thẻ "Gợi ý cho bạn" (backend SUGGESTION_COUNT); muốn xem hết thì sang Dịch vụ cưới */
+const SUGGESTION_COUNT = 3
 
 /**
- * Phương án trong ô gợi ý: gợi ý chính trước, sau đó tối đa ALTERNATIVES gói của NCC khác, vừa số tiền gợi ý
- * (gần số tiền nhất, rồi điểm đánh giá); không đủ thì thêm gói vượt rẻ nhất. Hàm thuần.
+ * Phương án trong ô gợi ý: cùng 3 nhà cung cấp, cùng thứ tự với "Gợi ý cho bạn" ở Timeline / Dịch vụ cưới (topVendors: mỗi NCC
+ * một gói tốt nhất trong số tiền gợi ý). Không NCC nào vừa số tiền thì chỉ có gợi ý chính (gói rẻ nhất, kèm "Vượt"). Hàm thuần.
  */
 export function suggestionOptions(main: ShownSuggestion, packages: readonly BudgetCandidatePackage[], limit: number): ShownSuggestion[] {
-  const seen = new Set([main.vendorId])
-  const within = packages.filter((p) => p.cost <= limit).sort((a, b) => b.cost - a.cost || (b.rating ?? -1) - (a.rating ?? -1))
-  const over = packages.filter((p) => p.cost > limit).sort((a, b) => a.cost - b.cost)
-  const out: ShownSuggestion[] = [main]
-  for (const p of [...within, ...over]) {
-    if (out.length > ALTERNATIVES || seen.has(p.vendorId)) continue
-    seen.add(p.vendorId)
-    out.push({ packageId: p.id, vendorId: p.vendorId, vendorName: p.vendorName, packageName: p.name, chargedTables: p.chargedTables, cost: p.cost })
-  }
-  return out
+  const top = topVendors([...packages], limit, SUGGESTION_COUNT)
+  if (!top.length) return [main]
+  return top.map((p) => ({ packageId: p.id, vendorId: p.vendorId, vendorName: p.vendorName, packageName: p.name, chargedTables: p.chargedTables, cost: p.cost }))
 }
 
 const label = (s: ShownSuggestion) => `${s.vendorName} · ${s.packageName}${s.chargedTables !== null ? ` · ${s.chargedTables} bàn` : ''}`
-const servicesOf = (slug: string) => `${paths.services}?category=${slug}&ai=1`
+/** Dịch vụ cưới của hạng mục ở dạng đầy đủ (ai=all): mọi dịch vụ, 3 gợi ý ghim đầu danh sách */
+const servicesOf = (slug: string) => `${paths.services}?category=${slug}&ai=all`
 
 /** Thêm các gợi ý vào kế hoạch (một hoặc nhiều dòng), một thông báo kèm Hoàn tác gỡ đúng những gì vừa thêm */
 export function useChooseSuggestions() {

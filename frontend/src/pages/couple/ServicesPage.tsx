@@ -12,7 +12,7 @@ import { FavoriteButton } from '@/features/favorites/components/FavoriteButton'
 import { HallsFreeBadge } from '@/features/halls/components/HallCalendar'
 import { useHallsFree } from '@/features/halls/hooks'
 import { RESTAURANT_SLUG } from '@/features/vendors/constants'
-import { SuggestionsBar, SuggestionsPanel, suggestionCardProps } from '@/features/weddings/components/SuggestionsPanel'
+import { SuggestionsPanel, suggestionCardProps } from '@/features/weddings/components/SuggestionsPanel'
 import { useAiSuggestions, usePlan, useWedding } from '@/features/weddings/hooks'
 import { AddToPlanButton } from '@/features/weddings/planActions'
 import { toISODate, today } from '@/lib/date'
@@ -23,7 +23,7 @@ const inPlanBadge = <span className="rounded-pill bg-moss-700 px-2.5 py-1 text-x
 /**
  * Trang Dịch vụ cưới (2.1), kèm "Gợi ý cho bạn" (4.3) khi mở từ nút gợi ý ở Kế hoạch / Timeline (?category=…&ai=1):
  * - ai=1 (thu gọn): chỉ khung gợi ý, ẩn thanh hạng mục và bộ lọc;
- * - ai=all (mở rộng): danh sách đầy đủ, 3 dịch vụ gợi ý ghim đầu danh sách kèm nhãn, có nút "Thu gọn".
+ * - ai=all (mở rộng): danh sách đầy đủ, 3 dịch vụ gợi ý ghim đầu danh sách kèm nhãn "Gợi ý cho bạn" trên thẻ.
  * Đổi bộ lọc hoặc tìm kiếm thì bỏ gợi ý (filters.ts xóa tham số ai), danh sách xếp theo kết quả lọc.
  *
  * Tìm theo câu gõ (?q=, docs/api/catalog.md GET /services/search): tầng 1 khớp chữ; không có kết quả thì backend trả NEEDS_AI,
@@ -177,7 +177,6 @@ export default function ServicesPage() {
       {shown && (hasChips || (textMode && result?.ai?.priceRejected)) && (
         <NlChips filters={shown} categoryName={shown.category ? categoryName(shown.category) : undefined} priceRejected={textMode && result?.ai?.priceRejected} onRemove={removeChip} />
       )}
-      {pinning && <SuggestionsBar data={ai.data} categoryName={categoryName(filters.category)} onCollapse={() => setAiMode('1')} />}
       {body}
     </>
   )

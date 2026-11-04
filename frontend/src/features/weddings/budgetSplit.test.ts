@@ -33,14 +33,14 @@ for (const [side, S] of [
       const r = S.initFromMode([member('TT', 20), member('CA', 30), member('TP', 10), member('TD', 20), member('HC', 20)], 'BALANCED')
       assert.deepEqual(pct(r), { TT: '20,00', CA: '30,00', TP: '10,00', TD: '20,00', HC: '20,00' })
     })
-    it('T02 Ưu tiên hình ảnh: trọng số 20, 30, 13, 12, 10', () => {
+    it('T02 Ưu tiên hình ảnh (đánh đổi): trọng số 16, 36, 15, 14, 8', () => {
       const r = S.initFromMode([member('TT', 20), member('CA', 20), member('TP', 10), member('TD', 10), member('HC', 10)], 'VISUAL')
-      assert.deepEqual(pct(r), { TT: '23,53', CA: '35,29', TP: '15,29', TD: '14,12', HC: '11,77' })
+      assert.deepEqual(pct(r), { TT: '17,98', CA: '40,45', TP: '16,85', TD: '15,73', HC: '8,99' })
       assert.equal(total(r), 10000)
     })
-    it('T03 Ưu tiên không gian: trọng số 26, 20, 20, 20, 20', () => {
+    it('T03 Ưu tiên không gian (trang trí, hoa cưới; đánh đổi): trọng số 36, 16, 16, 16, 32', () => {
       const r = S.initFromMode((['TT', 'CA', 'TP', 'TD', 'HC'] as K[]).map((k) => member(k, 20)), 'SPACE')
-      assert.deepEqual(pct(r), { TT: '24,53', CA: '18,87', TP: '18,87', TD: '18,87', HC: '18,86' })
+      assert.deepEqual(pct(r), { TT: '31,04', CA: '13,79', TP: '13,79', TD: '13,79', HC: '27,59' })
     })
     it('T04 ba hạng mục bằng nhau: phần dư về hạng mục đứng trước', () => {
       const r = S.initFromMode([member('HC', 5), member('CA', 5), member('TT', 5)], 'BALANCED')
@@ -264,37 +264,115 @@ describe('hai bản thuật toán cho cùng kết quả', () => {
   })
 })
 
-describe('trimToMax: chuyển phần thừa sang dịch vụ khác', () => {
-  const it3 = (a: number, b: number, c: number, locked = '') =>
-    [
-      { id: 'a', slug: 'chup-anh', ratio: a, locked: locked.includes('a') },
-      { id: 'b', slug: 'trang-phuc', ratio: b, locked: locked.includes('b') },
-      { id: 'c', slug: 'hoa-cuoi', ratio: c, locked: locked.includes('c') },
-    ]
-  const sum = (xs: { ratio: number }[]) => xs.reduce((s, x) => s + x.ratio, 0)
+const it3 = (a: number, b: number, c: number, locked = '') => [
+  { id: 'a', slug: 'chup-anh', ratio: a, locked: locked.includes('a') },
+  { id: 'b', slug: 'trang-phuc', ratio: b, locked: locked.includes('b') },
+  { id: 'c', slug: 'makeup', ratio: c, locked: locked.includes('c') },
+]
+const ratios = (xs: { ratio: number }[]) => xs.map((x) => x.ratio)
 
-  it('dịch vụ vượt về vạch, phần thừa sang dịch vụ còn dưới vạch; tổng giữ 10000', () => {
-    const out = fe.trimToMax(it3(6000, 3000, 1000), { a: 2000, b: null, c: null })
-    assert.equal(out[0].ratio, 2000)
-    assert.equal(sum(out), 10000)
-    assert.ok(out[1].ratio > 3000 && out[2].ratio > 1000)
+for (const [side, S] of [
+  ['frontend', fe],
+  ['backend', be as unknown as Impl],
+] as const) {
+  describe(`${side}: Dự phòng (tổng tỷ lệ dưới 10000)`, () => {
+    it('hợp lệ khi tổng ≤ 10000, không hợp lệ khi vượt', () => {
+      assert.equal(S.isValidSplit(it3(4000, 3000, 1000)), true)
+      assert.equal(S.isValidSplit(it3(5000, 4000, 2000)), false)
+    })
+    it('splitAmounts: Dự phòng là "Còn dư"', () => {
+      const r = S.splitAmounts(it3(4000, 3000, 1000), 10 * M, null)
+      assert.deepEqual([r.amounts.a, r.amounts.b, r.amounts.c, r.leftover], [4 * M, 3 * M, 1 * M, 2 * M])
+    })
+    it('rebalance, onRemove, onAdd giữ nguyên Dự phòng', () => {
+      assert.deepEqual(ratios(S.rebalance(it3(4000, 3000, 1000), 'a', 2000).items), [2000, 4500, 1500])
+      assert.deepEqual(ratios(S.onRemove(it3(4000, 3000, 1000), 'c').items), [4571, 3429])
+      const added = S.onAdd(it3(4000, 3000, 1000).slice(0, 2), { id: 'c', slug: 'makeup', median: 1 * M }, () => 1 * M, 'BALANCED')
+      assert.equal(added.reduce((s, x) => s + x.ratio, 0), 7000)
+    })
   })
+}
 
-  it('nhận thêm làm vượt thì lặp tiếp; hết chỗ nhận thì giữ phần thừa', () => {
-    const out = fe.trimToMax(it3(6000, 3000, 1000), { a: 2000, b: 3500, c: null })
-    assert.deepEqual(
-      out.map((x) => x.ratio),
-      [2000, 3500, 4500],
-    )
-    const none = it3(6000, 3000, 1000)
-    assert.deepEqual(fe.trimToMax(none, { a: 2000, b: 1000, c: 500 }), none)
+describe('setServiceRatio: kéo một dịch vụ ở Tùy chỉnh có Dự phòng', () => {
+  const none = { a: null, b: null, c: null }
+  it('giảm: phần nhả ra vào Dự phòng, dịch vụ khác giữ nguyên', () => {
+    const r = fe.setServiceRatio(it3(4600, 4400, 1000), 'b', 3000, none)
+    assert.deepEqual(ratios(r.items), [4600, 3000, 1000])
+    assert.equal(fe.reserveOf(r.items), 1400)
   })
-
-  it('không đụng hạng mục khóa', () => {
-    const out = fe.trimToMax(it3(6000, 3000, 1000, 'b'), { a: 2000, b: 1000, c: null })
-    assert.deepEqual(
-      out.map((x) => x.ratio),
-      [2000, 3000, 5000],
-    )
+  it('tăng: lấy từ Dự phòng trước, thiếu mới lấy từ dịch vụ mở khóa khác theo tương quan', () => {
+    assert.deepEqual(ratios(fe.setServiceRatio(it3(4000, 3000, 1000), 'a', 5000, none).items), [5000, 3000, 1000])
+    // Dự phòng 2000 hết, thiếu 1000 lấy từ b:c = 3000:1000
+    assert.deepEqual(ratios(fe.setServiceRatio(it3(4000, 3000, 1000), 'a', 7000, none).items), [7000, 2250, 750])
+  })
+  it('không vượt vạch của chính nó; hết tỷ lệ thì kẹp; không đụng hạng mục khóa', () => {
+    const m = fe.setServiceRatio(it3(4000, 3000, 1000), 'a', 6000, { a: 5000, b: null, c: null })
+    assert.deepEqual([ratios(m.items), m.limit], [[5000, 3000, 1000], 'MARKER'])
+    const s = fe.setServiceRatio(it3(4000, 3000, 1000, 'b'), 'a', 9000, none)
+    assert.deepEqual([ratios(s.items), s.limit, s.max], [[7000, 3000, 0], 'SHARE', 7000])
   })
 })
+
+describe('setReserve và clampToMax', () => {
+  it('tăng Dự phòng: bớt các dịch vụ mở khóa theo tương quan', () => {
+    const r = fe.setReserve(it3(5000, 3000, 2000), 2000, { a: null, b: null, c: null })
+    assert.deepEqual([ratios(r.items), r.reserve, r.limited], [[4000, 2400, 1600], 2000, false])
+  })
+  it('giảm Dự phòng: rót vào dịch vụ còn dưới vạch, đầy vạch thì dừng', () => {
+    const r = fe.setReserve(it3(4000, 2000, 1000), 0, { a: 5000, b: 2000, c: 1500 })
+    assert.deepEqual([ratios(r.items), r.reserve, r.limited], [[5000, 2000, 1500], 1500, true])
+  })
+  it('clampToMax: dịch vụ vượt vạch về vạch, phần vượt vào Dự phòng; không đụng hạng mục khóa', () => {
+    const out = fe.clampToMax(it3(6000, 3000, 1000, 'b'), { a: 4000, b: 2000, c: null })
+    assert.deepEqual([ratios(out), fe.reserveOf(out)], [[4000, 3000, 1000], 2000])
+  })
+})
+
+for (const [side, S] of [
+  ['frontend', fe],
+  ['backend', be as unknown as Impl],
+] as const) {
+  describe(`${side}: fitToMax (ba mức có sẵn không quá giá gói cao nhất)`, () => {
+    it('cắt về vạch, phần thừa sang hạng mục còn thiếu theo tương quan; dùng hết khi còn chỗ', () => {
+      // Như ảnh: 4599 / 4440 / 961, vạch 5585 / 3723 / 827 → Trang phục và Trang điểm về vạch, Chụp ảnh nhận phần thừa
+      assert.deepEqual(ratios(S.fitToMax(it3(4599, 4440, 961), { a: 5585, b: 3723, c: 827 })), [5450, 3723, 827])
+    })
+    it('nhận thêm làm vượt thì lặp; mọi hạng mục chạm vạch thì phần còn lại là Dự phòng', () => {
+      assert.deepEqual(ratios(S.fitToMax(it3(6000, 3000, 1000), { a: 2000, b: 3500, c: null })), [2000, 3500, 4500])
+      const all = S.fitToMax(it3(5000, 3000, 2000), { a: 4000, b: 2500, c: 1500 })
+      assert.deepEqual([ratios(all), 10000 - ratios(all).reduce((s, x) => s + x, 0)], [[4000, 2500, 1500], 2000])
+    })
+    it('không đụng hạng mục khóa; một hạng mục giữ nguyên', () => {
+      assert.deepEqual(ratios(S.fitToMax(it3(6000, 3000, 1000, 'b'), { a: 2000, b: 1000, c: null })), [2000, 3000, 5000])
+      assert.deepEqual(ratios(S.fitToMax(it3(10000, 0, 0).slice(0, 1), { a: 2000 })), [10000])
+    })
+  })
+}
+
+for (const [side, S] of [
+  ['frontend', fe],
+  ['backend', be as unknown as Impl],
+] as const) {
+  describe(`${side}: topVendors (ô gợi ý tab Ngân sách = "Gợi ý cho bạn")`, () => {
+    const p = (id: string, vendorId: string, tr: number, over: Partial<{ place: number; rating: number | null; reviewCount: number; overlap: number }> = {}) => ({
+      id,
+      vendorId,
+      cost: tr * M,
+      place: 0,
+      rating: null as number | null,
+      reviewCount: 0,
+      overlap: 0,
+      ...over,
+    })
+    const list = [p('a1', 'A', 9), p('a2', 'A', 7), p('b1', 'B', 8), p('c1', 'C', 11), p('d1', 'D', 5, { place: 1 }), p('e1', 'E', 6)]
+    it('mỗi NCC một gói tốt nhất trong giới hạn, xếp như pickPackage; NCC đầu là NCC của gói pickPackage chọn', () => {
+      const top = S.topVendors(list, 10 * M, 3)
+      assert.deepEqual(top.map((x) => x.id), ['a1', 'b1', 'e1'])
+      assert.equal(top[0].id, S.pickPackage(list, 10 * M)!.pkg.id)
+    })
+    it('cùng khu vực trước; NCC không có gói trong giới hạn thì bỏ', () => {
+      assert.deepEqual(S.topVendors(list, 10 * M, 10).map((x) => x.vendorId), ['A', 'B', 'E', 'D'])
+      assert.deepEqual(S.topVendors(list, 4 * M, 3), [])
+    })
+  })
+}

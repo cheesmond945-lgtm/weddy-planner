@@ -5,6 +5,9 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { Link } from 'react-router'
 import { chatApi } from '@/api/chat'
 import { planningKeys } from '@/features/weddings/hooks'
+import { Badge } from '@/components/Badge'
+import { ORDER_STATUS } from '@/features/vendorOrders/constants'
+import { formatDayTime } from '@/features/vendorOrders/calc'
 import { formatMessageTime } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
@@ -161,6 +164,20 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
           <X strokeWidth={1.75} />
         </DialogPrimitive.Close>
       </header>
+
+      {/* Đơn mới nhất với NCC: một dòng gọn (mã đơn, trạng thái, hạn cọc nếu đang chờ), chi tiết xem ở thẻ đơn tab Dịch vụ */}
+      {conversation.latestOrder && (
+        <div className="flex items-center justify-between gap-3 border-b border-line bg-gold-100/40 px-4 py-2 text-[13px]">
+          <span className="flex min-w-0 items-center gap-1.5 text-ink-2">
+            <FileText className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+            <span className="truncate">
+              Đơn <b className="font-semibold text-ink">{conversation.latestOrder.orderCode}</b>
+              {conversation.latestOrder.status === 'Pending' && conversation.latestOrder.depositDueDate && ` · Hạn cọc ${formatDayTime(conversation.latestOrder.depositDueDate)}`}
+            </span>
+          </span>
+          <Badge tone={ORDER_STATUS[conversation.latestOrder.status].tone}>{ORDER_STATUS[conversation.latestOrder.status].label}</Badge>
+        </div>
+      )}
 
       <div ref={listRef} aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
         {isPending ? (
