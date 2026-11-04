@@ -5,23 +5,18 @@ import { Button } from '@/components/ui/button'
 import { DateChip } from '@/features/vendorOrders/components/TaskDateRow'
 import { TaskTitle } from '@/features/vendorOrders/components/TaskTitle'
 import { daysBetween, formatDate, parseDate, today } from '@/lib/date'
-import { capitalizeFirst } from '@/lib/format'
 import { TASK_LABELS } from '@/lib/taskLabels'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { TimelineItem } from '@/types/wedding'
 import { DUE_SOON_DAYS } from '../timelineFilter'
 
-/** Tên hạng mục dùng trong chữ ("Gợi ý nhà hàng", "Việc chi tiết của nhà hàng"); danh mục lạ thì dùng tên từ API. */
-export const SERVICE_LABEL: Record<string, string> = {
-  'nha-hang': 'nhà hàng',
-  'chup-anh': 'chụp ảnh & quay phim',
-  'trang-phuc': 'trang phục',
-  decor: 'trang trí',
-  makeup: 'makeup',
-  'hoa-cuoi': 'hoa cưới',
-}
-export const serviceLabel = (item: TimelineItem) => SERVICE_LABEL[item.category?.slug ?? ''] ?? item.category?.name.toLowerCase() ?? 'dịch vụ'
+/**
+ * Tên dịch vụ đúng như trong CSDL (service_categories.name: Trung tâm tiệc cưới, Trang điểm, Chụp ảnh...), không đặt tên riêng ở front.
+ * serviceLabel dùng khi đứng riêng; trong câu ("Gợi ý trang điểm") thì hạ chữ đầu.
+ */
+export const serviceLabel = (item: TimelineItem) => item.category?.name ?? 'Dịch vụ'
+const inSentence = (name: string) => name.charAt(0).toLocaleLowerCase('vi') + name.slice(1)
 
 /** "14/7/2026": ngày, tháng không đệm số 0 (như thiết kế mẫu). */
 export const dmy = (s: string) => {
@@ -82,11 +77,13 @@ interface TimelineCardProps {
   showService?: boolean
   /** Hạn dạng d/m (không năm): nhóm theo tháng đã có năm ở tiêu đề */
   compactDate?: boolean
+  /** Chỉ cho thẻ Mốc chốt đã cọc: ngày thực hiện của đơn khi nó sau ngày cưới ("YYYY-MM-DD"), hiện dòng cảnh báo */
+  conflictDate?: string | null
 }
 
 
 /** Thẻ một việc: ô tick tròn, tên, dòng hạn, và nút chỉ khi nghiệp vụ cần. */
-export function TimelineCard({ item, leaving, nested, showService, onComplete, onReopen, onEdit, onRemove, onChat }: TimelineCardProps) {
+export function TimelineCard({ item, leaving, nested, showService, conflictDate, onComplete, onReopen, onEdit, onRemove, onChat }: TimelineCardProps) {
   const due = parseDate(item.dueDate!)
   const done = item.isDone
   const overdue = !done && !item.isRestPayment && due < today()
@@ -115,7 +112,7 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
       ? []
       : [
           togetherUnconfirmed && <span key="plan">NCC sẽ hẹn lịch với bạn</span>,
-          showService && <span key="svc">{capitalizeFirst(serviceLabel(item))}</span>,
+          showService && <span key="svc">{serviceLabel(item)}</span>,
           dueSoon && (
             <span key="soon" className="font-semibold text-gold-ink">
               Sắp đến hạn
@@ -208,6 +205,11 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
             Các việc phục vụ của nhà cung cấp mở ra sau khi bạn đặt cọc
           </div>
         )}
+        {autoDone && done && conflictDate && (
+          <div role="note" className="mt-1 text-[12.5px] text-warn">
+            Ngày thực hiện của đơn ({dmy(conflictDate)}) sau ngày cưới. Nhắn nhà cung cấp để cập nhật đơn.
+          </div>
+        )}
         {autoDone && done && item.vendorProcessMissing && (
           <div className="mt-1 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
             <Ban className="size-3.5" aria-hidden />
@@ -228,7 +230,7 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
           <Button asChild variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5">
             <Link to={`${paths.services}?category=${item.category.slug}`}>
               <Sparkles className="size-[15px] shrink-0" />
-              <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${label}`} →</span>
+              <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${inSentence(label)}`} →</span>
             </Link>
           </Button>
         )}

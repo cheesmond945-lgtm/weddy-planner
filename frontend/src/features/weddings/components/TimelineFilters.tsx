@@ -1,7 +1,8 @@
-import { ListFilter, Search, X } from 'lucide-react'
+import { CalendarDays, ListFilter, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { controlClass } from '@/features/vendors/components/FormParts'
 import { cn } from '@/lib/utils'
+import type { ViewMode } from '../timelineGroups'
 import { hasFilters, type MonthOption, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
 
 interface TimelineFiltersProps {
@@ -16,6 +17,9 @@ interface TimelineFiltersProps {
   onCategory: (slug: string) => void
   /** Số việc đang hiện sau khi lọc */
   shown: number
+  /** Đang xem danh sách hay lịch; nút lịch cạnh "Bộ lọc" chuyển qua lại */
+  view: ViewMode
+  onToggleView: () => void
 }
 
 const OWNERS: { value: OwnerFilter; label: string }[] = [
@@ -28,7 +32,7 @@ const OWNERS: { value: OwnerFilter; label: string }[] = [
  * Tìm kiếm và lọc việc của timeline: ô từ khóa hiện sẵn (tên việc, dịch vụ, tên NCC, ngày hạn "12/11", "tháng 12"; không cần gõ dấu);
  * tháng, dịch vụ và ai làm gom vào nút "Bộ lọc" (hiện số bộ lọc đang bật). Lọc ngay trên máy, không gọi API. Từ khóa được áp sau 250 ms để gõ mượt.
  */
-export function TimelineFilters({ filters, onChange, onReset, months, categories, category, onCategory, shown }: TimelineFiltersProps) {
+export function TimelineFilters({ filters, onChange, onReset, months, categories, category, onCategory, shown, view, onToggleView }: TimelineFiltersProps) {
   const [text, setText] = useState(filters.q)
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -64,8 +68,8 @@ export function TimelineFilters({ filters, onChange, onReset, months, categories
 
   return (
     <div className="mt-4" role="search" aria-label="Tìm và lọc việc">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative min-w-[220px] flex-1">
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input
             type="search"
@@ -82,7 +86,7 @@ export function TimelineFilters({ filters, onChange, onReset, months, categories
           )}
         </div>
 
-        <div ref={panelRef} className="relative">
+        <div ref={panelRef} className="relative shrink-0">
           <button
             type="button"
             aria-expanded={open}
@@ -136,6 +140,18 @@ export function TimelineFilters({ filters, onChange, onReset, months, categories
             </div>
           )}
         </div>
+        <button
+          type="button"
+          aria-label={view === 'calendar' ? 'Xem danh sách' : 'Xem lịch'}
+          title={view === 'calendar' ? 'Xem danh sách' : 'Xem lịch'}
+          onClick={onToggleView}
+          className={cn(
+            'grid size-[42px] shrink-0 place-items-center rounded-pill border border-line bg-surface text-muted-foreground hover:border-line-strong hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold',
+            view === 'calendar' && 'border-gold/45 bg-gold-soft text-gold-ink',
+          )}
+        >
+          <CalendarDays className="size-[18px]" />
+        </button>
       </div>
 
       {active && (

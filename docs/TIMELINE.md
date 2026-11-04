@@ -53,9 +53,9 @@ Kiểm chứng: 62 dòng sheet ví dụ (có kỳ vọng cập nhật theo luậ
 
 ## 5. Giao diện
 
-Hai cách xem, chọn bằng sub tab dùng chung `frontend/src/components/SegmentedTabs.tsx` (2 ô chia đều trong khung bo tròn; ô đang chọn nền xanh nhạt, chữ xanh in hoa; dòng phụ "{n} việc" theo bộ lọc / "{m} dịch vụ"). Mặc định THEO THỜI GIAN, nhớ lựa chọn trong `localStorage` (`weddy.timeline.view`). Hai cách dùng chung dữ liệu, bộ lọc Chưa xong / Đã xong / Tất cả, hộp xác nhận hoàn thành và các nút.
+Một danh sách việc theo thời gian (không còn thanh 3 tab "Theo thời gian / Theo dịch vụ / Lịch"). Nút icon lịch cạnh "Bộ lọc", cùng hàng với ô tìm kiếm, chuyển qua lại giữa danh sách và lịch tháng (tooltip "Xem lịch" / "Xem danh sách", tô màu khi đang xem lịch); chế độ nhớ trong `localStorage` (`weddy.timeline.view`; giá trị cũ `service` / `time` về danh sách, `calendar` giữ lịch: `parseView`). Danh sách và lịch dùng chung dữ liệu, ô tìm kiếm, Bộ lọc, bộ lọc Chưa xong / Đã xong / Tất cả, hộp xác nhận hoàn thành và các nút.
 - **THEO THỜI GIAN:** danh sách phẳng mọi việc (khung, việc chi tiết của mọi dịch vụ đã cọc, việc tự thêm), sắp theo Hạn tăng dần, cùng hạn giữ thứ tự mẫu. Chia nhóm theo tháng ("Tháng m/yyyy" + "{n} việc"); việc chưa xong có hạn trước hôm nay gom vào nhóm "Quá hạn" trên cùng. Việc chi tiết thêm tên dịch vụ ở dòng hạn ("Hạn: d/m · Nhà hàng"). Mốc chốt là thẻ thường, không xổ xuống: đã cọc hiện "✓ Đã chốt · {NCC}", chưa cọc hiện dòng ổ khóa "N việc chi tiết mở sau khi bạn đặt cọc". Logic nhóm: `features/weddings/timelineGroups.ts`.
-- **THEO DỊCH VỤ:** Mốc chốt đã cọc là thẻ nhóm xổ xuống việc con (tiến độ, "Tiếp theo: …").
+- **Lọc đúng một dịch vụ** (Bộ lọc hoặc `?category=`): phía trên danh sách hiện mỗi đơn đã cọc một dòng "Quy trình của <NCC> · <gói> · <mã đơn> · Đã xong x/N" kèm thanh tiến độ nhỏ và nút "Nhắn NCC" (câu soạn sẵn "Muốn thêm hoặc bỏ bước nào?"): `TimelineServiceSummary.tsx`, `orderProgress`. Cảnh báo "Ngày thực hiện của đơn (dd/mm/yyyy) sau ngày cưới" nằm ở thẻ Mốc chốt của đơn đó (`dateConflictOf`), hiện cả khi không lọc. Đã bỏ cách xem THEO DỊCH VỤ (thẻ nhóm xổ / thu và việc nhớ trạng thái xổ / thu).
 - **Ngày không đổi giữa hai cách xem và giữa các dịch vụ:** việc của các dịch vụ khác nhau được trùng ngày, không tự dàn lại; dịch vụ cọc sau không bao giờ làm đổi ngày việc của dịch vụ đã cọc trước (test cọc đủ 6 dịch vụ ở 6 thời điểm trong `backend/test/timeline-rows.test.ts`).
 
 Thẻ trắng bo góc, ô tick tròn; bấm thẻ hoặc ô tick mở hộp "Xác nhận hoàn thành" (Hoàn tác 5 giây).
@@ -183,7 +183,7 @@ Thông báo mới: `TaskUpdated` (gửi khách), `TaskDueSoon`, `TaskOverdue` (`
 
 Danh sách việc có thêm cách xem **Lịch tháng** (kiểu Google Calendar, chỉ xem và chọn ngày, **không kéo thả**: hạn việc có luật khoảng ngày và thứ tự ở mục 7.4 nên đổi hạn vẫn đi qua các hộp thoại hiện có). Không thêm thư viện: lưới tháng tự tính ở `frontend/src/features/calendar/monthGrid.ts` (tuần bắt đầu thứ Hai, tính theo UTC), component dùng chung `CalendarMonth.tsx`.
 
-- **Khách:** tab thứ ba **LỊCH** cạnh "Theo thời gian" / "Theo dịch vụ" ở `/timeline`, nhớ lựa chọn trong `localStorage` (`weddy.timeline.view` = `calendar`). Cùng bộ lọc Chưa xong / Đã xong / Tất cả và theo hạng mục. Mỗi việc nằm ở ngày Hạn; ngày cưới được đánh dấu. Bấm ngày để xem các việc của ngày đó bằng đúng thẻ việc của cách xem danh sách (hoàn thành, hẹn NCC, sửa đều như cũ). Có dải "N việc quá hạn" nhảy tới việc quá hạn sớm nhất.
+- **Khách:** nút icon lịch cạnh "Bộ lọc" ở `/timeline` (xem mục 5). Cùng ô tìm kiếm, Bộ lọc (trừ ô chọn tháng vì lịch có thanh chuyển tháng riêng) và bộ lọc Chưa xong / Đã xong / Tất cả. Mỗi việc nằm ở ngày Hạn; ngày cưới được đánh dấu. Bấm ngày để xem các việc của ngày đó bằng đúng thẻ việc của danh sách (hoàn thành, hẹn NCC, sửa đều như cũ). Có dải "N việc quá hạn" nhảy tới việc quá hạn sớm nhất.
 - **NCC:** trang **Lịch làm việc** (`/vendor/calendar`, menu trái) gồm ngày thực hiện của các đơn Chờ cọc / Chờ chỉnh sửa / Đã cọc / Hoàn thành và việc chi tiết của đơn đã cọc. NCC có nhiều khách cùng lúc nên lịch có công cụ để biết việc nào của khách nào và không bị chồng chéo:
   - **Màu theo đơn.** Mỗi đơn một màu ổn định (`features/calendar/orderColors.ts`: đơn đang theo dõi (chờ cọc, chờ chỉnh sửa, đã cọc) được chia trước, rồi theo mã đơn `DH<yyMM><số>` (id là UUID ngẫu nhiên nên không dùng để sắp), nên tối đa 8 đơn đang theo dõi không trùng màu dù có nhiều đơn cũ và đơn mới không làm đổi màu đơn đang có; quá 8 thì quay vòng; không dùng đỏ và vàng vì dành cho trạng thái). Thẻ ghi tên khách ngắn ("Hùng & Chi: Chốt thực đơn"). Trạng thái hiện bằng dấu hiệu riêng, không chiếm màu: quá hạn có "!" và viền đỏ, đã xong gạch ngang và mờ.
   - **Ô đông việc** (hơn 3) gom theo khách thành thẻ "Hùng & Chi · 2", ô nào có việc quá hạn thì thẻ có "!"; thừa thì "+N khách khác".
@@ -196,7 +196,7 @@ Danh sách việc có thêm cách xem **Lịch tháng** (kiểu Google Calendar,
 
 ### 9.1 Tìm kiếm và lọc (cách xem THEO THỜI GIAN và LỊCH)
 
-Thanh tìm kiếm và lọc nằm dưới thanh chuyển cách xem, lọc ngay trên máy (không gọi API), lưu trên URL (`?q=` `&month=` `&owner=` `&category=`) nên tải lại hoặc gửi link vẫn còn. Logic thuần: `frontend/src/features/weddings/timelineFilter.ts`. Cách xem THEO DỊCH VỤ không có thanh này (đã gom theo dịch vụ).
+Thanh tìm kiếm và lọc (kèm nút lịch) nằm dưới tiêu đề, lọc ngay trên máy (không gọi API), lưu trên URL (`?q=` `&month=` `&owner=` `&category=`) nên tải lại hoặc gửi link vẫn còn. Logic thuần: `frontend/src/features/weddings/timelineFilter.ts`. Ô tìm kiếm và Bộ lọc dùng chung cho danh sách và lịch.
 
 | Bộ lọc | Cách dùng |
 |---|---|
