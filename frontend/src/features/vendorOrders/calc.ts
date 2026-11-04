@@ -3,6 +3,8 @@ import { formatDate } from '@/lib/date'
 import { paths } from '@/routes/paths'
 import type { Order, OrderContent, OrderItemInput, OrderRevision, OrderUnit } from '@/types/vendorOrder'
 import { CANCEL_REASON, CHANGE_LABEL } from './constants'
+import { dayAfter } from './dayAfter'
+import { isPaidInFull } from './restPayment'
 
 /** Hạng mục đang nhập trong form: có thêm `key` để React theo dõi dòng. */
 export interface FormItem extends OrderItemInput {
@@ -142,6 +144,9 @@ export const canCancel = (o: Pick<Order, 'status' | 'eventDate'>) => o.status ==
 /** Đã qua ngày diễn ra sự kiện (giờ Việt Nam): được đánh dấu hoàn thành. */
 export const eventPassed = (o: Pick<Order, 'eventDate'>) => todayVN() > o.eventDate
 
+/** Dòng chữ hiện sẵn khi nút Hoàn tất bị khóa vì chưa qua ngày thực hiện. */
+export const completeFromText = (o: Pick<Order, 'eventDate'>) => `Hoàn tất được từ ${formatDate(dayAfter(o.eventDate))}`
+
 /** Dòng gợi ý việc cần làm cho NCC (docs/api/THE_DON_HANG.md mục 4). */
 export function orderHint(o: Order): { text: string; tone: 'info' | 'warn' | 'ok' } {
   const req = openRevision(o)
@@ -157,7 +162,9 @@ export function orderHint(o: Order): { text: string; tone: 'info' | 'warn' | 'ok
     case 'Deposited':
       if (req) return { text: `Khách yêu cầu chỉnh sửa (tiền cọc giữ nguyên): ${[changesLabel(req), req.requestNote].filter(Boolean).join(' · ')}`, tone: 'warn' }
       return {
-        text: eventPassed(o) ? 'Đã qua ngày thực hiện. Bấm Hoàn tất khi đã xong dịch vụ.' : `Đã nhận cọc. Thực hiện ngày ${formatDate(o.eventDate)}.`,
+        text: eventPassed(o)
+          ? 'Đã qua ngày thực hiện. Bấm Hoàn tất khi đã xong dịch vụ.'
+          : `${isPaidInFull(o) ? 'Đã thanh toán đủ.' : 'Đã nhận cọc.'} Thực hiện ngày ${formatDate(o.eventDate)}. ${completeFromText(o)}.`,
         tone: eventPassed(o) ? 'warn' : 'ok',
       }
     case 'Completed':

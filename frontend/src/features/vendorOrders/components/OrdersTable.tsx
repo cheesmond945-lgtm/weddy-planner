@@ -11,7 +11,7 @@ import type { PageMeta } from '@/types/api'
 import type { Order } from '@/types/vendorOrder'
 import { actionsOf, mainActionKey, type ActionKey } from '../actions'
 import { attentionOf, countdownText, msToDeadline, URGENT_HOURS } from '../summary'
-import { LateProgressBadge, OrderStatusBadge } from './OrderBadges'
+import { LateProgressBadge, OrderStatusBadge, PaidInFullBadge } from './OrderBadges'
 import { PaymentLines } from './PaymentLines'
 
 const ICON: Record<ActionKey, LucideIcon> = {
@@ -161,6 +161,7 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
                   <td className={td}>
                     <span className="flex flex-col items-start gap-1.5">
                       <OrderStatusBadge status={o.status} compact />
+                      <PaidInFullBadge order={o} />
                       <LateProgressBadge orderId={o.id} status={o.status} />
                       {o.status === 'Pending' && o.depositDueDate && <Countdown order={o} />}
                     </span>
@@ -192,6 +193,7 @@ export function OrdersTable({ orders, meta, busy, onOpen, onRun, onPage }: Order
                   <b className="font-semibold tabular-nums">{o.orderCode}</b>
                   <span className="flex flex-wrap items-center justify-end gap-1.5">
                     <OrderStatusBadge status={o.status} compact />
+                    <PaidInFullBadge order={o} />
                     <LateProgressBadge orderId={o.id} status={o.status} />
                   </span>
                 </div>

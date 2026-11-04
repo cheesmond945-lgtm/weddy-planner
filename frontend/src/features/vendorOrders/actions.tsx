@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import type { CancelReason, InvoiceType, Order } from '@/types/vendorOrder'
-import { canCancel, eventPassed, openRevision } from './calc'
+import { canCancel, completeFromText, eventPassed, openRevision } from './calc'
 import type { OrderFormMode } from './components/OrderFormDialog'
 import { CancelOrderDialog } from './components/CancelOrderDialog'
 import { RejectRevisionDialog } from './components/RejectRevisionDialog'
@@ -26,8 +26,9 @@ export interface OrderAction {
 /**
  * Thao tác của NCC trên một đơn, theo docs/api/THE_DON_HANG.md mục 4 (dùng chung cho thẻ đơn, màn chi tiết, bảng đơn):
  * Draft: Tiếp tục soạn. Pending: Cập nhật đơn. NeedRevision: Cập nhật đơn (chính). Expired, Cancelled: Tạo lại đơn (chính).
- * Deposited: Chỉnh sửa (chính khi khách đang yêu cầu chỉnh sửa, kèm Từ chối yêu cầu), Hoàn tất (chỉ khi đã qua ngày sự kiện),
- * Xuất hóa đơn, Hủy đơn (chỉ khi còn trước ngày sự kiện).
+ * Deposited: Chỉnh sửa (chính khi khách đang yêu cầu chỉnh sửa, kèm Từ chối yêu cầu), Hoàn tất (luôn hiện; trước ngày sự kiện bị khóa
+ * kèm chữ "Hoàn tất được từ <ngày>"), Ghi nhận / Bỏ ghi nhận tiền mặt (Bỏ ghi nhận khóa khi đã có hóa đơn cuối),
+ * Xuất hóa đơn (khóa tới khi đã ghi nhận tiền mặt), Hủy đơn (chỉ khi còn trước ngày sự kiện).
  * Completed: Xuất hóa đơn (nếu chưa xuất) hoặc Xem hóa đơn. Đơn chưa cọc tự hết hạn, NCC không hủy.
  */
 export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAction[] {
@@ -41,16 +42,17 @@ export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAct
   if (o.status === 'Expired' || o.status === 'Cancelled') out.push({ key: 'again', label: 'Tạo lại đơn', primary: true })
   if (o.status === 'Deposited') out.push({ key: 'edit', label: requested ? 'Chỉnh sửa theo yêu cầu' : 'Chỉnh sửa', primary: requested })
   if (requested) out.push({ key: 'reject', label: 'Từ chối yêu cầu', primary: false })
-  if (o.status === 'Deposited' && eventPassed(o)) out.push({ key: 'complete', label: 'Hoàn tất', primary: true })
+  // Hoàn tất luôn hiện với đơn Đã cọc; trước ngày thực hiện thì khóa kèm chữ "Hoàn tất được từ <ngày>"
+  if (o.status === 'Deposited') out.push(eventPassed(o) ? { key: 'complete', label: 'Hoàn tất', primary: true } : { key: 'complete', label: 'Hoàn tất', primary: false, disabledReason: completeFromText(o) })
   if (o.status === 'Deposited' || o.status === 'Completed') {
     const rest = o.restPayment?.status
     // Đợt 2 (tiền mặt phần còn lại): NCC ghi nhận đã nhận; hóa đơn cuối chỉ xuất sau khi đã ghi nhận
     if (rest === 'Pending') out.push({ key: 'receiveRest', label: 'Ghi nhận đã nhận tiền mặt', primary: false })
-    if (rest === 'Received') out.push({ key: 'unreceiveRest', label: 'Bỏ ghi nhận tiền mặt', primary: false })
+    if (rest === 'Received') out.push({ key: 'unreceiveRest', label: 'Bỏ ghi nhận tiền mặt', primary: false, ...(hasFinal && { disabledReason: 'Đã xuất hóa đơn cuối, không thể bỏ ghi nhận tiền mặt.' }) })
     out.push(
       hasFinal
         ? { key: 'viewInvoice', label: 'Xem hóa đơn', primary: false }
-        : { key: 'invoice', label: 'Xuất hóa đơn', primary: false, ...(rest !== 'Received' && { disabledReason: 'Ghi nhận đã nhận tiền mặt trước' }) },
+        : { key: 'invoice', label: 'Xuất hóa đơn', primary: false, ...(rest !== 'Received' && { disabledReason: 'Ghi nhận đã nhận tiền mặt trước khi xuất hóa đơn.' }) },
     )
   }
   if (canCancel(o)) out.push({ key: 'cancel', label: 'Hủy đơn', primary: false, danger: true })
@@ -108,13 +110,13 @@ export function useOrderActionRunner({ onOpenForm, onAgain, onView, onViewInvoic
       case 'again':
         return setConfirm({ type: 'again', order: o })
       case 'complete':
-        return setConfirm({ type: 'complete', order: o })
+        return eventPassed(o) ? setConfirm({ type: 'complete', order: o }) : undefined
       case 'invoice':
         return o.restPayment?.status === 'Received' ? setConfirm({ type: 'invoice', order: o }) : undefined
       case 'receiveRest':
         return setConfirm({ type: 'receiveRest', order: o })
       case 'unreceiveRest':
-        return setConfirm({ type: 'unreceiveRest', order: o })
+        return o.invoices.some((i) => i.type === 'FinalInvoice') ? undefined : setConfirm({ type: 'unreceiveRest', order: o })
       case 'viewInvoice':
         return onViewInvoice(o, 'FinalInvoice')
       case 'cancel':

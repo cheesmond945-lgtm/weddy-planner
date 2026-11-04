@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { formatDate, toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
+import { dayAfter } from '../dayAfter'
 import { useCompleteOrder, useOrders } from '../hooks'
 import { useRestAction, useRestPending } from '../taskActions'
 import { REST_TONE_CLASS, restLabel } from '../restPayment'
@@ -16,8 +17,6 @@ import { OrderProgressPanel } from './OrderProgressPanel'
 
 /** Số đơn mỗi trang ở Lưu trữ (Đã hoàn tất), cũng là số đơn Chờ hoàn tất hiện thêm mỗi lần. */
 const COMPLETED_PAGE = 10
-
-const dayAfter = (ymd: string) => new Date(Date.parse(`${ymd}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
 
 /** Một đơn trong Lưu trữ: dòng tóm tắt, bấm "Xem việc" mở danh sách việc của đơn. */
 function ArchiveRow({ orderId, hue, head, actions, readOnly }: { orderId: string; hue: number; head: ReactNode; actions?: ReactNode; readOnly: boolean }) {

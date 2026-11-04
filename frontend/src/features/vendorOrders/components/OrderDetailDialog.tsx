@@ -6,14 +6,13 @@ import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { InvoiceType, Order, OrderRevision } from '@/types/vendorOrder'
 import { CANCEL_REASON } from '../constants'
-import { changesLabel, depositDeadline, formatDay, formatDayTime, orderHint } from '../calc'
+import { changesLabel, formatDay, formatDayTime, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
-import { OrderStatusBadge } from './OrderBadges'
+import { OrderStatusBadge, PaidInFullBadge } from './OrderBadges'
 import { OrderDaySlotPanel } from './OrderDaySlotPanel'
 import { OrderProgressPanel } from './OrderProgressPanel'
 import type { OrderFormMode } from './OrderFormDialog'
 import { PanelDialog } from './PanelDialog'
-import { PaymentLines } from './PaymentLines'
 import { PaymentScheduleTable } from './PaymentScheduleTable'
 
 const INVOICE_LABEL: Record<InvoiceType, string> = { DepositReceipt: 'Giấy xác nhận cọc', FinalInvoice: 'Hóa đơn cuối' }
@@ -105,6 +104,7 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
       subtitle={
         <span className="inline-flex flex-wrap items-center gap-2">
           <OrderStatusBadge status={o.status} />
+          <PaidInFullBadge order={o} />
           <span>Tạo {formatDayTime(o.createdDate)}</span>
         </span>
       }
@@ -131,20 +131,17 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
     >
       <Section title="Thông tin đơn">
         <dl className="grid grid-cols-3 gap-x-4 gap-y-3 max-sm:grid-cols-1">
-          <Item label="Khách hàng">{o.customerName}</Item>
-          <Item label="Số điện thoại">{o.customerPhone || '—'}</Item>
+          {/* Khách xem đơn của chính mình: không lặp tên và số điện thoại của họ */}
+          {vendorView && <Item label="Khách hàng">{o.customerName}</Item>}
+          {vendorView && <Item label="Số điện thoại">{o.customerPhone || '—'}</Item>}
           <Item label="Ngày thực hiện">{formatDate(o.eventDate)}</Item>
           {o.package && <Item label="Sảnh">{o.package.name}</Item>}
-          <Item label="Thanh toán" full>
-            <PaymentLines order={o} />
-          </Item>
-          {o.status === 'Pending' && o.depositDueDate && <Item label="Hạn đặt cọc">{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</Item>}
           {o.completedDate && <Item label="Ngày hoàn thành">{formatDay(o.completedDate)}</Item>}
           {o.cancelledDate && <Item label="Ngày hủy">{formatDay(o.cancelledDate)}</Item>}
           {o.cancelReason && (
             <Item label="Lý do hủy">{CANCEL_REASON[o.cancelReason].label}</Item>
           )}
-          <Item label="Ghi chú gửi khách" full>
+          <Item label={vendorView ? 'Ghi chú gửi khách' : 'Ghi chú của nhà cung cấp'} full>
             {o.note ?? <span className="text-muted-foreground">Không có</span>}
           </Item>
         </dl>

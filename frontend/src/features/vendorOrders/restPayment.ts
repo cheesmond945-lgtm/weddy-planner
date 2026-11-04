@@ -4,6 +4,9 @@
  */
 import type { Order } from '@/types/vendorOrder'
 
+/** Đơn Đã cọc mà NCC đã ghi nhận đủ tiền mặt đợt 2: hiện nhãn "Đã thanh toán đủ" (đơn vẫn Đã cọc, chỉ sang Hoàn thành sau ngày thực hiện). */
+export const isPaidInFull = (o: Pick<Order, 'status' | 'restPayment'>) => o.status === 'Deposited' && o.restPayment?.status === 'Received'
+
 export type Viewer = 'VENDOR' | 'COUPLE'
 export type RestTone = 'ok' | 'wait' | 'warn' | 'none'
 

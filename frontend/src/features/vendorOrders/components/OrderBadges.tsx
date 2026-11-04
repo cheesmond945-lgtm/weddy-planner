@@ -1,9 +1,10 @@
 import { Check } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge, type BadgeTone } from '@/components/Badge'
-import type { OrderStatus } from '@/types/vendorOrder'
+import type { Order, OrderStatus } from '@/types/vendorOrder'
 import { ORDER_STATUS } from '../constants'
 import { useOrderProgress } from '../hooks'
+import { isPaidInFull } from '../restPayment'
 
 /** Nhãn có chấm hoặc dấu tích (badge trong prototype NCC). */
 export function StatusBadge({ tone, children, className }: { tone: BadgeTone; children: ReactNode; className?: string }) {
@@ -21,6 +22,16 @@ export function OrderStatusBadge({ status, className, compact }: { status: Order
   return (
     <StatusBadge tone={tone} className={className}>
       {compact && status === 'Pending' ? 'Chờ cọc' : label}
+    </StatusBadge>
+  )
+}
+
+/** "Đã thanh toán đủ": đơn Đã cọc đã ghi nhận đợt 2. Không hiện ở trạng thái khác. Dùng cho cả khách và NCC. */
+export function PaidInFullBadge({ order, className }: { order: Pick<Order, 'status' | 'restPayment'>; className?: string }) {
+  if (!isPaidInFull(order)) return null
+  return (
+    <StatusBadge tone="done" className={className}>
+      Đã thanh toán đủ
     </StatusBadge>
   )
 }
