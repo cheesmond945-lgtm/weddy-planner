@@ -6,7 +6,6 @@
  * Kiểu Order phía cặp đôi ở types/order.ts giữ nguyên.
  */
 import type { CategoryRef } from './catalog'
-import type { DaySlot, DayVenue } from './wedding'
 
 /** Trạng thái đơn (Orders.Status). Nhãn và màu ở features/vendorOrders/constants.ts. */
 export const ORDER_STATUSES = ['Draft', 'Pending', 'NeedRevision', 'Deposited', 'Completed', 'Expired', 'Cancelled'] as const
@@ -88,6 +87,8 @@ export interface Invoice {
 /** Đơn dịch vụ (Orders) kèm hạng mục, thanh toán cọc, lịch sử chỉnh sửa, chứng từ. */
 export interface Order {
   id: string
+  /** Dấu vân tay nội dung đơn: gửi lại khi lưu để backend chặn lưu đè nếu đơn đã đổi ở nơi khác (409 ORDER_STALE) */
+  version?: string
   /** Mã hiển thị, ví dụ "DH26100004", không đổi dù sửa nhiều lần */
   orderCode: string
   conversationId: string
@@ -167,6 +168,8 @@ export interface GuestChangeQuote {
 
 /** Một hạng mục NCC nhập (số tiền do backend tính). */
 export interface OrderItemInput {
+  /** Id dòng hiện có (order_items.id), chỉ khi sửa sau cọc: backend giữ gói của dòng theo id, không theo tên */
+  id?: string | null
   itemName: string
   unit: OrderUnit
   quantity: number
@@ -187,16 +190,36 @@ export interface OrderContent {
   packageId: string | null
 }
 
+/** Số liệu 4 thẻ đầu trang Quản lý đơn hàng, backend tính trên toàn bộ đơn của NCC (GET /vendors/me/orders/counts → tiles). */
+export interface OrderTilesData {
+  /** Đơn Chờ cọc, và trong đó số đơn hạn cọc còn dưới 24 giờ */
+  pending: number
+  expiringSoon: number
+  /** Chờ chỉnh sửa + Đã cọc có yêu cầu chỉnh sửa của khách đang chờ */
+  needsAction: number
+  /** Đã cọc, ngày thực hiện trong 30 ngày tới, và tổng giá trị */
+  upcoming: number
+  upcomingValue: number
+  /** Đã cọc, đã qua ngày thực hiện (NCC bấm được Hoàn tất), và trong đó số đơn chưa nhận tiền mặt */
+  dueToComplete: number
+  dueRestPending: number
+}
+
+/** Số đơn theo từng trạng thái (không theo bộ lọc) kèm số liệu 4 thẻ. */
+export type OrderCounts = Record<OrderStatus, number> & { tiles: OrderTilesData }
+
 export interface OrderListQuery {
   q?: string
-  status?: OrderStatus
+  /** Một trạng thái, hoặc nhiều trạng thái ngăn bằng dấu phẩy ("Expired,Cancelled") */
+  status?: string
+  /** Chỉ đơn cần NCC xử lý (Chờ chỉnh sửa, hoặc Đã cọc có yêu cầu chỉnh sửa đang chờ) */
+  needsAction?: boolean
+  /** Chỉ đơn Đã cọc / Hoàn thành mà đợt 2 (tiền mặt) chưa ghi nhận */
+  restPending?: boolean
   /** Ngày sự kiện từ / đến "YYYY-MM-DD" (gồm cả hai đầu) */
   from?: string
   to?: string
   conversationId?: string
-  /** Ngày cọc (Payments.PaidDate, giờ VN) từ / đến "YYYY-MM-DD", gồm cả hai đầu: đơn đã cọc trong khoảng này, mọi trạng thái */
-  depositFrom?: string
-  depositTo?: string
   page?: number
   pageSize?: number
 }
@@ -300,25 +323,3 @@ export interface BoardTask extends OrderTask {
 export type CalendarItem =
   | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: OrderStatus; isDone: boolean }
   | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isRestPayment: boolean; isPackageTask: boolean; isCustomOrderTask: boolean; isDone: boolean; status: TaskStatus; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean }
-
-/**
- * Giờ có mặt ngày cưới của một đơn (GET /vendors/me/orders/:id/day-slot, docs/LICH_TRINH_NGAY_CUOI.md).
- * Chỉ đơn Đã cọc / Hoàn thành làm đúng ngày cưới mới có (applicable); giờ VN dạng "YYYY-MM-DDTHH:mm".
- */
-export type OrderDaySlot =
-  | { applicable: false; reason: 'NOT_ACTIVE' | 'NO_WEDDING_DATE' | 'NOT_WEDDING_DAY'; message: string }
-  | {
-      applicable: true
-      /** Ngày cưới "YYYY-MM-DD" */
-      date: string
-      /** Giờ chính của khách "HH:mm"; null là khách chưa nhập */
-      mainTime: string | null
-      slot: DaySlot
-      /** Khung dự kiến theo gói / lĩnh vực (điền sẵn khi chốt); null khi chưa có giờ chính */
-      planned: { start: string; end: string; source: 'PACKAGE' | 'DEFAULT' } | null
-      venue: DayVenue | null
-      /** Các NCC khác trong ngày cưới: chỉ lĩnh vực và giờ */
-      others: { categoryName: string; isVenue: boolean; start: string | null; end: string | null; confirmed: boolean }[]
-      /** Đơn đang thực hiện (đã cọc): chốt / đổi / bỏ chốt được */
-      canEdit: boolean
-    }

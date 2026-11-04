@@ -1,5 +1,8 @@
 # Cơ sở dữ liệu WebPlan
 
+> **Tài liệu cũ, có thể không còn đúng.** Viết ở một thời điểm trước các thay đổi ngày 04/11/2026 (hạn đợt 2, VietQR thay VNPay, tên Forever, trang Quản lý đơn hàng). Xem tài liệu hiện hành: `LUONG_CHAT_DON_HANG.md` (phần Cập nhật đầu file), `api/orders.md`, `api/THE_DON_HANG.md`.
+
+
 > Chuyển nguyên văn từ tài liệu CSDL của nhóm (Bản sao của CSDL.docx). Đây là nguồn chuẩn cho tên bảng, tên cột, enum và quy tắc nghiệp vụ.
 
 ### 1. Bảng thực thể

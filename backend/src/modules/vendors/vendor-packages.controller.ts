@@ -36,12 +36,6 @@ export class VendorPackagesController {
     return this.packages.saveTasks(req.user.sub, id, body ?? {});
   }
 
-  /** Thời gian trong ngày cưới của gói (không qua Admin duyệt): { leadMinutes, durationMinutes, setupOpenTime } */
-  @Put(':id/day-plan')
-  saveDayPlan(@Req() req: any, @Param('id') id: string, @Body() body: { leadMinutes?: unknown; durationMinutes?: unknown; setupOpenTime?: unknown }) {
-    return this.packages.saveDayPlan(req.user.sub, id, body ?? {});
-  }
-
   @Post()
   create(@Req() req: any, @Body() body: SavePackageBody) {
     return this.packages.create(req.user.sub, body ?? {});

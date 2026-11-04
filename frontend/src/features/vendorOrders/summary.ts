@@ -3,8 +3,8 @@ import type { Order } from '@/types/vendorOrder'
 import { eventPassed, openRevision } from './calc'
 
 /*
- * Số liệu tổng hợp từ danh sách đơn (4 thẻ đầu trang Quản lý đơn hàng, trang Tổng quan). Hàm thuần.
- * FE tính từ danh sách đơn (tối đa 100 đơn mỗi trang theo README); cần chính xác với NCC nhiều đơn thì backend thêm endpoint tổng hợp.
+ * Hàm thuần dùng chung cho dòng đơn và trang Tổng quan. 4 thẻ đầu trang Quản lý đơn hàng không tính ở đây nữa:
+ * backend tính trên toàn bộ đơn (GET /vendors/me/orders/counts → tiles).
  */
 
 const HOUR = 3_600_000
@@ -35,41 +35,3 @@ export function attentionOf(o: Order): 'warn' | 'danger' | null {
 /** "Sắp thực hiện": đơn đã cọc có ngày sự kiện trong [hôm nay, hôm nay + 30 ngày]. Dùng chung cho Tổng quan và trang Đơn hàng. */
 export const UPCOMING_DAYS = 30
 export const isUpcoming = (o: Pick<Order, 'status' | 'eventDate'>, today = todayVN()) => o.status === 'Deposited' && o.eventDate >= today && o.eventDate <= addDaysYmd(today, UPCOMING_DAYS)
-
-/** Ngày cuối của tháng chứa `ymd` ("2026-10-26" -> "2026-10-31"). */
-const endOfMonth = (ymd: string) => {
-  const [y, m] = ymd.split('-').map(Number)
-  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
-}
-
-export function orderTiles(orders: Order[]) {
-  const today = todayVN()
-  const month = today.slice(0, 7)
-  const in30 = addDaysYmd(today, UPCOMING_DAYS)
-  const pending = orders.filter((o) => o.status === 'Pending')
-  const deposited = orders.filter((o) => o.status === 'Deposited')
-  const upcoming = orders.filter((o) => isUpcoming(o, today))
-  const toComplete = deposited.filter((o) => eventPassed(o))
-  // "Đặt cọc trong tháng": đơn có ngày cọc (Payments.PaidDate, giờ VN) trong tháng này, mọi trạng thái (gồm đã hoàn thành)
-  const depositedThisMonth = orders.filter((o) => o.payment?.status === 'Paid' && o.payment.paidDate && todayVN(new Date(o.payment.paidDate)).slice(0, 7) === month)
-  return {
-    pending: pending.length,
-    /** Chờ cọc mà sắp hết hạn trong 24 giờ */
-    expiringSoon: pending.filter((o) => {
-      const ms = msToDeadline(o)
-      return ms !== null && ms <= 24 * HOUR
-    }).length,
-    upcoming: upcoming.length,
-    upcomingValue: upcoming.reduce((s, o) => s + o.totalAmount, 0),
-    toComplete: toComplete.length,
-    depositedThisMonth: depositedThisMonth.length,
-    depositedThisMonthValue: depositedThisMonth.reduce((s, o) => s + o.totalAmount, 0),
-    /** Bộ lọc tương ứng của từng thẻ */
-    filters: {
-      pending: { status: 'Pending' as const, from: undefined, to: undefined, depositFrom: undefined, depositTo: undefined },
-      upcoming: { status: 'Deposited' as const, from: today, to: in30, depositFrom: undefined, depositTo: undefined },
-      toComplete: { status: 'Deposited' as const, from: undefined, to: addDaysYmd(today, -1), depositFrom: undefined, depositTo: undefined },
-      deposited: { status: undefined, from: undefined, to: undefined, depositFrom: `${month}-01`, depositTo: endOfMonth(today) },
-    },
-  }
-}

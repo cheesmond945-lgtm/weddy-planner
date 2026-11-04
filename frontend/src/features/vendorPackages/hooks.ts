@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { vendorPackagesApi } from '@/api/vendorPackages'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/store/auth'
-import type { PackageTask, SavePackageDayPlanRequest, SavePackageRequest, VendorPackage } from '@/types/vendorPackage'
+import type { PackageTask, SavePackageRequest, VendorPackage } from '@/types/vendorPackage'
 import { useMemo, useState } from 'react'
 import { fromServer, isDirty, toRequest, type TaskDraft } from './packageTasks'
 
@@ -40,19 +40,6 @@ function useSync() {
     )
     void qc.invalidateQueries({ queryKey: keys.all(user?.id), exact: true })
   }
-}
-
-/** Lưu thời gian trong ngày cưới của gói (không qua Admin duyệt). */
-export function useSavePackageDayPlan(id: string) {
-  const sync = useSync()
-  return useMutation({
-    mutationFn: (body: SavePackageDayPlanRequest) => vendorPackagesApi.saveDayPlan(id, body),
-    onSuccess: (pkg) => {
-      sync(pkg)
-      toast('Đã lưu thời gian trong ngày cưới.')
-    },
-    onError: (e) => toast(e.message),
-  })
 }
 
 /**

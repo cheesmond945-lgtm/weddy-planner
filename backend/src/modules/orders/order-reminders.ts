@@ -5,6 +5,7 @@ import { loadPackageMeta, ownersFrom } from '../weddings/package-task-meta';
 import { hiddenByCategory, isRemovedCode } from '../weddings/timeline-rows';
 import { DUE_SOON_DAYS, OVERDUE_MAX_DAYS, UNCONFIRMED_DAYS, dmyOf, ownerOf, reminderStage, remindersFor, taskDigest } from '../weddings/task-owner';
 import { addDaysYmd, startOfDayVn, todayVn, ymdOf } from './order-rules';
+import { isRestPayCode } from './rest-payment';
 
 /*
  * Nhắc hạn việc chi tiết của đơn đã cọc (docs/TIMELINE.md mục 8.2). Idempotent: mỗi (người nhận, việc, loại nhắc, hạn) chỉ một thông báo,
@@ -51,6 +52,8 @@ export async function remindTaskDeadlines(prisma: PrismaService, scope: Prisma.o
     const due = ymdOf(t.scheduled_date);
     const stage = reminderStage(due, today);
     if (!stage) continue;
+    // Đợt 2 (PAY:): sắp đến hạn thì nhắc, quá hạn thì không (khách và NCC tự thỏa thuận trả muộn)
+    if (stage === 'OVERDUE' && isRestPayCode(t.task_code)) continue;
     const reminders = remindersFor({ title: t.title ?? '', orderCode: o.order_code ?? '', vendorName: o.vendor_profiles?.business_name ?? '', due, owner: ownerOf(t.task_code, owners), status: t.status === 'Waiting' ? 'Waiting' : 'Todo' }, stage);
     for (const r of reminders) {
       const userId = r.to === 'COUPLE' ? o.weddings?.user_id : o.vendor_profiles?.user_id;

@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { countServices, groupByTime } from './timelineGroups.ts'
+import { dateConflictOf, groupByTime, orderProgress, parseView } from './timelineGroups.ts'
 
 type Item = Parameters<typeof groupByTime>[0][number]
 const item = (id: string, dueDate: string, extra: Partial<Item> = {}): Item =>
@@ -49,8 +49,31 @@ describe('groupByTime', () => {
   })
 })
 
-describe('countServices', () => {
-  it('đếm số hạng mục khác nhau, bỏ qua việc không thuộc hạng mục', () => {
-    assert.equal(countServices([item('a', '2026-11-01', { category: cat('decor') }), item('b', '2026-11-02', { category: cat('decor') }), item('c', '2026-11-03', { category: cat('hoa-cuoi') }), item('d', '2026-11-04')]), 2)
+describe('parseView: giá trị cũ trong localStorage', () => {
+  it('service, time, rỗng, lạ đều về danh sách; calendar giữ chế độ lịch', () => {
+    for (const v of ['service', 'time', '', null, undefined, 'abc']) assert.equal(parseView(v), 'time')
+    assert.equal(parseView('calendar'), 'calendar')
+  })
+})
+
+describe('orderProgress: tóm tắt từng đơn khi lọc một dịch vụ', () => {
+  const kid = (id: string, order: string | null, done: boolean, extra: Partial<Item> = {}) => item(id, '2026-11-02', { kind: 'SERVICE_TASK', orderCode: order, isDone: done, serviceName: 'NCC ' + order, serviceId: 's-' + order, ...extra } as Partial<Item>)
+  it('mỗi đơn một dòng, đếm xong / tổng, đơn nhiều việc lên trước', () => {
+    const rows = orderProgress([kid('a', 'DH1', true), kid('b', 'DH1', false), kid('c', 'DH2', true), kid('d', 'DH2', true), kid('e', 'DH2', false, { packageName: 'Gói A' })])
+    assert.deepEqual(rows.map((r) => [r.orderCode, r.done, r.total, r.packageName, r.vendorName]), [['DH2', 2, 3, 'Gói A', 'NCC DH2'], ['DH1', 1, 2, null, 'NCC DH1']])
+    assert.equal(rows[0].serviceId, 's-DH2')
+  })
+  it('bỏ qua việc không có mã đơn và không phải việc chi tiết; rỗng thì không có dòng', () => {
+    assert.deepEqual(orderProgress([kid('x', null, false), item('t', '2026-11-02', { orderCode: 'DH9' } as Partial<Item>)]), [])
+    assert.deepEqual(orderProgress([]), [])
+  })
+})
+
+describe('dateConflictOf: cảnh báo ngày thực hiện lệch ngày cưới', () => {
+  it('trả ngày thực hiện của đơn lệch; không lệch thì null', () => {
+    const ok = item('a', '2026-11-02', { kind: 'SERVICE_TASK' } as Partial<Item>)
+    const bad = item('b', '2026-11-03', { kind: 'SERVICE_TASK', dateConflict: true, orderEventDate: '2026-12-20' } as Partial<Item>)
+    assert.equal(dateConflictOf([ok, bad]), '2026-12-20')
+    assert.equal(dateConflictOf([ok]), null)
   })
 })

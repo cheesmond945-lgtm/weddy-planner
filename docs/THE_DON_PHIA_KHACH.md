@@ -1,5 +1,8 @@
 # Thẻ đơn dịch vụ phía KHÁCH theo từng trạng thái
 
+> **Cập nhật 04/11/2026:** thẻ đơn trong chat và trên trang Kế hoạch là **cùng một thành phần** (`CoupleOrderCard`). Đợt 2 chỉ có một dòng ("Đợt 2 · Còn lại (tiền mặt cho NCC)") kèm trạng thái và dòng "Hạn chót đợt 2: dd/mm/yyyy (ngày cưới). Bạn có thể trả sớm hơn." (quá hạn không cảnh báo). Đơn Đã cọc đã được NCC ghi nhận đợt 2 có nhãn "Đã thanh toán đủ". Nút "Xem hóa đơn" hiện khi đã có hóa đơn cuối, ở mọi trạng thái. Khi xem chi tiết, khách không thấy tên / SĐT của chính mình, ghi chú ghi "Ghi chú của nhà cung cấp". Cọc thanh toán qua VietQR (không còn VNPay).
+
+
 > Dựa trên `docs/database.md`, `docs/api/THE_DON_HANG.md` và `docs/CHOT_NGHIEP_VU_NCC.md`. Cập nhật 27/10/2026.
 > Mục tiêu: **khách và NCC thấy cùng nội dung đơn, chỉ khác nút**.
 > Kiểu dữ liệu dùng chung: `src/types/vendorOrder.ts` (7 trạng thái, nhiều hạng mục, DepositPercent, DepositDueDate, revisions, invoices, payment, cancelReason).
@@ -29,7 +32,7 @@ Thẻ nằm **bên trái** khung chat (tin của NCC gửi).
 │ Ngày thực hiện                   06/12/2027   │  ← EventDate
 │ Tổng giá trị                      1.200.000đ   │  ← TotalAmount
 │ Đã cập nhật: tổng 1.200.000đ → 1.700.000đ     │  ← chỉ ở thẻ gửi lại sau khi sửa
-│ Đặt cọc (30%)                       400.000đ   │  ← DepositPercent, DepositAmount (KHÔNG ghi "qua VNPay")
+│ Đặt cọc (30%)                       400.000đ   │  ← DepositPercent, DepositAmount (KHÔNG ghi "qua VietQR")
 │ Còn lại                             800.000đ   │  ← TotalAmount − DepositAmount (KHÔNG ghi "tiền mặt...")
 │ Hạn đặt cọc        10:10 27/10 · còn 23 giờ   │  ← DepositDueDate, chỉ khi Chờ thanh toán cọc
 │ Đã thanh toán cọc 400.000đ · 10:32 26/10      │  ← Payments.PaidDate, chỉ khi đã cọc
@@ -69,7 +72,7 @@ Ghi chú:
 ## 3. Các hộp thoại phía khách
 
 ### 3.1. Thanh toán cọc
-Bấm **Thanh toán cọc** → hộp xác nhận: mã đơn, tên NCC, số tiền cọc, hạn → **Thanh toán** (VNPay khi có cấu hình; chế độ thanh toán thử khi chạy dev). Thành công: đơn chuyển Đã đặt cọc, chat có tin Giấy xác nhận cọc (mục 4).
+Bấm **Thanh toán cọc** → hộp xác nhận: mã đơn, tên NCC, số tiền cọc, hạn → **Thanh toán** (VietQR khi có cấu hình; chế độ thanh toán thử khi chạy dev). Thành công: đơn chuyển Đã đặt cọc, chat có tin Giấy xác nhận cọc (mục 4).
 Quá hạn cọc thì nút khóa, hiện "Đơn đã hết hạn đặt cọc".
 
 ### 3.2. Yêu cầu chỉnh sửa (CHỈ khi Chờ thanh toán cọc)
@@ -88,7 +91,7 @@ Quá hạn cọc thì nút khóa, hiện "Đơn đã hết hạn đặt cọc".
 - Gửi xong: OrderRevisions (BeforeDeposit, Requested); đơn chuyển **Chờ chỉnh sửa**, hạn cọc tạm dừng; chat có **1 tin hệ thống** (không thêm tin riêng của khách).
 
 ### 3.3. Xem chi tiết (giống hệt phía NCC)
-Thông tin đơn · Bảng hạng mục đầy đủ · Lịch thanh toán 2 đợt (Đợt 1 cọc, phương thức VNPay + trạng thái; Đợt 2 phần còn lại, phương thức tiền mặt cho NCC, hạn = ngày thực hiện) · Lịch sử chỉnh sửa (ngày, trước/sau cọc, nội dung đổi, lời nhắn, tổng cũ → mới, trạng thái) · Lý do hủy (nếu có) · Chứng từ (Giấy xác nhận cọc, Hóa đơn cuối, mỗi loại nút Xem).
+Thông tin đơn · Bảng hạng mục đầy đủ · Lịch thanh toán 2 đợt (Đợt 1 cọc, phương thức VietQR + trạng thái; Đợt 2 phần còn lại, phương thức tiền mặt cho NCC, hạn = ngày thực hiện) · Lịch sử chỉnh sửa (ngày, trước/sau cọc, nội dung đổi, lời nhắn, tổng cũ → mới, trạng thái) · Lý do hủy (nếu có) · Chứng từ (Giấy xác nhận cọc, Hóa đơn cuối, mỗi loại nút Xem).
 
 ---
 
@@ -130,3 +133,13 @@ Mỗi hội thoại có badge theo đơn mới nhất với NCC đó: **Chờ c�
 | 10 | Gửi lại đơn không thu gọn thẻ cũ | Thu gọn thẻ cũ, thẻ mới có "Đã cập nhật: …" |
 | 11 | Giấy xác nhận cọc, hóa đơn hiện như chữ | Thẻ có nút Xem (mục 4) |
 | 12 | Yêu cầu sửa gửi 2 tin (khách + hệ thống) | Chỉ 1 tin hệ thống |
+
+## Thẻ đơn gọn (cập nhật 04/11/2026)
+
+Thẻ đơn phía khách (chat và trang Kế hoạch, cùng `CoupleOrderCard`) chỉ giữ phần cốt lõi, chia 3 phần ngăn bằng đường kẻ mảnh:
+- **Đầu:** tên NCC (chữ serif, tối đa 2 dòng), mã đơn chữ nhỏ, badge trạng thái; dòng hạng mục tóm tắt ("Sảnh Vàng Cánh Bướm · 30 bàn", nhiều dòng: "<dòng đầu> + N hạng mục khác").
+- **Tiền:** Ngày thực hiện, Tổng giá trị (đậm), "Cọc X%" (hoặc "Đã cọc · giờ ngày"), "Còn lại" (kèm trạng thái trả tiền mặt khi đã cọc).
+- **Hành động:** chip hạn cọc "Hạn đặt cọc còn N giờ (HH:MM dd/mm)" (dưới 6 giờ chuyển màu cảnh báo) hoặc "Đang chờ nhà cung cấp cập nhật đơn", nút theo trạng thái, link "Xem chi tiết →".
+- **Hết hạn / Hủy:** thu gọn một dòng "NCC · trạng thái · lý do ngắn", chữ nhạt, không bóng.
+
+Đơn giá từng dòng, sảnh, phương thức từng đợt, hạn chót đợt 2 (ngày cưới, có thể trả sớm), hạn cọc, ghi chú NCC, lịch sử chỉnh sửa và chứng từ có trong **Xem chi tiết**. Logic chữ ở `features/orders/cardSummary.ts`.

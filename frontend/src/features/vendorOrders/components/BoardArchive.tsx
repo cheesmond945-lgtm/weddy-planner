@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { formatDate, toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
+import { dayAfter } from '../dayAfter'
 import { useCompleteOrder, useOrders } from '../hooks'
 import { useRestAction, useRestPending } from '../taskActions'
 import { REST_TONE_CLASS, restLabel } from '../restPayment'
@@ -16,8 +17,6 @@ import { OrderProgressPanel } from './OrderProgressPanel'
 
 /** Số đơn mỗi trang ở Lưu trữ (Đã hoàn tất), cũng là số đơn Chờ hoàn tất hiện thêm mỗi lần. */
 const COMPLETED_PAGE = 10
-
-const dayAfter = (ymd: string) => new Date(Date.parse(`${ymd}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
 
 /** Một đơn trong Lưu trữ: dòng tóm tắt, bấm "Xem việc" mở danh sách việc của đơn. */
 function ArchiveRow({ orderId, hue, head, actions, readOnly }: { orderId: string; hue: number; head: ReactNode; actions?: ReactNode; readOnly: boolean }) {
@@ -103,7 +102,7 @@ interface BoardArchiveProps {
 
 /**
  * Tab "Lưu trữ" của Bảng việc (docs/TIMELINE.md mục 9.2): đơn NCC đã làm xong rời bảng tự động, không cần đổi CSDL.
- * - Chờ hoàn tất: đơn Đã cọc đã xong hết việc; bấm Hoàn tất đơn khi đã qua ngày thực hiện (hoặc tự hoàn tất sau ngày thực hiện + 7).
+ * - Chờ hoàn tất: đơn Đã cọc đã xong hết việc; bấm Hoàn tất đơn khi đã qua ngày thực hiện (hoặc tự hoàn tất khi quá ngày thực hiện hơn 7 ngày).
  *   Mở lại một việc (ở Xem việc) thì đơn quay lại tab Đang làm.
  * - Đã hoàn tất: đơn trạng thái Hoàn tất, mới nhất trước, có phân trang; việc chỉ xem.
  */
@@ -121,7 +120,7 @@ export function BoardArchive({ finished, hueFor }: BoardArchiveProps) {
         <h3 className="mb-1 flex items-baseline gap-2 font-sans text-[15px] font-semibold tracking-normal">
           Chờ hoàn tất <span className="text-[13px] font-medium text-muted-foreground">{finished.length} đơn</span>
         </h3>
-        <p className="mb-2.5 text-[13px] text-muted-foreground">Đơn đã xong hết việc nên rời bảng. Bấm Hoàn tất đơn khi đã qua ngày thực hiện; hệ thống cũng tự hoàn tất sau ngày thực hiện 7 ngày.</p>
+        <p className="mb-2.5 text-[13px] text-muted-foreground">Đơn đã xong hết việc nên rời bảng. Bấm Hoàn tất đơn khi đã qua ngày thực hiện; hệ thống cũng tự hoàn tất khi đã quá ngày thực hiện hơn 7 ngày.</p>
         {finished.length ? (
           <ul className="grid gap-2">
             {finished.slice(0, waitShown).map((o) => (

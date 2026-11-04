@@ -28,12 +28,12 @@ export function TimelineCalendar({ items, weddingDate, renderCard }: TimelineCal
   const events: CalendarEvent[] = useMemo(
     () =>
       dated.map((i) => {
-        const tone: CalendarTone = i.isDone ? 'done' : i.dueDate! < now ? 'overdue' : 'todo'
+        const tone: CalendarTone = i.isDone ? 'done' : !i.isRestPayment && i.dueDate! < now ? 'overdue' : 'todo'
         return { id: i.id, date: i.dueDate!, title: i.title, tone }
       }),
     [dated, now],
   )
-  const overdue = useMemo(() => dated.filter((i) => !i.isDone && i.dueDate! < now).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!)), [dated, now])
+  const overdue = useMemo(() => dated.filter((i) => !i.isDone && !i.isRestPayment && i.dueDate! < now).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!)), [dated, now])
   const ofDay = selected ? dated.filter((i) => i.dueDate === selected) : []
 
   const goToday = () => {

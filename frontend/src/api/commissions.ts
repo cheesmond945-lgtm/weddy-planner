@@ -11,7 +11,7 @@ export const commissionsApi = {
 
   get: (id: string): Promise<CommissionStatement> => (http.get(`/vendors/me/commissions/${id}`)),
 
-  /** Mã QR VietQR cho hoa hồng (số tiền lấy từ bảng kê, nội dung EVHH + mã bảng kê) */
+  /** Mã QR VietQR cho hoa hồng (số tiền lấy từ bảng kê, nội dung FOREVERHH + mã bảng kê) */
   pay: (id: string): Promise<PayInfo> => http.post(`/vendors/me/commissions/${id}/pay`),
 
   /** Backend hỏi SePay đã nhận đủ hoa hồng chưa và ghi nhận nếu đã nhận */

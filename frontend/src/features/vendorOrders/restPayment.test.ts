@@ -3,7 +3,8 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { restLabel, vnDayMonth } from './restPayment.ts'
+import { dayAfter } from './dayAfter.ts'
+import { isPaidInFull, restLabel, vnDayMonth } from './restPayment.ts'
 
 type O = Parameters<typeof restLabel>[0]
 const order = (status: string, rest: { status: string; receivedDate?: string | null } | null): O =>
@@ -43,3 +44,24 @@ describe('restLabel', () => {
     assert.equal(restLabel(order('Deposited', { status: 'Received' }), 'VENDOR').text, 'Đã nhận')
   })
 })
+
+describe('isPaidInFull: nhãn "Đã thanh toán đủ"', () => {
+  it('chỉ đơn Đã cọc đã ghi nhận đợt 2', () => {
+    assert.equal(isPaidInFull(order('Deposited', { status: 'Received' })), true);
+    assert.equal(isPaidInFull(order('Deposited', { status: 'Pending' })), false);
+    assert.equal(isPaidInFull(order('Deposited', null)), false);
+  });
+  it('đơn Hoàn thành / Hủy / chờ cọc thì không hiện nhãn dù có dữ liệu đợt 2', () => {
+    assert.equal(isPaidInFull(order('Completed', { status: 'Received' })), false);
+    assert.equal(isPaidInFull(order('Cancelled', { status: 'Received' })), false);
+    assert.equal(isPaidInFull(order('Pending', { status: 'NotApplicable' })), false);
+  });
+});
+
+describe('dayAfter: "Hoàn tất được từ" = ngày sau ngày thực hiện', () => {
+  it('cộng đúng một ngày, qua tháng và năm', () => {
+    assert.equal(dayAfter('2027-06-15'), '2027-06-16');
+    assert.equal(dayAfter('2027-06-30'), '2027-07-01');
+    assert.equal(dayAfter('2026-12-31'), '2027-01-01');
+  });
+});

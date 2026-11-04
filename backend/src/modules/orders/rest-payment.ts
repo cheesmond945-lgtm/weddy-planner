@@ -53,6 +53,16 @@ export function finalInvoiceGate(rest: RestPayment): RuleError | null {
 }
 
 /**
+ * Chặn "Bỏ ghi nhận" khi đơn đã xuất hóa đơn cuối: hóa đơn ghi "đã thanh toán tiền mặt" và không hủy hay xuất lại được,
+ * nên bỏ ghi nhận sẽ làm hóa đơn và trạng thái đợt 2 mâu thuẫn nhau. `finalInvoiceCode` là mã hóa đơn cuối của đơn (null nếu chưa có).
+ */
+export function clearRestGate(finalInvoiceCode: string | null): RuleError | null {
+  return finalInvoiceCode
+    ? { code: 'REST_PAYMENT_HAS_FINAL_INVOICE', message: `Đơn đã xuất hóa đơn cuối ${finalInvoiceCode}, không thể bỏ ghi nhận tiền mặt.`, status: 409, details: { invoiceCode: finalInvoiceCode } }
+    : null;
+}
+
+/**
  * Hoàn tất đơn: đã Received thì hoàn tất bình thường; chưa mà NCC gửi restReceived = true thì ghi nhận rồi hoàn tất cùng transaction ('record');
  * chưa mà không gửi thì 409 REST_PAYMENT_NOT_RECORDED kèm số tiền để giao diện hỏi lại.
  */
@@ -74,7 +84,6 @@ export const closableDetailTasksWhere = (orderId: string) => ({
 export interface RestDb {
   timeline_tasks: {
     findFirst(args: unknown): Promise<{ id: string; status: string | null } | null>;
-    findMany(args: unknown): Promise<{ scheduled_date: Date | null }[]>;
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
     updateMany(args: unknown): Promise<{ count: number }>;
@@ -91,7 +100,7 @@ export interface RestOrder {
 
 /**
  * Ghi nhận đã nhận tiền mặt: việc PAY:<orderId> thành Done, completed_date = `now`. Chưa có việc (đơn cũ) thì tạo giống lúc cọc
- * (hạn = max(E + 7, hạn lớn nhất của việc của đơn)). Trả true nếu có thay đổi (lần đầu), false nếu đã ghi nhận từ trước.
+ * (hạn = đúng ngày thực hiện). Trả true nếu có thay đổi (lần đầu), false nếu đã ghi nhận từ trước.
  */
 export async function applyRestReceived(db: RestDb, order: RestOrder, now: Date): Promise<boolean> {
   const code = payCode(order.id);
@@ -102,15 +111,13 @@ export async function applyRestReceived(db: RestDb, order: RestOrder, now: Date)
     return true;
   }
   if (!order.wedding_id) return false;
-  const dates = await db.timeline_tasks.findMany({ where: { order_id: order.id }, select: { scheduled_date: true } });
-  const last = dates.reduce((m, t) => (t.scheduled_date && t.scheduled_date.toISOString().slice(0, 10) > m ? t.scheduled_date.toISOString().slice(0, 10) : m), '');
   await db.timeline_tasks.create({
     data: {
       wedding_id: order.wedding_id,
       category_id: order.category_id,
       order_id: order.id,
       title: `Thanh toán phần còn lại cho ${order.vendorName.trim() || 'nhà cung cấp'}`,
-      scheduled_date: new Date(`${payDate(order.event_date.toISOString().slice(0, 10), last)}T00:00:00Z`),
+      scheduled_date: new Date(`${payDate(order.event_date.toISOString().slice(0, 10))}T00:00:00Z`),
       status: 'Done',
       completed_date: now,
       task_type: 'Detail',

@@ -1,7 +1,7 @@
-import { Ban, CalendarDays, Check, Clock, Heart, Hourglass, Lock, Pencil, Trash2 } from 'lucide-react'
+import { Ban, CalendarDays, Check, Clock, Heart, Hourglass, Lock, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import type { CSSProperties, KeyboardEvent } from 'react'
-import { CategoryIcon, categoryColor } from '@/features/catalog/categoryIcons'
 import { Button } from '@/components/ui/button'
+import { CategoryIcon, categoryColor } from '@/features/catalog/categoryIcons'
 import { DateChip } from '@/features/vendorOrders/components/TaskDateRow'
 import { TaskTitle } from '@/features/vendorOrders/components/TaskTitle'
 import { daysBetween, formatDate, parseDate, today } from '@/lib/date'
@@ -11,16 +11,12 @@ import type { TimelineItem } from '@/types/wedding'
 import { DUE_SOON_DAYS } from '../timelineFilter'
 import { useAiSuggest } from '../useAiSuggest'
 
-/** Tên hạng mục dùng trong chữ ("Gợi ý nhà hàng", "Việc chi tiết của nhà hàng"); danh mục lạ thì dùng tên từ API. */
-export const SERVICE_LABEL: Record<string, string> = {
-  'nha-hang': 'trung tâm tiệc cưới',
-  'chup-anh': 'chụp ảnh & quay phim',
-  'trang-phuc': 'trang phục',
-  decor: 'trang trí',
-  makeup: 'makeup',
-  'hoa-cuoi': 'hoa cưới',
-}
-export const serviceLabel = (item: TimelineItem) => SERVICE_LABEL[item.category?.slug ?? ''] ?? item.category?.name.toLowerCase() ?? 'dịch vụ'
+/**
+ * Tên dịch vụ đúng như trong CSDL (service_categories.name: Trung tâm tiệc cưới, Trang điểm, Chụp ảnh...), không đặt tên riêng ở front.
+ * serviceLabel dùng khi đứng riêng; trong câu ("Gợi ý trang điểm") thì hạ chữ đầu.
+ */
+export const serviceLabel = (item: TimelineItem) => item.category?.name ?? 'Dịch vụ'
+const inSentence = (name: string) => name.charAt(0).toLocaleLowerCase('vi') + name.slice(1)
 
 /** "14/7/2026": ngày, tháng không đệm số 0 (như thiết kế mẫu). */
 export const dmy = (s: string) => {
@@ -91,14 +87,17 @@ interface TimelineCardProps {
   nested?: boolean
   /** Hạn dạng d/m (không năm): nhóm theo tháng đã có năm ở tiêu đề */
   compactDate?: boolean
+  /** Chỉ cho thẻ Mốc chốt đã cọc: ngày thực hiện của đơn khi nó sau ngày cưới ("YYYY-MM-DD"), hiện dòng cảnh báo */
+  conflictDate?: string | null
 }
 
+
 /** Thẻ một việc: ô tick tròn, tên, dòng hạn, và nút chỉ khi nghiệp vụ cần. */
-export function TimelineCard({ item, leaving, nested, onComplete, onEdit, onRemove, onChat }: TimelineCardProps) {
+export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, onEdit, onRemove, onChat }: TimelineCardProps) {
   const aiSuggest = useAiSuggest()
   const due = parseDate(item.dueDate!)
   const done = item.isDone
-  const overdue = !done && due < today()
+  const overdue = !done && !item.isRestPayment && due < today()
   // Sắp đến hạn: còn 0 đến 2 ngày (cùng ngưỡng với thông báo của backend)
   const dueSoon = !done && !overdue && daysBetween(today(), due) <= DUE_SOON_DAYS
   // Mốc "Chốt" tự xong khi đặt cọc: không tick tay
@@ -220,6 +219,11 @@ export function TimelineCard({ item, leaving, nested, onComplete, onEdit, onRemo
             Các việc phục vụ của nhà cung cấp mở ra sau khi bạn đặt cọc
           </div>
         )}
+        {autoDone && done && conflictDate && (
+          <div role="note" className="mt-1 text-[12.5px] text-warn">
+            Ngày thực hiện của đơn ({dmy(conflictDate)}) sau ngày cưới. Nhắn nhà cung cấp để cập nhật đơn.
+          </div>
+        )}
         {autoDone && done && item.vendorProcessMissing && (
           <div className="mt-1 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
             <Ban className="size-3.5" aria-hidden />
@@ -239,7 +243,8 @@ export function TimelineCard({ item, leaving, nested, onComplete, onEdit, onRemo
         {suggests && item.category && (
           // Mở popup gợi ý nhà cung cấp ngay trên Timeline (SuggestionsDialog), như nút "Gợi ý cho bạn" ở Kế hoạch
           <Button variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5" onClick={() => aiSuggest(item.category!.slug)}>
-            <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${label}`} →</span>
+            <Sparkles className="size-[15px] shrink-0" />
+            <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${inSentence(label)}`} →</span>
           </Button>
         )}
         {/* Việc khung và việc tự thêm chưa xong: sửa tên, hạn và xóa (việc chi tiết của đơn do NCC sửa, khách chỉ xem).

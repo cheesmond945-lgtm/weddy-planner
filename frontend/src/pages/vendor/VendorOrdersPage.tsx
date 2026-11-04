@@ -1,27 +1,22 @@
-import { MessageSquare, Plus, ReceiptText } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router'
+import { MessageSquare, ReceiptText } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { useOrderActionRunner } from '@/features/vendorOrders/actions'
 import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
-import { NewOrderDialog } from '@/features/vendorOrders/components/NewOrderDialog'
 import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
 import { OrderFormDialog, type OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
 import { OrdersTable } from '@/features/vendorOrders/components/OrdersTable'
 import { OrderStatusTabs, OrderToolbar } from '@/features/vendorOrders/components/OrderToolbar'
 import { OrderTiles } from '@/features/vendorOrders/components/OrderTiles'
-import { useOrderPageState } from '@/features/vendorOrders/filters'
+import { LISTED_STATUSES, toApiQuery, useOrderPageState } from '@/features/vendorOrders/filters'
 import { useOrder, useOrderCounts, useOrders } from '@/features/vendorOrders/hooks'
-import { orderTiles } from '@/features/vendorOrders/summary'
 import { useNow } from '@/lib/clock'
 import { paths } from '@/routes/paths'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
-
-// Số liệu 4 thẻ tính từ mọi đơn; 100 là trang lớn nhất API cho phép (README mục 6)
-const ALL_ORDERS = { page: 1, pageSize: 100 }
 
 /**
  * Quản lý đơn hàng: danh sách đơn tạo từ Tin nhắn, cùng nguồn dữ liệu với thẻ đơn trong chat.
@@ -29,10 +24,9 @@ const ALL_ORDERS = { page: 1, pageSize: 100 }
  */
 export default function VendorOrdersPage() {
   const page = useOrderPageState()
-  const { data, isPending, isError, error, refetch } = useOrders(page.query)
+  const { data, isPending, isError, error, refetch } = useOrders(toApiQuery(page.query))
   const { data: counts } = useOrderCounts()
-  const { data: all } = useOrders(ALL_ORDERS)
-  const [creating, setCreating] = useState(false)
+  const navigate = useNavigate()
   const [form, setForm] = useState<OrderFormMode | null>(null)
   const [invoice, setInvoice] = useState<{ order: Order; type: InvoiceType } | null>(null)
 
@@ -55,26 +49,19 @@ export default function VendorOrdersPage() {
       page.openOrder(null)
       setForm(mode)
     },
+    // Đơn luôn soạn trong Tin nhắn: "Tạo lại đơn" mở form ngay trong cuộc trò chuyện của khách
+    onAgain: (o) => navigate(`${paths.vendor.chat}?c=${encodeURIComponent(o.conversationId)}&again=${encodeURIComponent(o.id)}`),
     onView: (o) => page.openOrder(o.id),
     onViewInvoice: (order, type) => setInvoice({ order, type }),
   })
 
-  const tiles = useMemo(() => orderTiles(all?.data ?? []), [all?.data])
-  const noOrders = counts && Object.values(counts).every((n) => n === 0)
-
-  const newOrder = (
-    <span className="flex flex-wrap items-center gap-2.5">
-      <Button className="rounded-pill" onClick={() => setCreating(true)}>
-        <Plus />
-        Tạo đơn
-      </Button>
-    </span>
-  )
+  // Bản nháp chỉ xem trong Tin nhắn nên không tính vào "chưa có đơn"
+  const noOrders = counts && LISTED_STATUSES.every((s) => counts[s] === 0)
 
   return (
     <>
-      <PageTitle title="Quản lý đơn hàng" description="Theo dõi các đơn tạo từ Tin nhắn: chờ cọc, đã cọc, hoàn thành." actions={newOrder} />
-      <OrderTiles tiles={tiles} query={page.query} onFilter={page.setFilter} />
+      <PageTitle title="Quản lý đơn hàng" description="Theo dõi các đơn tạo từ Tin nhắn: chờ cọc, đã cọc, hoàn thành." />
+      <OrderTiles tiles={counts?.tiles} query={page.query} onFilter={page.setFilter} />
       <OrderStatusTabs counts={counts} value={page.query.status} onChange={(status) => page.setFilter({ status })} />
       <OrderToolbar query={page.query} onChange={page.setFilter} onReset={page.resetFilters} hasFilter={page.hasFilter} />
 
@@ -109,7 +96,7 @@ export default function VendorOrdersPage() {
       </section>
 
       {detail && <OrderDetailDialog order={detail} onClose={() => page.openOrder(null)} onOpenForm={(mode) => setForm(mode)} onViewInvoice={(order, type) => setInvoice({ order, type })} />}
-      {invoice && <InvoiceDialog order={all?.data.find((o) => o.id === invoice.order.id) ?? invoice.order} type={invoice.type} onClose={() => setInvoice(null)} />}
+      {invoice && <InvoiceDialog order={data?.data.find((o) => o.id === invoice.order.id) ?? invoice.order} type={invoice.type} onClose={() => setInvoice(null)} />}
       {form && (
         <OrderFormDialog
           key={`${form.kind}-${'order' in form ? form.order.id : form.kind === 'again' ? form.from.id : 'new'}`}
@@ -122,7 +109,6 @@ export default function VendorOrdersPage() {
           onSent={(o) => page.openOrder(o.id)}
         />
       )}
-      {creating && <NewOrderDialog onClose={() => setCreating(false)} />}
       {runner.dialogs}
     </>
   )

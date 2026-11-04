@@ -70,7 +70,7 @@ const TILE_CATEGORIES = new Set(['chup-anh', 'trang-phuc', 'trang-diem']);
 export const packageLayoutOf = (slug: string): 'tiles' | 'album' => (TILE_CATEGORIES.has(slug) ? 'tiles' : 'album');
 
 /** Thứ tự hiển thị danh mục (như prototype): các slug lạ xếp cuối. */
-export const CATEGORY_ORDER = ['nha-hang', 'decor', 'trang-phuc', 'makeup', 'chup-anh', 'co-cuoi', 'hoa-cuoi'];
+export const CATEGORY_ORDER = ['nha-hang', 'decor', 'trang-phuc', 'makeup', 'chup-anh', 'hoa-cuoi'];
 export const categoryRank = (slug: string) => {
   const i = CATEGORY_ORDER.indexOf(slug);
   return i === -1 ? CATEGORY_ORDER.length : i;

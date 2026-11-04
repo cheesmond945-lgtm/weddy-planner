@@ -119,7 +119,7 @@ const PKG_DISPLAY_ORDER = 100;
 
 /**
  * Việc chi tiết của một đơn vừa đặt cọc: mỗi việc trong gói (mọi gói của đơn gộp lại, đúng thứ tự đưa vào) cộng một việc thanh toán phần còn lại.
- * Hạn tính bằng planPackageTasks từ D, E, I; thanh toán = max(E + 7, hạn lớn nhất của việc gói). Bỏ qua mã đã có (chạy lại không sinh trùng).
+ * Hạn tính bằng planPackageTasks từ D, E, I; thanh toán = đúng ngày thực hiện E (hạn chót khách phải trả, trả sớm lúc nào cũng được). Bỏ qua mã đã có (chạy lại không sinh trùng).
  * `vendorProcessMissing`: đơn không có việc nào của gói (không gắn gói, hoặc gói chưa khai việc): chỉ sinh việc thanh toán.
  */
 export function orderTaskRows(input: {
@@ -148,11 +148,10 @@ export function orderTaskRows(input: {
     task_code: pkgCode(t.id, input.orderId),
     display_order: PKG_DISPLAY_ORDER + i,
   }));
-  const last = plan.tasks.reduce((m, p) => (p.date > m ? p.date : m), '');
   rows.push({
     ...base,
     title: `Thanh toán phần còn lại cho ${input.vendorName.trim() || 'nhà cung cấp'}`,
-    scheduled_date: asDate(payDate(input.ctx.event, last)),
+    scheduled_date: asDate(payDate(input.ctx.event)),
     status: 'Waiting',
     task_code: payCode(input.orderId),
     display_order: PAY_DISPLAY_ORDER,
@@ -160,10 +159,12 @@ export function orderTaskRows(input: {
   return { rows: rows.filter((r) => !have.has(r.task_code)), vendorProcessMissing: input.tasks.length === 0 };
 }
 
-/** Hạn thanh toán phần còn lại: sau ngày thực hiện 7 ngày, và không sớm hơn việc cuối của gói. */
-export function payDate(event: string, lastPackageDate: string): string {
-  const e7 = new Date(Date.parse(`${event}T00:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
-  return lastPackageDate > e7 ? lastPackageDate : e7;
+/**
+ * Hạn thanh toán phần còn lại = đúng ngày thực hiện: hạn chót khách phải trả cho NCC (trả sớm lúc nào cũng được).
+ * Quá hạn thì khách và NCC tự thỏa thuận, hệ thống không quản lý trả muộn.
+ */
+export function payDate(event: string): string {
+  return event;
 }
 
 export interface OrderTaskState {
@@ -195,18 +196,15 @@ export function replanOrderTasks(input: { ctx: { today: string; event: string; d
   const locked = (t: OrderTaskState) => t.status === 'Done' || t.confirmed;
 
   const updates: { id: string; date: string }[] = [];
-  const final: string[] = [];
   const needsRecheck: string[] = [];
   for (const p of pkg) {
     const date = locked(p.t) ? p.t.date : planned.get(p.pid)!;
-    final.push(date);
     if (!locked(p.t) && date !== p.t.date) updates.push({ id: p.t.id, date });
     if (p.t.confirmed && p.offsetDays < 0 && p.t.date > input.ctx.event) needsRecheck.push(p.t.id);
   }
-  const last = final.reduce((m, d) => (d > m ? d : m), '');
   for (const t of input.tasks) {
     if (!t.code.startsWith(PAY_PREFIX) || locked(t)) continue;
-    const date = payDate(input.ctx.event, last);
+    const date = payDate(input.ctx.event);
     if (date !== t.date) updates.push({ id: t.id, date });
   }
   return { updates, needsRecheck };

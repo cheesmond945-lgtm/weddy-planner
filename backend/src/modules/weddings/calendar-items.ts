@@ -84,7 +84,7 @@ export function calendarItems(input: { orders: readonly CalendarOrder[]; tasks: 
       owner,
       /** NCC đổi được trạng thái mọi việc chi tiết của đơn mình */
       canTick: true,
-      overdue: !t.done && t.due < today,
+      overdue: !t.done && t.due < today && !t.code?.startsWith('PAY:'),
     });
   }
 

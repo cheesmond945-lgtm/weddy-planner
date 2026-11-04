@@ -1,5 +1,8 @@
 # Báo cáo hiện trạng: trạng thái đơn hàng ở phía NCC và phía khách
 
+> **Tài liệu cũ, có thể không còn đúng.** Viết ở một thời điểm trước các thay đổi ngày 04/11/2026 (hạn đợt 2, VietQR thay VNPay, tên Forever, trang Quản lý đơn hàng). Xem tài liệu hiện hành: `LUONG_CHAT_DON_HANG.md` (phần Cập nhật đầu file), `api/orders.md`, `api/THE_DON_HANG.md`.
+
+
 > Kiểm tra ngày 26/10/2026. **Chỉ đọc code và chạy thử, không sửa code, không commit.**
 > So với `docs/api/THE_DON_HANG.md` và `docs/database.md` (mục 9.5 đến 9.8).
 > Phía khách (của Chika) chỉ đọc. Ảnh chụp ở thư mục scratchpad (mục 4), không nằm trong repo.

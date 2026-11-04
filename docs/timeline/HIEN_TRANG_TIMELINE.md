@@ -1,5 +1,8 @@
 # Hiện trạng luồng Timeline (đang chạy thật)
 
+> **Tài liệu cũ, có thể không còn đúng.** Viết ở một thời điểm trước các thay đổi ngày 04/11/2026 (hạn đợt 2, VietQR thay VNPay, tên Forever, trang Quản lý đơn hàng). Xem tài liệu hiện hành: `LUONG_CHAT_DON_HANG.md` (phần Cập nhật đầu file), `api/orders.md`, `api/THE_DON_HANG.md`.
+
+
 Viết ngày 29/10/2026 từ **code thật** (nhánh `Chanh`, chưa commit) và dữ liệu thật trên Supabase (chỉ đọc). Mỗi ý kèm `file:dòng` để kiểm. **⚠️** = code làm khác ý đã chốt, hoặc chưa có quy tắc chốt nên đang chạy theo cách chưa chắc đúng ý.
 
 Đường dẫn gọn: `BE` = `backend/src/modules`, `FE` = `frontend/src/features/weddings`.

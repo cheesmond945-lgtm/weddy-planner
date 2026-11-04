@@ -130,10 +130,10 @@ export function CalendarMonth({ month, onMonthChange, events, today, selected, o
               aria-label={`${day}/${date.slice(5, 7)}${mark ? `, ${mark}` : ''}: ${list.length ? `${list.length} ${nouns.item}` : `không có ${nouns.item}`}`}
               onClick={() => onSelect(date)}
               className={cn(
-                'flex min-h-[58px] flex-col items-stretch gap-1 bg-surface p-1 text-left transition-colors hover:bg-surface-2 focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sage sm:min-h-[104px] sm:p-1.5',
+                'flex min-h-[58px] flex-col items-stretch gap-1 bg-surface p-1 text-left transition-colors hover:bg-sage-soft/40 focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sage sm:min-h-[104px] sm:p-1.5',
                 !inMonth && 'bg-surface-2/60 text-muted-foreground',
                 inMonth && dayClassName?.(date),
-                isSelected && 'z-10 outline-2 -outline-offset-2 outline-sage',
+                isSelected && 'z-10 bg-sage-soft/30 outline-2 -outline-offset-2 outline-sage',
               )}
             >
               <span className="flex items-center justify-between gap-1">

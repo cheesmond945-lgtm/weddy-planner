@@ -82,9 +82,9 @@ export function useOrder(orderId: string | null) {
 
 export type SaveOrderInput =
   | { kind: 'create'; conversationId: string; content: OrderContent; send: boolean }
-  | { kind: 'draft'; orderId: string; content: OrderContent }
-  | { kind: 'send'; orderId: string; content: OrderContent; resend: boolean }
-  | { kind: 'edit'; orderId: string; content: OrderContent; changeNote: string }
+  | { kind: 'draft'; orderId: string; content: OrderContent; expectedVersion?: string }
+  | { kind: 'send'; orderId: string; content: OrderContent; resend: boolean; expectedVersion?: string }
+  | { kind: 'edit'; orderId: string; content: OrderContent; changeNote: string; expectedVersion?: string }
 
 /**
  * Lưu nháp, gửi đơn, "Cập nhật đơn" hoặc sửa sau cọc từ form đơn trong chat.
@@ -99,11 +99,11 @@ export function useSaveOrder() {
         case 'create':
           return vendorOrdersApi.create({ conversationId: i.conversationId, content: i.content, send: i.send })
         case 'draft':
-          return vendorOrdersApi.saveDraft(i.orderId, i.content)
+          return vendorOrdersApi.saveDraft(i.orderId, i.content, i.expectedVersion)
         case 'send':
-          return vendorOrdersApi.send(i.orderId, i.content)
+          return vendorOrdersApi.send(i.orderId, i.content, i.expectedVersion)
         case 'edit':
-          return vendorOrdersApi.edit(i.orderId, i.content, i.changeNote)
+          return vendorOrdersApi.edit(i.orderId, i.content, i.changeNote, i.expectedVersion)
       }
     },
     onSuccess: (o, i) => {
@@ -181,28 +181,6 @@ export function useOrderTasks(orderId: string | null, enabled = true) {
     queryKey: vendorKeys.orderTasks(uid, orderId ?? ''),
     queryFn: () => vendorOrdersApi.tasks(orderId!),
     enabled: !!uid && !!orderId && enabled,
-  })
-}
-
-/** Giờ có mặt ngày cưới của đơn; khóa nằm dưới việc của đơn nên tải lại cùng (realtime `task`, khách đổi giờ chính). */
-const daySlotKey = (uid: string | undefined, orderId: string) => [...vendorKeys.orderTasks(uid, orderId), 'day-slot'] as const
-
-export function useDaySlot(orderId: string) {
-  const uid = useVendorId()
-  return useQuery({ queryKey: daySlotKey(uid, orderId), queryFn: () => vendorOrdersApi.daySlot(orderId), enabled: !!uid })
-}
-
-/** Chốt giờ có mặt ({ start, end }) hoặc bỏ chốt (null); khách được báo khi chốt. */
-export function useSetDaySlot(orderId: string) {
-  const uid = useVendorId()
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (v: { start: string; end: string } | null) => (v ? vendorOrdersApi.confirmDaySlot(orderId, v) : vendorOrdersApi.clearDaySlot(orderId)),
-    onSuccess: (data, v) => {
-      qc.setQueryData(daySlotKey(uid, orderId), data)
-      toast(v ? 'Đã xác nhận giờ có mặt, khách đã được báo.' : 'Đã bỏ xác nhận, quay về giờ dự kiến.')
-    },
-    onError: (e: unknown) => toast(e instanceof Error ? e.message : 'Không lưu được giờ có mặt.'),
   })
 }
 

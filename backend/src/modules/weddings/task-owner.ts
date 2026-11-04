@@ -142,6 +142,8 @@ export interface ProgressTask {
   title?: string;
   /** Todo / Waiting / Done. Có thì phía NCC = chưa Waiting; thiếu (dữ liệu cũ) thì suy theo owner */
   status?: string | null;
+  /** Việc thanh toán đợt 2 (PAY:): hạn chót là ngày thực hiện, quá hạn thì khách và NCC tự thỏa thuận nên KHÔNG tính trễ */
+  restPayment?: boolean;
 }
 
 export interface OrderProgress {
@@ -169,7 +171,7 @@ export function orderProgress(tasks: readonly ProgressTask[], today: string): Or
       continue;
     }
     p.open++;
-    const late = t.due < today;
+    const late = !t.restPayment && t.due < today;
     const vendorSide = t.status ? t.status !== 'Waiting' : t.owner !== 'CUSTOMER';
     if (vendorSide && (!p.next || t.due < p.next.due)) p.next = { due: t.due, title: t.title ?? '' };
     if (late && vendorSide) p.overdueVendor++;

@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 /*
  * Quy tắc nghiệp vụ đơn hàng dùng chung (docs/CHOT_NGHIEP_VU_NCC.md mục 4, docs/api/orders.md phần NCC).
@@ -47,6 +47,20 @@ export const ymdOf = (d: Date) => d.toISOString().slice(0, 10);
 export const addDaysYmd = (s: string, n: number) => new Date(Date.parse(`${s}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 export const startOfDayVn = (s: string) => new Date(`${s}T00:00:00+07:00`);
 export const endOfDayVn = (s: string) => new Date(`${s}T23:59:00+07:00`);
+
+/** Số ngày sau ngày thực hiện thì hệ thống tự hoàn tất đơn Deposited mà NCC quên bấm Hoàn tất. */
+export const AUTO_COMPLETE_DAYS = 7;
+/**
+ * Mốc tự hoàn tất: đơn Deposited có event_date < mốc này thì tự hoàn tất, tức là khi đã QUÁ ngày thực hiện hơn 7 ngày
+ * (event_date < hôm nay − 7, nghĩa là từ ngày thứ 8 sau ngày thực hiện). `today` là "YYYY-MM-DD" giờ VN.
+ */
+export const autoCompleteCutoff = (today: string) => new Date(`${addDaysYmd(today, -AUTO_COMPLETE_DAYS)}T00:00:00Z`);
+
+/** Tin hệ thống trong chat khi đơn hoàn thành: NCC bấm tay khác với hệ thống tự hoàn tất. */
+export const completedChatText = (orderCode: string | null, by: 'VENDOR' | 'SYSTEM') =>
+  by === 'VENDOR'
+    ? `NCC đã hoàn tất đơn ${orderCode}.`
+    : `Đơn ${orderCode} được hệ thống tự hoàn tất vì đã quá ngày thực hiện hơn ${AUTO_COMPLETE_DAYS} ngày mà NCC chưa bấm Hoàn tất.`;
 const validYmd = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 /** "YYYY-MM-DD" -> "dd/mm/yyyy" để đưa vào thông báo. */
 export const dmy = (s: string) => s.split('-').reverse().join('/');
@@ -82,7 +96,7 @@ export function weddingDateIssue(
 
 export const DEPOSIT_ROUNDING = 100_000;
 export const DEPOSIT_MIN = 100_000;
-/** Tỷ lệ cọc tối thiểu khi gửi đơn (%). Đợt 1 (cọc) khách chuyển khoản qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC. */
+/** Tỷ lệ cọc tối thiểu (%), áp khi lưu nháp, gửi và cập nhật đơn. Đợt 1 (cọc) khách chuyển khoản qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC. */
 export const DEPOSIT_PERCENT_MIN = 10;
 
 /** Tổng × tỷ lệ / 100, làm tròn gần nhất đến 100.000đ, tối thiểu 100.000đ (cọc 0đ thì khách không thanh toán được). */
@@ -129,12 +143,14 @@ export interface ContentInput {
   eventDate?: string;
   note?: string | null;
   depositPercent?: number | string | null;
-  items?: { itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string; packageId?: string | null }[];
+  items?: { id?: string | null; itemName?: string; unit?: string; quantity?: number | string; unitPrice?: number | string; packageId?: string | null }[];
   /** Sảnh (gói) của đơn: bắt buộc khi Trung tâm tiệc cưới gửi / sửa đơn (docs/LICH_BAN_SANH.md); dịch vụ khác bỏ qua */
   packageId?: string | null;
 }
 
 export interface ParsedItem {
+  /** Id dòng hiện có (order_items.id) mà form gửi lên khi sửa sau cọc, để giữ gói của dòng theo id chứ không theo tên; dòng mới thì không có */
+  id?: string | null;
   itemName: string;
   unit: string;
   quantity: number;
@@ -189,7 +205,9 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
     const itemPackage = i.packageId === undefined || i.packageId === null || String(i.packageId).trim() === '' ? null : String(i.packageId).trim();
     if (itemPackage && !UUID.test(itemPackage)) errors[`items.${idx}.packageId`] = 'Gói không hợp lệ.';
     // Lưu nháp: ràng buộc của CSDL (số lượng > 0, đơn giá ≥ 0) vẫn phải đúng nên chuẩn hóa lại
+    const itemId = i.id && UUID.test(String(i.id).trim()) ? String(i.id).trim() : null;
     return {
+      id: itemId,
       packageId: itemPackage,
       itemName: i.itemName?.trim() ?? '',
       unit: (UNITS as readonly string[]).includes(unit) ? unit : 'Gói',
@@ -206,6 +224,8 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
   const percent = hasPercent ? Number(c.depositPercent) : 30;
   const percentOk = percent > 0 && percent < 100;
   if (hasPercent && !percentOk) errors.depositPercent = 'Tỷ lệ đặt cọc phải lớn hơn 0 và nhỏ hơn 100 (%).';
+  // Tối thiểu 10% áp cho cả lưu nháp lẫn gửi / cập nhật đơn (không để nháp 5% rồi mới bị chặn lúc gửi). Sửa sau cọc giữ nguyên tỷ lệ đã chốt (đơn cũ có thể dưới mức tối thiểu) nên bỏ qua.
+  else if (hasPercent && mode !== 'edit' && percent < DEPOSIT_PERCENT_MIN) errors.depositPercent = `Tỷ lệ đặt cọc tối thiểu ${DEPOSIT_PERCENT_MIN}%.`;
 
   if (strict) {
     if (!customerName) errors.customerName = 'Nhập tên khách hàng.';
@@ -213,8 +233,6 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
     if (!items.length) errors.items = 'Thêm ít nhất một hạng mục.';
     else if (total <= 0) errors.items ??= 'Tổng tiền phải lớn hơn 0.';
     if (!hasPercent) errors.depositPercent = 'Nhập tỷ lệ đặt cọc (%).';
-    // Sửa sau cọc giữ nguyên tỷ lệ đã chốt (đơn cũ có thể dưới mức tối thiểu) nên chỉ kiểm khi gửi
-    else if (mode === 'send' && percentOk && percent < DEPOSIT_PERCENT_MIN) errors.depositPercent = `Tỷ lệ đặt cọc tối thiểu ${DEPOSIT_PERCENT_MIN}%.`;
     if (mode === 'send' && !errors.items && !errors.depositPercent && depositOf(total, percent) >= total) errors.deposit = 'Tổng đơn quá nhỏ để đặt cọc.';
   }
   if (Object.keys(errors).length) fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, errors);
@@ -264,4 +282,72 @@ export function sameContent(a: ParsedContent, b: ParsedContent): boolean {
     a.items.length === b.items.length &&
     a.items.every((x, i) => x.itemName === b.items[i].itemName && x.unit === b.items[i].unit && x.quantity === b.items[i].quantity && x.unitPrice === b.items[i].unitPrice && (x.packageId ?? null) === (b.items[i].packageId ?? null))
   );
+}
+
+/**
+ * Sửa sau cọc: việc chi tiết đã sinh theo gói lúc cọc nên KHÔNG đổi gói của dòng. Gói của mỗi dòng lấy từ dòng hiện có CÙNG ID
+ * (order_items.id), không khớp theo tên nên đổi tên dòng không làm mất gói; dòng mới (không id, hoặc id lạ) không gắn gói.
+ * Riêng dòng đang gắn sảnh cũ của đơn khi sảnh đổi sang `hall.to` thì chuyển theo sảnh mới (dòng sảnh đổi theo sảnh).
+ */
+export function carryItemPackages<T extends { id?: string | null; packageId?: string | null }>(
+  items: readonly T[],
+  current: readonly { id?: string | null; packageId?: string | null }[],
+  hall?: { from: string | null; to: string | null },
+): (T & { packageId: string | null })[] {
+  return items.map((i) => {
+    const cur = i.id ? current.find((c) => c.id === i.id) : undefined;
+    let pkg = cur?.packageId ?? null;
+    if (pkg && hall?.to && hall.from && pkg === hall.from && hall.to !== hall.from) pkg = hall.to;
+    return { ...i, packageId: pkg };
+  });
+}
+
+/**
+ * Số bàn tối thiểu của sảnh cho dòng gắn sảnh (400 "Sảnh <tên> đặt tối thiểu N bàn."). Dòng gắn sảnh = dòng có packageId trùng sảnh.
+ * Tạo / lưu nháp / gửi đơn: kiểm mọi dòng sảnh. Sửa đơn (`prior`): chỉ kiểm khi đổi sảnh hoặc số lượng dòng sảnh bị thay đổi
+ * so với dòng cùng id trước đó; đơn cũ không đổi dòng sảnh thì không kiểm (có thể đã dưới mức tối thiểu từ trước).
+ * Trả vị trí dòng và thông báo của dòng sai đầu tiên, hoặc null.
+ */
+export function hallTablesIssue(
+  items: readonly { id?: string | null; quantity: number; packageId?: string | null }[],
+  hall: { id: string; name: string; minTables: number | null },
+  prior?: { hallId: string | null; items: readonly { id?: string | null; quantity: number }[] },
+): { index: number; message: string } | null {
+  const min = hall.minTables;
+  if (!min || min <= 0) return null;
+  for (let index = 0; index < items.length; index++) {
+    const it = items[index];
+    if (it.packageId !== hall.id || it.quantity >= min) continue;
+    const before = prior && prior.hallId === hall.id && it.id ? prior.items.find((p) => p.id === it.id) : undefined;
+    if (before && before.quantity === it.quantity) continue; // đơn cũ, không đổi dòng sảnh
+    return { index, message: `Sảnh ${hall.name} đặt tối thiểu ${min} bàn.` };
+  }
+  return null;
+}
+
+/**
+ * "Phiên bản" của đơn để chặn lưu đè khi đơn đã bị sửa từ nơi khác (hai tab, NCC và khách cùng lúc). Bảng orders không có updated_at / version
+ * nên dùng dấu vân tay nội dung: băm trạng thái, thông tin khách, ngày, ghi chú, tỷ lệ cọc, sảnh, tổng tiền và các dòng (id, tên, đơn vị, số lượng, giá, gói).
+ * Mỗi lần sửa đơn các dòng được tạo lại với id mới nên sửa nào cũng đổi phiên bản.
+ */
+export function orderVersionOf(o: {
+  status: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  event_date: Date | null;
+  note: string | null;
+  deposit_percent: unknown;
+  package_id: string | null;
+  total_amount: unknown;
+  order_items: readonly { id: string; item_name: string | null; unit: string | null; quantity: number | null; unit_price: unknown; package_id: string | null }[];
+}): string {
+  const items = [...o.order_items].sort((a, b) => a.id.localeCompare(b.id)).map((i) => [i.id, i.item_name ?? '', i.unit ?? '', i.quantity ?? 0, Number(i.unit_price), i.package_id ?? null]);
+  const body = JSON.stringify([o.status, o.customer_name ?? '', o.customer_phone ?? '', o.event_date ? o.event_date.toISOString().slice(0, 10) : '', o.note ?? '', Number(o.deposit_percent), o.package_id ?? null, Number(o.total_amount), items]);
+  return createHash('sha1').update(body).digest('hex').slice(0, 16);
+}
+
+/** Phiên bản mà form mở ra (`expected`) khác phiên bản hiện tại của đơn: 409 ORDER_STALE. Không gửi `expected` thì không kiểm. */
+export function assertOrderFresh(expected: unknown, current: string): void {
+  if (expected === undefined || expected === null || expected === '') return;
+  if (expected !== current) fail('ORDER_STALE', 'Đơn đã được cập nhật ở nơi khác, vui lòng mở lại.', 409);
 }

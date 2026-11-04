@@ -53,12 +53,6 @@ export function useTimeline(enabled: boolean) {
   return useQuery({ queryKey: planningKeys.timeline(uid), queryFn: weddingsApi.getTimeline, enabled: !!uid && enabled })
 }
 
-/** Lịch trình ngày cưới; khóa nằm dưới timeline nên tải lại cùng timeline (realtime `task`, NCC cập nhật, đổi thông tin đám cưới). */
-export function useDaySchedule(enabled: boolean) {
-  const uid = useCoupleId()
-  return useQuery({ queryKey: [...planningKeys.timeline(uid), 'day'], queryFn: weddingsApi.getDaySchedule, enabled: !!uid && enabled })
-}
-
 /** Thêm / sửa / xóa việc trên timeline. API trả timeline mới, ghi thẳng vào cache. */
 export function useTimelineMutations() {
   const uid = useCoupleId()

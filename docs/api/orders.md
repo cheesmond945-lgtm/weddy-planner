@@ -14,7 +14,7 @@ Response 200: `{ "data": Order[] }`. NCC gọi thì 403.
 ### GET /orders/:id
 Response 200: `{ "data": Order }`. Lỗi: 404 `ORDER_NOT_FOUND` (không có, không phải của khách, hoặc đang là `Draft`).
 
-Trước khi đọc, backend tự đưa đơn `Pending` quá hạn cọc sang `Expired` và đơn `Deposited` quá `eventDate` + 7 ngày sang `Completed` (chỉ riêng đơn của khách này, xem mục "Việc theo thời gian" ở phần NCC).
+Trước khi đọc, backend tự đưa đơn `Pending` quá hạn cọc sang `Expired` và đơn `Deposited` có `eventDate < hôm nay − 7` (quá ngày thực hiện hơn 7 ngày) sang `Completed` (chỉ riêng đơn của khách này, xem mục "Việc theo thời gian" ở phần NCC).
 
 ### POST /orders/:id/revision-requests
 **Yêu cầu chỉnh sửa: khi `Pending`, hoặc khi `Deposited` còn trước `eventDate` và chưa có yêu cầu đang chờ.** Body:
@@ -83,7 +83,7 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
   - **Tổng đơn quá nhỏ để đặt cọc:** nếu `depositAmount` (đã làm tròn, tối thiểu) **lớn hơn hoặc bằng** `totalAmount` thì không cho Gửi đơn (`400 VALIDATION_ERROR`, `details.deposit` = "Tổng đơn quá nhỏ để đặt cọc."). Lưu nháp vẫn được. Không kiểm khi Chỉnh sửa sau cọc (tiền cọc đã khóa).
   - `depositDueDate` = thời điểm gửi đơn + 1 ngày (24 giờ).
   - NCC chỉ nhập: hạng mục, `depositPercent`, `eventDate`, `note` (cùng tên và số điện thoại khách, điền sẵn từ tài khoản khách).
-- `depositPercent`: **tối thiểu 10** và nhỏ hơn 100 khi Gửi đơn / Cập nhật đơn (`400 VALIDATION_ERROR`, `details.depositPercent` = "Tỷ lệ đặt cọc tối thiểu 10%."). Lưu nháp không chặn; Chỉnh sửa sau cọc giữ tỷ lệ đã chốt. FE chỉ cho nhập số nguyên 10 đến 99.
+- `depositPercent`: **tối thiểu 10** và nhỏ hơn 100 khi Lưu nháp, Gửi đơn và Cập nhật đơn (sửa sau cọc giữ tỷ lệ đã chốt, không kiểm) (`400 VALIDATION_ERROR`, `details.depositPercent` = "Tỷ lệ đặt cọc tối thiểu 10%."). Lưu nháp không chặn; Chỉnh sửa sau cọc giữ tỷ lệ đã chốt. FE chỉ cho nhập số nguyên 10 đến 99.
 - "Tạo lại đơn" (đơn `Expired`/`Cancelled`): FE chép **toàn bộ** thông tin đơn cũ (cả ngày thực hiện nếu chưa qua) sang đơn mới, mã mới, hạn cọc 24 giờ mới.
 - Đơn vị tính (`unit`): `Gói` (số lượng mặc định 1) hoặc `Bàn` (số lượng tùy chỉnh).
 - Mã đơn `orderCode` dạng `DH<yyMM><số 4 chữ số>` (ví dụ `DH26100001`), không đổi dù sửa nhiều lần.
@@ -127,7 +127,7 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 | `completedDate` | Ngày hoàn thành, mốc tính hoa hồng |
 | `cancelledDate` | Ngày NCC hủy |
 | `cancelReason` | `CUSTOMER_REQUEST` (khách yêu cầu hủy, khách mất cọc) hoặc `VENDOR_UNABLE` (NCC không thể thực hiện, hoàn cọc ngoài hệ thống); `null` nếu chưa hủy. **CSDL cần thêm cột `Orders.CancelReason`** |
-| (không có) | Không có phiên bản v1/v2, không có đợt, không có "đã thu". Hạn trả nốt (`eventDate`, trả muộn tới +7 ngày) FE suy từ `eventDate` |
+| (không có) | Không có phiên bản v1/v2, không có đợt, không có "đã thu". Hạn chót trả nốt là `eventDate` (khách trả sớm lúc nào cũng được; quá hạn khách và NCC tự thỏa thuận, hệ thống không quản lý trả muộn), FE suy từ `eventDate` |
 
 ### `OrderRevision`
 
@@ -192,15 +192,22 @@ Lỗi kiểm tra trả `400 VALIDATION_ERROR` với `details` theo trường: `c
 
 ### GET /vendors/me/orders
 
-Query: `q` (mã đơn, tên khách, số điện thoại), `status` (một trong 7 trạng thái), `from`, `to` (ngày sự kiện `YYYY-MM-DD`, gồm hai đầu), `depositFrom`, `depositTo` (ngày cọc `Payments.PaidDate`, giờ VN, `YYYY-MM-DD`, gồm hai đầu: đơn đã cọc trong khoảng này, **mọi trạng thái** kể cả đã hoàn thành; dùng cho thẻ "Đặt cọc trong tháng"), `conversationId`, `page`, `pageSize` (mặc định 20, tối đa 100). Sắp xếp `createdDate` giảm dần. Gồm cả bản nháp.
+Query: `q` (mã đơn, tên khách, số điện thoại), `status` (một trạng thái, hoặc nhiều trạng thái ngăn bằng dấu phẩy, ví dụ `Expired,Cancelled` cho tab Hết hạn / Hủy), `from`, `to` (ngày thực hiện `YYYY-MM-DD`, gồm hai đầu), `needsAction=1` (đơn `NeedRevision`, hoặc `Deposited` có yêu cầu chỉnh sửa của khách đang chờ), `restPending=1` (đơn `Deposited` / `Completed` mà đợt 2 tiền mặt chưa ghi nhận), `depositFrom`, `depositTo` (ngày cọc `Payments.PaidDate`, giờ VN, `YYYY-MM-DD`, gồm hai đầu; còn hỗ trợ ở API nhưng giao diện không còn dùng), `conversationId`, `page`, `pageSize` (mặc định 20, tối đa 100). Sắp xếp `createdDate` giảm dần. Gồm cả bản nháp.
 
 Response 200: `{ "data": Order[], "meta": { page, pageSize, total, totalPages } }`
 
 ### GET /vendors/me/orders/counts
 
-Số đơn theo từng trạng thái, không phụ thuộc bộ lọc.
+Số đơn theo từng trạng thái và số liệu 4 thẻ đầu trang Quản lý đơn hàng, tính trên toàn bộ đơn của NCC, không phụ thuộc bộ lọc.
 
-Response 200: `{ "data": { "Draft": 1, "Pending": 2, "NeedRevision": 1, "Deposited": 3, "Completed": 4, "Expired": 1, "Cancelled": 1 } }`
+Response 200:
+
+```json
+{ "data": { "Draft": 1, "Pending": 2, "NeedRevision": 1, "Deposited": 3, "Completed": 4, "Expired": 1, "Cancelled": 1,
+  "tiles": { "pending": 2, "expiringSoon": 1, "needsAction": 2, "upcoming": 1, "upcomingValue": 7900000, "dueToComplete": 1, "dueRestPending": 1 } } }
+```
+
+`tiles`: `pending` = đơn Chờ cọc, `expiringSoon` = trong đó hạn cọc còn dưới 24 giờ; `needsAction` = `NeedRevision` + `Deposited` có yêu cầu chỉnh sửa đang chờ; `upcoming` / `upcomingValue` = `Deposited` có `eventDate` trong [hôm nay, hôm nay + 30 ngày] và tổng giá trị; `dueToComplete` = `Deposited` đã qua `eventDate`, `dueRestPending` = trong đó đợt 2 tiền mặt chưa ghi nhận. Bấm thẻ thì giao diện lọc danh sách: `status=Pending` · `needsAction=1` · `status=Deposited&from&to` · `status=Deposited&to=hôm qua`.
 
 ### GET /vendors/me/orders/:id
 
@@ -313,7 +320,7 @@ Lịch làm việc của NCC: `?from=YYYY-MM-DD&to=YYYY-MM-DD` (tối đa 100 ng
 Theo CSDL mục 9.12 (múi giờ Việt Nam). Cả hai việc **idempotent**: chỉ xử lý dòng thật sự đổi trạng thái (cập nhật có điều kiện theo trạng thái cũ), nên chạy lặp hoặc song song không gửi tin hay thông báo trùng.
 
 1. **Hết hạn đơn:** `Pending` có `depositDueDate` đã qua thì thành `Expired`, thêm tin hệ thống "Đơn … đã hết hạn đặt cọc." và thông báo `OrderExpired` cho cả hai bên. (`NeedRevision` không hết hạn vì đang chờ NCC.)
-2. **Tự hoàn thành:** `Deposited` mà `eventDate` + 7 ngày đã qua thì thành `Completed`, `completedDate` = **cuối ngày `eventDate` + 7 (giờ VN)** (để hoa hồng vào đúng bảng kê tháng), tạo hoa hồng, thêm tin hệ thống "Đơn … đã hoàn thành.", thông báo `OrderCompleted`.
+2. **Tự hoàn thành:** `Deposited` có `eventDate < hôm nay − 7` (quá ngày thực hiện hơn 7 ngày; không kiểm tra đã ghi nhận đợt 2 hay chưa) thì thành `Completed`, `completedDate` = **cuối ngày `eventDate` + 7 (giờ VN)** (để hoa hồng vào đúng bảng kê tháng), tạo hoa hồng, thêm tin hệ thống (bấm tay: "NCC đã hoàn tất đơn …"; tự động: "Đơn … được hệ thống tự hoàn tất vì đã quá ngày thực hiện hơn 7 ngày…"), thông báo `OrderCompleted`.
 3. Nhắc hoa hồng (xem [commissions.md](commissions.md)): chưa làm.
 
 **Cách chạy:**
@@ -328,5 +335,10 @@ Phiên bản đơn (`versions`, v1/v2), đợt thanh toán tùy chỉnh (`instal
 
 ## Việc còn lại cho trang Quản lý đơn hàng
 
-- **Chưa làm:** endpoint tổng hợp (summary) cho 4 thẻ số liệu** (ví dụ `GET /vendors/me/orders/summary`). FE hiện tự tính từ danh sách đơn (tối đa 100 đơn mỗi trang), sẽ thiếu số khi NCC có hơn 100 đơn. Trả về: số đơn `Pending` và số đơn sắp hết hạn trong 24 giờ; số đơn `Deposited` có `eventDate` trong [hôm nay, hôm nay + 30 ngày] và tổng giá trị (cùng định nghĩa ở Tổng quan và trang Đơn hàng); số đơn `Deposited` đã qua `eventDate` (cần Hoàn tất); số đơn và tổng giá trị đơn có `Payments` `Paid` và `PaidDate` trong tháng hiện tại (giờ Việt Nam), mọi trạng thái (thẻ "Đặt cọc trong tháng"; bấm vào thì lọc bằng `depositFrom`, `depositTo`).
-- **Đã làm (lọc ở CSDL, phân trang):** danh sách đơn lọc theo `status`, `from`/`to` (ngày sự kiện), `depositFrom`/`depositTo` (ngày cọc, giờ VN), `conversationId`, và tìm `q` theo mã đơn, tên khách, số điện thoại (số điện thoại tìm theo chuỗi lưu trong CSDL, khớp cả khi gõ liền số nếu số lưu liền). `GET /vendors/me/orders/counts` trả đủ 7 trạng thái.
+- **Đã làm:** 4 thẻ số liệu của trang Quản lý đơn hàng do backend tính trên **toàn bộ** đơn của NCC, trả trong `GET /vendors/me/orders/counts` (trường `tiles`, định nghĩa ở mục đó). Thẻ "Đặt cọc trong tháng" đã bỏ.
+- **Đã làm (lọc ở CSDL, phân trang):** danh sách đơn lọc theo `status`, `from`/`to` (ngày sự kiện), `depositFrom`/`depositTo` (ngày cọc, giờ VN), `conversationId`, và tìm `q` theo mã đơn, tên khách, số điện thoại (số điện thoại tìm theo chuỗi lưu trong CSDL, khớp cả khi gõ liền số nếu số lưu liền). `GET /vendors/me/orders/counts` trả đủ 7 trạng thái cùng `tiles`.
+
+## Số bàn tối thiểu của sảnh và chống lưu đè (cập nhật 04/11/2026)
+
+- **Số bàn tối thiểu:** dòng gắn sảnh (`items[].packageId` = sảnh của đơn) không được thấp hơn `service_packages.min_tables`. Tạo, lưu nháp, gửi / cập nhật đơn: kiểm mọi dòng sảnh. Sửa sau cọc (`PATCH`): chỉ kiểm khi đổi sảnh hoặc số lượng dòng sảnh bị đổi. Lỗi `400 VALIDATION_ERROR`, thông báo "Sảnh <tên> đặt tối thiểu N bàn.", `details["items.<i>.quantity"]`.
+- **Chống lưu đè:** đơn trả thêm `version` (dấu vân tay nội dung, bảng `orders` không có `updated_at`). `PUT /:id/draft`, `POST /:id/send`, `PATCH /:id` nhận `expectedVersion` (tùy chọn); khác phiên bản hiện tại thì `409 ORDER_STALE` "Đơn đã được cập nhật ở nơi khác, vui lòng mở lại." Không gửi `expectedVersion` thì không kiểm.

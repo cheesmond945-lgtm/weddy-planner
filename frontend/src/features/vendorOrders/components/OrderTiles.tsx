@@ -1,57 +1,59 @@
-import { CalendarCheck, CheckCheck, Clock, Wallet } from 'lucide-react'
+import { CalendarCheck, CheckCheck, Clock, MessageSquareWarning } from 'lucide-react'
 import { StatCard } from '@/features/commissions/components/StatCard'
+import { addDaysYmd, todayVN } from '@/lib/clock'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { OrderListQuery } from '@/types/vendorOrder'
-import type { orderTiles } from '../summary'
+import type { OrderListQuery, OrderTilesData } from '@/types/vendorOrder'
+import { UPCOMING_DAYS } from '../summary'
 
-type Tiles = ReturnType<typeof orderTiles>
-type Patch = Partial<Pick<OrderListQuery, 'status' | 'from' | 'to' | 'depositFrom' | 'depositTo'>>
+type Patch = Pick<OrderListQuery, 'status' | 'from' | 'to' | 'needsAction' | 'restPending'>
 
 interface OrderTilesProps {
-  tiles: Tiles
+  /** Số liệu do backend tính trên toàn bộ đơn của NCC; chưa tải xong thì hiện khung chờ */
+  tiles: OrderTilesData | undefined
   query: OrderListQuery
-  onFilter: (patch: Patch) => void
+  onFilter: (patch: Partial<Patch>) => void
 }
 
-const CLEAR: Patch = { status: undefined, from: undefined, to: undefined, depositFrom: undefined, depositTo: undefined }
+const CLEAR: Patch = { status: undefined, from: undefined, to: undefined, needsAction: undefined, restPending: undefined }
 const same = (q: OrderListQuery, f: Patch) =>
-  q.status === f.status && (q.from ?? undefined) === f.from && (q.to ?? undefined) === f.to && (q.depositFrom ?? undefined) === f.depositFrom && (q.depositTo ?? undefined) === f.depositTo
+  q.status === f.status && (q.from ?? undefined) === f.from && (q.to ?? undefined) === f.to && !!q.needsAction === !!f.needsAction && !!q.restPending === !!f.restPending
 
 /**
  * Bốn thẻ số liệu đầu trang Quản lý đơn hàng; bấm thẻ thì lọc danh sách tương ứng, bấm lần nữa để bỏ lọc.
+ * Mọi con số tính ở backend (GET /vendors/me/orders/counts) nên đúng với cả NCC có hơn 100 đơn.
  */
 export function OrderTiles({ tiles: t, query, onFilter }: OrderTilesProps) {
-  const items = [
+  if (!t) return <div aria-busy="true" aria-label="Đang tải số liệu" className="mb-[22px] h-[112px] animate-pulse rounded-md bg-muted" />
+  const today = todayVN()
+  const items: { key: string; filter: Patch; card: React.ReactNode }[] = [
     {
       key: 'pending',
-      filter: t.filters.pending,
-      card: (
-        <StatCard icon={Clock} label="Đơn đang chờ cọc" value={t.pending} tone={t.expiringSoon ? 'text-warn' : ''} foot={t.expiringSoon ? `${t.expiringSoon} đơn sắp hết hạn trong 24 giờ` : 'Chưa có đơn sắp hết hạn'} />
-      ),
+      filter: { ...CLEAR, status: 'Pending' },
+      card: <StatCard icon={Clock} label="Chờ khách đặt cọc" value={t.pending} tone={t.expiringSoon ? 'text-warn' : ''} foot={t.expiringSoon ? `${t.expiringSoon} đơn hết hạn trong 24 giờ` : 'Chưa có đơn sắp hết hạn'} />,
+    },
+    {
+      key: 'needsAction',
+      filter: { ...CLEAR, needsAction: true },
+      card: <StatCard icon={MessageSquareWarning} label="Cần bạn xử lý" value={t.needsAction} tone={t.needsAction ? 'text-warn' : ''} foot={t.needsAction ? 'Khách đang chờ bạn chỉnh sửa đơn' : 'Không có yêu cầu chỉnh sửa nào'} />,
     },
     {
       key: 'upcoming',
-      filter: t.filters.upcoming,
-      card: <StatCard icon={CalendarCheck} label="Đã cọc, sắp thực hiện" value={t.upcoming} foot={t.upcoming ? `Trong 30 ngày tới · ${formatMoney(t.upcomingValue)}` : 'Không có đơn trong 30 ngày tới'} />,
+      filter: { ...CLEAR, status: 'Deposited', from: today, to: addDaysYmd(today, UPCOMING_DAYS) },
+      card: <StatCard icon={CalendarCheck} label="Sắp thực hiện" value={t.upcoming} foot={t.upcoming ? `Trong ${UPCOMING_DAYS} ngày tới · ${formatMoney(t.upcomingValue)}` : `Không có đơn trong ${UPCOMING_DAYS} ngày tới`} />,
     },
     {
-      key: 'toComplete',
-      filter: t.filters.toComplete,
+      key: 'dueToComplete',
+      filter: { ...CLEAR, status: 'Deposited', to: addDaysYmd(today, -1) },
       card: (
         <StatCard
           icon={CheckCheck}
-          label="Cần đánh dấu hoàn thành"
-          value={t.toComplete}
-          tone={t.toComplete ? 'text-gold-ink' : ''}
-          foot={t.toComplete ? 'Đã qua ngày thực hiện, chưa hoàn thành' : 'Không có đơn chờ hoàn thành'}
+          label="Đến hạn hoàn tất"
+          value={t.dueToComplete}
+          tone={t.dueToComplete ? 'text-gold-ink' : ''}
+          foot={t.dueToComplete ? `Đã qua ngày thực hiện${t.dueRestPending ? ` · ${t.dueRestPending} đơn chưa nhận tiền mặt` : ''}` : 'Không có đơn chờ hoàn tất'}
         />
       ),
-    },
-    {
-      key: 'deposited',
-      filter: t.filters.deposited,
-      card: <StatCard icon={Wallet} label="Đặt cọc trong tháng" value={formatMoney(t.depositedThisMonthValue)} tone="text-sage" foot={`${t.depositedThisMonth} đơn có ngày cọc trong tháng này, gồm cả đã hoàn thành`} />,
     },
   ]
   return (

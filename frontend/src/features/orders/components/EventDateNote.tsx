@@ -15,5 +15,5 @@ export function EventDateNote({ order }: { order: Pick<Order, 'status' | 'eventD
     : status === 'Deposited'
       ? `Sau ngày cưới của bạn (${formatDate(weddingDate)}). Nhắn nhà cung cấp trong chat để đổi ngày thực hiện.`
       : `Sau ngày cưới của bạn (${formatDate(weddingDate)}) nên bạn chưa đặt cọc được. Bấm "Yêu cầu chỉnh sửa" và chọn "Đổi ngày thực hiện".`
-  return <div className={after ? 'border-b border-dashed border-line py-1.5 text-[12.5px] text-warn' : 'border-b border-dashed border-line py-1.5 text-[12.5px] text-muted-foreground'}>{text}</div>
+  return <div className={after ? 'mt-2 text-[12.5px] leading-snug text-warn' : 'mt-2 text-[12.5px] leading-snug text-muted-foreground'}>{text}</div>
 }

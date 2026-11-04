@@ -38,7 +38,7 @@ Biến cho đơn hàng và thanh toán cọc (đã có sẵn trong `.env.example
 
 | Biến | Ý nghĩa |
 |---|---|
-| `PAYMENT_MODE` | `simulate` (mặc định khi chạy dev): đặt cọc ghi nhận thành công ngay, dùng để chạy thử và demo. `vnpay`: VNPay thật, **chưa tích hợp** (trả 501). Khi `NODE_ENV=production` thì **không giả lập** trừ khi bạn đặt **rõ** `PAYMENT_MODE=simulate` (để bản demo triển khai vẫn bật được) |
+| `PAYMENT_DEMO_MODE` | `false` (mặc định): đặt cọc chỉ ghi nhận khi SePay báo đã nhận tiền (VietQR). `true`: chế độ thử, khách có nút "Tôi đã thanh toán" để ghi nhận cọc ngay, dùng để chạy thử và demo. Nội dung chuyển khoản: `SEVQR FOREVER` + mã đơn (cọc), `SEVQR FOREVERHH` + mã bảng kê (hoa hồng) |
 | `ORDER_JOBS_ENABLED` | Mặc định `false`. `true`: quét toàn hệ thống đơn hết hạn cọc và tự hoàn thành, lúc khởi động và mỗi giờ. Dù để `false`, đơn của người đang xem vẫn được cập nhật đúng trạng thái khi họ mở danh sách hoặc chi tiết đơn |
 | `DB_POOL_MAX` | Số kết nối tối đa của backend tới DB (mặc định 5). Supabase chỉ có 15 chỗ dùng chung cả nhóm; lỗi `EMAXCONNSESSION` nghĩa là hết chỗ |
 

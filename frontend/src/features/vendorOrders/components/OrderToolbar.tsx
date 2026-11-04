@@ -1,36 +1,36 @@
-import { CalendarRange, Search, X } from 'lucide-react'
+import { Banknote, CalendarRange, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { controlClass } from '@/features/vendors/components/FormParts'
 import { formatDate } from '@/lib/date'
 import { cn } from '@/lib/utils'
-import { ORDER_STATUSES, type OrderListQuery, type OrderStatus } from '@/types/vendorOrder'
+import type { OrderCounts, OrderListQuery } from '@/types/vendorOrder'
 import { ORDER_STATUS } from '../constants'
+import { CLOSED_STATUS, LISTED_STATUSES } from '../filters'
 
 interface TabsProps {
-  counts: Record<OrderStatus, number> | undefined
-  value?: OrderStatus
-  onChange: (s?: OrderStatus) => void
+  counts: OrderCounts | undefined
+  /** Giá trị ?status= đang chọn (undefined = Tất cả) */
+  value?: string
+  onChange: (status?: string) => void
 }
 
-/** Lọc theo 7 trạng thái, có số đếm; cuộn ngang được trên màn nhỏ. */
+/** Tab trạng thái theo luồng đơn: Tất cả (trừ bản nháp) | Chờ cọc | Chờ chỉnh sửa | Đã cọc | Hoàn thành | Hết hạn / Hủy. */
+const TABS: { key: string | undefined; label: string; of: (c: OrderCounts) => number }[] = [
+  { key: undefined, label: 'Tất cả', of: (c) => LISTED_STATUSES.reduce((s, k) => s + c[k], 0) },
+  { key: 'Pending', label: ORDER_STATUS.Pending.label, of: (c) => c.Pending },
+  { key: 'NeedRevision', label: ORDER_STATUS.NeedRevision.label, of: (c) => c.NeedRevision },
+  { key: 'Deposited', label: ORDER_STATUS.Deposited.label, of: (c) => c.Deposited },
+  { key: 'Completed', label: ORDER_STATUS.Completed.label, of: (c) => c.Completed },
+  { key: CLOSED_STATUS, label: 'Hết hạn / Hủy', of: (c) => c.Expired + c.Cancelled },
+]
+
+/** Lọc theo trạng thái, có số đếm; cuộn ngang được trên màn nhỏ. */
 export function OrderStatusTabs({ counts, value, onChange }: TabsProps) {
-  const total = counts ? Object.values(counts).reduce((s, n) => s + n, 0) : undefined
-  const tabs: {
-    key: OrderStatus | undefined
-    label: string
-    n: number | undefined
-  }[] = [
-    { key: undefined, label: 'Tất cả', n: total },
-    ...ORDER_STATUSES.map((s) => ({
-      key: s,
-      label: ORDER_STATUS[s].label,
-      n: counts?.[s],
-    })),
-  ]
   return (
     <div role="tablist" aria-label="Lọc theo trạng thái đơn" className="-mx-1 mb-3.5 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
-      {tabs.map((t) => {
+      {TABS.map((t) => {
         const on = value === t.key
+        const n = counts ? t.of(counts) : undefined
         return (
           <button
             key={t.label}
@@ -44,11 +44,11 @@ export function OrderStatusTabs({ counts, value, onChange }: TabsProps) {
             )}
           >
             {t.label}
-            {t.n !== undefined && (
+            {n !== undefined && (
               <span
                 className={cn('grid h-[18px] min-w-[18px] place-items-center rounded-pill px-[5px] text-[11px] font-semibold tabular-nums', on ? 'bg-(image:--gold-grad) text-gold-on' : 'bg-bg text-muted-foreground')}
               >
-                {t.n}
+                {n}
               </span>
             )}
           </button>
@@ -65,7 +65,7 @@ interface ToolbarProps {
   hasFilter: boolean
 }
 
-/** Ô tìm kiếm pill (mã đơn, tên khách, số điện thoại) và nút chọn khoảng ngày sự kiện, cùng kiểu trang Tin nhắn. */
+/** Ô tìm kiếm pill (mã đơn, tên khách, số điện thoại), nút chọn khoảng ngày thực hiện và chip lọc "Chưa nhận tiền mặt", cùng kiểu trang Tin nhắn. */
 export function OrderToolbar({ query, onChange, onReset, hasFilter }: ToolbarProps) {
   const [text, setText] = useState(query.q ?? '')
   const [open, setOpen] = useState(false)
@@ -96,7 +96,7 @@ export function OrderToolbar({ query, onChange, onReset, hasFilter }: ToolbarPro
   }, [open])
 
   const ranged = !!(query.from || query.to)
-  const label = ranged ? `${query.from ? formatDate(query.from) : '…'} – ${query.to ? formatDate(query.to) : '…'}` : 'Ngày sự kiện'
+  const label = ranged ? `${query.from ? formatDate(query.from) : '…'} – ${query.to ? formatDate(query.to) : '…'}` : 'Ngày thực hiện'
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2.5">
@@ -131,7 +131,7 @@ export function OrderToolbar({ query, onChange, onReset, hasFilter }: ToolbarPro
         </button>
         {open && (
           <div className="absolute top-[calc(100%+6px)] right-0 z-20 grid w-[280px] gap-3 rounded-lg border border-line bg-surface p-4 shadow-portal-lift max-sm:right-auto max-sm:left-0">
-            <p className="text-[12.5px] text-muted-foreground">Lọc theo ngày diễn ra sự kiện</p>
+            <p className="text-[12.5px] text-muted-foreground">Lọc theo ngày thực hiện đơn</p>
             <label className="grid gap-1 text-[13px] font-medium">
               Từ ngày
               <input type="date" className={controlClass} value={query.from ?? ''} max={query.to || undefined} onChange={(e) => onChange({ from: e.target.value || undefined })} />
@@ -149,14 +149,18 @@ export function OrderToolbar({ query, onChange, onReset, hasFilter }: ToolbarPro
         )}
       </div>
 
-      {(query.depositFrom || query.depositTo) && (
-        <span className="inline-flex h-[46px] items-center gap-2 rounded-pill border border-gold/45 bg-gold-soft pr-2 pl-4 text-[13.5px] text-gold-ink">
-          Ngày cọc: {query.depositFrom ? formatDate(query.depositFrom) : '…'} – {query.depositTo ? formatDate(query.depositTo) : '…'}
-          <button type="button" aria-label="Bỏ lọc ngày cọc" onClick={() => onChange({ depositFrom: undefined, depositTo: undefined })} className="grid size-7 place-items-center rounded-full hover:bg-surface/60">
-            <X className="size-3.5" />
-          </button>
-        </span>
-      )}
+      <button
+        type="button"
+        aria-pressed={!!query.restPending}
+        onClick={() => onChange({ restPending: query.restPending ? undefined : true })}
+        className={cn(
+          'inline-flex h-[46px] items-center gap-2 rounded-pill border border-line bg-surface px-4 text-[13.5px] text-muted-foreground hover:border-line-strong hover:text-ink',
+          query.restPending && 'border-gold/45 bg-gold-soft text-gold-ink',
+        )}
+      >
+        <Banknote className="size-[17px]" />
+        Chưa nhận tiền mặt
+      </button>
 
       {hasFilter && (
         <button type="button" onClick={onReset} className="text-[13px] font-medium text-gold-ink hover:underline">
