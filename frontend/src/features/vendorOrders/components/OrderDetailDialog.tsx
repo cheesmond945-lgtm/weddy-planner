@@ -9,7 +9,6 @@ import { CANCEL_REASON } from '../constants'
 import { changesLabel, formatDay, formatDayTime, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
 import { OrderStatusBadge, PaidInFullBadge } from './OrderBadges'
-import { OrderDaySlotPanel } from './OrderDaySlotPanel'
 import { OrderProgressPanel } from './OrderProgressPanel'
 import type { OrderFormMode } from './OrderFormDialog'
 import { PanelDialog } from './PanelDialog'
@@ -149,7 +148,6 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, onViewInvoice
 
       {vendorView && (o.status === 'Deposited' || o.status === 'Completed') && (
         <>
-          <OrderDaySlotPanel orderId={o.id} frame={(c) => <Section title="Giờ có mặt ngày cưới">{c}</Section>} />
           <Section title="Tiến độ đơn">
             <OrderProgressPanel orderId={o.id} customerName={o.customerName} readOnly={o.status !== 'Deposited'} />
           </Section>

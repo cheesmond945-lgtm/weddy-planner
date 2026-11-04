@@ -184,28 +184,6 @@ export function useOrderTasks(orderId: string | null, enabled = true) {
   })
 }
 
-/** Giờ có mặt ngày cưới của đơn; khóa nằm dưới việc của đơn nên tải lại cùng (realtime `task`, khách đổi giờ chính). */
-const daySlotKey = (uid: string | undefined, orderId: string) => [...vendorKeys.orderTasks(uid, orderId), 'day-slot'] as const
-
-export function useDaySlot(orderId: string) {
-  const uid = useVendorId()
-  return useQuery({ queryKey: daySlotKey(uid, orderId), queryFn: () => vendorOrdersApi.daySlot(orderId), enabled: !!uid })
-}
-
-/** Chốt giờ có mặt ({ start, end }) hoặc bỏ chốt (null); khách được báo khi chốt. */
-export function useSetDaySlot(orderId: string) {
-  const uid = useVendorId()
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (v: { start: string; end: string } | null) => (v ? vendorOrdersApi.confirmDaySlot(orderId, v) : vendorOrdersApi.clearDaySlot(orderId)),
-    onSuccess: (data, v) => {
-      qc.setQueryData(daySlotKey(uid, orderId), data)
-      toast(v ? 'Đã xác nhận giờ có mặt, khách đã được báo.' : 'Đã bỏ xác nhận, quay về giờ dự kiến.')
-    },
-    onError: (e: unknown) => toast(e instanceof Error ? e.message : 'Không lưu được giờ có mặt.'),
-  })
-}
-
 /** Tiến độ tóm tắt của mọi đơn đang thực hiện ({ [orderId]: OrderProgress }), để hiện nhãn "Trễ tiến độ". */
 export function useOrderProgress() {
   const uid = useVendorId()

@@ -303,8 +303,7 @@ Mọi API trả việc chi tiết (timeline khách, bảng việc, lịch, tiế
 
 ### Giờ trong ngày cưới
 
-Việc của đơn vẫn tính theo ngày. Giờ có mặt của từng NCC trong ngày cưới (theo giờ đón khách, thời gian gói khai, giờ sảnh cho vào setup) là phần riêng:
-xem [LICH_TRINH_NGAY_CUOI.md](LICH_TRINH_NGAY_CUOI.md).
+Việc của đơn chỉ tính theo ngày. Tính năng giờ trong ngày cưới (giờ đón khách, giờ có mặt của từng NCC, chốt giờ) **đã bỏ** (04/11/2026), xem [LICH_TRINH_NGAY_CUOI.md](LICH_TRINH_NGAY_CUOI.md)..
 
 ### Dữ liệu cũ
 

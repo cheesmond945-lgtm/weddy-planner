@@ -20,7 +20,6 @@ import { SERVICE_LABEL, TimelineCard } from './TimelineRow'
 import { catalogApi } from '@/api/catalog'
 import { usePlanActions } from '../planActions'
 import { WeddingEditDialog } from './WeddingDialogs'
-import { WeddingDaySchedule } from './WeddingDaySchedule'
 
 type Show = 'todo' | 'done' | 'all'
 const SHOWS: { value: Show; label: string }[] = [
@@ -282,7 +281,6 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       <UrgencyBanner level={level} daysLeft={daysLeft} />
       <WaitingBanner count={waitingCount} onPick={() => { setView('time'); setParam({ month: '', q: '', owner: 'mine', category: '', show: 'todo' }) }} />
       <DeadlineBanner overdue={overdueCount} soon={soonCount} onPick={(m) => { setView('time'); setParam({ month: m, q: '', owner: '', category: '', show: '' }) }} />
-      <WeddingDaySchedule onEditWedding={() => setEditingWedding(true)} />
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="text-[26px] leading-[1.15]">Timeline</h1>

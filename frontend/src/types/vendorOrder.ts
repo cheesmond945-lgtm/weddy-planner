@@ -6,7 +6,6 @@
  * Kiểu Order phía cặp đôi ở types/order.ts giữ nguyên.
  */
 import type { CategoryRef } from './catalog'
-import type { DaySlot, DayVenue } from './wedding'
 
 /** Trạng thái đơn (Orders.Status). Nhãn và màu ở features/vendorOrders/constants.ts. */
 export const ORDER_STATUSES = ['Draft', 'Pending', 'NeedRevision', 'Deposited', 'Completed', 'Expired', 'Cancelled'] as const
@@ -284,25 +283,3 @@ export interface BoardTask extends OrderTask {
 export type CalendarItem =
   | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: OrderStatus; isDone: boolean }
   | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isRestPayment: boolean; isPackageTask: boolean; isCustomOrderTask: boolean; isDone: boolean; status: TaskStatus; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean }
-
-/**
- * Giờ có mặt ngày cưới của một đơn (GET /vendors/me/orders/:id/day-slot, docs/LICH_TRINH_NGAY_CUOI.md).
- * Chỉ đơn Đã cọc / Hoàn thành làm đúng ngày cưới mới có (applicable); giờ VN dạng "YYYY-MM-DDTHH:mm".
- */
-export type OrderDaySlot =
-  | { applicable: false; reason: 'NOT_ACTIVE' | 'NO_WEDDING_DATE' | 'NOT_WEDDING_DAY'; message: string }
-  | {
-      applicable: true
-      /** Ngày cưới "YYYY-MM-DD" */
-      date: string
-      /** Giờ chính của khách "HH:mm"; null là khách chưa nhập */
-      mainTime: string | null
-      slot: DaySlot
-      /** Khung dự kiến theo gói / lĩnh vực (điền sẵn khi chốt); null khi chưa có giờ chính */
-      planned: { start: string; end: string; source: 'PACKAGE' | 'DEFAULT' } | null
-      venue: DayVenue | null
-      /** Các NCC khác trong ngày cưới: chỉ lĩnh vực và giờ */
-      others: { categoryName: string; isVenue: boolean; start: string | null; end: string | null; confirmed: boolean }[]
-      /** Đơn đang thực hiện (đã cọc): chốt / đổi / bỏ chốt được */
-      canEdit: boolean
-    }

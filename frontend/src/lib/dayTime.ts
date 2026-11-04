@@ -1,18 +1,6 @@
 /*
- * Giờ trong lịch trình ngày cưới (docs/LICH_TRINH_NGAY_CUOI.md): API trả giờ VN dạng "YYYY-MM-DDTHH:mm", có thể là tối hôm trước ngày cưới.
+ * Giờ, thời lượng cho thẻ "Thời gian trong ngày cưới" của gói (NCC). Phần lịch trình ngày cưới của khách / chi tiết đơn đã bỏ.
  */
-
-/** "2026-10-20T05:30" -> "05:30" */
-export const clockOf = (local: string) => local.slice(11, 16)
-
-/** "2026-10-20T05:30" -> "2026-10-20" */
-export const dayOfLocal = (local: string) => local.slice(0, 10)
-
-/** Khung giờ "05:00–10:00"; có mặt từ hôm trước ngày cưới thì "22:00 hôm trước–10:00" */
-export function spanText(start: string, end: string, weddingDay: string): string {
-  const before = (s: string) => (dayOfLocal(s) < weddingDay ? ' hôm trước' : '')
-  return `${clockOf(start)}${before(start)}–${clockOf(end)}${before(end)}`
-}
 
 /** 90 -> "1 giờ 30 phút", 0 -> "0 phút" */
 export function durationText(min: number): string {

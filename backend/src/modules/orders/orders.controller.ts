@@ -142,24 +142,6 @@ export class VendorOrdersController {
     return this.tasks.unconfirmSchedule(req.user.sub, id, taskId);
   }
 
-  /** Giờ có mặt ngày cưới của đơn: đã chốt hoặc dự kiến, giờ sảnh mở, giờ của các NCC khác (docs/LICH_TRINH_NGAY_CUOI.md). */
-  @Get(':id/day-slot')
-  daySlot(@Req() req: any, @Param('id') id: string) {
-    return this.tasks.daySlot(req.user.sub, id);
-  }
-
-  /** Chốt giờ có mặt: { start, end } dạng 'YYYY-MM-DDTHH:mm' giờ VN (có thể từ tối hôm trước). Khách được báo. */
-  @Put(':id/day-slot')
-  confirmDaySlot(@Req() req: any, @Param('id') id: string, @Body() body: { start?: unknown; end?: unknown }) {
-    return this.tasks.confirmDaySlot(req.user.sub, id, body ?? {});
-  }
-
-  /** Bỏ chốt giờ có mặt: quay về giờ dự kiến. */
-  @Delete(':id/day-slot')
-  clearDaySlot(@Req() req: any, @Param('id') id: string) {
-    return this.tasks.clearDaySlot(req.user.sub, id);
-  }
-
   @Post()
   create(@Req() req: any, @Body() body: { conversationId?: string; content?: ContentInput; send?: boolean }) {
     return this.orders.create(req.user.sub, body ?? {});
