@@ -97,7 +97,6 @@ function DeadlineBanner({ overdue, soon, onPick }: { overdue: number; soon: numb
           {soon} việc sắp đến hạn
         </button>
       )}
-      <span className="text-[13px] opacity-80">Bấm để xem danh sách.</span>
     </div>
   )
 }

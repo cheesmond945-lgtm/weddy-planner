@@ -1,4 +1,4 @@
-import { Search, X } from 'lucide-react'
+import { ListFilter, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { controlClass } from '@/features/vendors/components/FormParts'
 import { cn } from '@/lib/utils'
@@ -25,11 +25,13 @@ const OWNERS: { value: OwnerFilter; label: string }[] = [
 ]
 
 /**
- * Tìm kiếm và lọc việc của timeline: từ khóa (tên việc, dịch vụ, tên NCC, mã đơn, ngày hạn "12/11", "tháng 12"; không cần gõ dấu),
- * tháng, dịch vụ, và ai làm. Lọc ngay trên máy, không gọi API. Từ khóa được áp sau 250 ms để gõ mượt.
+ * Tìm kiếm và lọc việc của timeline: ô từ khóa hiện sẵn (tên việc, dịch vụ, tên NCC, mã đơn, ngày hạn "12/11", "tháng 12"; không cần gõ dấu);
+ * tháng, dịch vụ và ai làm gom vào nút "Bộ lọc" (hiện số bộ lọc đang bật). Lọc ngay trên máy, không gọi API. Từ khóa được áp sau 250 ms để gõ mượt.
  */
 export function TimelineFilters({ filters, onChange, onReset, months, categories, category, onCategory, shown }: TimelineFiltersProps) {
   const [text, setText] = useState(filters.q)
+  const [open, setOpen] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
   const latest = useRef(onChange)
   latest.current = onChange
 
@@ -42,8 +44,23 @@ export function TimelineFilters({ filters, onChange, onReset, months, categories
   // Đổi từ ngoài (nút "Xóa bộ lọc"): đồng bộ ô tìm
   useEffect(() => setText(filters.q), [filters.q])
 
+  // Đóng bảng bộ lọc khi bấm ra ngoài hoặc nhấn Esc
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => !panelRef.current?.contains(e.target as Node) && setOpen(false)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
   const active = hasFilters(filters) || !!category
-  const select = cn(controlClass, 'sm:w-auto sm:min-w-[150px]')
+  // Số bộ lọc đang bật trong nút "Bộ lọc" (không tính từ khóa vì ô tìm kiếm hiện sẵn)
+  const count = (months && filters.month ? 1 : 0) + (category ? 1 : 0) + (filters.owner !== 'all' ? 1 : 0)
+  const select = controlClass
 
   return (
     <div className="mt-4" role="search" aria-label="Tìm và lọc việc">
@@ -65,31 +82,60 @@ export function TimelineFilters({ filters, onChange, onReset, months, categories
           )}
         </div>
 
-        {months && (
-          <select aria-label="Lọc theo tháng" value={filters.month} onChange={(e) => onChange({ month: e.target.value })} className={select}>
-            <option value="">Mọi tháng</option>
-            {months.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label} ({m.count})
-              </option>
-            ))}
-          </select>
-        )}
-        <select aria-label="Lọc theo dịch vụ" value={category} onChange={(e) => onCategory(e.target.value)} className={select}>
-          <option value="">Mọi dịch vụ</option>
-          {categories.map((c) => (
-            <option key={c.slug} value={c.slug}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-        <select aria-label="Lọc theo người thực hiện" value={filters.owner} onChange={(e) => onChange({ owner: e.target.value as OwnerFilter })} className={select}>
-          {OWNERS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <div ref={panelRef} className="relative">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-haspopup="dialog"
+            onClick={() => setOpen((o) => !o)}
+            className={cn(
+              'inline-flex h-[42px] items-center gap-2 rounded-pill border border-line bg-surface px-4 text-[13.5px] text-muted-foreground hover:border-line-strong hover:text-ink',
+              count > 0 && 'border-gold/45 bg-gold-soft text-gold-ink',
+            )}
+          >
+            <ListFilter className="size-[17px]" />
+            Bộ lọc
+            {count > 0 && <span className="grid h-[18px] min-w-[18px] place-items-center rounded-pill bg-(image:--gold-grad) px-[5px] text-[11px] font-semibold text-gold-on tabular-nums">{count}</span>}
+          </button>
+          {open && (
+            <div role="dialog" aria-label="Bộ lọc việc" className="absolute top-[calc(100%+6px)] right-0 z-20 grid w-[280px] gap-3 rounded-lg border border-line bg-surface p-4 shadow-portal-lift max-sm:right-auto max-sm:left-0">
+              {months && (
+                <label className="grid gap-1 text-[13px] font-medium">
+                  Tháng
+                  <select aria-label="Lọc theo tháng" value={filters.month} onChange={(e) => onChange({ month: e.target.value })} className={select}>
+                    <option value="">Mọi tháng</option>
+                    {months.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label} ({m.count})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="grid gap-1 text-[13px] font-medium">
+                Dịch vụ
+                <select aria-label="Lọc theo dịch vụ" value={category} onChange={(e) => onCategory(e.target.value)} className={select}>
+                  <option value="">Mọi dịch vụ</option>
+                  {categories.map((c) => (
+                    <option key={c.slug} value={c.slug}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-[13px] font-medium">
+                Người thực hiện
+                <select aria-label="Lọc theo người thực hiện" value={filters.owner} onChange={(e) => onChange({ owner: e.target.value as OwnerFilter })} className={select}>
+                  {OWNERS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+        </div>
       </div>
 
       {active && (
