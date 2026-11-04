@@ -1,20 +1,24 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { depositChip, endedReason, itemsSummary } from './cardSummary.ts'
+import { depositChip, endedReason, itemsSummary, itemsSummaryParts } from './cardSummary.ts'
 
 describe('itemsSummary: một dòng hạng mục', () => {
   it('sảnh tính theo bàn: tên · số bàn', () => {
     assert.equal(itemsSummary([{ itemName: 'Sảnh Vàng Cánh Bướm', unit: 'Bàn', quantity: 30 }]), 'Sảnh Vàng Cánh Bướm · 30 bàn')
   })
-  it('gói số lượng 1 chỉ hiện tên; số lượng lớn hơn 1 hiện kèm đơn vị', () => {
-    assert.equal(itemsSummary([{ itemName: 'Trang điểm cô dâu', unit: 'Gói', quantity: 1 }]), 'Trang điểm cô dâu')
+  it('gói hiện số lượng kèm đơn vị', () => {
+    assert.equal(itemsSummary([{ itemName: 'Trang điểm cô dâu', unit: 'Gói', quantity: 1 }]), 'Trang điểm cô dâu · 1 gói')
     assert.equal(itemsSummary([{ itemName: 'Phụ kiện', unit: 'Gói', quantity: 3 }]), 'Phụ kiện · 3 gói')
   })
   it('nhiều hạng mục: dòng đầu + N hạng mục khác', () => {
     assert.equal(
       itemsSummary([{ itemName: 'Sảnh A', unit: 'Bàn', quantity: 20 }, { itemName: 'Hoa', unit: 'Gói', quantity: 1 }, { itemName: 'Âm thanh', unit: 'Gói', quantity: 1 }]),
-      'Sảnh A · 20 bàn + 2 hạng mục khác',
+      'Sảnh A + 2 hạng mục khác',
     )
+  })
+  it('tách 2 cột: tên | số lượng; nhiều dòng thì cột phải trống', () => {
+    assert.deepEqual(itemsSummaryParts([{ itemName: 'Sảnh A', unit: 'Bàn', quantity: 30 }]), { name: 'Sảnh A', more: '', qty: '30 bàn' })
+    assert.deepEqual(itemsSummaryParts([{ itemName: 'Sảnh A', unit: 'Bàn', quantity: 30 }, { itemName: 'Hoa', unit: 'Gói', quantity: 1 }]), { name: 'Sảnh A', more: ' + 1 hạng mục khác', qty: '' })
   })
   it('không có dòng nào', () => assert.equal(itemsSummary([]), 'Chưa có hạng mục'))
 })

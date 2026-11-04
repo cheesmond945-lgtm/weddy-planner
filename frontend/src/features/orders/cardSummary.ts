@@ -9,13 +9,27 @@ interface ItemLike {
   quantity: number
 }
 
-/** "Sảnh Vàng Cánh Bướm · 30 bàn"; gói số lượng 1 thì chỉ tên; nhiều dòng: "<dòng đầu> + N hạng mục khác". */
-export function itemsSummary(items: readonly ItemLike[]): string {
-  if (!items.length) return 'Chưa có hạng mục'
+export interface ItemsSummary {
+  /** Tên hạng mục đầu (bên trái, cắt "…" nếu dài) */
+  name: string
+  /** " + N hạng mục khác" khi đơn nhiều hạng mục, luôn hiện đủ; rỗng nếu chỉ một */
+  more: string
+  /** Số lượng + đơn vị của hạng mục đầu, vd "30 bàn" (bên phải, thẳng cột với số tiền); rỗng khi nhiều hạng mục */
+  qty: string
+}
+
+/** Tách dòng hạng mục thành 2 cột: "Sảnh Vàng Cánh Bướm" | "30 bàn"; nhiều dòng: "<dòng đầu> + N hạng mục khác" | (trống). */
+export function itemsSummaryParts(items: readonly ItemLike[]): ItemsSummary {
+  if (!items.length) return { name: 'Chưa có hạng mục', more: '', qty: '' }
   const [first, ...rest] = items
-  const qty = first.quantity > 1 || first.unit === 'Bàn' ? ` · ${first.quantity} ${first.unit.toLocaleLowerCase('vi')}` : ''
-  const head = `${first.itemName}${qty}`
-  return rest.length ? `${head} + ${rest.length} hạng mục khác` : head
+  if (rest.length) return { name: first.itemName, more: ` + ${rest.length} hạng mục khác`, qty: '' }
+  return { name: first.itemName, more: '', qty: `${first.quantity} ${first.unit.toLocaleLowerCase('vi')}` }
+}
+
+/** Cả dòng ở dạng một chuỗi ("Sảnh Vàng Cánh Bướm · 30 bàn"), dùng cho chữ thay thế / thông báo. */
+export function itemsSummary(items: readonly ItemLike[]): string {
+  const p = itemsSummaryParts(items)
+  return `${p.name}${p.more}${p.qty ? ` · ${p.qty}` : ''}`
 }
 
 const VN = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })

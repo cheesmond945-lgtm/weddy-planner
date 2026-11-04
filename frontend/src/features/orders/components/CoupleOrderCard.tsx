@@ -16,18 +16,22 @@ import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { openRevision } from '@/features/vendorOrders/calc'
 import type { InvoiceType, Order } from '@/types/order'
-import { depositChip, endedReason, itemsSummary } from '../cardSummary'
+import { depositChip, endedReason, itemsSummaryParts } from '../cardSummary'
 import { DepositTermsDialog } from './DepositTermsDialog'
 import { EventDateNote } from './EventDateNote'
 
-/** Một dòng tiền: nhãn nhạt bên trái, số bên phải căn phải, chữ số thẳng cột. */
+/**
+ * Một dòng của phần tiền: MỘT cỡ chữ và một màu cho mọi nhãn, một cỡ cho mọi giá trị; "Tổng giá trị" (strong) chỉ đậm hơn.
+ * Nhãn bên trái cắt "…" nếu dài, giá trị bên phải không xuống dòng và thẳng cột (tabular-nums).
+ */
+const ROW = 'flex items-baseline justify-between gap-3 py-1 text-[13.5px] leading-snug'
 const money = (label: ReactNode, value: ReactNode, opts: { strong?: boolean; accent?: boolean; note?: ReactNode } = {}) => (
-  <div className="py-1">
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className={cn('min-w-0 text-[13px] text-muted-foreground', opts.strong && 'font-semibold text-ink')}>{label}</dt>
-      <dd className={cn('shrink-0 text-right text-[14px] font-medium whitespace-nowrap tabular-nums', opts.strong && 'text-[17px] font-bold', opts.accent && 'font-semibold text-gold-ink')}>{value}</dd>
+  <div className="py-0.5">
+    <div className={cn(ROW, 'py-0.5')}>
+      <dt className={cn('min-w-0 truncate text-muted-foreground', opts.strong && 'font-semibold')}>{label}</dt>
+      <dd className={cn('shrink-0 text-right font-medium whitespace-nowrap tabular-nums', opts.strong && 'font-semibold', opts.accent && 'text-gold-ink')}>{value}</dd>
     </div>
-    {opts.note && <div className="mt-0.5 text-right text-xs">{opts.note}</div>}
+    {opts.note && <div className="text-right text-xs leading-snug">{opts.note}</div>}
   </div>
 )
 
@@ -72,6 +76,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   const restKnown = !!rest && rest.status !== 'NotApplicable'
   const waiting = openRevision(o)
   const slug = categorySlug ?? o.category?.slug
+  const summary = itemsSummaryParts(o.items)
   const pct = `${Math.round(o.depositPercent * 100) / 100}%`
   const awaitingDeposit = o.status === 'Pending' || o.status === 'NeedRevision'
 
@@ -131,7 +136,13 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
           <PaidInFullBadge order={o} />
         </span>
       </header>
-      <p className="mt-3 text-[13.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{itemsSummary(o.items)}</p>
+      <div className={cn(ROW, 'mt-3 text-muted-foreground')}>
+        <span className="flex min-w-0 items-baseline">
+          <span className="truncate">{summary.name}</span>
+          {summary.more && <span className="shrink-0 whitespace-pre">{summary.more}</span>}
+        </span>
+        {summary.qty && <span className="shrink-0 text-right whitespace-nowrap tabular-nums">{summary.qty}</span>}
+      </div>
 
       {/* Phần tiền */}
       <dl className="mt-4 border-t border-line pt-3">
