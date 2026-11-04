@@ -1,5 +1,5 @@
 import { todayVN } from '@/lib/clock'
-import { DEPOSIT_PERCENT_MIN, isDepositTooLarge } from '@/lib/deposit'
+import { depositPercentError, isDepositTooLarge } from '@/lib/deposit'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { filledItems, totalOf, type OrderFormValues } from './calc'
@@ -51,9 +51,8 @@ export function validateOrder(
     e.eventDate = `Ngày thực hiện không được sau ngày cưới của khách (${formatDate(opts.weddingDate)}).`
   }
   // Sửa sau cọc (deposit = false): tỷ lệ đã khóa, đơn cũ có thể dưới mức tối thiểu nên không kiểm
-  if (opts.deposit !== false && (!(v.depositPercent >= DEPOSIT_PERCENT_MIN && v.depositPercent < 100) || !Number.isInteger(v.depositPercent))) {
-    e.depositPercent = `Tỷ lệ cọc là số nguyên từ ${DEPOSIT_PERCENT_MIN} đến 99 (%).`
-  }
+  const percentError = opts.deposit !== false ? depositPercentError(v.depositPercent) : undefined
+  if (percentError) e.depositPercent = percentError
 
   const rows = v.items.map((it, index) => ({ it, index })).filter(({ it }) => filledItems([it]).length)
   if (!rows.length) e.items = 'Thêm ít nhất một hạng mục báo giá.'

@@ -96,7 +96,7 @@ export function weddingDateIssue(
 
 export const DEPOSIT_ROUNDING = 100_000;
 export const DEPOSIT_MIN = 100_000;
-/** Tỷ lệ cọc tối thiểu khi gửi đơn (%). Đợt 1 (cọc) khách chuyển khoản qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC. */
+/** Tỷ lệ cọc tối thiểu (%), áp khi lưu nháp, gửi và cập nhật đơn. Đợt 1 (cọc) khách chuyển khoản qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC. */
 export const DEPOSIT_PERCENT_MIN = 10;
 
 /** Tổng × tỷ lệ / 100, làm tròn gần nhất đến 100.000đ, tối thiểu 100.000đ (cọc 0đ thì khách không thanh toán được). */
@@ -220,6 +220,8 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
   const percent = hasPercent ? Number(c.depositPercent) : 30;
   const percentOk = percent > 0 && percent < 100;
   if (hasPercent && !percentOk) errors.depositPercent = 'Tỷ lệ đặt cọc phải lớn hơn 0 và nhỏ hơn 100 (%).';
+  // Tối thiểu 10% áp cho cả lưu nháp lẫn gửi / cập nhật đơn (không để nháp 5% rồi mới bị chặn lúc gửi). Sửa sau cọc giữ nguyên tỷ lệ đã chốt (đơn cũ có thể dưới mức tối thiểu) nên bỏ qua.
+  else if (hasPercent && mode !== 'edit' && percent < DEPOSIT_PERCENT_MIN) errors.depositPercent = `Tỷ lệ đặt cọc tối thiểu ${DEPOSIT_PERCENT_MIN}%.`;
 
   if (strict) {
     if (!customerName) errors.customerName = 'Nhập tên khách hàng.';
@@ -227,8 +229,6 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
     if (!items.length) errors.items = 'Thêm ít nhất một hạng mục.';
     else if (total <= 0) errors.items ??= 'Tổng tiền phải lớn hơn 0.';
     if (!hasPercent) errors.depositPercent = 'Nhập tỷ lệ đặt cọc (%).';
-    // Sửa sau cọc giữ nguyên tỷ lệ đã chốt (đơn cũ có thể dưới mức tối thiểu) nên chỉ kiểm khi gửi
-    else if (mode === 'send' && percentOk && percent < DEPOSIT_PERCENT_MIN) errors.depositPercent = `Tỷ lệ đặt cọc tối thiểu ${DEPOSIT_PERCENT_MIN}%.`;
     if (mode === 'send' && !errors.items && !errors.depositPercent && depositOf(total, percent) >= total) errors.deposit = 'Tổng đơn quá nhỏ để đặt cọc.';
   }
   if (Object.keys(errors).length) fail('VALIDATION_ERROR', 'Đơn chưa hợp lệ.', 400, errors);

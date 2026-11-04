@@ -59,7 +59,7 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
   - **Tổng đơn quá nhỏ để đặt cọc:** nếu `depositAmount` (đã làm tròn, tối thiểu) **lớn hơn hoặc bằng** `totalAmount` thì không cho Gửi đơn (`400 VALIDATION_ERROR`, `details.deposit` = "Tổng đơn quá nhỏ để đặt cọc."). Lưu nháp vẫn được. Không kiểm khi Chỉnh sửa sau cọc (tiền cọc đã khóa).
   - `depositDueDate` = thời điểm gửi đơn + 1 ngày (24 giờ).
   - NCC chỉ nhập: hạng mục, `depositPercent`, `eventDate`, `note` (cùng tên và số điện thoại khách, điền sẵn từ tài khoản khách).
-- `depositPercent`: **tối thiểu 10** và nhỏ hơn 100 khi Gửi đơn / Cập nhật đơn (`400 VALIDATION_ERROR`, `details.depositPercent` = "Tỷ lệ đặt cọc tối thiểu 10%."). Lưu nháp không chặn; Chỉnh sửa sau cọc giữ tỷ lệ đã chốt. FE chỉ cho nhập số nguyên 10 đến 99.
+- `depositPercent`: **tối thiểu 10** và nhỏ hơn 100 khi Lưu nháp, Gửi đơn và Cập nhật đơn (sửa sau cọc giữ tỷ lệ đã chốt, không kiểm) (`400 VALIDATION_ERROR`, `details.depositPercent` = "Tỷ lệ đặt cọc tối thiểu 10%."). Lưu nháp không chặn; Chỉnh sửa sau cọc giữ tỷ lệ đã chốt. FE chỉ cho nhập số nguyên 10 đến 99.
 - "Tạo lại đơn" (đơn `Expired`/`Cancelled`): FE chép **toàn bộ** thông tin đơn cũ (cả ngày thực hiện nếu chưa qua) sang đơn mới, mã mới, hạn cọc 24 giờ mới.
 - Đơn vị tính (`unit`): `Gói` (số lượng mặc định 1) hoặc `Bàn` (số lượng tùy chỉnh).
 - Mã đơn `orderCode` dạng `DH<yyMM><số 4 chữ số>` (ví dụ `DH26100001`), không đổi dù sửa nhiều lần.

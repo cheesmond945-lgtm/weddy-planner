@@ -13,7 +13,7 @@ import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import { UnsavedChangesGuard } from '@/features/vendors/components/UnsavedChangesGuard'
 import { todayVN } from '@/lib/clock'
 import { formatDate } from '@/lib/date'
-import { DEPOSIT_MIN, DEPOSIT_PERCENT_MIN, DEPOSIT_ROUNDING, depositOf } from '@/lib/deposit'
+import { DEPOSIT_MIN, DEPOSIT_PERCENT_MIN, DEPOSIT_ROUNDING, depositOf, depositPercentError } from '@/lib/deposit'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { VendorConversation } from '@/types/vendorConversation'
@@ -119,7 +119,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
                 <span className="pointer-events-none absolute top-1/2 left-[78px] -translate-y-1/2 text-[13px] text-muted-foreground">%</span>
               </div>
               {error && (
-                <span role="alert" data-field-error className="mt-1 block max-w-[130px] text-xs leading-snug text-destructive">
+                <span role="alert" data-field-error className="mt-1 block max-w-[160px] text-xs leading-snug text-destructive">
                   {error}
                 </span>
               )}
@@ -128,7 +128,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
             <td className={td}>
               <b className="block font-semibold whitespace-nowrap tabular-nums">{locked || !valid ? formatMoney(deposit) : `≈ ${formatMoney(deposit)}`}</b>
               <span className="text-xs text-muted-foreground">
-                {locked ? 'Tiền cọc đã chốt' : `ước tính, hệ thống tính chính thức khi gửi (làm tròn ${formatMoney(DEPOSIT_ROUNDING)}, tối thiểu ${formatMoney(DEPOSIT_MIN)})`}
+                {locked ? 'Tiền cọc đã chốt' : `Làm tròn ${formatMoney(DEPOSIT_ROUNDING)}, tối thiểu ${formatMoney(DEPOSIT_MIN)}`}
               </span>
             </td>
             <td className={td}>{paidDate ? `Đã cọc ${formatDay(paidDate)}` : '1 ngày sau khi gửi đơn'}</td>
@@ -151,7 +151,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
         </p>
       )}
       <p className="border-t border-line bg-surface-2 px-3 py-2 text-[12.5px] text-muted-foreground">
-        Cọc tối thiểu {DEPOSIT_PERCENT_MIN}% tổng đơn. Hệ thống chỉ ghi nhận khoản cọc qua VietQR; khách quá 24 giờ chưa cọc thì đơn tự hủy (hết hạn).
+        Cọc tối thiểu {DEPOSIT_PERCENT_MIN}% tổng đơn, tối đa 99%. Hệ thống chỉ ghi nhận khoản cọc qua VietQR; khách quá 24 giờ chưa cọc thì đơn tự hủy (hết hạn).
       </p>
     </div>
   )
@@ -212,11 +212,12 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
     requireHall: venue,
   }
   const advice = eventDateAdvice({ eventDate: values.eventDate, weddingDate, today: todayVN(), categorySlug })
-  const errors: OrderErrors = checked
-    ? validateOrder(values, rules)
-    : needDate
-      ? validateDraft(values)
-      : {}
+  // Tỷ lệ cọc báo lỗi ngay khi gõ (không đợi bấm Gửi) và khoá nút Gửi / Lưu nháp khi sai; đơn đã cọc thì tỷ lệ đã khóa
+  const percentError = locked ? undefined : depositPercentError(values.depositPercent)
+  const errors: OrderErrors = {
+    ...(checked ? validateOrder(values, rules) : needDate ? validateDraft(values) : {}),
+    ...(percentError && { depositPercent: percentError }),
+  }
   const request = order?.revisions.find((r) => r.status === 'Requested')
   const canDraft = mode.kind === 'new' || mode.kind === 'again' || mode.kind === 'draft'
 
@@ -248,7 +249,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   function saveDraft() {
     setFormError('')
     setNoWedding(false)
-    if (Object.keys(validateDraft(values)).length) {
+    if (Object.keys(validateDraft(values)).length || percentError) {
       setNeedDate(true)
       scrollToError()
       return
@@ -340,11 +341,11 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
               Hủy
             </Button>
             {canDraft && (
-              <Button type="button" variant="outline" className="border-line-strong" onClick={saveDraft} disabled={busy}>
+              <Button type="button" variant="outline" className="border-line-strong" onClick={saveDraft} disabled={busy || !!percentError}>
                 Lưu nháp
               </Button>
             )}
-            <Button type="button" onClick={submit} disabled={busy}>
+            <Button type="button" onClick={submit} disabled={busy || !!percentError}>
               {busy ? (
                 <>
                   <LoaderCircle className="animate-spin" />
