@@ -2,13 +2,14 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
-import { CHART_COLORS, Donut } from '@/features/weddings/components/Donut'
+import { categoryColor } from '@/features/catalog/categoryIcons'
+import { Donut } from '@/features/weddings/components/Donut'
 import { usePlanContext } from '@/features/weddings/components/PlanHub'
 import { StackBar, StatCard, StatGrid } from '@/features/weddings/components/StatCard'
 import { SpendingServicesCard } from '@/features/weddings/components/SpendingServicesCard'
 import { useOverview } from '@/features/weddings/hooks'
 import { formatShortDate } from '@/lib/date'
-import { formatMillions, formatMoney, formatNumber } from '@/lib/format'
+import { formatMillions, formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { Overview } from '@/types/wedding'
@@ -45,9 +46,9 @@ function dueText(daysLeft: number, dueDate: string) {
   return { text: `Hạn ${formatShortDate(dueDate)}`, cls: 'text-muted-foreground' }
 }
 
-/** Ba thẻ số đầu trang: cùng kiểu thẻ số tab Ngân sách / Khách mời (ô giấy kem trên dải ô liu, chú thích bên dưới); Ngân sách, Khách mời bấm được */
+/** Ba thẻ số đầu trang: cùng kiểu thẻ số tab Ngân sách (ô giấy kem trên dải ô liu, chú thích bên dưới); Ngân sách bấm được */
 function TopCards({ data }: { data: Overview }) {
-  const { tasks, budget, guests } = data
+  const { tasks, budget } = data
   return (
     <StatGrid className="grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
       {tasks && (
@@ -95,28 +96,6 @@ function TopCards({ data }: { data: Overview }) {
                 ]}
               />
             </div>
-          </StatCard>
-        </Link>
-      )}
-      {guests && (
-        <Link to={paths.planTab.guests} className="olive-link">
-          <StatCard
-            label="Khách mời"
-            value={
-              <>
-                {formatNumber(guests.total)}
-                <span className="text-[17px] font-normal text-muted-foreground">/{formatNumber(guests.expected)} khách</span>
-              </>
-            }
-            sub={
-              <span className={cn(guests.total > guests.expected && 'font-semibold text-warn')}>
-                {guests.total > guests.expected
-                  ? `Vượt ${formatNumber(guests.total - guests.expected)} khách so với dự kiến`
-                  : `Đã mời ${formatNumber(guests.invited)}, sẽ đến ${formatNumber(guests.attending)}`}
-              </span>
-            }
-          >
-            <div className="w-full">{progress(Math.min(guests.total, guests.expected), guests.expected)}</div>
           </StatCard>
         </Link>
       )}
@@ -168,6 +147,7 @@ function ProgressCard({ tasks }: { tasks: NonNullable<Overview['tasks']> }) {
   )
 }
 
+/** Chi phí theo hạng mục: biểu đồ tròn và chú thích nằm gọn trong một cột; rê chuột vào lát hoặc dòng chú thích để xem số tiền và tỉ lệ. Màu theo hạng mục (như trang Kế hoạch). */
 function CostCard({ budget }: { budget: NonNullable<Overview['budget']> }) {
   const spent = budget.slices.reduce((s, x) => s + x.amount, 0)
   return (
@@ -175,17 +155,19 @@ function CostCard({ budget }: { budget: NonNullable<Overview['budget']> }) {
       {budget.slices.length ? (
         <Donut
           label="Chi phí theo hạng mục"
-          size={130}
+          size={200}
           center={
             <span>
-              <b className="block font-serif text-base">{formatMillions(spent)}</b>dự kiến
+              <b className="block font-serif text-[22px] leading-tight">{formatMillions(spent)}</b>
+              <span className="text-muted-foreground">chi phí dự kiến</span>
             </span>
           }
-          slices={budget.slices.map((s, i) => ({
+          detail={(s) => (budget.total > 0 ? `${Math.round((s.value / budget.total) * 100)}% tổng ngân sách ${formatMillions(budget.total)}` : null)}
+          slices={budget.slices.map((s) => ({
             key: s.slug,
             label: s.name,
             value: s.amount,
-            color: s.slug === 'other' ? 'var(--line-strong)' : CHART_COLORS[i % CHART_COLORS.length],
+            color: s.slug === 'other' ? 'var(--line-strong)' : categoryColor(s.slug),
             note: formatMoney(s.amount),
             warn: s.isOver,
           }))}
@@ -218,7 +200,7 @@ export default function PlanOverviewPage() {
   const data = overview.data
 
   // Cùng phong cách tab Ngân sách (plan-theme / budget-theme: Lexend, tiêu đề serif nghiêng, thẻ số ô liu).
-  // Hai cột cân nhau: trái = việc sắp đến hạn + mức chia và dịch vụ; phải = chi phí theo hạng mục + tiến độ theo hạng mục.
+  // Thẻ số → hai cột gọn: trái = chi phí theo hạng mục + mức chia và dịch vụ; phải = việc sắp đến hạn + tiến độ theo hạng mục.
   return (
     <div className="plan-theme budget-theme overview-page">
       {overview.isPending ? (
@@ -226,13 +208,13 @@ export default function PlanOverviewPage() {
       ) : (
         <TopCards data={data!} />
       )}
-      <div className="grid grid-cols-[1.15fr_1fr] items-start gap-5 max-[900px]:grid-cols-1">
+      <div className="grid grid-cols-2 items-start gap-5 max-[900px]:grid-cols-1">
         <div className="flex flex-col gap-5">
-          {data?.tasks && <UpcomingCard tasks={data.tasks} />}
+          {data?.budget && <CostCard budget={data.budget} />}
           <SpendingServicesCard wedding={wedding} onEdit={openEdit} />
         </div>
         <div className="flex flex-col gap-5">
-          {data?.budget && <CostCard budget={data.budget} />}
+          {data?.tasks && <UpcomingCard tasks={data.tasks} />}
           {data?.tasks && <ProgressCard tasks={data.tasks} />}
         </div>
       </div>

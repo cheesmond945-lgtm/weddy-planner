@@ -187,7 +187,7 @@ export function monthOptions(items: readonly TimelineItem[], today: string): Mon
   }
   const out: MonthOption[] = []
   if (overdue) out.push({ value: 'overdue', label: 'Quá hạn', count: overdue })
-  if (soon) out.push({ value: 'soon', label: 'Sắp đến hạn', count: soon })
+  if (soon) out.push({ value: 'soon', label: `Sắp đến hạn (trong ${DUE_SOON_DAYS} ngày)`, count: soon })
   for (const [m, count] of [...months].sort(([a], [b]) => a.localeCompare(b)))
     out.push({ value: m, label: `Tháng ${Number(m.slice(5))}/${m.slice(0, 4)}`, count })
   return out

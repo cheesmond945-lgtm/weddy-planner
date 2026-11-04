@@ -76,6 +76,9 @@ export const categoryRank = (slug: string) => {
   return i === -1 ? CATEGORY_ORDER.length : i;
 };
 
+/** Thời gian giữ danh sách NCC đang hiện trong bộ nhớ: NCC/Admin sửa gói thì khách thấy chậm tối đa chừng này. */
+const VISIBLE_TTL_MS = 30_000;
+
 /**
  * Frontend gọi "dịch vụ" = nhà cung cấp (vendor_profiles) đã duyệt có ít nhất một gói Approved.
  * "Gói" của dịch vụ = service_packages; mỗi gói là một album (package_albums).
@@ -90,11 +93,28 @@ export class ServicesService {
    * `alsoHidden`: id các NCC đang bị ẩn (Hidden) vẫn được trả về, dành cho cặp đôi đã có đơn với NCC đó (xem withOrderWith).
    */
   private async loadVisible(alsoHidden: string[] = []) {
+    // DB ở xa (mỗi truy vấn ~100ms+), danh mục ít đổi: giữ kết quả VISIBLE_TTL_MS, các yêu cầu cùng lúc dùng chung một lần đọc
+    const now = Date.now();
+    if (!this.visibleCache || this.visibleCache.at + VISIBLE_TTL_MS < now) {
+      const data = this.queryVisible({ status: 'Approved' });
+      this.visibleCache = { at: now, data };
+      data.catch(() => (this.visibleCache = null));
+    }
+    if (!alsoHidden.length) return this.visibleCache.data;
+    // NCC bị ẩn mà cặp đôi đã có đơn: đọc riêng (không cache), ghép vào theo đúng thứ tự created_date, id
+    const [visible, hidden] = await Promise.all([this.visibleCache.data, this.queryVisible({ status: 'Hidden', id: { in: alsoHidden } })]);
+    const key = (v: (typeof visible)[number]) => `${v.created_date?.toISOString() ?? '~'}|${v.id}`;
+    return [...visible, ...hidden].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+  }
+
+  private visibleCache: { at: number; data: ReturnType<ServicesService['queryVisible']> } | null = null;
+
+  private async queryVisible(status: { status: 'Approved' } | { status: 'Hidden'; id: { in: string[] } }) {
     return this.prisma.vendor_profiles.findMany({
       where: {
         users: { status: 'Active' },
         service_packages: { some: { status: 'Approved' } },
-        OR: [{ status: 'Approved' }, ...(alsoHidden.length ? [{ status: 'Hidden', id: { in: alsoHidden } }] : [])],
+        ...status,
       },
       orderBy: [{ created_date: 'asc' }, { id: 'asc' }],
       include: {

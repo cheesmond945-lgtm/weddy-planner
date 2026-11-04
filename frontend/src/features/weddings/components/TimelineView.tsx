@@ -11,13 +11,13 @@ import { useTimeline, useTimelineMutations } from '../hooks'
 import { ImportDialog } from '../import/ImportDialog'
 import { countServices, groupByTime, type ViewMode } from '../timelineGroups'
 import { chatDraft, filterTimeline, processChangeDraft, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
-import { CompleteTaskDialog, ReopenTaskDialog } from './TimelineConfirmDialogs'
+import { CompleteTaskDialog, DeleteTaskDialog } from './TimelineConfirmDialogs'
 import { AddTaskDialog, EditMilestoneDialog } from './TimelineDialogs'
 import { TimelineGroupCard, defaultOpen } from './TimelineGroupCard'
 import { TimelineCalendar } from './TimelineCalendar'
 import { TimelineFilters } from './TimelineFilters'
 import { TimelineHero } from './TimelineHero'
-import { SERVICE_LABEL, TimelineCard } from './TimelineRow'
+import { TimelineCard } from './TimelineRow'
 import { catalogApi } from '@/api/catalog'
 import { usePlanActions } from '../planActions'
 import { WeddingEditDialog } from './WeddingDialogs'
@@ -141,7 +141,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   }
   const [editing, setEditing] = useState<TimelineItem | null>(null)
   const [completing, setCompleting] = useState<TimelineItem | null>(null)
-  const [reopening, setReopening] = useState<TimelineItem | null>(null)
+  const [removing, setRemoving] = useState<TimelineItem | null>(null)
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set())
   const [adding, setAdding] = useState(false)
   const [editingWedding, setEditingWedding] = useState(false)
@@ -196,7 +196,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   const months = monthOptions(filterTimeline(baseItems, { ...filters, month: '' }, nowISO), nowISO)
   const timeItems = view === 'service' ? baseItems : filterTimeline(baseItems, view === 'calendar' ? { ...filters, month: '' } : filters, nowISO)
   const timeGroups = groupByTime(timeItems, nowISO)
-  const categories = [...new Map(items.filter((i) => i.category).map((i) => [i.category!.slug, SERVICE_LABEL[i.category!.slug] ?? i.category!.name])).entries()].map(([slug, label]) => ({ slug, label }))
+  const categories = [...new Map(items.filter((i) => i.category).map((i) => [i.category!.slug, i.category!.name])).entries()].map(([slug, label]) => ({ slug, label }))
   const setView = (v: ViewMode) => {
     setViewState(v)
     saveView(v)
@@ -254,10 +254,9 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       toast('Đã chuyển sang Đã xong', 5000, { label: 'Hoàn tác', onClick: () => undo(item) })
     }, 280)
   }
-  const reopen = (item: TimelineItem) => {
-    setReopening(null)
-    update.mutate({ id: item.id, patch: { isDone: false } })
-    toast('Đã đưa về Chưa xong')
+  const removeTask = (item: TimelineItem) => {
+    setRemoving(null)
+    remove.mutate(item.id, { onSuccess: () => toast('Đã xóa việc'), onError: (e) => toast(e.message) })
   }
 
   /** Mở khung chat với NCC của dịch vụ (đơn), kèm câu nhắn soạn sẵn. */
@@ -270,9 +269,8 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   const handlers = {
     onChat: (i: TimelineItem) => void chatWith(i.serviceId!, chatDraft(i)),
     onComplete: setCompleting,
-    onReopen: setReopening,
     onEdit: setEditing,
-    onRemove: (i: TimelineItem) => remove.mutate(i.id, { onSuccess: () => toast('Đã xóa việc') }),
+    onRemove: setRemoving,
   }
 
   const chip = (active: boolean) =>
@@ -329,7 +327,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       )}
 
       {view === 'calendar' ? (
-        <TimelineCalendar items={timeItems} weddingDate={wedding.date} renderCard={(i) => <TimelineCard key={i.id} item={i} leaving={leaving.has(i.id)} showService compactDate {...handlers} />} />
+        <TimelineCalendar items={timeItems} weddingDate={wedding.date} renderCard={(i) => <TimelineCard key={i.id} item={i} leaving={leaving.has(i.id)} compactDate {...handlers} />} />
       ) : view === 'time' ? (
         <div className="mt-5">
           {timeItems.length === 0 && <EmptyState title={hasFilters(filters) || category ? 'Không có việc nào khớp bộ lọc' : show === 'done' ? 'Chưa có việc nào xong' : 'Không còn việc nào cần làm'} action={hasFilters(filters) || category ? <Button variant="outline" onClick={resetFilters}>Xóa bộ lọc</Button> : undefined} />}
@@ -341,7 +339,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
               </h2>
               <div className="flex flex-col gap-3.5">
                 {g.items.map((i) => (
-                  <TimelineCard key={i.id} item={i} leaving={leaving.has(i.id)} showService compactDate={g.key !== 'overdue'} {...handlers} />
+                  <TimelineCard key={i.id} item={i} leaving={leaving.has(i.id)} compactDate={g.key !== 'overdue'} {...handlers} />
                 ))}
               </div>
             </section>
@@ -371,7 +369,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       )}
 
       <CompleteTaskDialog item={completing} onClose={() => setCompleting(null)} onConfirm={complete} />
-      <ReopenTaskDialog item={reopening} onClose={() => setReopening(null)} onConfirm={reopen} />
+      <DeleteTaskDialog item={removing} onClose={() => setRemoving(null)} onConfirm={removeTask} />
       <EditMilestoneDialog item={editing} wedding={wedding} onClose={() => setEditing(null)} />
       <AddTaskDialog open={adding} wedding={wedding} onClose={() => setAdding(false)} />
       <WeddingEditDialog open={editingWedding} onOpenChange={setEditingWedding} />

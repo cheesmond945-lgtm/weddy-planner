@@ -49,8 +49,8 @@ export interface WeddingPatch {
 // ---- Chia sẻ ----
 
 /** Subtab của Kế hoạch (link xem công khai chọn phần nào được xem) */
-export type PlanTab = 'overview' | 'timeline' | 'services' | 'budget' | 'guests'
-export const PLAN_TABS: PlanTab[] = ['overview', 'timeline', 'services', 'budget', 'guests']
+export type PlanTab = 'overview' | 'timeline' | 'services' | 'budget'
+export const PLAN_TABS: PlanTab[] = ['overview', 'timeline', 'services', 'budget']
 
 // ---- Lịch trình ngày cưới theo giờ (docs/LICH_TRINH_NGAY_CUOI.md) ----
 
@@ -224,8 +224,6 @@ export interface Overview {
     /** Chi phí theo hạng mục; slug "other" là Chi phí khác */
     slices: { slug: string; name: string; amount: number; budget: number; isOver: boolean }[]
   } | null
-  /** null khi không được xem tab Khách mời */
-  guests: GuestStats | null
 }
 
 // ---- Ngân sách (7) ----
@@ -256,7 +254,7 @@ export interface BudgetPackageOption {
   cost: number
   chargedTables: number | null
   fits: boolean
-  /** "Chọn gói này, 5 dịch vụ còn lại còn tối đa X so với gói rẻ nhất cần Y, thiếu Z."; null khi không thiếu */
+  /** Cảnh báo thiếu tiền nếu chọn gói (vượt bao nhiêu, dịch vụ chưa chọn nào cần bao nhiêu, nên làm gì); null khi không thiếu */
   consequence: string | null
 }
 
@@ -432,48 +430,9 @@ export interface BudgetSettings {
   ownVenueCost?: number | null
 }
 
-// ---- Khách mời (8) ----
-
-export type GuestSide = 'BRIDE' | 'GROOM'
-export type GuestRsvp = 'PENDING' | 'ATTENDING' | 'DECLINED'
-export const GUEST_GROUPS = ['Gia đình', 'Họ hàng', 'Bạn bè', 'Đồng nghiệp', 'Khác']
-
-export interface Guest {
-  id: string
-  fullName: string
-  side: GuestSide
-  group: string
-  partySize: number
-  isInvited: boolean
-  rsvp: GuestRsvp
-  createdDate: string
-}
-
-export type GuestInput = Omit<Guest, 'id' | 'createdDate'>
-
-/** Thống kê theo số người */
-export interface GuestStats {
-  total: number
-  expected: number
-  invited: number
-  attending: number
-  declined: number
-  /** Đã mời, chưa phản hồi */
-  pending: number
-  notInvited: number
-  bride: number
-  groom: number
-  rows: number
-}
-
-export interface GuestList {
-  items: Guest[]
-  stats: GuestStats
-}
-
 // ---- Nhập và xuất (9) ----
 
-export type ImportType = 'guests' | 'tasks' | 'expenses'
+export type ImportType = 'tasks' | 'expenses'
 
 export interface ImportRequest {
   rows: Record<string, string>[]

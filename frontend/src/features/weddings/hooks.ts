@@ -3,7 +3,7 @@ import { weddingsApi } from '@/api/weddings'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/store/auth'
 import { ApiError } from '@/api/client'
-import type { Budget, BudgetSettings, GuestList, NewTask, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
+import type { Budget, BudgetSettings, NewTask, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
 
 /** Khóa cache theo người dùng để đổi tài khoản không lẫn dữ liệu. */
 export const planningKeys = {
@@ -12,18 +12,17 @@ export const planningKeys = {
   plan: (uid?: string) => ['plan', uid] as const,
   overview: (uid?: string) => ['overview', uid] as const,
   budget: (uid?: string) => ['budget', uid] as const,
-  guests: (uid?: string) => ['guests', uid] as const,
   conversations: (uid?: string) => ['conversations', uid] as const,
   messages: (uid: string | undefined, conversationId: string) => ['messages', uid, conversationId] as const,
   order: (uid: string | undefined, id: string) => ['order', uid, id] as const,
   ai: (uid: string | undefined, slug: string) => ['ai', uid, slug] as const,
 }
 
-/** Gọi sau khi dữ liệu kế hoạch đổi: làm mới kế hoạch, timeline, ngân sách, khách mời (số khách dự kiến), tổng quan, hội thoại. */
+/** Gọi sau khi dữ liệu kế hoạch đổi: làm mới kế hoạch, timeline, ngân sách, tổng quan, hội thoại. */
 export function useRefreshPlanning() {
   const qc = useQueryClient()
   return () =>
-    Promise.all(['plan', 'timeline', 'budget', 'guests', 'overview', 'conversations', 'messages', 'order', 'orders'].map((k) => qc.invalidateQueries({ queryKey: [k] })))
+    Promise.all(['plan', 'timeline', 'budget', 'overview', 'conversations', 'messages', 'order', 'orders'].map((k) => qc.invalidateQueries({ queryKey: [k] })))
 }
 
 function useCoupleId() {
@@ -180,7 +179,7 @@ export function usePatchWedding() {
     mutationFn: (patch: Omit<WeddingPatch, 'version'>) => weddingsApi.patchMine({ ...patch, version: version() }),
     onSuccess: (w) => {
       qc.setQueryData(planningKeys.wedding(uid), w)
-      for (const k of ['budget', 'plan', 'guests', 'overview', 'ai']) void qc.invalidateQueries({ queryKey: [k] })
+      for (const k of ['budget', 'plan', 'overview', 'ai']) void qc.invalidateQueries({ queryKey: [k] })
     },
     onError: after.onError,
   })
@@ -200,28 +199,3 @@ export function useChoosePackage() {
   })
 }
 
-/** Tab Khách mời. */
-export function useGuests(enabled = true) {
-  const uid = useCoupleId()
-  return useQuery({ queryKey: planningKeys.guests(uid), queryFn: weddingsApi.getGuests, enabled: !!uid && enabled })
-}
-
-/** Thêm, sửa, xóa khách. API trả danh sách mới, ghi thẳng vào cache. */
-export function useGuestMutations() {
-  const uid = useCoupleId()
-  const qc = useQueryClient()
-  const onSuccess = (list: GuestList) => {
-    qc.setQueryData(planningKeys.guests(uid), list)
-    void qc.invalidateQueries({ queryKey: ['overview'] })
-  }
-  return {
-    add: useMutation({ mutationFn: weddingsApi.addGuest, onSuccess }),
-    addMany: useMutation({ mutationFn: weddingsApi.addGuests, onSuccess }),
-    update: useMutation({
-      mutationFn: ({ id, patch }: { id: string; patch: Parameters<typeof weddingsApi.updateGuest>[1] }) => weddingsApi.updateGuest(id, patch),
-      onSuccess,
-      onError: (e) => toast(e.message),
-    }),
-    remove: useMutation({ mutationFn: weddingsApi.removeGuest, onSuccess, onError: (e) => toast(e.message) }),
-  }
-}

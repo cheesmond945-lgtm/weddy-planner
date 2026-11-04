@@ -54,6 +54,24 @@ const PREFIX_LEN = ORD_PREFIX.length;
 export const pkgTaskIdOf = (code: string | null | undefined) => (code?.startsWith(PKG_PREFIX) ? code.slice(PKG_PREFIX.length).split(':')[0] : null);
 export const isOrderTaskCode = (code: string | null | undefined) => !!code && (code.startsWith(PKG_PREFIX) || code.startsWith(PAY_PREFIX));
 
+/**
+ * Việc mẫu (khung) khách đã xóa: giữ dòng, đổi task_code thành 'DEL:<mã>' (CSDL chỉ cho task_type Frame / Detail) để lưu lại
+ * thông tin đám cưới không sinh lại việc đó; timeline, nhắc việc, đổi ngày cưới đều bỏ qua dòng này. Việc khách tự thêm thì xóa hẳn.
+ */
+export const REMOVED_PREFIX = 'DEL:';
+export const removedCode = (code: string) => `${REMOVED_PREFIX}${code}`.slice(0, 50);
+export const isRemovedCode = (code: string | null | undefined) => !!code?.startsWith(REMOVED_PREFIX);
+/** Mã mẫu gốc của dòng (bỏ tiền tố DEL:), để kiểm "đã có việc này" khi sinh khung. */
+export const baseCode = (code: string) => (isRemovedCode(code) ? code.slice(REMOVED_PREFIX.length) : code);
+
+/**
+ * Việc sinh từ mẫu của một hạng mục khách đã bỏ khỏi "Dịch vụ muốn sử dụng": ẩn khỏi timeline và nhắc việc, KHÔNG xóa,
+ * để chọn lại hạng mục thì việc (cả việc đã tích) hiện lại như cũ. Việc gắn đơn và việc khách tự thêm luôn hiện.
+ * `active`: hạng mục đang chọn (và hạng mục còn đơn hiệu lực).
+ */
+export const hiddenByCategory = (t: { task_code: string | null; order_id: string | null; category_id: string | null }, active: ReadonlySet<string>) =>
+  t.task_code !== null && !t.order_id && !!t.category_id && !active.has(t.category_id);
+
 /** Việc khung: Tự làm của "Chung" và Tự làm / Chọn NCC / Mốc chốt của các hạng mục đã chọn, hạn tính từ ngày cưới. */
 export function frameRows(templates: readonly TimelineTemplate[], input: { weddingId: string; wedding: string; today: string; services: readonly ServiceRef[] }): TaskRow[] {
   const plan = planFrame(templates, { wedding: input.wedding, today: input.today, services: input.services.map((s) => s.key) });

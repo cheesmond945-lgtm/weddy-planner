@@ -33,7 +33,7 @@ Response 200
         "packages": [{ "id": "…", "name": "Sảnh Hoa Dạ Quang", "total": 203000000 }],
         "total": 203000000, "formula": "35 × 5.800.000đ", "assumption": null,
         "budget": { "kind": "LEFT", "amount": 31000000, "text": "Còn dư 31.000.000đ" },
-        "tables": { "count": 35, "byMinimum": true, "text": "35 bàn, tối thiểu của gói", "warning": "Gói này yêu cầu tối thiểu 35 bàn, nhiều hơn 5 bàn so với dự kiến của bạn" },
+        "tables": { "count": 35, "byMinimum": true, "text": "35 bàn, tối thiểu của gói", "warning": "Gói này yêu cầu đặt tối thiểu 35 bàn: chọn gói này bạn phải đặt ít nhất 35 bàn (nhiều hơn 5 bàn so với 30 bàn dự kiến). Không cần thêm bàn thì chọn gói khác" },
         "location": null,
         "capacity": { "max": 500, "fits": true, "text": "Tối đa 500 khách, đủ cho 300 khách của bạn" },
         "rating": { "value": null, "count": 0, "text": "Chưa có đánh giá" },

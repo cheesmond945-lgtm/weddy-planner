@@ -5,9 +5,6 @@ import type {
   BudgetSplitBody,
   DateChangePreview,
   DaySchedule,
-  GuestInput,
-  GuestList,
-  GuestSide,
   ImportReport,
   ImportRequest,
   ImportType,
@@ -24,8 +21,8 @@ import { download, http } from './client'
 
 const q = (version: string) => `?version=${encodeURIComponent(version)}`
 
-const TEMPLATE_NAME: Record<ImportType, string> = { guests: 'khach-moi', tasks: 'cong-viec', expenses: 'chi-phi-khac' }
-const EXPORT_NAME = { guests: 'khach-moi.csv', tasks: 'cong-viec.csv', budget: 'ngan-sach.csv' } as const
+const TEMPLATE_NAME: Record<ImportType, string> = { tasks: 'cong-viec', expenses: 'chi-phi-khac' }
+const EXPORT_NAME = { tasks: 'cong-viec.csv', budget: 'ngan-sach.csv' } as const
 
 /** Hợp đồng: docs/api/weddings.md */
 export const weddingsApi = {
@@ -80,19 +77,10 @@ export const weddingsApi = {
   removeExtraCost: (id: string, version: string): Promise<Budget> =>
     http.delete(`/weddings/me/extra-costs/${id}${q(version)}`),
 
-  // Khách mời (8)
-  getGuests: (): Promise<GuestList> => (http.get('/weddings/me/guests')),
-  addGuest: (body: GuestInput): Promise<GuestList> => (http.post('/weddings/me/guests', body)),
-  addGuests: (body: { names: string[]; side: GuestSide; group: string }): Promise<GuestList> =>
-    http.post('/weddings/me/guests/bulk', body),
-  updateGuest: (id: string, body: Partial<GuestInput>): Promise<GuestList> =>
-    http.patch(`/weddings/me/guests/${id}`, body),
-  removeGuest: (id: string): Promise<GuestList> => (http.delete(`/weddings/me/guests/${id}`)),
-
   // Nhập và xuất (9)
   importRows: (type: ImportType, body: ImportRequest): Promise<ImportReport> =>
     http.post(`/weddings/me/import/${type}`, body),
   downloadTemplate: (type: ImportType) => download(`/weddings/me/import/${type}/template.csv`, `mau-${TEMPLATE_NAME[type]}.csv`),
-  downloadExport: (type: 'guests' | 'tasks' | 'budget') => download(`/weddings/me/export/${type}.csv`, EXPORT_NAME[type]),
+  downloadExport: (type: 'tasks' | 'budget') => download(`/weddings/me/export/${type}.csv`, EXPORT_NAME[type]),
 
 }

@@ -1,19 +1,19 @@
-import { Ban, CalendarDays, Check, Clock, Hourglass, Lock, MessageSquareText, Pencil, RotateCcw, Trash2 } from 'lucide-react'
-import type { KeyboardEvent } from 'react'
-import { Link } from 'react-router'
+import { Ban, CalendarDays, Check, Clock, Heart, Hourglass, Lock, Pencil, Trash2 } from 'lucide-react'
+import type { CSSProperties, KeyboardEvent } from 'react'
+import { CategoryIcon, categoryColor } from '@/features/catalog/categoryIcons'
 import { Button } from '@/components/ui/button'
 import { DateChip } from '@/features/vendorOrders/components/TaskDateRow'
 import { TaskTitle } from '@/features/vendorOrders/components/TaskTitle'
 import { daysBetween, formatDate, parseDate, today } from '@/lib/date'
 import { TASK_LABELS } from '@/lib/taskLabels'
 import { cn } from '@/lib/utils'
-import { paths } from '@/routes/paths'
 import type { TimelineItem } from '@/types/wedding'
 import { DUE_SOON_DAYS } from '../timelineFilter'
+import { useAiSuggest } from '../useAiSuggest'
 
 /** Tên hạng mục dùng trong chữ ("Gợi ý nhà hàng", "Việc chi tiết của nhà hàng"); danh mục lạ thì dùng tên từ API. */
 export const SERVICE_LABEL: Record<string, string> = {
-  'nha-hang': 'nhà hàng',
+  'nha-hang': 'trung tâm tiệc cưới',
   'chup-anh': 'chụp ảnh & quay phim',
   'trang-phuc': 'trang phục',
   decor: 'trang trí',
@@ -30,6 +30,20 @@ export const dmy = (s: string) => {
 export const dm = (s: string) => {
   const d = parseDate(s)
   return `${d.getDate()}/${d.getMonth() + 1}`
+}
+
+/** Nhãn dịch vụ của việc (icon + tên, màu theo danh mục) để lướt timeline vẫn biết việc thuộc dịch vụ nào; việc không gắn dịch vụ là "Việc chung". */
+function ServiceTag({ item }: { item: TimelineItem }) {
+  const slug = item.category?.slug
+  return (
+    <span
+      style={{ '--cc': slug ? categoryColor(slug) : 'var(--muted-foreground)' } as CSSProperties}
+      className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-[color-mix(in_srgb,var(--cc)_14%,transparent)] px-2 py-0.5 text-[12px] leading-none font-semibold text-(--cc)"
+    >
+      {slug ? <CategoryIcon slug={slug} size={13} strokeWidth={2} /> : <Heart className="size-[13px]" strokeWidth={2} aria-hidden />}
+      {item.category?.name ?? 'Việc chung'}
+    </span>
+  )
 }
 
 /** Tag trạng thái của việc chi tiết (pill nổi bật, góc phải trên của thẻ): Bạn cần làm / Cùng NCC / NCC thực hiện / Đã xong · dd/mm. */
@@ -69,24 +83,19 @@ interface TimelineCardProps {
   leaving?: boolean
   /** Mở hộp "Xác nhận hoàn thành" (bấm thẻ, ô tick hoặc Enter) */
   onComplete: (item: TimelineItem) => void
-  /** Đưa việc đã xong về Chưa xong (nút ↺) */
-  onReopen: (item: TimelineItem) => void
   onEdit: (item: TimelineItem) => void
   onRemove: (item: TimelineItem) => void
   /** "Nhắn NCC" cho việc chi tiết đang chờ khách / cùng NCC chưa chốt lịch */
   onChat?: (item: TimelineItem) => void
   /** Việc con trong thẻ nhóm: nhỏ gọn hơn, thụt vào */
   nested?: boolean
-  /** Cách xem THEO THỜI GIAN: việc con có thêm tên dịch vụ ở dòng hạn ("Hạn: d/m · Nhà hàng") */
-  showService?: boolean
   /** Hạn dạng d/m (không năm): nhóm theo tháng đã có năm ở tiêu đề */
   compactDate?: boolean
 }
 
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
-
 /** Thẻ một việc: ô tick tròn, tên, dòng hạn, và nút chỉ khi nghiệp vụ cần. */
-export function TimelineCard({ item, leaving, nested, showService, onComplete, onReopen, onEdit, onRemove, onChat }: TimelineCardProps) {
+export function TimelineCard({ item, leaving, nested, onComplete, onEdit, onRemove, onChat }: TimelineCardProps) {
+  const aiSuggest = useAiSuggest()
   const due = parseDate(item.dueDate!)
   const done = item.isDone
   const overdue = !done && due < today()
@@ -115,7 +124,6 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
       ? []
       : [
           togetherUnconfirmed && <span key="plan">NCC sẽ hẹn lịch với bạn</span>,
-          showService && <span key="svc">{capitalize(serviceLabel(item))}</span>,
           dueSoon && (
             <span key="soon" className="font-semibold text-gold-ink">
               Sắp đến hạn
@@ -141,7 +149,10 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
           <StatusTag item={item} />
         </div>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2" onClick={(e) => e.stopPropagation()}>
-          <DateChip dueDate={item.dueDate!} confirmed={item.dateStatus === 'CONFIRMED'} overdue={overdue} isDone={done} />
+          <span className="flex flex-wrap items-center gap-2">
+            <ServiceTag item={item} />
+            <DateChip dueDate={item.dueDate!} confirmed={item.dateStatus === 'CONFIRMED'} overdue={overdue} isDone={done} />
+          </span>
           {askVendor && (
             <Button variant="outline" size="sm" className="ml-auto" onClick={() => onChat!(item)}>
               Nhắn NCC
@@ -170,7 +181,7 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
       data-state={done ? 'done' : 'todo'}
       onClick={canComplete ? () => onComplete(item) : undefined}
       onKeyDown={onKeyDown}
-      className={cn(card, nested && 'rounded-2xl px-4 py-3 shadow-sm max-[640px]:px-3', grayDone && 'border-line/70 bg-surface-2/60 opacity-60 shadow-none', canComplete && clickable, leaving && !done && 'pointer-events-none -translate-x-6 scale-[0.98] opacity-0 duration-300')}
+      className={cn(card, nested && 'rounded-2xl px-4 py-3 shadow-sm max-[640px]:px-3', done && 'border-line/70 bg-surface-2/60 opacity-60 shadow-none', canComplete && clickable, leaving && !done && 'pointer-events-none -translate-x-6 scale-[0.98] opacity-0 duration-300')}
     >
       {done ? (
         <span aria-hidden className={cn('grid size-[26px] shrink-0 place-items-center rounded-full', grayDone ? 'bg-sage/25 text-sage' : 'bg-sage text-white')}>
@@ -182,8 +193,9 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
 
       <div className="min-w-0 flex-1 basis-[220px]">
         <div className={cn(nested ? 'text-[15.5px]' : 'text-[17px]', 'leading-snug font-semibold', done && !autoDone && !grayDone && 'text-muted-foreground line-through', grayDone && 'text-muted-foreground', done && autoDone && 'text-sage')}>{vendorOwned ? <TaskTitle as="div" title={item.title} className="" noteClassName="text-[13px]" /> : item.title}</div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[12.5px] font-medium text-muted-foreground">
-          <CalendarDays className="size-3.5" aria-hidden />
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px] font-medium text-muted-foreground">
+          <ServiceTag item={item} />
+          <CalendarDays className="ml-1 size-3.5" aria-hidden />
           <span className={cn(overdue && 'text-warn')}>Hạn {formatDate(item.dueDate!)}</span>
           {dueSoon && <span className="font-semibold text-gold-ink">· Sắp đến hạn</span>}
           {overdue && <span className="font-semibold text-warn">· Quá hạn</span>}
@@ -220,38 +232,27 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
             Đang cập nhật quy trình công việc của nhà cung cấp
           </div>
         )}
-        {item.note && (
-          <p className="mt-1.5 flex gap-1.5 text-[13px]">
-            <MessageSquareText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            <span>{item.note}</span>
-          </p>
-        )}
       </div>
 
       {/* Bấm nút trong thẻ không mở hộp xác nhận */}
       <div className="flex flex-wrap items-center gap-2 max-[640px]:w-full max-[640px]:pl-[42px]" onClick={(e) => e.stopPropagation()}>
         {suggests && item.category && (
-          <Button asChild variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5">
-            {/* ai=1: trang Dịch vụ bật khung gợi ý (tối đa 3 nhà cung cấp) như nút gợi ý ở Kế hoạch (useAiSuggest) */}
-            <Link to={`${paths.services}?category=${item.category.slug}&ai=1`}>
-              <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${label}`} →</span>
-            </Link>
+          // Mở popup gợi ý nhà cung cấp ngay trên Timeline (SuggestionsDialog), như nút "Gợi ý cho bạn" ở Kế hoạch
+          <Button variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5" onClick={() => aiSuggest(item.category!.slug)}>
+            <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${label}`} →</span>
           </Button>
         )}
-        {!done && item.isCustom && (
-          <span className="flex gap-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
-            <Button variant="outline" size="icon" className="size-8" aria-label={`Sửa ${item.title}`} onClick={() => onEdit(item)}>
-              <Pencil className="size-3.5" />
-            </Button>
-            <Button variant="outline" size="icon" className="size-8" aria-label={`Xóa ${item.title}`} onClick={() => onRemove(item)}>
-              <Trash2 className="size-3.5" />
-            </Button>
+        {/* Việc khung và việc tự thêm chưa xong: sửa tên, hạn và xóa (việc chi tiết của đơn do NCC sửa, khách chỉ xem).
+            Hai nút nhỏ xếp dọc, chỉ hiện khi rê chuột hoặc focus vào thẻ; màn hình cảm ứng (không rê chuột) thì luôn hiện */}
+        {!done && (
+          <span className="flex flex-col gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
+            <button type="button" className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-surface-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-gold" aria-label={`Sửa ${item.title}`} title="Sửa tên và hạn" onClick={() => onEdit(item)}>
+              <Pencil className="size-4" strokeWidth={1.75} />
+            </button>
+            <button type="button" className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-warn-soft hover:text-warn focus-visible:outline-2 focus-visible:outline-gold" aria-label={`Xóa ${item.title}`} title="Xóa việc" onClick={() => onRemove(item)}>
+              <Trash2 className="size-4" strokeWidth={1.75} />
+            </button>
           </span>
-        )}
-        {done && !autoDone && !vendorOwned && (
-          <Button variant="outline" size="icon" className="size-8" aria-label={`Đưa về Chưa xong: ${item.title}`} title="Đưa về Chưa xong" onClick={() => onReopen(item)}>
-            <RotateCcw className="size-3.5" />
-          </Button>
         )}
       </div>
 

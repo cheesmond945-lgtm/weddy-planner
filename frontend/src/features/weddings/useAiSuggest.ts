@@ -3,8 +3,9 @@ import { toast } from '@/components/ui/toast'
 import { useRequireCouple } from '@/features/auth/useRequireCouple'
 import { paths } from '@/routes/paths'
 import { useWedding } from './hooks'
+import { openSuggestions } from './suggestDialog'
 
-/** Mở "Gợi ý cho bạn" của một hạng mục: sang trang Dịch vụ cưới ở trạng thái thu gọn (?category=…&ai=1). */
+/** Mở popup "Gợi ý {dịch vụ}" của một hạng mục (SuggestionsDialog) ngay tại trang đang xem. */
 export function useAiSuggest() {
   const requireCouple = useRequireCouple()
   const navigate = useNavigate()
@@ -17,7 +18,6 @@ export function useAiSuggest() {
         navigate(paths.plan)
         return
       }
-      navigate(`${paths.services}?category=${categorySlug}&ai=1`)
-      window.scrollTo(0, 0)
+      openSuggestions(categorySlug)
     })
 }

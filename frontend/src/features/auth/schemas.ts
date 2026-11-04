@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 // Quy tắc và câu báo lỗi lấy theo prototype (doLogin, doRegister, saveProfile)
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const PHONE_RE = /^0\d{9}$/
+export const PHONE_RE = /^0\d{9}$/
 export const MIN_PASSWORD = 6
 
 export const loginSchema = z.object({

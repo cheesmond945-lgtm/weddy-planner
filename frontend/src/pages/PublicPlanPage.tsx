@@ -12,15 +12,13 @@ import { costSourceText } from '@/features/weddings/budgetView'
 import { StatCard, StatGrid } from '@/features/weddings/components/StatCard'
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { daysBetween, formatDate, formatShortDate, parseDate, today } from '@/lib/date'
-import { formatMoney, formatNumber } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { PublicTabData } from '@/types/sharing'
 import type { PlanTab } from '@/types/wedding'
 
 const card = 'rounded-lg border border-line bg-surface px-[22px] py-5'
-const SIDE = { GROOM: 'Nhà trai', BRIDE: 'Nhà gái' } as const
-const RSVP = { PENDING: 'Chưa phản hồi', ATTENDING: 'Sẽ đến', DECLINED: 'Từ chối' } as const
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -37,7 +35,6 @@ function OverviewView({ d }: { d: PublicTabData['overview'] }) {
       <StatGrid className="mb-0">
         {d.tasks && <StatCard label="Công việc" value={`${d.tasks.done}/${d.tasks.total}`} sub={d.tasks.overdue ? `${d.tasks.overdue} việc quá hạn` : 'Chưa có việc nào quá hạn'} />}
         {d.budget && <StatCard label="Dự kiến chi" value={formatMoney(d.budget.planned)} sub={`Tổng ngân sách ${formatMoney(d.budget.total)}`} />}
-        {d.guests && <StatCard label="Khách mời" value={`${formatNumber(d.guests.total)}/${formatNumber(d.guests.expected)}`} sub={`Đã mời ${formatNumber(d.guests.invited)}, sẽ đến ${formatNumber(d.guests.attending)}`} />}
       </StatGrid>
       {d.tasks && (
         <Section title="Việc sắp đến hạn">
@@ -123,44 +120,6 @@ function BudgetView({ d }: { d: PublicTabData['budget'] }) {
   )
 }
 
-function GuestsView({ d }: { d: PublicTabData['guests'] }) {
-  const s = d.stats
-  return (
-    <div className="flex flex-col gap-4">
-      <StatGrid className="mb-0">
-        <StatCard label="Tổng khách" value={`${formatNumber(s.total)}/${formatNumber(s.expected)}`} />
-        <StatCard label="Đã mời" value={formatNumber(s.invited)} />
-        <StatCard label="Sẽ đến" value={formatNumber(s.attending)} tone="good" />
-        <StatCard label="Từ chối" value={formatNumber(s.declined)} />
-      </StatGrid>
-      <div className={cn(card, 'overflow-x-auto px-0 py-0')}>
-        <table className="w-full min-w-[520px] text-left text-sm">
-          <thead className="text-[13px] text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2.5 font-medium">Tên khách</th>
-              <th className="px-3 py-2.5 font-medium">Bên</th>
-              <th className="px-3 py-2.5 font-medium">Nhóm</th>
-              <th className="px-3 py-2.5 text-center font-medium">Số người</th>
-              <th className="px-4 py-2.5 font-medium">Phản hồi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {d.items.map((g) => (
-              <tr key={g.id} className="border-t border-line">
-                <td className="px-4 py-2.5 font-medium">{g.fullName}</td>
-                <td className="px-3 py-2.5">{SIDE[g.side]}</td>
-                <td className="px-3 py-2.5">{g.group}</td>
-                <td className="px-3 py-2.5 text-center">{g.partySize}</td>
-                <td className="px-4 py-2.5">{g.isInvited ? RSVP[g.rsvp] : 'Chưa mời'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
 function TabContent({ token, tab }: { token: string; tab: PlanTab }) {
   const q = useQuery({ queryKey: ['public-plan', token, tab], queryFn: () => sharingApi.getPublicTab(token, tab), retry: false })
   if (q.isPending) return <div className="h-[320px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải" />
@@ -168,8 +127,7 @@ function TabContent({ token, tab }: { token: string; tab: PlanTab }) {
   const d = q.data as never
   if (tab === 'overview') return <OverviewView d={d} />
   if (tab === 'services') return <ServicesView d={d} />
-  if (tab === 'budget') return <BudgetView d={d} />
-  return <GuestsView d={d} />
+  return <BudgetView d={d} />
 }
 
 /**

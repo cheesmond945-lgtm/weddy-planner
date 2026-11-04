@@ -7,7 +7,6 @@ import { TimelineCard, dm, dmy } from './TimelineRow'
 
 interface Handlers {
   onComplete: (item: TimelineItem) => void
-  onReopen: (item: TimelineItem) => void
   onEdit: (item: TimelineItem) => void
   onRemove: (item: TimelineItem) => void
   onChat?: (item: TimelineItem) => void

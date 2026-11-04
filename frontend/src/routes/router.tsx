@@ -3,7 +3,6 @@ import { AdminLayout } from '@/layouts/AdminLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { CoupleLayout } from '@/layouts/CoupleLayout'
 import { VendorLayout } from '@/layouts/VendorLayout'
-import ForbiddenPage from '@/pages/ForbiddenPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import PublicPlanPage from '@/pages/PublicPlanPage'
 import TimelinePage from '@/pages/couple/TimelinePage'
@@ -26,11 +25,11 @@ import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import SetPasswordPage from '@/pages/auth/SetPasswordPage'
 import ChatPage from '@/pages/couple/ChatPage'
+import CoupleAccountPage from '@/pages/couple/CoupleAccountPage'
 import ComparePage from '@/pages/couple/ComparePage'
 import DealPage from '@/pages/couple/DealPage'
 import FavoritesPage from '@/pages/couple/FavoritesPage'
 import PlanBudgetPage from '@/pages/couple/PlanBudgetPage'
-import PlanGuestsPage from '@/pages/couple/PlanGuestsPage'
 import PlanLayoutPage from '@/pages/couple/PlanLayoutPage'
 import PlanOverviewPage from '@/pages/couple/PlanOverviewPage'
 import PlanServicesPage from '@/pages/couple/PlanServicesPage'
@@ -46,44 +45,49 @@ import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
 import VendorProfilePage from '@/pages/vendor/VendorProfilePage'
 import { RedirectKeepSearch } from './RedirectKeepSearch'
 import VendorAccountPage from '@/pages/vendor/VendorAccountPage'
-import { RequireRole } from './RequireRole'
+import { GuestOrRole, RequireRole } from './RequireRole'
 import { paths } from './paths'
 
 export const router = createBrowserRouter([
   // TẠM THỜI: xem thử điều khoản, xóa sau
   { path: '/preview/terms', element: <TermsPreviewPage /> },
   { path: '/preview/deposit-terms', element: <DepositTermsPreviewPage /> },
-  // Phía cặp đôi
+  // Phía cặp đôi (NCC, Admin đã đăng nhập không vào được, chuyển về trang quản lý)
   {
-    element: <CoupleLayout />,
+    element: <GuestOrRole roles={['COUPLE']} />,
     children: [
-      // Ai cũng xem được (như prototype)
-      { path: paths.services, element: <ServicesPage /> },
-      { path: '/services/:serviceId', element: <ServiceDetailPage /> },
-      // Cần đăng nhập với role cặp đôi
       {
-        element: <RequireRole roles={['COUPLE']} />,
+        element: <CoupleLayout />,
         children: [
-          { path: paths.favorites, element: <FavoritesPage /> },
-          { path: paths.compare, element: <ComparePage /> },
-          // Kế hoạch của tôi: mỗi subtab một route con, reload hay dán link vẫn đúng tab
+          // Ai cũng xem được (như prototype)
+          { path: paths.services, element: <ServicesPage /> },
+          { path: '/services/:serviceId', element: <ServiceDetailPage /> },
+          // Cần đăng nhập với role cặp đôi
           {
-            path: paths.plan,
-            element: <PlanLayoutPage />,
+            element: <RequireRole roles={['COUPLE']} />,
             children: [
-              // /plan: trang khung tự chuyển sang tab đầu tiên được xem
-              { index: true, element: null },
-              { path: paths.planTab.overview, element: <PlanOverviewPage /> },
-              { path: paths.planTab.services, element: <PlanServicesPage /> },
-              { path: paths.planTab.budget, element: <PlanBudgetPage /> },
-              { path: paths.planTab.guests, element: <PlanGuestsPage /> },
+              { path: paths.favorites, element: <FavoritesPage /> },
+              { path: paths.compare, element: <ComparePage /> },
+              // Kế hoạch của tôi: mỗi subtab một route con, reload hay dán link vẫn đúng tab
+              {
+                path: paths.plan,
+                element: <PlanLayoutPage />,
+                children: [
+                  // /plan: trang khung tự chuyển sang tab đầu tiên được xem
+                  { index: true, element: null },
+                  { path: paths.planTab.overview, element: <PlanOverviewPage /> },
+                  { path: paths.planTab.services, element: <PlanServicesPage /> },
+                  { path: paths.planTab.budget, element: <PlanBudgetPage /> },
+                ],
+              },
+              { path: '/plan/deal/:dealId', element: <DealPage /> },
+              { path: paths.timeline, element: <TimelinePage /> },
+              // Link cũ /plan/timeline sang trang Timeline
+              { path: '/plan/timeline', element: <RedirectKeepSearch to={paths.timeline} /> },
+              { path: paths.chat, element: <ChatPage /> },
+              { path: paths.account, element: <CoupleAccountPage /> },
             ],
           },
-          { path: '/plan/deal/:dealId', element: <DealPage /> },
-          { path: paths.timeline, element: <TimelinePage /> },
-          // Link cũ /plan/timeline sang trang Timeline
-          { path: '/plan/timeline', element: <RedirectKeepSearch to={paths.timeline} /> },
-          { path: paths.chat, element: <ChatPage /> },
         ],
       },
     ],
@@ -149,6 +153,5 @@ export const router = createBrowserRouter([
   // Xem kế hoạch qua link công khai: khung riêng, đầu trang chỉ có Đăng nhập và Đăng ký
   { path: '/xem/:token/:tab?', element: <PublicPlanPage /> },
 
-  { path: paths.forbidden, element: <ForbiddenPage /> },
   { path: '*', element: <NotFoundPage /> },
 ])

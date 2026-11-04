@@ -1,7 +1,7 @@
 generator client {
   provider        = "prisma-client"
   output          = "../src/generated/prisma"
-  previewFeatures = ["partialIndexes"]
+  previewFeatures = ["partialIndexes", "relationJoins"]
   moduleFormat    = "cjs"
 }
 
@@ -579,28 +579,10 @@ model weddings {
   plan_vendors             plan_vendors[]
   timeline_tasks           timeline_tasks[]
   wedding_categories       wedding_categories[]
-  wedding_guests           wedding_guests[]
   wedding_extra_costs      wedding_extra_costs[]
   wedding_share_links      wedding_share_links?
   wedding_category_budgets wedding_category_budgets[]
   users                    users?                     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-}
-
-/// Khách mời (backend/prisma/sql/2026-10-29-04-guests.sql).
-model wedding_guests {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  wedding_id   String   @db.Uuid
-  full_name    String   @db.VarChar(100)
-  side         String   @db.VarChar(20)
-  group_name   String   @default("Khác") @db.VarChar(30)
-  party_size   Int      @default(1)
-  is_invited   Boolean  @default(false)
-  rsvp_status  String   @default("Pending") @db.VarChar(20)
-  created_date DateTime @default(now()) @db.Timestamptz(6)
-  updated_date DateTime @default(now()) @db.Timestamptz(6)
-  weddings     weddings @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([wedding_id, created_date], map: "ix_wedding_guests_wedding")
 }
 
 /// Ngân sách hạng mục khách sửa tay; ô chưa sửa không lưu (backend/prisma/manual/2026-10-30-01-budget-tiers.sql).

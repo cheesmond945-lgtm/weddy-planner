@@ -1,4 +1,4 @@
-import { LayoutDashboard, LayoutGrid, Pencil, Share2, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
+import { LayoutDashboard, LayoutGrid, Pencil, Share2, Wallet, type LucideIcon } from 'lucide-react'
 import { useState, type CSSProperties } from 'react'
 import couplePhoto from '@/assets/plan-hero.jpg'
 import { NavLink, useOutletContext } from 'react-router'
@@ -122,7 +122,6 @@ export const PLAN_TAB_LINKS: { tab: PlanTab; to: string; label: string; icon: Lu
   { tab: 'overview', to: paths.planTab.overview, label: 'Tổng quan', icon: LayoutDashboard },
   { tab: 'services', to: paths.planTab.services, label: 'Dịch vụ', icon: LayoutGrid },
   { tab: 'budget', to: paths.planTab.budget, label: 'Ngân sách', icon: Wallet },
-  { tab: 'guests', to: paths.planTab.guests, label: 'Khách mời', icon: UsersRound },
 ]
 
 /** Thanh subtab của Kế hoạch (ptabs trong prototype). Đổi tab không cuộn lại đầu trang. */

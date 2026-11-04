@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { categorySlug } from '../catalog/services.service';
 import { customerReadonlyIssue, dateStatusOf } from '../orders/order-task-rules';
 import { loadPackageMeta, ownersFrom, packagesOfOrder } from './package-task-meta';
-import { isCustomOrderTaskCode, PAY_PREFIX, PKG_PREFIX } from './timeline-rows';
+import { hiddenByCategory, isCustomOrderTaskCode, isRemovedCode, PAY_PREFIX, PKG_PREFIX, removedCode } from './timeline-rows';
 import { planWeddingDateChange, todayVNDate, toYmd, vnYmd } from './timeline-hooks';
 import { dayOf, levelOf, planFrame } from './timeline-schedule';
 import { dueBounds, dueRangeIssue, sequenceIssue } from './timeline-rules';
@@ -51,7 +51,7 @@ export class TimelineService {
 
   async get(userId: string) {
     const w = await this.weddings.requireWedding(userId);
-    const [tasks, cats, plan, orders] = await Promise.all([
+    const [allTasks, cats, plan, orders] = await Promise.all([
       this.prisma.timeline_tasks.findMany({ where: { wedding_id: w.id }, orderBy: [{ scheduled_date: 'asc' }, { display_order: 'asc' }, { created_date: 'asc' }], include: { task_confirmations: true } }),
       this.prisma.service_categories.findMany(),
       this.weddings.planSnapshot(w.user_id, w.id),
@@ -71,6 +71,12 @@ export class TimelineService {
         },
       }),
     ]);
+    // Hạng mục khách đã bỏ chọn (và không còn đơn hiệu lực): ẩn việc khung của nó, giữ trong CSDL để chọn lại thì hiện lại
+    const active = new Set([
+      ...w.wedding_categories.map((c) => c.category_id),
+      ...orders.filter((o) => o.status !== 'Cancelled' && o.status !== 'Draft').flatMap((o) => (o.vendor_profiles?.category_id ? [o.vendor_profiles.category_id] : [])),
+    ]);
+    const tasks = allTasks.filter((t) => !isRemovedCode(t.task_code) && !hiddenByCategory(t, active));
     const catById = new Map(cats.map((c) => [c.id, { id: c.id, slug: categorySlug(c.name), name: c.name ?? '' }]));
     const keyOfCat = (id: string | null) => {
       const name = cats.find((c) => c.id === id)?.name;
@@ -247,8 +253,9 @@ export class TimelineService {
     const readonly = customerReadonlyIssue(task);
     if (readonly) return fail(readonly.code, readonly.message, readonly.status);
     if (task.task_type === 'Detail') return fail('TIMELINE_ITEM_READONLY', 'Việc này mở ra sau khi đặt cọc dịch vụ.', 400);
+    if (isRemovedCode(task.task_code)) return fail('TIMELINE_ITEM_NOT_FOUND', 'Không tìm thấy việc trong timeline.', 404);
+    // Việc khung (mẫu) và việc tự thêm: khách đổi được tên và hạn
     if (body.title !== undefined) {
-      if (task.task_code !== null) return fail('TIMELINE_ITEM_READONLY', 'Không đổi được tên việc mặc định.', 400);
       const title = body.title.trim();
       if (!title || title.length > 255) return fail('VALIDATION_ERROR', 'Nhập tên việc (tối đa 255 ký tự).', 400);
       data.title = title;
@@ -274,8 +281,10 @@ export class TimelineService {
     const { task } = await this.task(userId, id);
     const readonly = customerReadonlyIssue(task);
     if (readonly) return fail(readonly.code, readonly.message, readonly.status);
-    if (task.task_code !== null) return fail('TASK_NOT_CUSTOM', 'Chỉ xóa được việc do bạn thêm.', 409);
-    await this.prisma.timeline_tasks.delete({ where: { id } });
+    if (task.task_type === 'Detail') return fail('TIMELINE_ITEM_READONLY', 'Việc này do nhà cung cấp quản lý, bạn chỉ xem được.', 400);
+    // Việc tự thêm: xóa hẳn. Việc khung (mẫu): đổi mã thành DEL:<mã> để lưu thông tin đám cưới không sinh lại (removedCode)
+    if (task.task_code === null) await this.prisma.timeline_tasks.delete({ where: { id } });
+    else await this.prisma.timeline_tasks.update({ where: { id }, data: { task_code: removedCode(task.task_code) } });
     return this.get(userId);
   }
 }

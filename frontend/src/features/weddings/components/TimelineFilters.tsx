@@ -18,8 +18,11 @@ interface TimelineFiltersProps {
   shown: number
 }
 
-const OWNERS: { value: OwnerFilter; label: string }[] = [
-  { value: 'all', label: 'Mọi việc' },
+/** Giá trị tháng "YYYY-MM" (còn lại là lọc theo hạn: overdue / soon) */
+const MONTH_RE = /^\d{4}-\d{2}$/
+
+const OWNERS:{ value: OwnerFilter; label: string }[] = [
+  { value: 'all', label: 'Tất cả việc' },
   { value: 'mine', label: 'Việc của tôi' },
   { value: 'vendor', label: 'Việc do NCC làm' },
 ]
@@ -66,17 +69,33 @@ export function TimelineFilters({ filters, onChange, onReset, months, categories
         </div>
 
         {months && (
-          <select aria-label="Lọc theo tháng" value={filters.month} onChange={(e) => onChange({ month: e.target.value })} className={select}>
-            <option value="">Mọi tháng</option>
-            {months.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label} ({m.count})
-              </option>
-            ))}
+          // Thời gian: tách "theo hạn" (Quá hạn, Sắp đến hạn) khỏi "theo tháng" để không lẫn hai cách lọc trong một danh sách
+          <select aria-label="Lọc theo thời gian" value={filters.month} onChange={(e) => onChange({ month: e.target.value })} className={select}>
+            <option value="">Tất cả thời gian</option>
+            {months.some((m) => !MONTH_RE.test(m.value)) && (
+              <optgroup label="Theo hạn">
+                {months
+                  .filter((m) => !MONTH_RE.test(m.value))
+                  .map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label} ({m.count} việc)
+                    </option>
+                  ))}
+              </optgroup>
+            )}
+            <optgroup label="Theo tháng">
+              {months
+                .filter((m) => MONTH_RE.test(m.value))
+                .map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label} ({m.count} việc)
+                  </option>
+                ))}
+            </optgroup>
           </select>
         )}
         <select aria-label="Lọc theo dịch vụ" value={category} onChange={(e) => onCategory(e.target.value)} className={select}>
-          <option value="">Mọi dịch vụ</option>
+          <option value="">Tất cả dịch vụ</option>
           {categories.map((c) => (
             <option key={c.slug} value={c.slug}>
               {c.label}

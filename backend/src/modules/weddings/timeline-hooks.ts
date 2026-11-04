@@ -3,7 +3,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
 import { syncOrderPackageTasks as syncOrderPackageTasksOf, type SyncDb } from './order-package-sync';
 import { loadPackageMeta } from './package-task-meta';
-import { cancelPlan, frameRows, isOrderTaskCode, replanOrderTasks, type ServiceRef } from './timeline-rows';
+import { baseCode, cancelPlan, frameRows, isOrderTaskCode, isRemovedCode, replanOrderTasks, type ServiceRef } from './timeline-rows';
 import { replanOnWeddingDateChange } from './timeline-schedule';
 import { customerDateWarning, dateChangeIssue, vendorDateNotice } from './timeline-rules';
 import { serviceKeyOf, TIMELINE_TEMPLATES, templateOf, type ServiceKey } from './timeline-templates';
@@ -27,7 +27,8 @@ export async function onWeddingCategories(prisma: PrismaService, weddingId: stri
     return key ? [{ key, categoryId: c.id }] : [];
   });
   const rows = frameRows(TIMELINE_TEMPLATES, { weddingId, wedding: ymdOf(weddingDate), today: vnYmd(new Date()), services });
-  const existing = new Set((await prisma.timeline_tasks.findMany({ where: { wedding_id: weddingId, task_code: { not: null } }, select: { task_code: true } })).map((t) => t.task_code));
+  // Việc khung khách đã xóa (DEL:<mã>) cũng tính là đã có: không sinh lại
+  const existing = new Set((await prisma.timeline_tasks.findMany({ where: { wedding_id: weddingId, task_code: { not: null } }, select: { task_code: true } })).map((t) => baseCode(t.task_code!)));
   const todo = rows.filter((r) => !existing.has(r.task_code));
   if (!todo.length) return;
   await prisma.timeline_tasks.createMany({ data: todo, skipDuplicates: true });
@@ -120,7 +121,7 @@ export interface DateChangePlan {
  * nơi gọi tự UPDATE `updates` (xem trước thì không, lưu ngày cưới thì trong cùng transaction).
  */
 export async function planWeddingDateChange(db: Db, weddingId: string, newWedding: string): Promise<DateChangePlan> {
-  const [tasks, cats, orders] = await Promise.all([
+  const [allTasks, cats, orders] = await Promise.all([
     db.timeline_tasks.findMany({ where: { wedding_id: weddingId }, select: { id: true, title: true, task_code: true, scheduled_date: true, status: true, order_id: true, category_id: true } }),
     db.service_categories.findMany({ select: { id: true, name: true } }),
     db.orders.findMany({
@@ -128,6 +129,8 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
       select: { id: true, order_code: true, status: true, event_date: true, payments: { select: { paid_date: true } }, vendor_profiles: { select: { id: true, business_name: true, category_id: true } } },
     }),
   ]);
+  // Việc khung khách đã xóa: không dời hạn
+  const tasks = allTasks.filter((t) => !isRemovedCode(t.task_code));
   const keyOf = (categoryId: string | null) => {
     const name = cats.find((c) => c.id === categoryId)?.name;
     return serviceKeyOf(name);

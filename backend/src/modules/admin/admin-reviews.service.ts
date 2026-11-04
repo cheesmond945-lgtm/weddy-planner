@@ -5,6 +5,7 @@ import { notify } from '../chat/chat-messages';
 import { categorySlug } from '../catalog/services.service';
 import { fileNameOfPath, mimeOfPath } from '../vendors/vendor-files';
 import { livePhotos, liveSnapshot, openUpdate } from '../vendors/package-update';
+import { applyGiftTasks } from '../vendors/venue-gift';
 import { parseHours } from '../vendors/working-hours';
 import { fail, matches, UUID } from './admin-common';
 
@@ -318,6 +319,10 @@ export class AdminReviewsService {
               this.prisma.package_albums.createMany({ data: s.photos.map((url, i) => ({ package_id: id, url, display_order: i, is_cover: url === s.cover })) }),
             ]),
       ]);
+      // Trung tâm tiệc cưới: sức chứa mới có thể đổi ưu đãi tặng bánh cưới, tháp ly, đưa công việc của gói về đúng quy tắc
+      if (!revision && categorySlug(p.vendor_profiles?.service_categories?.name ?? null) === 'nha-hang') {
+        await this.prisma.$transaction((tx) => applyGiftTasks(tx, id, s.capacity));
+      }
       // Ảnh của bản cũ không còn trong bản mới (dòng xác minh vẫn giữ snapshot làm lịch sử nội dung)
       await this.storage.remove(ALBUM_BUCKET, dropped);
     } else {

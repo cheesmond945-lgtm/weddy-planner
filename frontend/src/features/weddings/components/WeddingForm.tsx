@@ -175,7 +175,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
             {errors.services}
           </p>
         ) : (
-          <p className="mt-1.5 truncate text-xs text-muted-foreground">Dịch vụ đã chọn sẽ được đưa vào timeline khung.</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">Dịch vụ đã chọn sẽ được đưa vào timeline khung. Bỏ chọn thì việc của dịch vụ đó tạm ẩn, chọn lại sẽ hiện lại cùng các việc đã tích.</p>
         )}
       </div>
 

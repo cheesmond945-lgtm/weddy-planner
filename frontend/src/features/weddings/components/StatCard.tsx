@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * Thẻ số ở đầu các tab Ngân sách, Khách mời (và trang chia sẻ kế hoạch), theo ảnh tham khảo "aesthetics in the village":
+ * Thẻ số ở đầu các tab Tổng quan, Ngân sách (và trang chia sẻ kế hoạch), theo ảnh tham khảo "aesthetics in the village":
  * số nằm trong ô giấy kem như một tấm ảnh, nhãn là chú thích chữ serif màu kem bên dưới, trên dải nền ô liu (StatGrid).
  * Kiểu ở plan-theme.css (.olive-*).
  */

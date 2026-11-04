@@ -5,7 +5,6 @@ import { PlanTabsController } from './plan-tabs.controller';
 import { AiSuggestService } from './ai-suggest.service';
 import { BudgetCalcService } from './budget-calc.service';
 import { BudgetService } from './budget.service';
-import { GuestsService } from './guests.service';
 import { ImportExportService } from './import-export.service';
 import { OverviewService } from './overview.service';
 import { TimelineService } from './timeline.service';
@@ -17,7 +16,7 @@ import { WeddingSharingService } from '../wedding-sharing/wedding-sharing.servic
   imports: [CatalogModule],
   // Chia sẻ (thư mục wedding-sharing) đăng ký ở đây vì xem công khai dùng lại các service của các tab
   controllers: [WeddingsController, PlanTabsController, WeddingSharingController, PublicPlansController],
-  providers: [WeddingsService, TimelineService, AiSuggestService, BudgetCalcService, BudgetService, GuestsService, OverviewService, ImportExportService, WeddingSharingService],
+  providers: [WeddingsService, TimelineService, AiSuggestService, BudgetCalcService, BudgetService, OverviewService, ImportExportService, WeddingSharingService],
   exports: [WeddingsService, BudgetCalcService],
 })
 export class WeddingsModule {}

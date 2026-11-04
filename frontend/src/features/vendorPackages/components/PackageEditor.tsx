@@ -73,7 +73,7 @@ interface PackageEditorProps {
 
 /**
  * Form gói dịch vụ, hai khung: thông tin gói; hình ảnh dịch vụ (cùng cách trình bày với trang Hồ sơ NCC).
- * Thứ tự: tên gói, giá (trung tâm tiệc cưới: giá mỗi mâm), tags, sức chứa và số mâm tối thiểu (trung tâm tiệc cưới), mô tả (có "Tạo với AI"), ảnh.
+ * Thứ tự: tên gói, giá (trung tâm tiệc cưới: giá mỗi bàn), tags, sức chứa và số bàn tối thiểu (trung tâm tiệc cưới), mô tả (có "Tạo với AI"), ảnh.
  * Lưu nháp: cần tên gói và giá. Gửi duyệt: thêm mô tả, ít nhất một ảnh, và hồ sơ đã được duyệt đúng lĩnh vực.
  * Đặt key theo pkg.updatedAt để nạp lại sau khi lưu.
  */
@@ -192,14 +192,6 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
               <TagsInput tags={values.tags} onChange={(tags) => set({ tags })} disabled={off} />
             </Field>
             {venue && (
-              <Field label="Đơn vị tính giá">
-                <select className={input()} disabled={off} value={values.unit} onChange={(e) => set({ unit: e.target.value as 'TABLE' | 'PACKAGE' })}>
-                  <option value="TABLE">Theo bàn (giá một bàn)</option>
-                  <option value="PACKAGE">Trọn gói</option>
-                </select>
-              </Field>
-            )}
-            {venue && (
               <Field label="Sức chứa tối đa (khách)" error={errors.capacity} hint="Tùy chọn · tính theo khách, không quy đổi sang bàn.">
                 <WithUnit unit="khách">
                   <input
@@ -217,7 +209,7 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
                 </WithUnit>
               </Field>
             )}
-            {venue && values.unit === 'TABLE' && (
+            {venue && (
               <Field
                 label="Số bàn tối thiểu"
                 error={errors.minTables}
@@ -454,7 +446,7 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
           values.name.trim() && (Number(values.price) > 0 || values.tags.length || (venue && values.capacity.trim()))
             ? null
             : venue
-              ? 'AI chưa có đủ dữ liệu để viết. Bạn điền Tên gói, rồi thêm Giá mỗi mâm, Sức chứa hoặc vài Phong cách (tags) nhé.'
+              ? 'AI chưa có đủ dữ liệu để viết. Bạn điền Tên gói, rồi thêm Giá mỗi bàn, Sức chứa hoặc vài Phong cách (tags) nhé.'
               : 'AI chưa có đủ dữ liệu để viết. Bạn điền Tên gói, rồi thêm Giá hoặc vài Phong cách (tags) nhé.'
         }
         styles={PACKAGE_AI_STYLES}

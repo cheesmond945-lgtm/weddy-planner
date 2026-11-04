@@ -1,22 +1,23 @@
-import { Heart, Menu, MessageCircle, X } from 'lucide-react'
+import { ArrowUp, Heart, Menu, MessageCircle, X } from 'lucide-react'
 import { useEffect, useState, type MouseEvent } from 'react'
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation, useMatch, useNavigate } from 'react-router'
 import { Brand } from '@/components/Brand'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
-import { ProfileDialog } from '@/features/auth/components/ProfileDialog'
 import { compareStore } from '@/features/compare/store'
 import { ChatPanel } from '@/features/chat/components/ChatPanel'
 import { useConversations, useUnreadMessages } from '@/features/chat/hooks'
 import { useService } from '@/features/catalog/hooks'
 import { useFavorites } from '@/features/favorites/hooks'
 import { previewWeddingSetup, WeddingSetupDialog } from '@/features/weddings/components/WeddingDialogs'
+import { SuggestionsDialog } from '@/features/weddings/components/SuggestionsDialog'
 import { usePlan } from '@/features/weddings/hooks'
 import { ChatPanelResume, ReplacePlanDialog, usePlanActions } from '@/features/weddings/planActions'
 import { cn } from '@/lib/utils'
 import { CoupleNotificationBell } from '@/features/coupleNotifications/components/CoupleNotificationBell'
+import { CoupleFooter } from './CoupleFooter'
 import { PartnerButton, UserMenu } from './HeaderActions'
-import { homeOf, paths } from '@/routes/paths'
+import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
 
 const NAV = [
@@ -73,15 +74,12 @@ function Header() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const requireLogin = useRequireLogin()
-  const [profileOpen, setProfileOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   // Chuyển trang thì đóng menu ☰
   useEffect(() => setMenuOpen(false), [pathname])
   const { favorites } = useFavorites()
   const { data: plan } = usePlan()
   const counts: Record<string, number> = { [paths.favorites]: favorites.length, [paths.plan]: plan?.items.length ?? 0 }
-  // Tin chưa đọc chỉ hiện ở nút chat nổi và mục Tin nhắn trong menu tài khoản, tách khỏi số đếm kế hoạch
-  const unreadMessages = useUnreadMessages()
 
   // Trang Dịch vụ cưới: lúc còn ở đầu trang, header nằm trên dải ảnh (trong suốt, chữ trắng); cuộn qua dải ảnh thì về header sáng
   const onPhotoPage = pathname === paths.services
@@ -155,11 +153,6 @@ function Header() {
                 </Button>
               </>
             )}
-            {user && user.role !== 'COUPLE' && (
-              <Button asChild variant="outline" size="sm" className="rounded-pill">
-                <Link to={homeOf[user.role]}>Trang quản lý</Link>
-              </Button>
-            )}
             {user && (
               <>
                 {user.role === 'COUPLE' && <PartnerButton />}
@@ -167,8 +160,7 @@ function Header() {
                 <span aria-hidden className="mx-1 h-7 w-px bg-line" />
                 <UserMenu
                   user={user}
-                  onProfile={user.role === 'COUPLE' ? () => setProfileOpen(true) : undefined}
-                  unreadMessages={user.role === 'COUPLE' ? unreadMessages : undefined}
+                  onProfile={user.role === 'COUPLE' ? () => navigate(paths.account) : undefined}
                   onLogout={handleLogout}
                 />
               </>
@@ -193,7 +185,6 @@ function Header() {
           </nav>
         )}
       </div>
-      {user && <ProfileDialog user={user} open={profileOpen} onOpenChange={setProfileOpen} />}
     </header>
   )
 }
@@ -246,11 +237,31 @@ function QuickActions({ hideClassName }: { hideClassName?: string }) {
   )
 }
 
-function Footer() {
+/** Nút nổi góc dưới bên trái: cùng kiểu nút Tin nhắn, chỉ hiện khi đã cuộn xuống quá một màn hình; bấm thì cuộn mượt về đầu trang. */
+function BackToTop({ hideClassName }: { hideClassName?: string }) {
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setShown(window.scrollY > window.innerHeight * 0.8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
   return (
-    <footer className="mx-auto flex w-full max-w-content flex-wrap items-center justify-between gap-4 px-[clamp(16px,4vw,32px)] pb-8 text-[13px] text-ink-2">
-      <span>© {new Date().getFullYear()} Forever. Nền tảng lập kế hoạch đám cưới.</span>
-    </footer>
+    <button
+      type="button"
+      aria-label="Về đầu trang"
+      title="Về đầu trang"
+      tabIndex={shown ? 0 : -1}
+      aria-hidden={!shown}
+      onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}
+      className={cn(
+        'btn-gold fixed bottom-[22px] left-[18px] z-40 grid size-[46px] place-items-center rounded-full border border-transparent shadow-fab transition-[transform,box-shadow,opacity] hover:-translate-y-0.5 hover:shadow-fab-hover max-sm:bottom-3.5 max-sm:left-3 max-sm:size-[42px] [&_svg]:size-[23px]',
+        shown ? 'opacity-100' : 'pointer-events-none translate-y-2 opacity-0',
+        hideClassName,
+      )}
+    >
+      <ArrowUp />
+    </button>
   )
 }
 
@@ -272,10 +283,12 @@ export function CoupleLayout() {
       <main className={cn('mx-auto w-full flex-1', isChat ? 'px-7 pt-3.5 pb-7 md:pr-[84px] max-md:px-2' : 'max-w-content px-[clamp(16px,4vw,32px)] pt-8 pb-24')}>
         <Outlet />
       </main>
-      {!isChat && <Footer />}
+      {!isChat && <CoupleFooter />}
       {/* Trang chat trên điện thoại: ẩn để không che nút gửi */}
       <QuickActions hideClassName={isChat ? 'max-md:hidden' : isServiceDetail ? 'max-[900px]:hidden' : undefined} />
+      {!isChat && <BackToTop hideClassName={isServiceDetail ? 'max-[900px]:hidden' : undefined} />}
       <WeddingSetupDialog />
+      <SuggestionsDialog />
       <ReplacePlanDialog />
       <ChatPanel />
       <ChatPanelResume />

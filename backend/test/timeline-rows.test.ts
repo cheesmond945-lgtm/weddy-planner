@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { syncOrderPackageTasks, type SyncDb } from '../src/modules/weddings/order-package-sync.ts';
 import { packagesOfOrder } from '../src/modules/weddings/package-task-meta.ts';
-import { cancelPlan, frameRows, initialStatus, orderTaskRows, payDate, payCode, pkgCode, pkgTaskIdOf, replanOrderTasks, taskTitle, type OrderTaskState, type PackageTaskRef, type TaskRow } from '../src/modules/weddings/timeline-rows.ts';
+import { baseCode, cancelPlan, frameRows, hiddenByCategory, initialStatus, isRemovedCode, removedCode, orderTaskRows, payDate, payCode, pkgCode, pkgTaskIdOf, replanOrderTasks, taskTitle, type OrderTaskState, type PackageTaskRef, type TaskRow } from '../src/modules/weddings/timeline-rows.ts';
 import { TIMELINE_TEMPLATES } from '../src/modules/weddings/timeline-templates.ts';
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -257,5 +257,32 @@ describe('mã việc gói không trùng giữa các đơn', () => {
     const newCodes = fresh.created.map((c) => c.task_code);
     assert.equal(newCodes.filter((c) => oldCodes.includes(c)).length, 0, 'không trùng mã đơn cũ');
     assert.equal(new Set([...oldCodes, ...newCodes]).size, 6);
+  });
+});
+
+describe('hiddenByCategory: bỏ chọn hạng mục thì ẩn việc khung, không xóa', () => {
+  const venue = 'cat-venue';
+  const active = new Set(['cat-decor']);
+  it('việc mẫu của hạng mục đã bỏ chọn bị ẩn (kể cả đã tích)', () => {
+    assert.equal(hiddenByCategory({ task_code: 'VENUE_TASTING', order_id: null, category_id: venue }, active), true);
+  });
+  it('chọn lại hạng mục thì hiện lại', () => {
+    assert.equal(hiddenByCategory({ task_code: 'VENUE_TASTING', order_id: null, category_id: venue }, new Set([...active, venue])), false);
+  });
+  it('việc chung, việc khách tự thêm, việc gắn đơn luôn hiện', () => {
+    assert.equal(hiddenByCategory({ task_code: 'GEN_BUDGET', order_id: null, category_id: null }, active), false);
+    assert.equal(hiddenByCategory({ task_code: null, order_id: null, category_id: venue }, active), false);
+    assert.equal(hiddenByCategory({ task_code: 'PKG:x:y', order_id: 'o1', category_id: venue }, active), false);
+  });
+});
+
+describe('việc khung khách đã xóa: mã DEL:<mã>', () => {
+  it('đánh dấu, nhận ra và lấy lại mã gốc', () => {
+    assert.equal(removedCode('SELF_CARS'), 'DEL:SELF_CARS');
+    assert.equal(isRemovedCode('DEL:SELF_CARS'), true);
+    assert.equal(isRemovedCode('SELF_CARS'), false);
+    assert.equal(isRemovedCode(null), false);
+    assert.equal(baseCode('DEL:SELF_CARS'), 'SELF_CARS');
+    assert.equal(baseCode('SELF_CARS'), 'SELF_CARS');
   });
 });

@@ -2,6 +2,7 @@ import type { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
 import { loadPackageMeta, ownersFrom } from '../weddings/package-task-meta';
+import { hiddenByCategory, isRemovedCode } from '../weddings/timeline-rows';
 import { DUE_SOON_DAYS, OVERDUE_MAX_DAYS, UNCONFIRMED_DAYS, dmyOf, ownerOf, reminderStage, remindersFor, taskDigest } from '../weddings/task-owner';
 import { addDaysYmd, startOfDayVn, todayVn, ymdOf } from './order-rules';
 
@@ -126,7 +127,21 @@ export async function remindFrameTasks(prisma: PrismaService, coupleId?: string,
       scheduled_date: { gte: from, lte: to },
       weddings: { is: coupleId ? { user_id: coupleId } : {} },
     },
-    select: { title: true, scheduled_date: true, wedding_id: true, weddings: { select: { user_id: true } } },
+    select: {
+      title: true,
+      scheduled_date: true,
+      wedding_id: true,
+      task_code: true,
+      order_id: true,
+      category_id: true,
+      weddings: {
+        select: {
+          user_id: true,
+          wedding_categories: { select: { category_id: true } },
+          orders: { where: { status: { notIn: ['Cancelled', 'Draft'] } }, select: { vendor_profiles: { select: { category_id: true } } } },
+        },
+      },
+    },
     orderBy: [{ scheduled_date: 'asc' }, { id: 'asc' }],
     skip,
     take,
@@ -135,6 +150,12 @@ export async function remindFrameTasks(prisma: PrismaService, coupleId?: string,
   for (const r of rows) {
     const userId = r.weddings?.user_id;
     if (!userId || !r.scheduled_date || !r.wedding_id) continue;
+    // Việc khách đã xóa, việc của hạng mục khách đã bỏ chọn (đang ẩn trên timeline): không nhắc (như TimelineService.get)
+    const active = new Set([
+      ...(r.weddings?.wedding_categories.map((c) => c.category_id) ?? []),
+      ...(r.weddings?.orders.flatMap((o) => (o.vendor_profiles?.category_id ? [o.vendor_profiles.category_id] : [])) ?? []),
+    ]);
+    if (isRemovedCode(r.task_code) || hiddenByCategory(r, active)) continue;
     const entry = byUser.get(userId) ?? { weddingId: r.wedding_id, tasks: [] };
     entry.tasks.push({ title: r.title ?? '', due: ymdOf(r.scheduled_date) });
     byUser.set(userId, entry);

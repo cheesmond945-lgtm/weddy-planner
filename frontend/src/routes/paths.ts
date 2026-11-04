@@ -15,10 +15,11 @@ export const paths = {
     overview: '/plan/tong-quan',
     services: '/plan/dich-vu',
     budget: '/plan/ngan-sach',
-    guests: '/plan/khach-moi',
   },
   deal: (id: string | number) => `/plan/deal/${id}`,
   chat: '/chat',
+  /** Tài khoản của tôi (cặp đôi) */
+  account: '/account',
   /** Xem kế hoạch qua link công khai */
   publicPlanTab: (token: string, tab: string) => `/xem/${token}/${tab}`,
 
@@ -57,8 +58,6 @@ export const paths = {
     users: '/admin/users',
     account: '/admin/account',
   },
-
-  forbidden: '/403',
 } as const
 
 /** Trang đầu tiên của từng role sau khi đăng nhập. */
