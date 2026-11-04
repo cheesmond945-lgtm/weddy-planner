@@ -27,7 +27,7 @@ Luật thuần: `backend/src/modules/halls/hall-busy.ts`; đọc CSDL: `hall-sto
 | NCC **Gửi / Cập nhật / Tạo lại** đơn | Phải chọn sảnh của mình (gói đang đăng); sảnh không bận ngày thực hiện | `400 VALIDATION_ERROR` (`details.packageId`), `409 HALL_BUSY` |
 | NCC **Chỉnh sửa sau cọc** | Đổi sảnh hoặc ngày thì sảnh mới phải trống ngày đó (khóa và kiểm lại trong transaction); giữ nguyên thì không kiểm. Đơn cũ chưa có sảnh: phải chọn | `409 HALL_BUSY` |
 | Khách **bấm đặt cọc** | Sảnh không bận ngày thực hiện (chặn trước khi chuyển tiền) | `409 HALL_BUSY` |
-| **Ghi nhận cọc** (giả lập, trang quay về VNPay, IPN) | Khóa `pg_advisory_xact_lock('hall:<sảnh>:<ngày>')` rồi kiểm lại; chỉ mục duy nhất là lớp chặn cuối | Không ghi nhận; đã thu tiền thì báo liên hệ hoàn tiền (như `CATEGORY_ALREADY_DEPOSITED`) |
+| **Ghi nhận cọc** (giả lập, xác nhận qua SePay (VietQR)) | Khóa `pg_advisory_xact_lock('hall:<sảnh>:<ngày>')` rồi kiểm lại; chỉ mục duy nhất là lớp chặn cuối | Không ghi nhận; đã thu tiền thì báo liên hệ hoàn tiền (như `CATEGORY_ALREADY_DEPOSITED`) |
 
 Lời báo: NCC thấy nguồn ("đơn DH… đã đặt cọc", "bạn đã đánh dấu bận: …"); khách chỉ thấy "Sảnh … đã có khách khác đặt cọc ngày …" hoặc "… không nhận tiệc ngày …", không lộ khách, đơn hay lý do.
 

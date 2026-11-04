@@ -1,4 +1,4 @@
-# Weddy Planner (WebPlan)
+# Weddy Planner (Forever)
 
 Nền tảng web lập kế hoạch đám cưới và kết nối cặp đôi với nhà cung cấp (NCC).
 Luật làm việc và cấu trúc repo: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Quy ước API: [docs/api/README.md](docs/api/README.md).

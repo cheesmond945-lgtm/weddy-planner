@@ -28,7 +28,7 @@ Ký hiệu: W ngày cưới, I hôm nay (giờ VN), L = W − I, L1 = L − 1, d
 
 **Việc chi tiết** (khi đơn Deposited, dùng D = ngày cọc thật, E = ngày thực hiện thật của đơn):
 - Các việc dạng E − x co theo hệ số min(1, (E − (D + k)) / x_max); không có chỗ (E − (D + k) ≤ 0) thì mọi việc trước sự kiện = max(I + 1, D + 1) và gắn cờ gấp.
-- D + 2, S ± n, W − 7, E (ngày thực hiện), E + 2; Thanh toán: Hạn E + 7.
+- D + 2, S ± n, W − 7, E (ngày thực hiện), E + 2; Thanh toán: Hạn E (đúng ngày thực hiện, là hạn chót khách trả; trả sớm lúc nào cũng được, quá hạn không tô quá hạn).
 - S mặc định = D(chụp) + 23, không muộn hơn W − 35, không sớm hơn D + 2; việc neo theo S hiện "· Tạm tính" cho tới khi khách chốt Ngày hẹn.
 
 Kiểm chứng: 62 dòng sheet ví dụ (có kỳ vọng cập nhật theo luật chỉ lùi) và các L = 400, 180, 91, 45, 20, 7 trong `backend/test/timeline-schedule.test.ts`.
@@ -36,7 +36,7 @@ Kiểm chứng: 62 dòng sheet ví dụ (có kỳ vọng cập nhật theo luậ
 ## 3. Vòng đời
 
 1. **Tạo / sửa thông tin đám cưới** (`PUT /weddings/me`): sinh việc khung theo W và I = hôm nay. Chỉ thêm mã chưa có, không bao giờ dời việc đã sinh.
-2. **Đặt cọc** (`onOrderDeposited`, cả đường simulate và VNPay): Mốc chốt của dịch vụ xong; sinh việc chi tiết của đơn. Dịch vụ cọc trước giữ nguyên ngày; dịch vụ cọc sau chỉ thêm việc của nó.
+2. **Đặt cọc** (`onOrderDeposited`, cả đường thử và VietQR): Mốc chốt của dịch vụ xong; sinh việc chi tiết của đơn. Dịch vụ cọc trước giữ nguyên ngày; dịch vụ cọc sau chỉ thêm việc của nó.
 3. **Hủy đơn đã cọc** (NCC, `POST /vendors/me/orders/:id/cancel`; `onOrderCancelled`):
    - Gỡ MỌI việc chi tiết gắn với đơn, kể cả việc đã xong. Dịch vụ khác không đổi.
    - Còn đơn khác cùng hạng mục đã cọc / hoàn thành: Mốc chốt vẫn xong; đơn Deposited cọc mới nhất nhận lại việc chi tiết (chỉ còn đơn Completed thì không sinh lại).
@@ -88,7 +88,7 @@ Giao diện: form đơn của NCC điền sẵn E = W, hiện "Ngày cưới c�
 ### 7.2 Sinh và đóng việc chi tiết
 
 - **B1** `syncOrderDetails` không sinh việc chi tiết khi `E > W` (ghi log cảnh báo), không tự kẹp E về W vì sẽ che sự thật. Mốc chốt vẫn xong khi cọc.
-- **B2** Đơn → Hoàn thành (NCC bấm hoặc tự hoàn thành sau E+7): việc chi tiết còn Todo của đơn tự thành Done. Không còn việc "quá hạn" của dịch vụ đã làm xong.
+- **B2** Đơn → Hoàn thành (NCC bấm sau ngày thực hiện, hoặc tự hoàn thành khi đã quá E hơn 7 ngày): việc chi tiết còn Todo của đơn tự thành Done. Không còn việc "quá hạn" của dịch vụ đã làm xong.
 - **B3** NCC Sửa đơn đã cọc đổi E: việc chi tiết neo theo E còn Todo bị xóa rồi sinh lại theo E mới (`onOrderEventDateChanged`); việc đã xong và việc neo D / S / W giữ nguyên.
 - Mỗi hạng mục tối đa một đơn Deposited (mục 3.5) giữ nguyên.
 
@@ -265,7 +265,7 @@ status có 3 giá trị Todo/Waiting/Done — cần SQL 2026-11-01-timeline-stat
 ### Sinh việc khi cọc (`syncOrderPackageTasks`)
 
 - Mỗi việc trong gói: dòng `task_code = 'PKG:<package_tasks.id>'`, `task_type = 'Detail'`, `title = tên (+ " — " + ghi chú)` (≤ 255).
-- Mỗi đơn thêm một việc `task_code = 'PAY:<orderId>'` "Thanh toán phần còn lại cho <NCC>", status `Waiting`, hạn = max(E + 7, hạn lớn nhất của việc gói).
+- Mỗi đơn thêm một việc `task_code = 'PAY:<orderId>'` "Thanh toán phần còn lại cho <NCC>", status `Waiting`, hạn = E (đúng ngày thực hiện; bỏ phần lấy max với việc cuối của gói). Việc `PAY:` không bao giờ bị tính quá hạn: không vào nhóm "Quá hạn", không đếm "Trễ tiến độ", không nhắc quá hạn.
 - Đơn không gắn gói hoặc gói chưa có việc: chỉ sinh việc PAY; Mốc chốt trả cờ `vendorProcessMissing`.
 - Hạn tính bằng `planPackageTasks({ D, E, I, tasks })` (công thức co giãn cũ): `lo = D + 2`, `scale = min(1, (E − lo) / xmax)`, việc trước E: `n = min(E − round(x · scale), E − 1)`, `n < lo` thì `n = lo`; `E − lo ≤ 0` dồn về `max(I + 1, D + 1)` (gấp); việc từ E trở đi: `E + offset`. E = `orders.event_date`, D = `payments.paid_date` (giờ VN).
 

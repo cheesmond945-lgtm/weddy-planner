@@ -169,7 +169,7 @@ Response 200
 }
 ```
 
-Quy tắc (aiPick trong prototype; bản thật gọi LLM rồi **đối chiếu lại** với danh sách NCC trên WebPlan, không trả dịch vụ không có thật):
+Quy tắc (aiPick trong prototype; bản thật gọi LLM rồi **đối chiếu lại** với danh sách NCC trên Forever, không trả dịch vụ không có thật):
 
 - Ngân sách hạng mục = tổng ngân sách × tỷ lệ gợi ý, làm tròn 100.000đ (`budgetSource: "ESTIMATED"`). Tỷ lệ: nhà hàng 22%; decor, cỗ cưới 14%; chụp ảnh, hoa cưới 12%; trang phục 10%; makeup 8%. `ALLOCATED` dành cho khi có phân bổ ngân sách theo hạng mục (prototype chưa có màn hình này).
 - Lọc: cùng khu vực, `priceFrom` ≤ ngân sách; riêng nhà hàng cần `capacity` ≥ `guestCount`.

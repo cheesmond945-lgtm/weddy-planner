@@ -1,5 +1,8 @@
 # Hiện trạng Timeline (khảo sát trước khi đổi hướng)
 
+> **Tài liệu cũ, có thể không còn đúng.** Viết ở một thời điểm trước các thay đổi ngày 04/11/2026 (hạn đợt 2, VietQR thay VNPay, tên Forever, trang Quản lý đơn hàng). Xem tài liệu hiện hành: `LUONG_CHAT_DON_HANG.md` (phần Cập nhật đầu file), `api/orders.md`, `api/THE_DON_HANG.md`.
+
+
 Khảo sát ngày 01/11/2026 trên nhánh `Chanh` (sau commit `Merge main into Chanh`). Chỉ đọc code và `schema.prisma`: không chạy lệnh nào đụng CSDL, không sửa code. Mỗi ý kèm `file:dòng`.
 
 Đường dẫn gọn: `BE` = `backend/src/modules`, `FE` = `frontend/src`.

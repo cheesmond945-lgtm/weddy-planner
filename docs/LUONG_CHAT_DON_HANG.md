@@ -1,5 +1,14 @@
 # Luồng chat và đơn hàng: từ tin nhắn đầu tiên đến hoàn thành
 
+> **Cập nhật 04/11/2026 (nhánh Chanh), ưu tiên hơn các đoạn cũ bên dưới:**
+> - **Thanh toán cọc là VietQR + SePay**, không còn VNPay (các đoạn nhắc VNPay, `integrations/vnpay`, `/payments/vnpay/*` bên dưới là cũ). Nội dung chuyển khoản: `SEVQR FOREVER` + mã đơn; vẫn nhận tiền tố cũ `EVERLY`.
+> - **Hoàn thành** giữ nguyên: NCC bấm "Hoàn tất" sau ngày thực hiện, hoặc hệ thống tự hoàn tất khi `eventDate < hôm nay − 7` (quá ngày thực hiện hơn 7 ngày). **Ghi nhận đợt 2 không làm đơn sang Hoàn thành**; đơn Đã cọc đã ghi nhận đợt 2 hiện nhãn "Đã thanh toán đủ". Nút Hoàn tất luôn hiện với đơn Đã cọc, trước ngày thực hiện bị khóa kèm "Hoàn tất được từ <ngày>".
+> - **Hạn đợt 2** = ngày thực hiện (hạn chót, trả sớm lúc nào cũng được); không còn "trả muộn tới +7 ngày", quá hạn không tô quá hạn. Việc `PAY:` có hạn = ngày thực hiện.
+> - **Trang Quản lý đơn hàng** không còn nút "Tạo đơn" (đơn chỉ tạo trong Tin nhắn); tab: Tất cả | Chờ cọc | Chờ chỉnh sửa | Đã cọc | Hoàn thành | Hết hạn / Hủy (không có Bản nháp); 4 thẻ: Chờ khách đặt cọc, Cần bạn xử lý, Sắp thực hiện, Đến hạn hoàn tất (tính ở backend, `GET /vendors/me/orders/counts` → `tiles`); chip "Chưa nhận tiền mặt". "Tạo lại đơn" mở form trong Tin nhắn.
+> - **Tin hệ thống mới:** NCC ghi nhận / bỏ ghi nhận tiền mặt đều có tin trong chat; tin hoàn tất tách "NCC đã hoàn tất đơn…" và "hệ thống tự hoàn tất…". Đã xuất hóa đơn cuối thì không bỏ ghi nhận được (409 `REST_PAYMENT_HAS_FINAL_INVOICE`).
+> - Thẻ đơn phía khách (chat và Kế hoạch) dùng chung một thành phần (`CoupleOrderCard`).
+
+
 > Dành cho lập trình viên **chưa biết dự án**. Đọc xong phải nắm trọn luồng NCC và khách nhắn qua lại, NCC gửi đơn, khách đặt cọc hoặc yêu cầu chỉnh sửa, hoàn thành; biết mọi trường hợp của đơn; và tự sửa được code.
 > Viết ngày 28/10/2026 từ **code thật** (nhánh `Chanh`) và các tài liệu trong `docs/`. Chỗ code lệch quy tắc nghiệp vụ đã chốt được đánh dấu **⚠️ LỆCH**. Không chắc thì ghi **chưa xác minh**.
 > Đường dẫn trong file này bấm được trong VS Code (dạng `file:dòng`). Số dòng đúng tại thời điểm viết; code đổi thì lệch vài dòng.

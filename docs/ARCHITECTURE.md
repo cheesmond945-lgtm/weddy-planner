@@ -1,7 +1,7 @@
-# Weddy Planner (WebPlan): luật cho AI
+# Weddy Planner (Forever): luật cho AI
 
 Nền tảng web lập kế hoạch đám cưới và kết nối cặp đôi với nhà cung cấp (NCC).
-Giao diện tiếng Việt. Tiền tệ đồng. Tên hiển thị trên giao diện giữ như prototype (WebPlan) cho tới khi tôi đổi.
+Giao diện tiếng Việt. Tiền tệ đồng. Tên hiển thị trên giao diện, email, thông báo và nội dung chuyển khoản VietQR thống nhất là "Forever" (tên biến môi trường WEBPLAN_* giữ nguyên).
 
 ## Stack
 | Phần | Chọn |

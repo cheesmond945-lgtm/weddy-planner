@@ -52,7 +52,7 @@ Lý do chỉnh sửa lấy từ `AdminNote` của dòng xác minh gần nhất (
 
 Lĩnh vực cung cấp dùng chung danh mục với phía cặp đôi (`GET /categories`, [catalog.md](catalog.md)).
 
-- Mỗi tài khoản NCC gắn **đúng 1** lĩnh vực. Admin chọn khi tạo tài khoản NCC từ yêu cầu tư vấn; NCC **không đổi được** (form hiển thị chỉ đọc, kèm "Liên hệ WebPlan nếu cần đổi lĩnh vực").
+- Mỗi tài khoản NCC gắn **đúng 1** lĩnh vực. Admin chọn khi tạo tài khoản NCC từ yêu cầu tư vấn; NCC **không đổi được** (form hiển thị chỉ đọc, kèm "Liên hệ Forever nếu cần đổi lĩnh vực").
 - API hồ sơ không nhận trường lĩnh vực: `UpdateVendorProfileRequest` không có `categoryId`; nếu client vẫn gửi thì BE bỏ qua.
 - Luật giấy tờ, ảnh cơ sở bên dưới, tỷ lệ hoa hồng ([commissions.md](commissions.md)) và lĩnh vực của gói ([catalog.md](catalog.md)) đều đọc `category` / `verifiedCategory` của hồ sơ.
 
@@ -182,7 +182,7 @@ Role: VENDOR
 Lưu và gửi xác minh trong một bước. Chỉ khi trạng thái là `NOT_SUBMITTED` hoặc `NEEDS_REVISION`. Thành công: `status = PENDING`, `submittedAt` = thời điểm gửi.
 
 Request: `UpdateVendorProfileRequest`, kiểm tra như `PATCH` và thêm:
-- Bắt buộc: `businessName`, `taxCode`, `representativeName`, `district`, `address`. Tài khoản chưa được gán lĩnh vực (dữ liệu lỗi) thì trả `400`, NCC liên hệ WebPlan.
+- Bắt buộc: `businessName`, `taxCode`, `representativeName`, `district`, `address`. Tài khoản chưa được gán lĩnh vực (dữ liệu lỗi) thì trả `400`, NCC liên hệ Forever.
 - `taxCode`: 10 chữ số, hoặc 10 + 3 số chi nhánh (`0312345678`, `0312345678-001`).
 - Đủ giấy tờ và ảnh cơ sở theo lĩnh vực (mục Luật theo lĩnh vực).
 - `agreedToTerms: true` (đã tích "Tôi đã đọc và đồng ý Điều khoản hợp tác"), thiếu thì 400 `VALIDATION_ERROR` với `details.agreedToTerms`. Chỉ kiểm tra, **không lưu vào CSDL**. Áp dụng cả khi NCC đã duyệt gửi cập nhật. Toàn văn điều khoản nằm ở FE (`features/vendors/partnerTerms.ts`), điền `{{TEN_DOANH_NGHIEP}}` từ `businessName`, `{{TEN_LOAI_DICH_VU}}` từ `category.name`, `{{TY_LE}}` từ `commissionRate` (= `service_categories.commission_rate`) của `VendorProfile`.
@@ -269,5 +269,5 @@ Lỗi: 404 `VENDOR_NOT_FOUND`, 404 `GOOGLE_PLACE_NOT_FOUND` (không tìm thấy 
 ## Cần chốt
 
 - **Phần Admin (làm sau):** màn tạo tài khoản NCC (từ yêu cầu tư vấn) phải **bắt buộc chọn lĩnh vực** (1 danh mục trong `GET /categories`). API tạo tài khoản NCC của Admin cần nhận `categoryId` và tạo sẵn hồ sơ trống với `category` đó.
-- Luồng đổi lĩnh vực khi NCC liên hệ WebPlan: Admin sửa ở đâu, giấy tờ/ảnh không còn thuộc bộ của lĩnh vực mới xử lý thế nào, gói đang đăng thuộc lĩnh vực cũ ra sao, và hồ sơ có phải xác minh lại không.
+- Luồng đổi lĩnh vực khi NCC liên hệ Forever: Admin sửa ở đâu, giấy tờ/ảnh không còn thuộc bộ của lĩnh vực mới xử lý thế nào, gói đang đăng thuộc lĩnh vực cũ ra sao, và hồ sơ có phải xác minh lại không.
 - Khi lĩnh vực đã cố định, `verifiedCategory` có thể gộp vào `category` + `status = VERIFIED`. Tạm giữ vì gói dịch vụ và hoa hồng đang đọc trường này.
