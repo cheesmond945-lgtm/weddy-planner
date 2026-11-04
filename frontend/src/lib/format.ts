@@ -17,3 +17,9 @@ export function formatPriceRange(from: number, to?: number) {
 export function formatNumber(n: number) {
   return n.toLocaleString('vi-VN')
 }
+
+/**
+ * Viết hoa chữ cái đầu để hiện tên dịch vụ đứng riêng ("trang trí" thành "Trang trí", "chụp ảnh & quay phim" thành "Chụp ảnh & quay phim").
+ * Chỉ dùng lúc hiển thị, không đổi dữ liệu gốc. Chữ giữa câu ("Gợi ý nhà hàng") vẫn để chữ thường.
+ */
+export const capitalizeFirst = (s: string) => (s ? s.charAt(0).toLocaleUpperCase('vi') + s.slice(1) : s)

@@ -19,13 +19,13 @@ interface TimelineFiltersProps {
 }
 
 const OWNERS: { value: OwnerFilter; label: string }[] = [
-  { value: 'all', label: 'Mọi việc' },
+  { value: 'all', label: 'Tất cả người thực hiện' },
   { value: 'mine', label: 'Việc của tôi' },
   { value: 'vendor', label: 'Việc do NCC làm' },
 ]
 
 /**
- * Tìm kiếm và lọc việc của timeline: ô từ khóa hiện sẵn (tên việc, dịch vụ, tên NCC, mã đơn, ngày hạn "12/11", "tháng 12"; không cần gõ dấu);
+ * Tìm kiếm và lọc việc của timeline: ô từ khóa hiện sẵn (tên việc, dịch vụ, tên NCC, ngày hạn "12/11", "tháng 12"; không cần gõ dấu);
  * tháng, dịch vụ và ai làm gom vào nút "Bộ lọc" (hiện số bộ lọc đang bật). Lọc ngay trên máy, không gọi API. Từ khóa được áp sau 250 ms để gõ mượt.
  */
 export function TimelineFilters({ filters, onChange, onReset, months, categories, category, onCategory, shown }: TimelineFiltersProps) {
@@ -71,8 +71,8 @@ export function TimelineFilters({ filters, onChange, onReset, months, categories
             type="search"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Tìm việc, dịch vụ, nhà cung cấp, mã đơn, ngày…"
-            aria-label="Tìm việc theo tên, dịch vụ, nhà cung cấp, mã đơn, ngày hoặc tháng"
+            placeholder="Tìm việc, dịch vụ, nhà cung cấp, ngày…"
+            aria-label="Tìm việc theo tên, dịch vụ, nhà cung cấp, ngày hoặc tháng"
             className="w-full rounded-pill border border-line bg-surface py-2.5 pr-9 pl-9 text-sm text-ink outline-none focus:border-gold [&::-webkit-search-cancel-button]:hidden"
           />
           {text && (
@@ -103,7 +103,7 @@ export function TimelineFilters({ filters, onChange, onReset, months, categories
                 <label className="grid gap-1 text-[13px] font-medium">
                   Tháng
                   <select aria-label="Lọc theo tháng" value={filters.month} onChange={(e) => onChange({ month: e.target.value })} className={select}>
-                    <option value="">Mọi tháng</option>
+                    <option value="">Tất cả tháng</option>
                     {months.map((m) => (
                       <option key={m.value} value={m.value}>
                         {m.label} ({m.count})
@@ -115,7 +115,7 @@ export function TimelineFilters({ filters, onChange, onReset, months, categories
               <label className="grid gap-1 text-[13px] font-medium">
                 Dịch vụ
                 <select aria-label="Lọc theo dịch vụ" value={category} onChange={(e) => onCategory(e.target.value)} className={select}>
-                  <option value="">Mọi dịch vụ</option>
+                  <option value="">Tất cả dịch vụ</option>
                   {categories.map((c) => (
                     <option key={c.slug} value={c.slug}>
                       {c.label}

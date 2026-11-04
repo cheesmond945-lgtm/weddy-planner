@@ -5,6 +5,7 @@ import { SegmentedTabs } from '@/components/SegmentedTabs'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { toISODate, today } from '@/lib/date'
+import { capitalizeFirst } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { PrepLevel, TimelineItem, Wedding } from '@/types/wedding'
 import { useTimeline, useTimelineMutations } from '../hooks'
@@ -192,7 +193,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   const months = monthOptions(filterTimeline(baseItems, { ...filters, month: '' }, nowISO), nowISO)
   const timeItems = view === 'service' ? baseItems : filterTimeline(baseItems, view === 'calendar' ? { ...filters, month: '' } : filters, nowISO)
   const timeGroups = groupByTime(timeItems, nowISO)
-  const categories = [...new Map(items.filter((i) => i.category).map((i) => [i.category!.slug, SERVICE_LABEL[i.category!.slug] ?? i.category!.name])).entries()].map(([slug, label]) => ({ slug, label }))
+  const categories = [...new Map(items.filter((i) => i.category).map((i) => [i.category!.slug, capitalizeFirst(SERVICE_LABEL[i.category!.slug] ?? i.category!.name)])).entries()].map(([slug, label]) => ({ slug, label }))
   const setView = (v: ViewMode) => {
     setViewState(v)
     saveView(v)

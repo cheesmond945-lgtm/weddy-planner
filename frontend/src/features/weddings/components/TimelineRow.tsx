@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DateChip } from '@/features/vendorOrders/components/TaskDateRow'
 import { TaskTitle } from '@/features/vendorOrders/components/TaskTitle'
 import { daysBetween, formatDate, parseDate, today } from '@/lib/date'
+import { capitalizeFirst } from '@/lib/format'
 import { TASK_LABELS } from '@/lib/taskLabels'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
@@ -83,7 +84,6 @@ interface TimelineCardProps {
   compactDate?: boolean
 }
 
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 /** Thẻ một việc: ô tick tròn, tên, dòng hạn, và nút chỉ khi nghiệp vụ cần. */
 export function TimelineCard({ item, leaving, nested, showService, onComplete, onReopen, onEdit, onRemove, onChat }: TimelineCardProps) {
@@ -115,7 +115,7 @@ export function TimelineCard({ item, leaving, nested, showService, onComplete, o
       ? []
       : [
           togetherUnconfirmed && <span key="plan">NCC sẽ hẹn lịch với bạn</span>,
-          showService && <span key="svc">{capitalize(serviceLabel(item))}</span>,
+          showService && <span key="svc">{capitalizeFirst(serviceLabel(item))}</span>,
           dueSoon && (
             <span key="soon" className="font-semibold text-gold-ink">
               Sắp đến hạn
