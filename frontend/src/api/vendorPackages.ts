@@ -1,5 +1,5 @@
 import type { AiSuggestion } from '@/types/ai'
-import type { PackageTask, SavePackageDayPlanRequest, SavePackageRequest, SavePackageTasksRequest, VendorPackage } from '@/types/vendorPackage'
+import type { PackageTask, SavePackageRequest, SavePackageTasksRequest, VendorPackage } from '@/types/vendorPackage'
 import { http } from './client'
 
 /** Hợp đồng: docs/api/catalog.md (phần Nhà cung cấp). Ảnh gói upload qua vendorsApi.uploadFile('PACKAGE_PHOTO'). */
@@ -19,7 +19,6 @@ export const vendorPackagesApi = {
   saveTasks: (id: string, body: SavePackageTasksRequest): Promise<PackageTask[]> => http.put(`/vendors/me/packages/${id}/tasks`, body),
 
   /** Thời gian trong ngày cưới của gói; không qua Admin duyệt. Trả gói đã cập nhật */
-  saveDayPlan: (id: string, body: SavePackageDayPlanRequest): Promise<VendorPackage> => http.put(`/vendors/me/packages/${id}/day-plan`, body),
 
   create: (body: SavePackageRequest): Promise<VendorPackage> =>
     http.post('/vendors/me/packages', body),

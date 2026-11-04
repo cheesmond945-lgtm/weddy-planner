@@ -1,8 +1,8 @@
 # Lịch trình ngày cưới theo giờ
 
-> **Tính năng đã bỏ (04/11/2026, nhóm quyết định).** Không còn giờ đón khách / làm lễ, khối "Lịch trình ngày cưới" của khách, khối "Giờ có mặt ngày cưới" trong chi tiết đơn của NCC, các API `GET /weddings/me/day-schedule`, `GET|PUT|DELETE /vendors/me/orders/:id/day-slot`, trường `mainTime` của `PUT /weddings/me` và hai thông báo `WeddingTimeChanged`, `DaySlotConfirmed`. Tài liệu bên dưới chỉ giữ để tham khảo, **không còn đúng**.
+> **Tính năng đã bỏ (04/11/2026, nhóm quyết định).** Không còn giờ đón khách / làm lễ, khối "Lịch trình ngày cưới" của khách, khối "Giờ có mặt ngày cưới" trong chi tiết đơn của NCC, thẻ "Thời gian trong ngày cưới" của gói (tab Công việc) cùng `PUT /vendors/me/packages/:id/day-plan` và trường `dayPlan` của gói, các API `GET /weddings/me/day-schedule`, `GET|PUT|DELETE /vendors/me/orders/:id/day-slot`, trường `mainTime` của `PUT /weddings/me` và hai thông báo `WeddingTimeChanged`, `DaySlotConfirmed`. Tài liệu bên dưới chỉ giữ để tham khảo, **không còn đúng**.
 >
-> **Cột CSDL không còn dùng (giữ nguyên, không xóa):** `weddings.main_time`; `orders.dayof_start_at`, `orders.dayof_end_at`, `orders.dayof_confirmed_at`. Còn dùng cho thẻ "Thời gian trong ngày cưới" của gói (chưa có quyết định bỏ): `service_packages.dayof_lead_minutes`, `dayof_duration_minutes`, `setup_open_time` (xem `PUT /vendors/me/packages/:id/day-plan`).
+> **Cột CSDL không còn dùng (giữ nguyên, không xóa):** `weddings.main_time`; `orders.dayof_start_at`, `orders.dayof_end_at`, `orders.dayof_confirmed_at`; `service_packages.dayof_lead_minutes`, `service_packages.dayof_duration_minutes`, `service_packages.setup_open_time` (trước dùng cho thẻ của gói; thẻ và API đã bỏ).
 
 Trước đây cả hệ thống chỉ tính theo ngày: biết decor làm "ngày 20/10" nhưng không biết phải vào sảnh từ mấy giờ. Phần này thêm **giờ** cho ngày cưới:
 khách nhập giờ đón khách / làm lễ, mỗi gói khai thời gian cần trong ngày cưới, hệ thống xếp giờ có mặt cho từng NCC và cảnh báo khi thiếu giờ
