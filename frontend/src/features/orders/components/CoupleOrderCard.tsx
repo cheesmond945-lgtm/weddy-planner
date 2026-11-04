@@ -1,9 +1,9 @@
-import { MessageCircle } from 'lucide-react'
+import { Clock, MessageCircle } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
-import { canRequestRevision, depositDeadline, formatDayTime } from '@/features/vendorOrders/calc'
+import { canRequestRevision, formatDayTime } from '@/features/vendorOrders/calc'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
 import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
 import { PaidInFullBadge } from '@/features/vendorOrders/components/OrderBadges'
@@ -14,17 +14,20 @@ import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
+import { openRevision } from '@/features/vendorOrders/calc'
 import type { InvoiceType, Order } from '@/types/order'
-import { hintOf, hintTone } from '../hint'
+import { depositChip, endedReason, itemsSummary } from '../cardSummary'
 import { DepositTermsDialog } from './DepositTermsDialog'
 import { EventDateNote } from './EventDateNote'
 
-const HOUR = 3_600_000
-
-const row = (label: string, value: ReactNode) => (
-  <div className="flex justify-between gap-3 border-b border-dashed border-line py-1.5 text-[13px]">
-    <span className="whitespace-nowrap text-muted-foreground">{label}</span>
-    <b className="text-right font-semibold">{value}</b>
+/** Một dòng tiền: nhãn nhạt bên trái, số bên phải căn phải, chữ số thẳng cột. */
+const money = (label: ReactNode, value: ReactNode, opts: { strong?: boolean; accent?: boolean; note?: ReactNode } = {}) => (
+  <div className="py-1">
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className={cn('min-w-0 text-[13px] text-muted-foreground', opts.strong && 'font-semibold text-ink')}>{label}</dt>
+      <dd className={cn('shrink-0 text-right text-[14px] font-medium whitespace-nowrap tabular-nums', opts.strong && 'text-[17px] font-bold', opts.accent && 'font-semibold text-gold-ink')}>{value}</dd>
+    </div>
+    {opts.note && <div className="mt-0.5 text-right text-xs">{opts.note}</div>}
   </div>
 )
 
@@ -35,7 +38,7 @@ interface CoupleOrderCardProps {
    * plan: thẻ đơn dưới hạng mục trên trang Kế hoạch của tôi (có thêm nút mở cuộc trò chuyện).
    */
   variant: 'chat' | 'plan'
-  /** Slug hạng mục, cho nút "Xem việc cần làm" (chỉ thẻ trong chat) */
+  /** Slug hạng mục, cho nút "Xem việc cần làm" (mặc định lấy từ đơn) */
   categorySlug?: string
   onRevise: (order: Order) => void
   /** Nhắn tin cho NCC (đưa con trỏ về ô nhập tin), chỉ thẻ trong chat */
@@ -43,9 +46,10 @@ interface CoupleOrderCardProps {
 }
 
 /**
- * Thẻ đơn dịch vụ phía khách, dùng chung cho khung chat và trang Kế hoạch (docs/THE_DON_PHIA_KHACH.md): cùng nội dung, cùng nút,
- * chỉ khác khung ngoài và nút mở cuộc trò chuyện. Đợt 1 (cọc) thanh toán qua VietQR, đợt 2 (còn lại) trả tiền mặt trực tiếp cho NCC
- * và chỉ có một dòng. Hạn chót đợt 2 là ngày thực hiện, trả sớm lúc nào cũng được.
+ * Thẻ đơn dịch vụ phía khách, dùng chung cho khung chat và trang Kế hoạch (docs/THE_DON_PHIA_KHACH.md): cùng nội dung, cùng nút, chỉ khác
+ * khung ngoài và nút mở cuộc trò chuyện. Thẻ chỉ giữ phần cốt lõi (NCC, hạng mục tóm tắt, ngày, tiền, nút); đơn giá từng dòng, sảnh, phương thức,
+ * hạn chót đợt 2 và lịch sử nằm trong "Xem chi tiết". Bố cục 3 phần: đầu, tiền, hành động. Đơn hết hạn / hủy thu gọn một dòng.
+ * Đợt 1 (cọc) thanh toán qua VietQR, đợt 2 (còn lại) trả tiền mặt trực tiếp cho NCC.
  */
 export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onMessageVendor }: CoupleOrderCardProps) {
   useNow()
@@ -56,139 +60,150 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
 
   const chat = variant === 'chat'
   const status = ORDER_STATUS[o.status]
-  const shown = o.items.slice(0, 2)
-  const more = o.items.length - shown.length
-  const dueMs = o.depositDueDate ? new Date(o.depositDueDate).getTime() - Date.now() : null
-  const overdue = o.status === 'Pending' && dueMs !== null && dueMs <= 0
-  const urgent = o.status === 'Pending' && dueMs !== null && dueMs < 6 * HOUR
+  // Đơn hết hạn / đã hủy cùng tông xám
+  const ended = o.status === 'Expired' || o.status === 'Cancelled'
+  const chip = o.status === 'Pending' && o.depositDueDate ? depositChip(o.depositDueDate, Date.now()) : null
   const paidDate = o.payment?.status === 'Paid' ? o.payment.paidDate : null
   const last = o.revisions[0]
   const updated = last && last.status === 'Applied' && last.newTotalAmount !== null && last.newTotalAmount !== last.oldTotalAmount ? last : null
-  const hint = hintOf(o)
   const finalInvoice = o.invoices.some((i) => i.type === 'FinalInvoice')
   const rest = o.restPayment
   const restAmount = rest?.amount ?? o.totalAmount - o.depositAmount
   const restKnown = !!rest && rest.status !== 'NotApplicable'
-  // Hạn chót đợt 2 chỉ nhắc khi đơn còn hiệu lực và chưa trả; quá hạn không cảnh báo (khách và NCC tự thỏa thuận)
-  const showDeadline = ['Pending', 'NeedRevision', 'Deposited'].includes(o.status) && rest?.status !== 'Received'
-  const btnSize = o.status === 'Pending' && chat ? 'default' : 'sm'
+  const waiting = openRevision(o)
+  const slug = categorySlug ?? o.category?.slug
+  const pct = `${Math.round(o.depositPercent * 100) / 100}%`
+  const awaitingDeposit = o.status === 'Pending' || o.status === 'NeedRevision'
+
+  const shell = cn(
+    'border border-line bg-surface',
+    chat ? 'w-[min(360px,100%)] self-start rounded-[22px] rounded-bl-[4px]' : 'flex flex-col rounded-[22px]',
+  )
+
+  const detailLink = (
+    <button type="button" onClick={() => setDetail(true)} className="ml-auto text-[13px] font-medium text-gold-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
+      Xem chi tiết →
+    </button>
+  )
+
+  const dialogs = (
+    <>
+      <DepositTermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
+      {detail && <OrderDetailDialog order={o} viewer="couple" onClose={() => setDetail(false)} onViewInvoice={(_, type) => setInvoice(type)} />}
+      {invoice && <InvoiceDialog order={o} type={invoice} vendorName={o.vendorName} onClose={() => setInvoice(null)} />}
+    </>
+  )
+
+  // Hết hạn / Hủy: một dòng "NCC · trạng thái · lý do ngắn", không bóng, chữ nhạt
+  if (ended) {
+    return (
+      <article data-order={o.id} className={cn(shell, 'bg-surface-2/60 px-4 py-3 text-muted-foreground')}>
+        <p className="line-clamp-2 text-[13.5px] leading-snug [overflow-wrap:anywhere]">
+          <b className="font-semibold">{o.vendorName}</b> · {status.label} · {endedReason(o.status, o.cancelReason)}
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-xs tabular-nums">{o.orderCode}</span>
+          {chat && o.status === 'Expired' && (
+            <button type="button" onClick={onMessageVendor} className="text-[13px] font-medium text-gold-ink underline-offset-2 hover:underline">
+              Nhắn tin cho NCC
+            </button>
+          )}
+          {detailLink}
+        </div>
+        {dialogs}
+      </article>
+    )
+  }
 
   return (
     <article
       data-order={o.id}
-      className={cn(
-        'border border-line bg-surface px-5 py-[18px] shadow-bubble',
-        chat ? 'w-[min(360px,100%)] self-start rounded-[22px] rounded-bl-[4px]' : 'flex flex-col rounded-[18px]',
-      )}
+      className={cn(shell, 'p-5 shadow-card transition-shadow duration-150 ease-out hover:shadow-[0_12px_28px_rgb(var(--shadow-rgb)/0.14)] motion-reduce:transition-none', o.status === 'Completed' && 'bg-surface')}
     >
-      <div className="flex items-start justify-between gap-2.5">
+      {/* Phần đầu: NCC, mã đơn, trạng thái, hạng mục tóm tắt */}
+      <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-sans text-[15px] font-semibold">Đơn dịch vụ {o.orderCode}</h3>
-          {o.vendorName && <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{o.vendorName}</p>}
+          <h3 className="line-clamp-2 font-serif text-[19px] leading-snug font-semibold [overflow-wrap:anywhere]">{o.vendorName}</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">{o.orderCode}</p>
         </div>
-        <span className="flex flex-wrap items-center justify-end gap-1.5">
+        <span className="flex shrink-0 flex-col items-end gap-1.5">
           <Badge tone={status.tone}>{status.label}</Badge>
           <PaidInFullBadge order={o} />
         </span>
-      </div>
+      </header>
+      <p className="mt-3 text-[13.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{itemsSummary(o.items)}</p>
 
-      <div className="mt-2 mb-1">
-        {shown.map((i) => (
-          <div key={i.id} className="border-b border-dashed border-line py-1.5 text-[13px]">
-            <div className="flex justify-between gap-3">
-              <span className="font-medium">{i.itemName}</span>
-              <b className="text-right font-semibold whitespace-nowrap">{formatMoney(i.amount)}</b>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {i.quantity} {i.unit} × {formatMoney(i.unitPrice)}
-            </div>
-          </div>
-        ))}
-        {more > 0 && <div className="border-b border-dashed border-line py-1.5 text-xs text-muted-foreground">và {more} hạng mục khác</div>}
-      </div>
-
-      {o.package && row('Sảnh', o.package.name)}
-      {row('Ngày thực hiện', formatDate(o.eventDate))}
+      {/* Phần tiền */}
+      <dl className="mt-4 border-t border-line pt-3">
+        {money('Ngày thực hiện', formatDate(o.eventDate))}
+        {money('Tổng giá trị', formatMoney(o.totalAmount), { strong: true })}
+        {updated && <div className="pb-1 text-right text-xs text-gold-ink">Đã cập nhật: {formatMoney(updated.oldTotalAmount)} → {formatMoney(updated.newTotalAmount as number)}</div>}
+        {money(paidDate ? `Đã cọc · ${formatDayTime(paidDate)}` : `Cọc ${pct}`, formatMoney(o.depositAmount), { accent: awaitingDeposit })}
+        {money('Còn lại', formatMoney(restAmount), {
+          note: restKnown && o.status !== 'NeedRevision' ? <span className={REST_TONE_CLASS[restLabel(o, 'COUPLE').tone]}>{restLabel(o, 'COUPLE').text}</span> : undefined,
+        })}
+      </dl>
       <EventDateNote order={o} />
-      {row('Tổng giá trị', formatMoney(o.totalAmount))}
-      {updated && (
-        <div className="border-b border-dashed border-line py-1.5 text-[12.5px] text-gold-700">
-          Đã cập nhật: tổng {formatMoney(updated.oldTotalAmount)} → {formatMoney(updated.newTotalAmount as number)}
-        </div>
-      )}
-      {o.status === 'Deposited' && last?.status === 'Applied' && last.revisionType === 'AfterDeposit' && last.requestNote && (
-        <div className="border-b border-dashed border-line py-1.5 text-[12.5px] whitespace-pre-wrap">
-          <span className="text-muted-foreground">Nội dung thay đổi: </span>
-          {last.requestNote}
-        </div>
-      )}
-      {row(`Đợt 1 · Cọc ${Math.round(o.depositPercent * 100) / 100}% (VietQR)`, <span className="text-gold-700">{formatMoney(o.depositAmount)}</span>)}
-      {row(
-        'Đợt 2 · Còn lại (tiền mặt cho NCC)',
-        restKnown ? (
-          <span>
-            {formatMoney(restAmount)} — <span className={REST_TONE_CLASS[restLabel(o, 'COUPLE').tone]}>{restLabel(o, 'COUPLE').text}</span>
-          </span>
-        ) : (
-          formatMoney(restAmount)
-        ),
-      )}
-      {showDeadline && <div className="border-b border-dashed border-line py-1.5 text-[12.5px] text-muted-foreground">Hạn chót đợt 2: {formatDate(o.eventDate)} (ngày cưới). Bạn có thể trả sớm hơn.</div>}
-      {o.status === 'Pending' && o.depositDueDate && row('Hạn đặt cọc', <span className={cn(urgent && 'text-warn')}>{depositDeadline(o.depositDueDate).replace('Hạn cọc: ', '')}</span>)}
-      {paidDate && (
-        <p className="mt-2 text-[13px] font-semibold text-sage">
-          Đã thanh toán cọc {formatMoney(o.depositAmount)} · {formatDayTime(paidDate)}
-        </p>
-      )}
-      {o.note && <p className="mt-2 text-[13px] whitespace-pre-wrap">Ghi chú của NCC: {o.note}</p>}
 
-      {hint && <div className={cn('mt-2.5 rounded-sm px-2.5 py-2 text-[13px] whitespace-pre-wrap', hintTone(o))}>{hint}</div>}
+      {/* Phần hành động */}
+      <div className="mt-4 border-t border-line pt-4">
+        {chip && (
+          <p
+            className={cn(
+              'mb-3 inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-xs font-semibold',
+              chip.urgent ? 'bg-warn-soft text-warn' : 'bg-[color-mix(in_srgb,var(--gold)_16%,var(--surface))] text-gold-ink',
+            )}
+          >
+            <Clock className="size-3.5 shrink-0" aria-hidden />
+            {chip.text}
+          </p>
+        )}
+        {(o.status === 'NeedRevision' || (o.status === 'Deposited' && waiting)) && (
+          <p className="mb-3 inline-flex items-center gap-1.5 rounded-pill bg-[color-mix(in_srgb,var(--gold)_16%,var(--surface))] px-3 py-1 text-xs font-semibold text-gold-ink">
+            <Clock className="size-3.5 shrink-0" aria-hidden />
+            {o.status === 'NeedRevision' ? 'Đang chờ nhà cung cấp cập nhật đơn' : 'Đang chờ nhà cung cấp xử lý yêu cầu'}
+          </p>
+        )}
 
-      <div className={cn('flex flex-wrap gap-2', chat ? 'mt-3' : 'mt-auto pt-3')}>
-        {o.status === 'Pending' && (
-          <Button variant="success" size={btnSize} disabled={overdue} onClick={() => navigate(paths.deal(o.id))}>
-            {overdue ? 'Đã hết hạn đặt cọc' : 'Thanh toán cọc'}
-          </Button>
-        )}
-        {chat && o.status === 'Deposited' && categorySlug && (
-          <Button variant="outline" size="sm" onClick={() => navigate(`${paths.timeline}?category=${categorySlug}`)}>
-            Xem việc cần làm
-          </Button>
-        )}
-        {canRequestRevision(o) && (
-          <Button variant="outline" size={btnSize} onClick={() => onRevise(o)}>
-            Yêu cầu chỉnh sửa
-          </Button>
-        )}
-        <Button variant="outline" size={btnSize} onClick={() => setDetail(true)}>
-          Xem chi tiết
-        </Button>
-        {finalInvoice && (
-          <Button variant="outline" size={btnSize} onClick={() => setInvoice('FinalInvoice')}>
-            Xem hóa đơn
-          </Button>
-        )}
-        {chat && o.status === 'Expired' && (
-          <Button variant="outline" size="sm" onClick={onMessageVendor}>
-            Nhắn tin cho NCC
-          </Button>
-        )}
-        {!chat && o.conversationId && (
-          <Button variant="ghost" size="sm" onClick={() => navigate(`${paths.chat}?c=${encodeURIComponent(o.conversationId)}`)}>
-            <MessageCircle />
-            Nhắn NCC
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2 [&>button]:min-w-[140px] [&>button]:grow [&>button]:basis-[140px]">
+          {o.status === 'Pending' && (
+            <Button variant="success" size={chat ? 'default' : 'sm'} disabled={chip?.overdue} onClick={() => navigate(paths.deal(o.id))}>
+              {chip?.overdue ? 'Đã hết hạn đặt cọc' : 'Thanh toán cọc'}
+            </Button>
+          )}
+          {o.status === 'Deposited' && slug && (
+            <Button variant="outline" size="sm" onClick={() => navigate(`${paths.timeline}?category=${slug}`)}>
+              Xem việc cần làm
+            </Button>
+          )}
+          {canRequestRevision(o) && (
+            <Button variant="outline" size={o.status === 'Pending' && chat ? 'default' : 'sm'} onClick={() => onRevise(o)}>
+              Yêu cầu chỉnh sửa
+            </Button>
+          )}
+          {finalInvoice && (
+            <Button variant="outline" size="sm" onClick={() => setInvoice('FinalInvoice')}>
+              Xem hóa đơn
+            </Button>
+          )}
+          {!chat && o.conversationId && (
+            <Button variant="ghost" size="sm" onClick={() => navigate(`${paths.chat}?c=${encodeURIComponent(o.conversationId)}`)}>
+              <MessageCircle />
+              Nhắn NCC
+            </Button>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {o.status === 'Pending' && !chip?.overdue && (
+            <button type="button" className="text-xs text-muted-foreground underline underline-offset-2 hover:text-ink" onClick={() => setTermsOpen(true)}>
+              Điều khoản đặt dịch vụ
+            </button>
+          )}
+          {detailLink}
+        </div>
       </div>
-
-      {o.status === 'Pending' && !overdue && (
-        <button type="button" className="mt-2.5 self-start text-xs text-muted-foreground underline underline-offset-2 hover:text-ink" onClick={() => setTermsOpen(true)}>
-          Xem điều khoản đặt dịch vụ
-        </button>
-      )}
-      <DepositTermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
-      {detail && <OrderDetailDialog order={o} viewer="couple" onClose={() => setDetail(false)} onViewInvoice={(_, type) => setInvoice(type)} />}
-      {invoice && <InvoiceDialog order={o} type={invoice} vendorName={o.vendorName} onClose={() => setInvoice(null)} />}
+      {dialogs}
     </article>
   )
 }
