@@ -13,10 +13,10 @@ import { VENUE_SLUG, type BudgetPreset } from './allocation.config';
 import { fitsGuests, packageCost, plannedPackage, tableCount, type EnginePackage, type EnginePlanVendor } from './budget-engine';
 import {
   displayMoney,
-  fitToMax,
   initFromMode,
   markersOf,
   pickPackage,
+  presetItems,
   reconcile,
   splitAmounts,
   suggestedLimit,
@@ -282,8 +282,9 @@ export function allocate(input: AllocInput) {
   const hasPackages = (c: AllocCategory) => (levels.get(c.id)?.count ?? 0) > 0;
   const openServices = open.filter((c) => c.slug !== VENUE_SLUG && hasPackages(c));
   const venueOpen = open.find((c) => c.slug === VENUE_SLUG) ?? null;
-  // Bỏ khỏi phần chia: chỉ ở mức Tùy chỉnh, chỉ hạng mục chưa chọn
-  const excluded = new Set(custom ? (input.split?.excluded ?? []).filter((id) => open.some((c) => c.id === id && c.slug !== VENUE_SLUG)) : []);
+  // Dịch vụ tự lo (bỏ khỏi phần chia, chỉ hạng mục chưa chọn): áp dụng ở mọi mức chia, không riêng Tùy chỉnh, để chuyển mức
+  // không làm dịch vụ tự lo lại được chia tiền và gợi ý gói (danh sách lưu cùng cấu hình chia, xem budget.service setOwnService)
+  const excluded = new Set((input.split?.excluded ?? []).filter((id) => open.some((c) => c.id === id && c.slug !== VENUE_SLUG)));
   const groupCats = openServices.filter((c) => !excluded.has(c.id));
   const members: GroupMember[] = groupCats.map((c) => ({ id: c.id, slug: c.slug, median: levels.get(c.id)!.median! }));
 
@@ -375,8 +376,12 @@ export function allocate(input: AllocInput) {
     }
   }
   const baseMode: BaseMode = state ? state.baseMode : (input.preset as BaseMode);
-  // Phương án có sẵn: không hạng mục nào quá giá gói cao nhất, phần thừa sang hạng mục còn thiếu (fitToMax)
-  const items = state ? state.items : fitToMax(initFromMode(members, baseMode), markersOf(members.map((m) => m.id), (id) => levels.get(id)?.max ?? null, serviceBudget));
+  // Phương án có sẵn: không hạng mục nào quá giá gói cao nhất, phần thừa sang hạng mục còn thiếu (fitToMax); hai mức Ưu tiên nâng
+  // hạng gói của dịch vụ ưu tiên khi ra cùng gói với Cân bằng (presetItems)
+  const pools = Object.fromEntries(groupCats.map((c) => [c.id, toCandidates(c, guests, tables, input)]));
+  const items = state
+    ? state.items
+    : presetItems(members, baseMode, markersOf(members.map((m) => m.id), (id) => levels.get(id)?.max ?? null, serviceBudget), pools, serviceBudget);
   const { amounts, leftover } = splitAmounts(items, serviceBudget, state?.capAmount ?? null);
 
   for (const it of items) {

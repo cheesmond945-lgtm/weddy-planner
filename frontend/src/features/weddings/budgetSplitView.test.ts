@@ -26,11 +26,11 @@ const snap = (over: Partial<BudgetFund> = {}, tables = 30): FundSnapshot => ({ f
 
 describe('fundChangeReason (mục 3, T54, T61)', () => {
   it('T54 tăng chi phí ngoài nền tảng', () => {
-    assert.equal(fundChangeReason(snap(), snap({ externalCost: 12 * M, serviceBudgetRaw: 148 * M })), 'Quỹ dịch vụ vừa thay đổi vì chi phí ngoài nền tảng.')
+    assert.equal(fundChangeReason(snap(), snap({ externalCost: 12 * M, serviceBudgetRaw: 148 * M })), 'Quỹ chưa phân bổ vừa thay đổi vì chi phí ngoài nền tảng.')
   })
   it('T61 gói tiệc đề xuất đổi cùng chi phí ngoài nền tảng', () => {
     const r = fundChangeReason(snap(), snap({ externalCost: 32 * M, venue: { status: 'SUGGESTED', amount: 120 * M, overBy: null }, serviceBudgetRaw: 156 * M }))
-    assert.equal(r, 'Quỹ dịch vụ vừa thay đổi vì gói tiệc đề xuất đổi, chi phí ngoài nền tảng.')
+    assert.equal(r, 'Quỹ chưa phân bổ vừa thay đổi vì gói tiệc đề xuất đổi, chi phí ngoài nền tảng.')
   })
   it('đổi số bàn, chọn thêm gói dịch vụ', () => {
     assert.match(fundChangeReason(snap(), snap({ serviceBudgetRaw: 100 * M }, 35))!, /số bàn hoặc số khách/)
@@ -119,13 +119,22 @@ describe('splitView', () => {
     assert.equal(v.limits.CA, 14 * M)
     assert.deepEqual(configBody(st, 3), { version: 3, baseMode: 'BALANCED', excluded: ['HC'], capAmount: 5 * M, items: [{ categoryId: 'TT', ratio: 10000, locked: false }] })
   })
-  it('quỹ dư: Tùy chỉnh tạm không áp dụng (tính theo phương án nền) nhưng vẫn giữ hạng mục Tự lo', () => {
-    const b = budget('CUSTOM')
-    const st = stateFromConfig({ version: 3, baseMode: 'BALANCED', excluded: ['HC'], capAmount: 5 * M, items: [{ categoryId: 'TT', ratio: 10000, locked: false }] }, b)
-    const v = splitView(b, st, true)
+  it('mức có sẵn vẫn giữ dịch vụ Tự lo (danh sách excluded backend trả về): không chia tiền, không gợi ý', () => {
+    const b = budget('BALANCED')
+    const v = splitView({ ...b, split: { ...b.split, excluded: ['HC'] } }, null)
     assert.equal(v.custom, false)
     assert.deepEqual(v.excluded.map((c) => c.categoryId), ['HC'])
-    assert.equal(v.capAmount, null)
+    assert.ok(!v.rows.some((r) => r.item.id === 'HC'))
+    assert.ok(!v.group.some((m) => m.id === 'HC'))
+  })
+  it('quỹ dư: vẫn dùng Tùy chỉnh như backend (giữ mức chi khách đặt, giá trần, hạng mục Tự lo)', () => {
+    const b = budget('CUSTOM')
+    const st = stateFromConfig({ version: 3, baseMode: 'BALANCED', excluded: ['HC'], capAmount: 5 * M, items: [{ categoryId: 'TT', ratio: 10000, locked: false }] }, b)
+    const v = splitView({ ...b, fund: { ...b.fund, serviceBudget: 400 * M, serviceBudgetRaw: 400 * M } }, st)
+    assert.equal(v.custom, true)
+    assert.equal(v.capAmount, 5 * M)
+    assert.equal(v.rows[0].amount, 5 * M)
+    assert.deepEqual(v.excluded.map((c) => c.categoryId), ['HC'])
     assert.ok(!v.rows.some((r) => r.item.id === 'HC'))
   })
 })

@@ -38,7 +38,11 @@ const label = (s: ShownSuggestion) => `${s.vendorName} · ${s.packageName}${s.ch
 /** Dịch vụ cưới của hạng mục ở dạng đầy đủ (ai=all): mọi dịch vụ, 3 gợi ý ghim đầu danh sách */
 const servicesOf = (slug: string) => `${paths.services}?category=${slug}&ai=all`
 
-/** Thêm các gợi ý vào kế hoạch (một hoặc nhiều dòng), một thông báo kèm Hoàn tác gỡ đúng những gì vừa thêm */
+/**
+ * Thêm các gợi ý vào kế hoạch (một hoặc nhiều dòng), một thông báo kèm Hoàn tác gỡ đúng những gì vừa thêm.
+ * Gợi ý chỉ hiện ở hạng mục ngân sách coi là chưa chọn; hạng mục vẫn còn NCC cũ trong kế hoạch là NCC có đơn đã hủy
+ * (ngân sách đã trả hạng mục về chưa chọn) nên thêm kèm replace để thay NCC đó, không báo "Hạng mục đã có dịch vụ khác".
+ */
 export function useChooseSuggestions() {
   const refresh = useRefreshPlanning()
   const [busy, setBusy] = useState(false)
@@ -46,7 +50,7 @@ export function useChooseSuggestions() {
     setBusy(true)
     const added: string[] = []
     try {
-      for (const s of list) added.push((await weddingsApi.addPlanItem(s.vendorId, false, s.packageId)).id)
+      for (const s of list) added.push((await weddingsApi.addPlanItem(s.vendorId, true, s.packageId)).id)
     } catch (e) {
       toast((e as Error).message)
     }
@@ -70,11 +74,16 @@ export function BudgetSuggestionPicker({
   suggestion,
   packages,
   limit,
+  onOwn,
+  ownBusy = false,
 }: {
   slug: string
   suggestion: ShownSuggestion | null
   packages: readonly BudgetCandidatePackage[]
   limit: number
+  /** "Tôi tự lo dịch vụ này": chuyển hạng mục sang Tự lo (không chia tiền, không gợi ý); không truyền thì không hiện */
+  onOwn?: () => void
+  ownBusy?: boolean
 }) {
   const { choose, busy } = useChooseSuggestions()
   const [open, setOpen] = useState(false)
@@ -93,12 +102,20 @@ export function BudgetSuggestionPicker({
     }
   }, [open])
 
+  const ownButton = onOwn && (
+    <button type="button" disabled={ownBusy} onClick={() => (setOpen(false), onOwn())} className="text-left text-[13px] font-medium text-muted-foreground hover:text-gold-700 disabled:opacity-60">
+      Tôi tự lo dịch vụ này
+    </button>
+  )
   if (!suggestion) {
     return (
-      <Link to={servicesOf(slug)} className="inline-flex items-center gap-1 self-start text-[13px] font-medium text-gold-700 hover:underline">
-        Chưa có gói vừa ngân sách, tìm ở Dịch vụ cưới
-        <ArrowRight className="size-3.5" aria-hidden />
-      </Link>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Link to={servicesOf(slug)} className="inline-flex items-center gap-1 self-start text-[13px] font-medium text-gold-700 hover:underline">
+          Chưa có gói vừa ngân sách, tìm ở Dịch vụ cưới
+          <ArrowRight className="size-3.5" aria-hidden />
+        </Link>
+        {ownButton}
+      </div>
     )
   }
   const options = suggestionOptions(suggestion, packages, limit)
@@ -152,6 +169,7 @@ export function BudgetSuggestionPicker({
             Xem tất cả ở Dịch vụ cưới
             <ArrowRight className="size-3.5" aria-hidden />
           </Link>
+          {ownButton && <div className="border-t border-line px-3.5 py-2">{ownButton}</div>}
         </div>
       )}
     </div>

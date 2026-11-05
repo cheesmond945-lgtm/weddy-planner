@@ -375,4 +375,36 @@ for (const [side, S] of [
       assert.deepEqual(S.topVendors(list, 4 * M, 3), [])
     })
   })
+
+  describe(`${side}: presetItems (hai mức Ưu tiên nâng hạng gói)`, () => {
+    // Quỹ 20tr, Chụp ảnh (ưu tiên ở Ưu tiên hình ảnh) gói 8tr / 15tr, Trang trí (không ưu tiên) gói 4tr / 6tr
+    const sb = 20 * M
+    const pkg = (id: string, costTr: number) => ({ id, cost: costTr * M, place: 0, rating: null, reviewCount: 0, overlap: 0 })
+    const group = [member('TT', 10), member('CA', 10)]
+    const markers = S.markersOf(['TT', 'CA'], (id) => (id === 'CA' ? 15 * M : 6 * M), sb)
+    const pick = (its: { id: string; ratio: number }[], id: string, pools: Record<string, ReturnType<typeof pkg>[]>) =>
+      S.pickPackage(pools[id], (sb * its.find((x) => x.id === id)!.ratio) / 10000)!.pkg.id
+    it('cùng gói với Cân bằng: nâng Chụp ảnh lên gói kế trên, Trang trí hạ một bậc để bù, tổng tỷ lệ giữ nguyên', () => {
+      const pools = { CA: [pkg('ca8', 8), pkg('ca15', 15)], TT: [pkg('tt4', 4), pkg('tt6', 6)] }
+      const bal = S.presetItems(group, 'BALANCED', markers, pools, sb)
+      const vis = S.presetItems(group, 'VISUAL', markers, pools, sb)
+      assert.equal(pick(bal, 'CA', pools), 'ca8')
+      assert.equal(pick(vis, 'CA', pools), 'ca15')
+      assert.equal(pick(vis, 'TT', pools), 'tt4')
+      assert.equal(total(vis), total(bal))
+      // Nâng làm tròn lên: chạm đúng giá gói đắt nhất không bị báo vượt
+      const ca = (sb * vis.find((x) => x.id === 'CA')!.ratio) / 10000
+      assert.equal(S.priceMarker(ca, 15 * M, sb).warn, false)
+    })
+    it('dịch vụ không ưu tiên không còn gói rẻ hơn để hạ: giữ nguyên, không nâng', () => {
+      const pools = { CA: [pkg('ca8', 8), pkg('ca15', 15)], TT: [pkg('tt6', 6)] }
+      const vis = S.presetItems(group, 'VISUAL', markers, pools, sb)
+      assert.equal(pick(vis, 'CA', pools), 'ca8')
+      assert.equal(pick(vis, 'TT', pools), 'tt6')
+    })
+    it('Cân bằng không nâng hạng (giống fitToMax)', () => {
+      const pools = { CA: [pkg('ca8', 8), pkg('ca15', 15)], TT: [pkg('tt4', 4), pkg('tt6', 6)] }
+      assert.deepEqual(S.presetItems(group, 'BALANCED', markers, pools, sb), S.fitToMax(S.initFromMode(group, 'BALANCED'), markers))
+    })
+  })
 }
