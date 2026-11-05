@@ -12,15 +12,15 @@ export type OrderErrors = Record<string, string>
 
 /** Ngày sự kiện hợp lệ: đủ "YYYY-MM-DD", năm 4 chữ số (ô ngày của trình duyệt cho gõ năm 5 chữ số, giá trị thành "55555-05-12"). */
 const eventDateError = (date: string) => {
-  if (!date) return 'Chọn ngày diễn ra sự kiện.'
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) ? undefined : 'Ngày diễn ra sự kiện không hợp lệ (năm gồm 4 chữ số).'
+  if (!date) return 'Chọn ngày thực hiện dịch vụ.'
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) ? undefined : 'Ngày thực hiện dịch vụ không hợp lệ (năm gồm 4 chữ số).'
 }
 
 /** Lưu nháp: chỉ bắt buộc ngày sự kiện (cột NOT NULL, backend không tự đặt ngày hôm nay). */
 export function validateDraft(v: OrderFormValues): OrderErrors {
   const e: OrderErrors = {}
   const date = eventDateError(v.eventDate)
-  if (date) e.eventDate = v.eventDate ? date : 'Chọn ngày diễn ra sự kiện để lưu nháp.'
+  if (date) e.eventDate = v.eventDate ? date : 'Chọn ngày thực hiện dịch vụ để lưu nháp.'
   return e
 }
 
@@ -45,7 +45,7 @@ export function validateOrder(
   if (!isVnPhone(v.customerPhone)) e.customerPhone = PHONE_MESSAGE
   const date = eventDateError(v.eventDate)
   if (date) e.eventDate = date
-  else if (v.eventDate !== opts.originalEventDate && v.eventDate < todayVN()) e.eventDate = 'Ngày diễn ra sự kiện phải từ hôm nay trở đi.'
+  else if (v.eventDate !== opts.originalEventDate && v.eventDate < todayVN()) e.eventDate = 'Ngày thực hiện dịch vụ phải từ hôm nay trở đi.'
   else if (opts.weddingDate && !opts.afterDeposit && opts.weddingDate <= todayVN()) {
     e.eventDate = `Ngày cưới của khách (${formatDate(opts.weddingDate)}) đã qua hoặc là hôm nay. Nhắn khách cập nhật ngày cưới trước khi gửi đơn.`
   } else if (opts.weddingDate && v.eventDate > opts.weddingDate && !(opts.afterDeposit && v.eventDate === opts.originalEventDate)) {

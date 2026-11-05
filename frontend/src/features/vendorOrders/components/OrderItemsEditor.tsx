@@ -82,7 +82,7 @@ export function OrderItemsEditor({ items, onChange, errors, packages, lookup, ha
         const linked = !!it.packageId
         const pkg = lookup.find((p) => p.id === it.packageId)
         const switched = lockPackages && !!it.packageId && !!depositedPackageIds && !depositedPackageIds.includes(it.packageId)
-        const note = switched ? `Đổi sang ${isHall ? 'sảnh' : 'gói'} ${pkg?.name ?? ''} · công việc đổi theo khi lưu (trùng tên giữ tiến độ)` : packageNote(it, pkg, isHall ? 'hall' : 'package', lockPackages)
+        const note = switched ? `Đổi sang ${isHall ? 'sảnh' : 'gói'} ${pkg?.name ?? ''}` : packageNote(it, pkg, isHall ? 'hall' : 'package', lockPackages)
         return (
           <div
             key={it.key}

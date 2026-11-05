@@ -192,7 +192,7 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
   const customerPhone = normalizePhone(c.customerPhone);
   const eventOk = validYmd(c.eventDate);
   const eventDate = eventOk ? (c.eventDate as string) : '';
-  if (!eventOk) errors.eventDate = 'Chọn ngày diễn ra sự kiện.';
+  if (!eventOk) errors.eventDate = 'Chọn ngày thực hiện dịch vụ.';
 
   const blank = (i: NonNullable<ContentInput['items']>[number]) => (i.itemName?.trim() ?? '') === '' && !Number(i.quantity) && !Number(i.unitPrice);
   const raw = (c.items ?? []).filter((i) => !blank(i));

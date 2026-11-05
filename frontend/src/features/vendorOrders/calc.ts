@@ -33,9 +33,9 @@ export const totalOf = (items: OrderItemInput[]) => items.reduce((s, i) => s + i
 
 const withKeys = (items: OrderItemInput[]): FormItem[] => (items.length ? items.map((i) => ({ ...i, key: newItemKey() })) : [newItem()])
 
-/** Đơn mới: điền sẵn tên, số điện thoại và ngày thực hiện = ngày cưới của khách (NCC đổi được, nhưng không được sau ngày cưới); tỷ lệ cọc mặc định = mức tối thiểu (10%). */
+/** Đơn mới: điền sẵn tên và số điện thoại; ngày thực hiện để trống cho NCC tự chọn (không được sau ngày cưới); tỷ lệ cọc mặc định = mức tối thiểu (10%). */
 export function emptyValues(customer: { name: string; phone: string; weddingDate?: string | null }): OrderFormValues {
-  return { customerName: customer.name, customerPhone: customer.phone, eventDate: customer.weddingDate ?? '', note: null, depositPercent: DEPOSIT_PERCENT_MIN, items: [newItem()], packageId: null }
+  return { customerName: customer.name, customerPhone: customer.phone, eventDate: '', note: null, depositPercent: DEPOSIT_PERCENT_MIN, items: [newItem()], packageId: null }
 }
 
 /** Nội dung hiện tại của đơn (để sửa). */
@@ -141,10 +141,10 @@ export const canRequestRevision = (o: Pick<Order, 'status' | 'eventDate' | 'revi
 /** "Đổi số lượng, Đổi ngày thực hiện" */
 export const changesLabel = (r: Pick<OrderRevision, 'changes'>) => r.changes.map((c) => CHANGE_LABEL[c]).join(', ')
 
-/** NCC hủy được đơn đã cọc khi hôm nay (giờ Việt Nam) còn trước ngày diễn ra sự kiện. */
+/** NCC hủy được đơn đã cọc khi hôm nay (giờ Việt Nam) còn trước ngày thực hiện dịch vụ. */
 export const canCancel = (o: Pick<Order, 'status' | 'eventDate'>) => o.status === 'Deposited' && todayVN() < o.eventDate
 
-/** Đã qua ngày diễn ra sự kiện (giờ Việt Nam): được đánh dấu hoàn thành. */
+/** Đã qua ngày thực hiện dịch vụ (giờ Việt Nam): được đánh dấu hoàn thành. */
 export const eventPassed = (o: Pick<Order, 'eventDate'>) => todayVN() > o.eventDate
 
 /** Dòng chữ hiện sẵn khi nút Hoàn tất bị khóa vì chưa qua ngày thực hiện. */

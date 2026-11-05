@@ -20,7 +20,7 @@ export const TERMS_ARTICLES: TermsArticle[] = [
     paragraphs: [
       'Đối tác chiết khấu cho Forever {{TY_LE}}% trên giá trị đơn thực tế, theo tỷ lệ áp dụng cho loại dịch vụ {{TEN_LOAI_DICH_VU}}.',
       'Giá trị đơn thực tế là tổng giá trị cuối cùng của đơn trên Forever, sau mọi lần chỉnh sửa.',
-      'Phí chỉ áp dụng khi khách hàng đã thanh toán hoàn tất cho Đối tác, tức là khi đơn chuyển sang trạng thái “Hoàn thành”. Đơn chuyển sang “Hoàn thành” khi Đối tác xác nhận sau ngày diễn ra sự kiện, hoặc khi hệ thống tự xác nhận do đã quá ngày diễn ra sự kiện hơn 7 ngày.',
+      'Phí chỉ áp dụng khi khách hàng đã thanh toán hoàn tất cho Đối tác, tức là khi đơn chuyển sang trạng thái “Hoàn thành”. Đơn chuyển sang “Hoàn thành” khi Đối tác xác nhận sau ngày thực hiện dịch vụ, hoặc khi hệ thống tự xác nhận do đã quá ngày thực hiện dịch vụ hơn 7 ngày.',
       'Đơn hết hạn cọc hoặc bị khách hủy không phát sinh hoa hồng.',
     ],
   },

@@ -102,7 +102,7 @@ export interface Order {
   status: OrderStatus
   customerName: string
   customerPhone: string
-  /** Ngày diễn ra sự kiện "YYYY-MM-DD" */
+  /** Ngày thực hiện dịch vụ "YYYY-MM-DD" */
   eventDate: string
   /** Ngày cưới của khách "YYYY-MM-DD" (chỉ BE thật trả): ngày thực hiện không được sau ngày này */
   weddingDate?: string | null

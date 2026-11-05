@@ -483,7 +483,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                 />
               </Field>
               <Field
-                label="Ngày diễn ra sự kiện *"
+                label="Ngày thực hiện dịch vụ *"
                 error={errors.eventDate}
                 hint={
                   weddingDate || advice.length ? (
@@ -534,8 +534,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                       </span>
                     ) : (
                       <>
-                        <span className="block">Chọn sảnh một lần: dòng 1 của báo giá tự điền theo sảnh. Sảnh bận vào ngày thực hiện khi khách đặt cọc.</span>
-                        {locked && values.packageId !== mode.order.package?.id && <span className="mt-1 block text-gold-ink">Các việc trong timeline đã tạo theo sảnh cũ sẽ không tự thay đổi.</span>}
+                                                {locked && values.packageId !== mode.order.package?.id && <span className="mt-1 block text-gold-ink">Các việc trong timeline đã tạo theo sảnh cũ sẽ không tự thay đổi.</span>}
                       </>
                     )
                   }
