@@ -33,6 +33,8 @@ export interface CmpItem {
   ward: string | null;
   rating: number | null;
   reviewCount: number;
+  /** Bình luận của khách trích nguyên văn (mới nhất trước, tối đa MAX_REVIEW_QUOTES); không có thì rỗng */
+  quotes?: { rating: number; content: string }[];
   packages: CmpPackage[];
 }
 
@@ -44,8 +46,13 @@ export interface CmpContext {
   tables: number | null;
   /** Ngân sách hạng mục (Giới hạn của hàm phân bổ); null khi kế hoạch chưa có tổng ngân sách */
   budget: number | null;
-  /** Phường/xã nơi tổ chức (có tiền tố); null thì ẩn dòng Vị trí */
+  /**
+   * Phường/xã để so dòng Vị trí (có tiền tố); null thì ẩn dòng. So trung tâm tiệc: khu vực cặp đôi chọn ở thông tin đám cưới
+   * (chính sảnh mới là nơi tổ chức). Hạng mục khác: phường của trung tâm tiệc trong kế hoạch nếu có (`venueName`), không thì khu vực cặp đôi chọn.
+   */
   weddingWard: string | null;
+  /** Trung tâm tiệc trong kế hoạch có phường trùng `weddingWard` (nơi tổ chức thật); null khi đang dùng khu vực cặp đôi chọn */
+  venueName?: string | null;
   /** Ngày cưới "YYYY-MM-DD"; null thì ẩn dòng Lịch ngày cưới */
   weddingDate?: string | null;
   /** Tên NCC hạng mục này khách đã cọc: các NCC khác không thêm được từ trang So sánh */
@@ -119,6 +126,8 @@ export function defaultPackage(item: CmpItem, ctx: CmpContext) {
 /**
  * Dòng "Bao gồm": 3–4 ý ngắn. Trước hết là thẻ của gói (dữ liệu có cấu trúc), rồi bổ sung cụm ngắn tách từ mô tả
  * (xuống dòng, gạch đầu dòng, chấm, chấm phẩy, dấu phẩy). Bỏ cụm dài, cụm nhắc tên NCC / tên gói, giá, sức chứa (đã có dòng riêng).
+ * Ưu đãi "Tặng kèm …" (bánh cưới, tháp ly của sảnh đủ sức chứa, xem venue-gift.ts) luôn đứng đầu: câu này nằm cuối mô tả nên dễ bị cắt,
+ * mà lại là chỗ khác nhau giữa các sảnh.
  */
 export function includesOf(description: string, tags: string[] = [], names: string[] = []) {
   const fold = (x: string) => x.toLowerCase();
@@ -137,8 +146,9 @@ export function includesOf(description: string, tags: string[] = [], names: stri
     )
     .filter((x) => x.length >= 2 && !skip(x))
     .map((x) => x.charAt(0).toUpperCase() + x.slice(1));
+  const gift = (x: string) => /^tặng kèm/i.test(x);
   const out: string[] = [];
-  for (const x of [...tags.map((t) => `Phong cách ${t.toLowerCase()}`), ...clauses]) {
+  for (const x of [...clauses.filter(gift), ...tags.map((t) => `Phong cách ${t.toLowerCase()}`), ...clauses.filter((x) => !gift(x))]) {
     if (out.length >= MAX_INCLUDES) break;
     if (!out.some((o) => fold(o) === fold(x))) out.push(x);
   }
@@ -234,12 +244,13 @@ export function compareServices(items: CmpItem[], ctx: CmpContext, picked: Recor
     }
 
     // Vị trí: chỉ so khi cả nơi tổ chức và NCC cùng xác định được phường/xã
+    const place = venue || !ctx.venueName ? 'khu vực bạn chọn' : 'nơi tổ chức';
     const location =
       ctx.weddingWard && it.ward
         ? it.ward === ctx.weddingWard
           ? {
               same: true,
-              text: `${shortWard(ctx.weddingWard)}, cùng khu vực nơi tổ chức`,
+              text: `${shortWard(ctx.weddingWard)}, cùng ${place}`,
             }
           : {
               same: false,
@@ -297,6 +308,7 @@ export function compareServices(items: CmpItem[], ctx: CmpContext, picked: Recor
         value: it.reviewCount > 0 ? it.rating : null,
         count: it.reviewCount,
         text: it.reviewCount > 0 && it.rating !== null ? `${it.rating.toLocaleString('vi-VN')}/5 từ ${num(it.reviewCount)} lượt` : 'Chưa có đánh giá',
+        quotes: it.quotes ?? [],
       },
       includes: pkg ? includesOf(pkg.description, pkg.tags, [it.name, pkg.name]) : [],
       canAdd: fits && !full && !(ctx.lockedBy && ctx.lockedBy !== it.name),
@@ -359,7 +371,7 @@ export function compareServices(items: CmpItem[], ctx: CmpContext, picked: Recor
   }
   const located = columns.filter((c) => c.location);
   if (located.length === columns.length && located.some((c) => c.location!.same) && located.some((c) => !c.location!.same)) {
-    summary.push(`${joinNames(located.filter((c) => c.location!.same).map((c) => c.name))} cùng khu vực với địa điểm tổ chức.`);
+    summary.push(`${joinNames(located.filter((c) => c.location!.same).map((c) => c.name))} cùng ${venue || !ctx.venueName ? 'khu vực bạn chọn' : 'khu vực nơi tổ chức'}.`);
   }
   // Mọi bên đều cao hơn mức gợi ý: một dòng chung thay cho nhãn từng cột
   const allOver = columns.length > 0 && columns.every((c) => c.budget?.kind === 'OVER');
@@ -391,10 +403,13 @@ export function compareServices(items: CmpItem[], ctx: CmpContext, picked: Recor
     /** Tên dòng hệ quả: "Nếu đổi nhà cung cấp" khi đã cọc một bên, không thì "Nếu chọn gói này" */
     consequenceLabel: ctx.lockedBy ? 'Nếu đổi nhà cung cấp' : 'Nếu chọn gói này',
     /** Đã cọc một NCC của hạng mục: một cảnh báo chung ở đầu trang (thay cho lý do khóa nút lặp lại ở từng cột) */
-    /** Ghi một lần dưới nhãn dòng Vị trí: "Nơi tổ chức: {phường/xã}" (các ô chỉ ghi phường/xã của NCC) */
-    locationNote: ctx.weddingWard ? `Nơi tổ chức: ${shortWard(ctx.weddingWard)}` : null,
+    /**
+     * Ghi một lần dưới nhãn dòng Vị trí (các ô chỉ ghi phường/xã của NCC): chỉ khi kế hoạch đã có trung tâm tiệc,
+     * "Nơi tổ chức: {phường} ({tên trung tâm})". Mốc là khu vực cặp đôi chọn thì không ghi (ô trùng đã có "cùng khu vực bạn chọn").
+     */
+    locationNote: ctx.weddingWard && !venue && ctx.venueName ? `Nơi tổ chức: ${shortWard(ctx.weddingWard)} (${ctx.venueName})` : null,
     lockNote: ctx.lockedBy
-      ? `Bạn đã cọc ${ctx.lockedBy}${ctx.weddingDate ? ` cho ngày cưới ${dayMonth(ctx.weddingDate)}` : ''} nên chưa thêm được nhà cung cấp khác. Đổi nhà cung cấp có thể mất ${vnd(round10k(ctx.lockedDeposit ?? 0))} tiền cọc. Muốn đổi, hãy nhắn ${ctx.lockedBy} hoặc hủy đơn.`
+      ? `Bạn đã cọc ${ctx.lockedBy}${ctx.weddingDate ? ` cho ngày cưới ${dayMonth(ctx.weddingDate)}` : ''} nên chưa thêm được nhà cung cấp khác. Đổi nhà cung cấp có thể mất tiền cọc. Muốn đổi, hãy nhắn ${ctx.lockedBy} hoặc hủy đơn.`
       : null,
     /** Dòng gộp các tiêu chí giống nhau ở mọi bên ("Giống nhau: 30 bàn, đủ cho 300 khách"); các dòng đó ẩn đi */
     sameNote,

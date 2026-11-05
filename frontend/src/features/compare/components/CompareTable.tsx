@@ -3,11 +3,13 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { RESTAURANT_SLUG as VENUE_SLUG } from '@/features/vendors/constants'
 import { Button } from '@/components/ui/button'
+import { StarRating } from '@/features/catalog/components/StarRating'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { ServiceDetail } from '@/types/catalog'
 import type { CompareColumn, CompareResult } from '@/types/compare'
+import { shortVendorName } from '@/lib/vendorName'
 
 interface CompareTableProps {
   result: CompareResult
@@ -168,11 +170,33 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
       label: 'Đánh giá',
       cell: (c) => (
         <>
-          {c.rating.value === null ? <Muted>{c.rating.text}</Muted> : c.rating.text}
+          {c.rating.value === null ? (
+            <Muted>{c.rating.text}</Muted>
+          ) : (
+            // 5 sao vàng như trang chi tiết dịch vụ, kèm điểm và số lượt đánh giá
+            <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <StarRating value={c.rating.value} size={16} />
+              <b className="font-semibold tabular-nums">{c.rating.value.toLocaleString('vi-VN')}</b>
+              <span className="text-muted-foreground">({c.rating.count} đánh giá)</span>
+            </span>
+          )}
           {c.labels.topRated && (
             <div>
               <RowBadge>Điểm cao nhất</RowBadge>
             </div>
+          )}
+          {/* Bình luận của khách trích nguyên văn (mới nhất trước); dài thì gọn 4 dòng, rê chuột xem đủ */}
+          {c.rating.quotes.length > 0 && (
+            <ul className="mt-3 space-y-2.5">
+              {c.rating.quotes.map((q, i) => (
+                <li key={i} className="border-l-2 border-line pl-3">
+                  <StarRating value={q.rating} size={12} />
+                  <p className="mt-0.5 line-clamp-4 text-[14px] text-ink-2 italic" title={q.content}>
+                    “{q.content}”
+                  </p>
+                </li>
+              ))}
+            </ul>
           )}
         </>
       ),
@@ -209,7 +233,9 @@ export function CompareTable({ result, onPick, updating, renderAdd, renderQuote 
             {pairs.map(({ c }) => (
               <th key={c.id} scope="col" className="compare-vendor px-4 pt-[18px] pb-2.5 text-left align-top font-normal">
                 <div className={cn(faded(c) && 'opacity-55')}>
-                  <span className="compare-vendor-name font-serif text-[17px] font-semibold">{c.name}</span>
+                  <span className="compare-vendor-name font-serif text-[17px] font-semibold" title={c.name}>
+                    {shortVendorName(c.name)}
+                  </span>
                 </div>
                 {withDay && c.availability && (
                   <div>

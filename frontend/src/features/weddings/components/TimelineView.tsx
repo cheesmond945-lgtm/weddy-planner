@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
-import type { PrepLevel, TimelineItem, Wedding } from '@/types/wedding'
+import type { TimelineItem, Wedding } from '@/types/wedding'
 import { useTimeline, useTimelineMutations } from '../hooks'
 import { dateConflictOf, groupByTime, orderProgress, parseView, type ViewMode } from '../timelineGroups'
-import { chatDraft, filterTimeline, processChangeDraft, hasFilters, isDueSoon, isOverdue, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
+import { chatDraft, filterTimeline, processChangeDraft, hasFilters, monthOptions, type OwnerFilter, type TimelineFilters as Filters } from '../timelineFilter'
 import { CompleteTaskDialog, DeleteTaskDialog } from './TimelineConfirmDialogs'
 import { AddTaskDialog, EditMilestoneDialog } from './TimelineDialogs'
 import { TimelineServiceSummary } from './TimelineServiceSummary'
@@ -57,46 +57,6 @@ function WaitingBanner({ count, onPick }: { count: number; onPick: () => void })
 }
 
 /**
- * Dải tổng hợp việc cần chú ý: quá hạn và sắp đến hạn (còn 0 đến 2 ngày). Bấm để xem đúng nhóm đó ở cách xem THEO THỜI GIAN.
- * Cùng ngưỡng với thông báo (chuông) để hai nơi nói cùng một chuyện.
- */
-function DeadlineBanner({ overdue, soon, onPick }: { overdue: number; soon: number; onPick: (month: 'overdue' | 'soon') => void }) {
-  if (!overdue && !soon) return null
-  const btn = 'font-semibold underline underline-offset-2 hover:opacity-80'
-  return (
-    <div role="status" className={cn('mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border px-4 py-3 text-sm', overdue ? 'border-warn bg-warn-soft text-warn' : 'border-gold-500 bg-gold-100 text-gold-800')}>
-      {overdue > 0 && (
-        <button type="button" className={btn} onClick={() => onPick('overdue')}>
-          {overdue} việc quá hạn
-        </button>
-      )}
-      {soon > 0 && (
-        <button type="button" className={btn} onClick={() => onPick('soon')}>
-          {soon} việc sắp đến hạn
-        </button>
-      )}
-    </div>
-  )
-}
-
-/** Banner khi thời gian chuẩn bị ngắn (mức Gấp / Rất gấp). */
-function UrgencyBanner({ level, daysLeft }: { level: PrepLevel | null; daysLeft: number | null }) {
-  if (level !== 'SOON' && level !== 'VERY_SOON') return null
-  const very = level === 'VERY_SOON'
-  return (
-    <div role="status" className={cn('mb-4 rounded-lg border px-4 py-3 text-sm', very ? 'border-warn bg-warn-soft text-warn' : 'border-gold-500 bg-gold-100 text-gold-800')}>
-      {very ? (
-        <>
-          <b className="font-semibold">Thời gian chuẩn bị rất ngắn</b>, ưu tiên chốt các dịch vụ chính trước.
-        </>
-      ) : (
-        <>Còn {daysLeft} ngày nữa đến đám cưới, thời gian chuẩn bị khá gấp. Lịch bên dưới đã được rút gọn cho kịp.</>
-      )}
-    </div>
-  )
-}
-
-/**
  * Trang Timeline khi đã có thông tin đám cưới: danh sách theo hạn tăng dần, lọc Chưa xong / Đã xong / Tất cả (?show=) và theo hạng mục (?category=).
  * Việc chi tiết của dịch vụ đã cọc nằm TRONG thẻ nhóm của Mốc chốt; Mốc chốt chưa cọc là một thẻ riêng có dòng "N việc chi tiết mở sau khi bạn đặt cọc".
  */
@@ -135,7 +95,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
     )
   }
 
-  const { items, level, daysLeft } = timeline.data
+  const { items } = timeline.data
   const slugOf = (i: TimelineItem) => i.category?.slug ?? ''
   const tab = (i: TimelineItem) => show === 'all' || (show === 'done' ? i.isDone : !i.isDone)
 
@@ -180,8 +140,6 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       { replace: true, preventScrollReset: true },
     )
   const waitingCount = items.filter((i) => i.kind === 'SERVICE_TASK' && i.status === 'Waiting').length
-  const overdueCount = items.filter((i) => i.kind !== 'LOCKED' && isOverdue(i, nowISO)).length
-  const soonCount = items.filter((i) => i.kind !== 'LOCKED' && isDueSoon(i, nowISO)).length
   const setFilters = (patch: Partial<Filters>) => setParam({ ...(patch.q !== undefined && { q: patch.q.trim() }), ...(patch.month !== undefined && { month: patch.month }), ...(patch.owner !== undefined && { owner: patch.owner === 'all' ? '' : (patch.owner as OwnerFilter) }) })
   const resetFilters = () => setParam({ q: '', month: '', owner: '', category: '' })
   const setLeave = (id: string, on: boolean) =>
@@ -222,13 +180,11 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   }
 
   const chip = (active: boolean) =>
-    cn('rounded-pill border px-3.5 py-1.5 text-[13px] font-medium transition-colors', active ? 'border-ink bg-ink text-bg' : 'border-line bg-surface text-ink hover:border-primary')
+    cn('rounded-pill border px-3.5 py-1.5 text-[13px] font-medium transition-colors', active ? 'border-(--accent) bg-(--accent) text-(--accent-ink)' : 'border-line bg-surface text-ink hover:border-primary')
 
   return (
     <>
-      <UrgencyBanner level={level} daysLeft={daysLeft} />
       <WaitingBanner count={waitingCount} onPick={() => { setView('time'); setParam({ month: '', q: '', owner: 'mine', category: '', show: 'todo' }) }} />
-      <DeadlineBanner overdue={overdueCount} soon={soonCount} onPick={(m) => { setView('time'); setParam({ month: m, q: '', owner: '', category: '', show: '' }) }} />
 
       {/* Tab Timeline trong Kế hoạch của tôi: lọc trạng thái bên trái, nút Thêm việc bên phải (thông tin đám cưới đã ở đầu trang Kế hoạch) */}
       <div className="flex flex-wrap items-center justify-between gap-3">

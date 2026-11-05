@@ -55,6 +55,13 @@ Response 200
 
 `serviceCount`: số dịch vụ đang hiển thị của danh mục (không phụ thuộc bộ lọc khác). Không phân trang (danh sách ngắn).
 
+### GET /categories/min-costs?guests=300
+Chi phí thấp nhất của từng hạng mục cho số khách (công khai): min chi phí ước tính các NCC đang hiển thị, cùng cách tính với tìm kiếm (nhà hàng = đơn giá bàn × max(số bàn dự kiến, số bàn tối thiểu của gói), gói đủ chỗ nếu biết số khách). Form thông tin đám cưới dùng để chặn tổng ngân sách nhỏ hơn gói rẻ nhất trên Forever, hoặc nhỏ hơn tổng giá thấp nhất của các dịch vụ đã chọn.
+
+```json
+{ "data": [{ "slug": "nha-hang", "minCost": 135000000 }, { "slug": "decor", "minCost": 10000000 }] }
+```
+
 ### GET /services/locations
 Role: Public
 

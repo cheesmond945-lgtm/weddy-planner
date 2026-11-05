@@ -40,6 +40,13 @@ export class ServicesController {
     return this.services.categories();
   }
 
+  /** Chi phí thấp nhất từng hạng mục cho số khách (?guests=300): form thông tin đám cưới kiểm tra ngân sách tối thiểu */
+  @Get('categories/min-costs')
+  minCosts(@Query('guests') guests = '0') {
+    const n = Math.min(Math.max(0, Math.floor(Number(guests) || 0)), 5000);
+    return this.services.minCosts(n);
+  }
+
   @Get('services/locations')
   locations() {
     return this.services.locations();

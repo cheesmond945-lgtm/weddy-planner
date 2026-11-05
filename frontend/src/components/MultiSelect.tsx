@@ -54,7 +54,7 @@ export function MultiSelect({ options, value, onChange, placeholder, allLabel, m
         aria-controls={panelId}
         aria-invalid={invalid || undefined}
         onClick={() => setOpen((o) => !o)}
-        className="flex min-h-10 w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border border-line bg-white/85 px-3.5 py-2 text-left text-sm font-medium text-ink hover:border-gold aria-expanded:border-gold aria-invalid:border-destructive"
+        className="flex min-h-10 w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border border-line bg-surface/85 px-3.5 py-2 text-left text-sm font-medium text-ink hover:border-gold aria-expanded:border-gold aria-invalid:border-destructive"
         {...aria}
       >
         {icon && (
@@ -86,7 +86,7 @@ export function MultiSelect({ options, value, onChange, placeholder, allLabel, m
                 key={o.value}
                 className={cn(
                   'inline-flex cursor-pointer items-center gap-1.5 rounded-pill border px-3 py-1.5 text-[13px] font-medium transition-colors select-none has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ring',
-                  checked ? 'border-gold bg-gold-100 text-gold-800' : 'border-line bg-white/70 text-ink-2 hover:border-gold hover:text-ink',
+                  checked ? 'border-gold bg-gold-100 text-gold-800' : 'border-line bg-surface/70 text-ink-2 hover:border-gold hover:text-ink',
                 )}
               >
                 <input type="checkbox" checked={checked} onChange={() => toggle(o.value)} className="sr-only" />

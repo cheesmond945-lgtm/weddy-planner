@@ -3,6 +3,18 @@
  * File này chỉ khai báo giá trị thô. Tên dùng trong class Tailwind nằm ở theme.css.
  */
 :root {
+  /*
+   * Biến vốn chỉ có ở cổng NCC / Admin (vendor.css) nhưng component phía khách cũng dùng (Timeline, Ngân sách):
+   * khai báo mặc định theo bộ màu khách để không bị rỗng; tham chiếu biến nên tự theo chế độ tối và .plan-theme.
+   * Cổng NCC / Admin gán lại giá trị riêng trong vendor.css.
+   */
+  --surface-2: color-mix(in srgb, var(--surface) 60%, var(--bg));
+  --line-strong: color-mix(in srgb, var(--line) 82%, var(--ink));
+  --gold-soft: var(--accent-soft);
+  --gold-ink: var(--gold-800);
+  --gold-grad: linear-gradient(var(--accent), var(--accent));
+  --gold-on: var(--accent-ink);
+
   /* Nền và chữ */
   --bg: #fbf7ee;
   --surface: #fffdf8;

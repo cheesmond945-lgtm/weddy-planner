@@ -30,7 +30,7 @@ export function hintOf(o: Order): ReactNode {
     case 'Completed':
       return 'Đơn đã hoàn thành.'
     case 'Expired':
-      return 'Đơn đã hết hạn đặt cọc. Nhắn NCC nếu bạn vẫn muốn đặt.'
+      return 'Đơn đã hết hạn đặt cọc. Nhắn tin cho NCC nếu bạn vẫn muốn đặt.'
     case 'Cancelled':
       return o.cancelReason === 'VENDOR_UNABLE'
         ? 'NCC đã hủy đơn vì không thể thực hiện. NCC sẽ hoàn cọc cho bạn.'

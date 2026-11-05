@@ -161,14 +161,18 @@ export interface Overview {
     total: number
     overdue: number
     upcoming: { id: string; title: string; dueDate: string; daysLeft: number; category: CategoryRef | null }[]
-    /** slug null là "Việc chung" */
-    byCategory: { slug: string | null; name: string; done: number; total: number }[]
+    /** Tiến độ theo dịch vụ (việc không gắn dịch vụ không có nhóm riêng) */
+    byCategory: { slug: string; name: string; done: number; total: number }[]
   } | null
+  /** Số hạng mục theo trạng thái (total không gồm tự lo); null khi không được xem tab Dịch vụ */
+  services: { total: number; deposited: number; ordered: number; planned: number; open: number; own: number } | null
   /** null khi không được xem tab Ngân sách */
   budget: {
     total: number
     planned: number
     deposited: number
+    /** Tiền cọc đã mất của đơn bị hủy (đã trả, nằm trong planned) */
+    lostDeposits: number
     remaining: number
     /** Chi phí theo hạng mục; slug "other" là Chi phí khác */
     slices: { slug: string; name: string; amount: number; budget: number; isOver: boolean }[]

@@ -262,3 +262,22 @@
     background-color: var(--accent-hover);
   }
 }
+
+/* Hộp chat nổi (góc dưới phải, rộng 360px) đang mở: thông báo nhanh và khay so sánh dời sang trái để không bị che (máy tính) */
+@media (min-width: 901px) {
+  :root[data-chat='open'] .toaster-wrap {
+    padding-right: 408px;
+  }
+  :root[data-chat='open'] .compare-tray {
+    left: 24px;
+    translate: none;
+    width: min(880px, calc(100% - 432px));
+  }
+}
+
+/* Điện thoại: khay so sánh chiếm mép dưới, nút về đầu trang nổi lên trên khay thay vì đè lên chip đầu tiên */
+@media (max-width: 639px) {
+  body:has(.compare-tray) .back-to-top {
+    bottom: 104px;
+  }
+}

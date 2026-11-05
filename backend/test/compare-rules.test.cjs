@@ -38,9 +38,18 @@ test('hòa chi phí: không gắn nhãn, không có câu rẻ hơn', () => {
 test('một cùng khu vực, một khác: tóm tắt có câu vị trí; chưa chọn nơi tổ chức thì ẩn dòng Vị trí', () => {
   const items = [item('A', [pkg('a', 10 * M)], { ward: 'Phường Cầu Giấy' }), item('B', [pkg('b', 12 * M)], { ward: 'Phường Đống Đa' })];
   const r = c.compareServices(items, { slug: 'decor', guestCount: 300, tables: 30, budget: 20 * M, weddingWard: 'Phường Cầu Giấy' });
-  assert.equal(r.columns[0].location.text, 'Cầu Giấy, cùng khu vực nơi tổ chức');
+  assert.equal(r.columns[0].location.text, 'Cầu Giấy, cùng khu vực bạn chọn');
   assert.equal(r.columns[1].location.text, 'Đống Đa');
-  assert.ok(r.summary.includes('A cùng khu vực với địa điểm tổ chức.'));
+  assert.ok(r.summary.includes('A cùng khu vực bạn chọn.'));
+  assert.equal(r.locationNote, null);
+  // Kế hoạch đã có trung tâm tiệc: phường của sảnh là nơi tổ chức thật
+  const atVenue = c.compareServices(items, { slug: 'decor', guestCount: 300, tables: 30, budget: 20 * M, weddingWard: 'Phường Cầu Giấy', venueName: 'Mipec Place' });
+  assert.equal(atVenue.locationNote, 'Nơi tổ chức: Cầu Giấy (Mipec Place)');
+  assert.equal(atVenue.columns[0].location.text, 'Cầu Giấy, cùng nơi tổ chức');
+  assert.ok(atVenue.summary.includes('A cùng khu vực nơi tổ chức.'));
+  // So trung tâm tiệc: luôn là khu vực bạn chọn (chính sảnh là nơi tổ chức)
+  const venues = c.compareServices(items, venueCtx({ weddingWard: 'Phường Cầu Giấy', venueName: 'Mipec Place' }));
+  assert.equal(venues.locationNote, null);
   const none = c.compareServices(items, { slug: 'decor', guestCount: 300, tables: 30, budget: 20 * M, weddingWard: null });
   assert.equal(none.rows.location, false);
   assert.ok(none.columns.every((x) => x.location === null));
@@ -114,6 +123,15 @@ test('dòng Bao gồm: thẻ của gói trước, rồi cụm ngắn từ mô t�
   assert.ok(r.length <= 4 && r.every((x) => x.length <= 60 && !/giá|Ha Vy/.test(x)));
 });
 
+test('dòng Bao gồm: ưu đãi tặng bánh cưới, tháp ly (câu gần cuối mô tả) luôn đứng đầu, không bị cắt', () => {
+  const desc = 'Sảnh riêng, MC, ban nhạc, hoa bàn, cổng hoa, màn LED. Tặng kèm bánh cưới và tháp ly. Mức giá từ 3.500.000đ/bàn.';
+  const r = c.includesOf(desc, ['Sang trọng']);
+  assert.equal(r[0], 'Tặng kèm bánh cưới và tháp ly');
+  assert.equal(r[1], 'Phong cách sang trọng');
+  assert.equal(r.length, 4);
+  assert.ok(!c.includesOf('Sảnh riêng, MC, ban nhạc.').some((x) => /bánh|tháp ly/.test(x)));
+});
+
 test('lịch ngày cưới: bên đã kín làm mờ, không so giá, khóa nút; gói mặc định bỏ qua sảnh đã kín', () => {
   const items = [
     item('Trống Đồng', [pkg('t1', 5 * M, { capacity: 400 })], { availability: { t1: 'FULL' } }),
@@ -165,7 +183,7 @@ test('đã cọc một NCC: lịch "Đã giữ … cho bạn", khóa ô chọn g
   // Một bên là giá đơn thật: không so "rẻ hơn", không gắn "Chi phí thấp nhất"
   assert.ok(r.columns.every((x) => !x.labels.cheapest));
   assert.deepEqual(r.summary, []);
-  assert.equal(r.lockNote, 'Bạn đã cọc Trống Đồng cho ngày cưới 28/11 nên chưa thêm được nhà cung cấp khác. Đổi nhà cung cấp có thể mất 2.000.000đ tiền cọc. Muốn đổi, hãy nhắn Trống Đồng hoặc hủy đơn.');
+  assert.equal(r.lockNote, 'Bạn đã cọc Trống Đồng cho ngày cưới 28/11 nên chưa thêm được nhà cung cấp khác. Đổi nhà cung cấp có thể mất tiền cọc. Muốn đổi, hãy nhắn Trống Đồng hoặc hủy đơn.');
 });
 
 test('mọi bên cao hơn mức gợi ý: một dòng chung; hệ quả "Chọn gói này thì còn X" làm tròn 10.000đ; dòng giống nhau được gộp', () => {

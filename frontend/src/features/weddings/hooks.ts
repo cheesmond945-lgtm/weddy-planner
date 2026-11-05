@@ -3,7 +3,7 @@ import { weddingsApi } from '@/api/weddings'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/store/auth'
 import { ApiError } from '@/api/client'
-import type { Budget, BudgetSettings, NewTask, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
+import type { Budget, BudgetSettings, NewTask, PlanItem, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
 
 /** Khóa cache theo người dùng để đổi tài khoản không lẫn dữ liệu. */
 export const planningKeys = {
@@ -91,13 +91,19 @@ export function usePlan() {
   return useQuery({ queryKey: planningKeys.plan(uid), queryFn: weddingsApi.getPlan, enabled: !!uid })
 }
 
+/**
+ * Bỏ NCC khỏi kế hoạch (tin nhắn, đơn giữ nguyên). Có Hoàn tác: thêm lại đúng gói khách đã chọn (gói dự kiến thì để backend tự chọn).
+ */
 export function useRemovePlanItem() {
   const refresh = useRefreshPlanning()
   return useMutation({
-    mutationFn: weddingsApi.removePlanItem,
-    onSuccess: () => {
-      toast('Đã bỏ dịch vụ khỏi kế hoạch')
+    mutationFn: (item: PlanItem) => weddingsApi.removePlanItem(item.id),
+    onSuccess: (_, item) => {
       void refresh()
+      const packageId = item.package?.source === 'SELECTED' ? item.package.id : null
+      toast(`Đã bỏ ${item.service.name} khỏi kế hoạch`, {
+        action: { label: 'Hoàn tác', onClick: () => void weddingsApi.addPlanItem(item.id, false, packageId).then(refresh, (e: Error) => toast(e.message)) },
+      })
     },
     onError: (e) => toast(e.message),
   })

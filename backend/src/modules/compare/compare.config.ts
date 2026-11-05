@@ -9,6 +9,8 @@ export const VENUE_SLUG = 'nha-hang';
 
 /** Nhãn "Điểm cao nhất" chỉ gắn khi mọi bên đều có ít nhất số lượt đánh giá này */
 export const MIN_REVIEWS = 3;
+/** Số bình luận của khách trích nguyên văn ở dòng Đánh giá (mới nhất trước) */
+export const MAX_REVIEW_QUOTES = 2;
 
 /** Câu "có sức chứa lớn hơn" chỉ ghi khi chênh lệch từ số khách này trở lên */
 export const CAPACITY_NOTABLE_GAP = 50;

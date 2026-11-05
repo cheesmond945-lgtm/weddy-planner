@@ -236,6 +236,22 @@ export class ServicesService {
   }
 
   /**
+   * Chi phí thấp nhất của từng hạng mục cho số khách dự kiến (form thông tin đám cưới kiểm tra tổng ngân sách đủ tối thiểu):
+   * min chi phí ước tính của các NCC đang hiển thị (cùng cách tính với tìm kiếm). Hạng mục chưa có NCC thì bỏ qua.
+   */
+  async minCosts(guests: number) {
+    const vendors = await this.loadVisible();
+    const expected: Expected = { guestCount: guests > 0 ? guests : null, tables: Math.max(1, Math.ceil(guests / GUESTS_PER_TABLE)) };
+    const out = new Map<string, number>();
+    for (const v of vendors) {
+      const slug = categorySlug(v.service_categories?.name ?? null);
+      const cost = this.estimatedCost(v, expected);
+      if (slug && cost > 0 && cost < (out.get(slug) ?? Infinity)) out.set(slug, cost);
+    }
+    return [...out].map(([slug, minCost]) => ({ slug, minCost }));
+  }
+
+  /**
    * Chi phí ước tính của một NCC (dùng cho dropdown Mức giá và tìm kiếm, không bao giờ so đơn giá bàn):
    * dịch vụ thường = giá gói thấp nhất; nhà hàng = min theo gói (đủ chỗ nếu biết số khách) của đơn giá × max(số bàn dự kiến, số bàn tối thiểu, 1).
    */

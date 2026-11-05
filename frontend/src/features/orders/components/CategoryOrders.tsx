@@ -15,8 +15,9 @@ const closed = (o: Order) => o.status === 'Expired' || o.status === 'Cancelled'
  * Đơn của một hạng mục trên trang Kế hoạch của tôi (mới nhất trước): mỗi đơn một dòng gọn (mã đơn, trạng thái, tổng tiền,
  * hạn cọc nếu đang chờ cọc), bấm "Xem chi tiết đơn hàng" mở popup có thẻ đơn đầy đủ (thanh toán cọc, yêu cầu chỉnh sửa, hóa đơn,
  * nhắn NCC). Đơn hết hạn / đã hủy thu gọn sau nút "Xem …" để hạng mục không dài khi NCC đã tạo lại đơn nhiều lần.
+ * `embedded`: nằm trong thẻ nhà cung cấp (dưới đường kẻ), không tiêu đề, dòng không viền riêng.
  */
-export function CategoryOrders({ orders, onRevise }: { orders: Order[]; onRevise: (o: Order) => void }) {
+export function CategoryOrders({ orders, onRevise, embedded = false }: { orders: Order[]; onRevise: (o: Order) => void; embedded?: boolean }) {
   const [showClosed, setShowClosed] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   if (!orders.length) return null
@@ -27,13 +28,13 @@ export function CategoryOrders({ orders, onRevise }: { orders: Order[]; onRevise
   const opened = orders.find((o) => o.id === openId) ?? null
 
   return (
-    <div className="mt-3">
-      <h3 className="mb-2 font-sans text-[13px] font-semibold tracking-[0.04em] text-muted-foreground uppercase">Đơn hàng ({orders.length})</h3>
+    <div className={embedded ? '' : 'mt-3'}>
+      {!embedded && <h3 className="mb-2 font-sans text-[13px] font-semibold tracking-[0.04em] text-muted-foreground uppercase">Đơn hàng ({orders.length})</h3>}
       {shown.length > 0 && (
-        <ul className="flex flex-col gap-2">
+        <ul className={cn('flex flex-col', embedded ? 'gap-0.5' : 'gap-2')}>
           {shown.map((o) => (
             <li key={o.id}>
-              <OrderRow order={o} onOpen={() => setOpenId(o.id)} />
+              <OrderRow order={o} embedded={embedded} onOpen={() => setOpenId(o.id)} />
             </li>
           ))}
         </ul>
@@ -61,18 +62,22 @@ export function CategoryOrders({ orders, onRevise }: { orders: Order[]; onRevise
   )
 }
 
-/** Một dòng đơn: mã đơn, trạng thái, tổng tiền; đang chờ cọc thì kèm hạn cọc (để không bị bỏ sót khi chi tiết nằm trong popup) */
-function OrderRow({ order: o, onOpen }: { order: Order; onOpen: () => void }) {
+/** Một dòng đơn: mã đơn, trạng thái, gói (sảnh), tổng tiền; đang chờ cọc thì kèm hạn cọc (để không bị bỏ sót khi chi tiết nằm trong popup) */
+function OrderRow({ order: o, onOpen, embedded }: { order: Order; onOpen: () => void; embedded: boolean }) {
   const status = ORDER_STATUS[o.status]
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-line bg-surface px-4 py-3 text-left text-sm transition-colors hover:border-primary"
+      className={cn(
+        'group flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-left text-sm transition-colors',
+        embedded ? '-mx-2.5 w-[calc(100%+20px)] rounded-lg px-2.5 py-2 hover:bg-accent-soft/60' : 'rounded-xl border border-line bg-surface px-4 py-3 hover:border-primary',
+      )}
     >
       <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       <span className="font-semibold">Đơn {o.orderCode}</span>
       <Badge tone={status.tone}>{status.label}</Badge>
+      {o.package && <span className="text-muted-foreground">{o.package.name}</span>}
       {/* Ghi rõ "Tổng" để không nhầm với tiền cọc (con số đứng ngay sau nhãn "Đã đặt cọc"); đã cọc thì ghi thêm số đã cọc */}
       <span className="text-muted-foreground">
         Tổng <b className="font-medium text-ink tabular-nums">{formatMoney(o.totalAmount)}</b>

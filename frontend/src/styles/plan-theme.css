@@ -26,6 +26,11 @@
     --accent-soft: #e8ebd9;
     --gold-100: #efe9d2;
     --moss-700: #4a5734;
+    /* Chữ, viền "vàng" của component dùng chung (link, nhãn, viền thẻ đang chọn) chuyển sang xanh rêu cho cùng tông */
+    --gold: #55633f;
+    --gold-500: #8a9468;
+    --gold-700: #4a5734;
+    --gold-800: #3d482b;
   }
 }
 :root[data-theme='light'] body {
@@ -41,17 +46,34 @@
   --accent-soft: #e8ebd9;
   --gold-100: #efe9d2;
   --moss-700: #4a5734;
+  /* Chữ, viền "vàng" của component dùng chung (link, nhãn, viền thẻ đang chọn) chuyển sang xanh rêu cho cùng tông */
+  --gold: #55633f;
+  --gold-500: #8a9468;
+  --gold-700: #4a5734;
+  --gold-800: #3d482b;
 }
 
 /* Thẻ như giấy: vân giấy + bóng đổ mềm, viền ngả xanh */
-:root:not([data-theme='dark']) .plan-theme .bg-surface {
+/* Chỉ chế độ sáng: chọn sáng, hoặc chưa chọn mà máy đang sáng (máy tối thì giữ bộ màu tối) */
+:root[data-theme='light'] .plan-theme .bg-surface {
   background-image: var(--paper-grain);
 }
-:root:not([data-theme='dark']) .plan-theme :is(section, article).rounded-lg.border,
-:root:not([data-theme='dark']) .plan-theme a.rounded-lg.border {
+:root[data-theme='light'] .plan-theme :is(section, article).rounded-lg.border,
+:root[data-theme='light'] .plan-theme a.rounded-lg.border {
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.7),
     0 14px 30px -22px rgb(52 62 34 / 0.45);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .plan-theme .bg-surface {
+    background-image: var(--paper-grain);
+  }
+  :root:not([data-theme]) .plan-theme :is(section, article).rounded-lg.border,
+  :root:not([data-theme]) .plan-theme a.rounded-lg.border {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.7),
+      0 14px 30px -22px rgb(52 62 34 / 0.45);
+  }
 }
 
 /* Tiêu đề trong nội dung kế hoạch: Playfair Display (cùng font tiêu đề toàn web) */
@@ -389,14 +411,24 @@
   background: #6f7444;
 }
 
-/* Biểu đồ trong Kế hoạch (Donut, CHART_COLORS): pastel tươi trên nền kem, "Chi phí khác" màu be nhạt */
+/* Biến "vàng" của component dùng chung (tokens.css) tính lại theo màu nhấn xanh rêu của Kế hoạch */
 .plan-theme {
-  --chart-1: #f29bb2;
-  --chart-2: #7fd1b0;
-  --chart-3: #f8b686;
-  --chart-4: #93c3ee;
-  --chart-5: #b7a3ec;
-  --chart-6: #f1d06f;
+  --gold-soft: var(--accent-soft);
+  --gold-grad: linear-gradient(var(--accent), var(--accent));
+  --gold-on: var(--accent-ink);
+}
+
+/*
+ * Biểu đồ trong Kế hoạch (Donut, CHART_COLORS): màu tươi sáng tông ấm, hợp nền kem và xanh rêu (san hô, lá non, mật ong,
+ * xanh ngọc nhạt, hồng lan, vàng bơ); không dùng màu tối. "Chi phí khác" màu be nhạt
+ */
+.plan-theme {
+  --chart-1: #ec9f9a;
+  --chart-2: #a8cc86;
+  --chart-3: #f4c17a;
+  --chart-4: #8cc5bc;
+  --chart-5: #dba8cc;
+  --chart-6: #f1dc8a;
   --chart-other: #e2dccb;
 }
 :root[data-theme='dark'] .plan-theme {
@@ -412,18 +444,37 @@
  * Tab Dịch vụ (.services-page): thẻ giấy trắng sáng hơn nền trang (như tab Ngân sách) để nổi, bỏ vân giấy trên thẻ, viền ấm rõ hơn,
  * bóng nhấc nhẹ; ô hạng mục chưa chọn nền trắng mờ để không chìm vào nền.
  */
-:root:not([data-theme='dark']) .services-page {
+/* Chỉ chế độ sáng: chọn sáng, hoặc chưa chọn mà máy đang sáng (máy tối thì giữ bộ màu tối) */
+:root[data-theme='light'] .services-page {
   --surface: #fffefb;
   --line: #e4ddcd;
 }
-:root:not([data-theme='dark']) .services-page .bg-surface {
+:root[data-theme='light'] .services-page .bg-surface {
   background-image: none;
 }
-:root:not([data-theme='dark']) .services-page :is(article.border, li > button.border) {
+:root[data-theme='light'] .services-page :is(article.border, li > button.border) {
   box-shadow:
     0 1px 2px rgb(60 45 25 / 0.06),
     0 12px 26px -20px rgb(60 45 25 / 0.35);
 }
-:root:not([data-theme='dark']) .services-page .border-dashed {
+:root[data-theme='light'] .services-page .border-dashed {
   background-color: rgb(255 254 251 / 0.6);
 }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .services-page {
+    --surface: #fffefb;
+    --line: #e4ddcd;
+  }
+  :root:not([data-theme]) .services-page .bg-surface {
+    background-image: none;
+  }
+  :root:not([data-theme]) .services-page :is(article.border, li > button.border) {
+    box-shadow:
+      0 1px 2px rgb(60 45 25 / 0.06),
+      0 12px 26px -20px rgb(60 45 25 / 0.35);
+  }
+  :root:not([data-theme]) .services-page .border-dashed {
+    background-color: rgb(255 254 251 / 0.6);
+  }
+}
+

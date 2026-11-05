@@ -1,21 +1,20 @@
 /*
  * Tab Ngân sách (.budget-theme, đặt cùng .plan-theme để lấy bộ màu xanh rêu / giấy kem của moodboard).
- * - Chữ Lexend (hình học, tròn, đủ dấu tiếng Việt, số dễ đọc) cho cả trang, kể cả số tiền và tiêu đề.
+ * - Chữ thường cùng font chung của web (Be Vietnam Pro, var(--sans)) để chuyển tab Kế hoạch không đổi kiểu chữ; số tiền chữ số đều.
  * - Thẻ bo tròn lớn, viền mảnh, nền kem; thanh kéo màu xanh rêu; bảng thoáng, tiêu đề cột chữ nhỏ in hoa.
  * Chế độ tối giữ bộ màu tối hiện có, chỉ đổi font và hình khối.
  */
 .budget-theme {
-  --budget-font: 'Lexend', 'Be Vietnam Pro', system-ui, sans-serif;
+  --budget-font: var(--sans);
   font-family: var(--budget-font);
-  font-weight: 300;
-  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
 }
 
 .budget-theme :is(strong, b, th, button, label, dt, dd, .font-medium, .font-semibold):not(h1, h2, h3) {
   font-family: var(--budget-font);
 }
 
-/* Số liệu: bỏ serif của thẻ số, dùng Lexend chữ số đều nhau */
+/* Số liệu: bỏ serif của thẻ số, dùng font chung chữ số đều nhau */
 .budget-theme .font-serif:not(h1, h2, h3) {
   font-family: var(--budget-font);
   font-weight: 500;
@@ -148,7 +147,7 @@
 }
 
 
-/* Khung Mức chia: dòng Tiệc dạng nhãn bo tròn, hộp hướng dẫn tím nhạt */
+/* Khung Mức chia: dòng Tiệc dạng nhãn bo tròn, hộp hướng dẫn nền rêu nhạt (cùng tông trang) */
 .budget-chip {
   border-radius: 999px;
   padding: 4px 12px;
@@ -161,13 +160,20 @@
 .budget-note {
   border-radius: 14px;
   padding: 10px 14px;
-  background: #ece8f6;
-  color: #463c6b;
+  background: var(--accent-soft);
+  color: var(--moss-700);
 }
 :root[data-theme='dark'] .budget-chip,
 :root[data-theme='dark'] .budget-note {
-  background: color-mix(in srgb, #e8e4f4 14%, #1b1d16);
-  color: #ddd6f3;
+  background: color-mix(in srgb, #dfe8cf 14%, #1b1d16);
+  color: #d8e2c6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .budget-chip,
+  :root:not([data-theme='light']) .budget-note {
+    background: color-mix(in srgb, #dfe8cf 14%, #1b1d16);
+    color: #d8e2c6;
+  }
 }
 
 /* Danh sách mức chi khi ba mức có sẵn bị khóa: mỗi dịch vụ một màu pastel (chấm, thanh, nền khi rê chuột) */

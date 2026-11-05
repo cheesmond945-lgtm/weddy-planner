@@ -10,6 +10,8 @@ import { attrsOf, imagesOf, withoutPrice } from './packageInfo'
 
 interface PackageTilesProps {
   service: ServiceDetail
+  /** Phần thêm cuối khung chi tiết gói (nút chọn gói cho kế hoạch…) */
+  extra?: (pkg: ServicePackage) => ReactNode
 }
 
 /** Số gói tối đa còn dùng ô lớn nổi bật; nhiều hơn thì lưới đều nhau và "Xem thêm" */
@@ -75,7 +77,7 @@ function tileClasses(count: number, featured: boolean): string[] {
  * Khác số đó: lưới đều 3 ô một hàng, quá 6 gói thì hiện 6 và nút "Xem thêm".
  * Bấm ô mở drawer chi tiết gói. Từng gói chỉ để xem: kế hoạch lưu theo NCC nên nút thêm vào kế hoạch chỉ ở khung giá bên phải.
  */
-export function PackageTiles({ service }: PackageTilesProps) {
+export function PackageTiles({ service, extra }: PackageTilesProps) {
   const [opened, setOpened] = useState<ServicePackage | null>(null)
   const [showAll, setShowAll] = useState(false)
 
@@ -113,7 +115,7 @@ export function PackageTiles({ service }: PackageTilesProps) {
         </div>
       )}
 
-      <PackageDrawer service={service} pkg={opened} onClose={() => setOpened(null)} />
+      <PackageDrawer service={service} pkg={opened} extra={opened ? extra?.(opened) : null} onClose={() => setOpened(null)} />
     </>
   )
 }

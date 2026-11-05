@@ -5,7 +5,7 @@ import { MoneyInput } from '@/components/MoneyInput'
 import { MultiSelect } from '@/components/MultiSelect'
 import { SearchSelect, type SearchSelectGroup } from '@/components/SearchSelect'
 import { Button } from '@/components/ui/button'
-import { useCategories, useAreas } from '@/features/catalog/hooks'
+import { useAreas, useCategories, useCategoryMinCosts } from '@/features/catalog/hooks'
 import { addDays, toISODate, today } from '@/lib/date'
 import type { BudgetPreset, Wedding, WeddingInput } from '@/types/wedding'
 import { validateWeddingForm, type WeddingFormErrors } from '../weddingFormRules'
@@ -39,13 +39,24 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
   // Lần đầu: mặc định chọn tất cả dịch vụ như prototype
   const [services, setServices] = useState<string[] | null>(initial?.categorySlugs ?? null)
   const serviceValue = services ?? categories.map((c) => c.slug)
+  // Giá thấp nhất từng hạng mục theo số khách đang nhập: kiểm tra ngân sách đủ tối thiểu cho các dịch vụ đã chọn
+  const { data: minCosts } = useCategoryMinCosts(Number(guestCount) > 0 ? Math.floor(Number(guestCount)) : 0)
   const [errors, setErrors] = useState<Errors>({})
+  const [tried, setTried] = useState(false)
+  const validate = () => validateWeddingForm({ brideName, groomName, date, ward, guestCount, budget, services: serviceValue }, toISODate(today()), minCosts)
+  // Ngân sách và dịch vụ phụ thuộc nhau (và số khách): sau lần bấm lưu đầu, kiểm lại ngay khi sửa một trong ba ô
+  const live = tried ? validate() : {}
+  const budgetError = tried ? live.budget : errors.budget
+  const servicesError = tried ? live.services : errors.services
+  // Còn ô báo đỏ thì làm mờ nút lưu để khách biết phải sửa trước, không nghĩ nút bị lỗi
+  const blocked = Object.values({ ...errors, budget: budgetError, services: servicesError }).some(Boolean)
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    const errs = validateWeddingForm({ brideName, groomName, date, ward, guestCount, budget, services: serviceValue }, toISODate(today()))
+    const errs = validate()
     const guests = guestCount ? Number(guestCount) : null
     setErrors(errs)
+    setTried(true)
     if (Object.keys(errs).length) return
     onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, ward, guestCount: guests, budget, ...(budgetPreset !== 'CUSTOM' && { budgetPreset }), categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
   }
@@ -110,7 +121,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
             setErrors((x) => ({ ...x, guestCount: undefined }))
           }}
           error={errors.guestCount}
-          hint="Nên nhập số khách tối đa dự kiến"
+          hint="Nhập số khách tối đa"
           className={FIELD}
         />
       </div>
@@ -130,7 +141,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
           setBudget(v)
           setErrors((x) => ({ ...x, budget: undefined }))
         }}
-        error={errors.budget}
+        error={budgetError}
       />
 
       <div>
@@ -150,14 +161,14 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
           allLabel="Tất cả dịch vụ"
           maxChips={2}
           selectAll
-          invalid={!!errors.services}
+          invalid={!!servicesError}
         />
-        {errors.services ? (
+        {servicesError ? (
           <p role="alert" className="mt-1.5 text-[13px] text-destructive">
-            {errors.services}
+            {servicesError}
           </p>
         ) : (
-          <p className="mt-1.5 text-xs text-muted-foreground">Dịch vụ đã chọn sẽ được đưa vào timeline khung. Bỏ chọn thì việc của dịch vụ đó tạm ẩn, chọn lại sẽ hiện lại cùng các việc đã tích.</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">Bỏ chọn dịch vụ thì các việc của dịch vụ đó tạm ẩn khỏi timeline.</p>
         )}
       </div>
 
@@ -166,8 +177,9 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
       <FormError message={error} />
 
       <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-line pt-3.5">
+        {blocked && <span className="mr-auto text-xs text-muted-foreground">Sửa các ô báo đỏ để lưu</span>}
         {secondaryAction}
-        <Button type="submit" disabled={pending} className="h-10 gap-2 px-5">
+        <Button type="submit" disabled={pending || blocked} className="h-10 gap-2 px-5">
           {pending ? 'Đang lưu…' : submitLabel}
         </Button>
       </div>
@@ -176,7 +188,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
 }
 
 /** Ô nhập trong form này: cao hơn, bo tròn, nền trắng mờ để nổi trên ảnh nền hộp thiết lập */
-const FIELD = 'h-10 rounded-xl border-line bg-white/85 py-1.5 text-sm'
+const FIELD = 'h-10 rounded-xl border-line bg-surface/85 py-1.5 text-sm'
 
 /** Nhãn trường bắt buộc: dấu * đỏ */
 function Required({ children }: { children: ReactNode }) {

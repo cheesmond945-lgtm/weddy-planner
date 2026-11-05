@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ChevronRight, TriangleAlert } from 'lucide-react'
 import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
@@ -45,9 +46,18 @@ function dueText(daysLeft: number, dueDate: string) {
   return { text: `Hạn ${formatShortDate(dueDate)}`, cls: 'text-muted-foreground' }
 }
 
-/** Ba thẻ số đầu trang: cùng kiểu thẻ số tab Ngân sách (ô giấy kem trên dải ô liu, chú thích bên dưới); Ngân sách bấm được */
+/** Ba thẻ số đầu trang: cùng kiểu thẻ số tab Ngân sách (ô giấy kem trên dải ô liu, chú thích bên dưới); Dịch vụ, Ngân sách bấm được */
 function TopCards({ data }: { data: Overview }) {
-  const { tasks, budget } = data
+  const { tasks, services, budget } = data
+  // Dòng phụ thẻ Dịch vụ: chỉ các trạng thái có số, theo thứ tự cần làm (chờ cọc → dự kiến → chưa chọn), tự lo ghi cuối
+  const serviceSub = services
+    ? [
+        services.ordered && `${services.ordered} chờ cọc`,
+        services.planned && `${services.planned} dự kiến`,
+        services.open && `${services.open} chưa chọn`,
+        services.own && `${services.own} tự lo`,
+      ].filter(Boolean)
+    : []
   return (
     <StatGrid className="grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
       {tasks && (
@@ -67,6 +77,32 @@ function TopCards({ data }: { data: Overview }) {
         >
           <div className="w-full">{progress(tasks.done, tasks.total)}</div>
         </StatCard>
+      )}
+      {services && services.total > 0 && (
+        <Link to={paths.planTab.services} className="olive-link">
+          <StatCard
+            label="Dịch vụ"
+            value={
+              <>
+                {services.deposited}
+                <span className="text-[17px] font-normal text-muted-foreground">/{services.total} đã đặt cọc</span>
+              </>
+            }
+            sub={serviceSub.length ? serviceSub.join(' · ') : 'Đã đặt cọc đủ các dịch vụ'}
+          >
+            <div className="w-full">
+              <StackBar
+                label="Đã cọc, chờ cọc, dự kiến và chưa chọn"
+                parts={[
+                  { title: 'Đã cọc', value: services.deposited, className: 'bg-[#6f7444]' },
+                  { title: 'Chờ cọc', value: services.ordered, className: 'bg-[#c9b37a]' },
+                  { title: 'Dự kiến', value: services.planned, className: 'bg-[#e3d7b4]' },
+                  { title: 'Chưa chọn', value: services.open, className: 'bg-transparent' },
+                ]}
+              />
+            </div>
+          </StatCard>
+        </Link>
       )}
       {budget && (
         <Link to={paths.planTab.budget} className="olive-link">
@@ -90,7 +126,9 @@ function TopCards({ data }: { data: Overview }) {
                 label="Đã cọc, chưa cọc và còn lại"
                 parts={[
                   { title: 'Đã cọc', value: budget.deposited, className: 'bg-[#6f7444]' },
-                  { title: 'Chưa cọc', value: budget.planned - budget.deposited, className: budget.remaining < 0 ? 'bg-warn' : 'bg-[#c9b37a]' },
+                  // Cọc mất đã trả nên không tính vào "Chưa cọc"
+                  { title: 'Cọc mất', value: budget.lostDeposits, className: 'bg-warn/55' },
+                  { title: 'Chưa cọc', value: budget.planned - budget.deposited - budget.lostDeposits, className: budget.remaining < 0 ? 'bg-warn' : 'bg-[#c9b37a]' },
                   { title: 'Còn lại', value: budget.remaining, className: 'bg-transparent' },
                 ]}
               />
@@ -102,9 +140,25 @@ function TopCards({ data }: { data: Overview }) {
   )
 }
 
+/** Việc sắp tới (tối đa 3, không gồm việc quá hạn); việc quá hạn gom thành một dòng dẫn sang Timeline đã lọc sẵn */
 function UpcomingCard({ tasks }: { tasks: NonNullable<Overview['tasks']> }) {
   return (
-    <Card title="Việc sắp đến hạn">
+    <Card title="Việc sắp tới" action={more(paths.planTab.timeline, 'Xem timeline')}>
+      {tasks.overdue > 0 && (
+        <Link
+          to={`${paths.planTab.timeline}?month=overdue`}
+          className="flex items-center justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3.5 py-2.5 text-sm text-warn hover:border-warn/60"
+        >
+          <span className="inline-flex items-center gap-2 font-medium">
+            <TriangleAlert className="size-4 shrink-0" aria-hidden />
+            {tasks.overdue} việc đã quá hạn
+          </span>
+          <span className="inline-flex items-center gap-0.5 text-[13px] font-semibold">
+            Xem
+            <ChevronRight className="size-4" aria-hidden />
+          </span>
+        </Link>
+      )}
       {tasks.upcoming.length ? (
         <ul>
           {tasks.upcoming.map((t) => {
@@ -113,7 +167,7 @@ function UpcomingCard({ tasks }: { tasks: NonNullable<Overview['tasks']> }) {
               <li key={t.id} className="flex items-start gap-3 border-t border-line py-2.5 text-sm first:border-t-0 first:pt-0">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{t.title}</div>
-                  <div className="text-[12.5px] text-muted-foreground">{t.category?.name ?? 'Việc chung'}</div>
+                  {t.category && <div className="text-[12.5px] text-muted-foreground">{t.category.name}</div>}
                 </div>
                 <span className={cn('rounded-pill px-2 py-0.5 text-[12px] whitespace-nowrap', due.cls)}>{due.text}</span>
               </li>
@@ -121,7 +175,7 @@ function UpcomingCard({ tasks }: { tasks: NonNullable<Overview['tasks']> }) {
           })}
         </ul>
       ) : (
-        <p className="text-sm text-muted-foreground">Không còn việc nào cần làm.</p>
+        <p className="text-sm text-muted-foreground">{tasks.overdue > 0 ? 'Không có việc nào khác sắp đến hạn.' : 'Không còn việc nào cần làm.'}</p>
       )}
     </Card>
   )
@@ -131,9 +185,9 @@ function UpcomingCard({ tasks }: { tasks: NonNullable<Overview['tasks']> }) {
 function ProgressCard({ tasks }: { tasks: NonNullable<Overview['tasks']> }) {
   return (
     <Card title="Tiến độ theo hạng mục">
-      <ul className="flex flex-col gap-2.5">
+      <ul className="grid grid-cols-2 gap-x-6 gap-y-2.5 max-[560px]:grid-cols-1">
         {tasks.byCategory.map((c) => (
-          <li key={c.slug ?? 'chung'} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 text-sm">
+          <li key={c.slug} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 text-sm">
             <span className="truncate">{c.name}</span>
             <span className="text-[12.5px] text-muted-foreground tabular-nums">
               {c.done}/{c.total}
@@ -198,8 +252,8 @@ export default function PlanOverviewPage() {
   }
   const data = overview.data
 
-  // Cùng phong cách tab Ngân sách (plan-theme / budget-theme: Lexend, tiêu đề serif nghiêng, thẻ số ô liu).
-  // Thẻ số → hai cột gọn: trái = chi phí theo hạng mục + mức chia và dịch vụ; phải = việc sắp đến hạn + tiến độ theo hạng mục.
+  // Cùng phong cách tab Ngân sách (plan-theme / budget-theme: chữ chung Be Vietnam Pro, tiêu đề serif, thẻ số ô liu).
+  // Thẻ số → lưới 2×2 bên dưới.
   return (
     <div className="plan-theme budget-theme overview-page">
       {overview.isPending ? (
@@ -207,15 +261,12 @@ export default function PlanOverviewPage() {
       ) : (
         <TopCards data={data!} />
       )}
-      <div className="grid grid-cols-2 items-start gap-5 max-[900px]:grid-cols-1">
-        <div className="flex flex-col gap-5">
-          {data?.budget && <CostCard budget={data.budget} />}
-          <SpendingServicesCard wedding={wedding} onEdit={openEdit} />
-        </div>
-        <div className="flex flex-col gap-5">
-          {data?.tasks && <UpcomingCard tasks={data.tasks} />}
-          {data?.tasks && <ProgressCard tasks={data.tasks} />}
-        </div>
+      {/* Lưới 2×2, hai cột bằng nhau, thẻ cùng hàng cao bằng nhau: chi phí | việc sắp tới, mức chia và dịch vụ | tiến độ */}
+      <div className="grid grid-cols-2 gap-5 max-[900px]:grid-cols-1 [&>*]:h-full">
+        {data?.budget && <CostCard budget={data.budget} />}
+        {data?.tasks && <UpcomingCard tasks={data.tasks} />}
+        <SpendingServicesCard wedding={wedding} onEdit={openEdit} />
+        {data?.tasks && <ProgressCard tasks={data.tasks} />}
       </div>
     </div>
   )

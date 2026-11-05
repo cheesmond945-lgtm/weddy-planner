@@ -27,7 +27,8 @@ export interface CompareColumn {
   tables: { count: number | null; byMinimum: boolean; text: string; warning: string | null } | null
   location: { same: boolean; text: string } | null
   capacity: { max: number; fits: boolean; text: string } | null
-  rating: { value: number | null; count: number; text: string }
+  /** quotes: bình luận của khách trích nguyên văn, mới nhất trước (tối đa 2) */
+  rating: { value: number | null; count: number; text: string; quotes: { rating: number; content: string }[] }
   /** 3–4 ý ngắn của gói */
   includes: string[]
   /** Khóa nút "Thêm vào kế hoạch" khi: đã kín ngày cưới, đã cọc NCC khác cùng hạng mục, gói tiệc không đủ chỗ */
@@ -56,7 +57,7 @@ export interface CompareResult {
     consequenceLabel: string
     /** Đã cọc một NCC của hạng mục: một cảnh báo chung ở đầu trang */
     lockNote: string | null
-    /** "Nơi tổ chức: Bồ Đề", ghi dưới nhãn dòng Vị trí */
+    /** "Nơi tổ chức: Bồ Đề (tên trung tâm tiệc)" khi kế hoạch đã có trung tâm tiệc, ghi dưới nhãn dòng Vị trí; không thì null */
     locationNote: string | null
     /** "Giống nhau: 30 bàn, đủ cho 300 khách" (các dòng số bàn / sức chứa giống nhau ở mọi bên được gộp vào đây) */
     sameNote: string | null

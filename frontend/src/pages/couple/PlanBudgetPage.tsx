@@ -25,6 +25,7 @@ import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { Budget, BudgetCategory, BudgetVendor, PlanItem } from '@/types/wedding'
+import { shortVendorName } from '@/lib/vendorName'
 
 /** Tiền phân bổ hiển thị làm tròn 10.000đ (backend giữ số chính xác) */
 const money = (x: number) => formatMoney(displayMoney(x))
@@ -280,8 +281,8 @@ function ServiceCell({ c, b, view, items }: { c: BudgetCategory; b: Budget; view
         {c.vendors.map((v) => (
           <div key={v.id} className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-1.5">
-              <Link to={paths.serviceDetail(v.id)} className="font-medium hover:underline">
-                {v.name}
+              <Link to={paths.serviceDetail(v.id)} className="font-medium hover:underline" title={v.name}>
+                {shortVendorName(v.name)}
               </Link>
               {v.status && <Badge tone={PLAN_STATUS[v.status].tone}>{PLAN_STATUS[v.status].label}</Badge>}
               {/* Chưa có đơn: bỏ chọn để hạng mục quay lại thanh chia và có gợi ý như hạng mục chưa chọn */}
@@ -341,13 +342,8 @@ function BudgetStats({ b, onEditTotal }: { b: Budget; onEditTotal: () => void })
           </span>
         }
         value={formatMoney(t.total)}
-        sub={
-          b.status === 'OVER_BUDGET' ? (
-            <span className="font-medium text-warn">Vượt ngân sách</span>
-          ) : (
-            `${b.guestCount.toLocaleString('vi-VN')} khách · ${b.tables.count} bàn`
-          )
-        }
+        // Vượt ngân sách đã có ở thẻ thứ tư và thông báo bên dưới: thẻ này luôn ghi số khách, số bàn
+        sub={`${b.guestCount.toLocaleString('vi-VN')} khách · ${b.tables.count} bàn`}
       />
       <StatCard label="Đã cọc" value={formatMoney(t.deposited)} sub={`Còn phải trả NCC ${formatMoney(t.owed)}`} />
       <StatCard label="Dự kiến chưa chốt" value={formatMoney(displayMoney(t.plannedTotal))} sub="Dịch vụ đã chọn, chưa có đơn" />
@@ -355,7 +351,7 @@ function BudgetStats({ b, onEditTotal }: { b: Budget; onEditTotal: () => void })
         label={over ? 'Vượt ngân sách' : 'Còn lại'}
         value={formatMoney(displayMoney(Math.abs(t.remaining)))}
         tone={over ? 'warn' : 'good'}
-        sub="Cho các hạng mục chưa chọn"
+        sub={over ? 'Chi phí dự kiến cao hơn tổng ngân sách' : 'Cho các hạng mục chưa chọn'}
       />
     </StatGrid>
   )
@@ -434,7 +430,7 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
 
       <section className="mb-5 rounded-lg border border-line bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-2.5 px-[22px] pt-5 pb-3">
-          <h2 className="text-lg">Theo hạng mục</h2>
+          <h2>Theo hạng mục</h2>
           <span className="ml-auto" />
           <ChooseAllSuggestions list={suggestionsToChoose(b, view)} />
           <Button variant="outline" size="sm" onClick={() => weddingsApi.downloadExport('budget').catch((e: Error) => toast(e.message))}>
@@ -513,7 +509,7 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
 
       <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface px-[22px] py-5">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <h2 className="text-lg">Chi phí khác ngoài Forever</h2>
+          <h2>Chi phí khác ngoài Forever</h2>
           <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
             <FileSpreadsheet />
             Nhập từ Excel

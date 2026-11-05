@@ -17,7 +17,7 @@ const grid = 'grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] gap
 
 /** Nhãn nhỏ góc ảnh của thẻ được gợi ý */
 export const suggestionBadge = (
-  <span className="rounded-pill bg-[rgb(255_253_248/0.94)] px-2.5 py-1 text-xs font-semibold text-gold-800 shadow-sm">Gợi ý cho bạn</span>
+  <span className="rounded-pill bg-surface/95 px-2.5 py-1 text-xs font-semibold text-gold-800 shadow-sm">Gợi ý cho bạn</span>
 )
 
 /** Nơi tổ chức để ghi trên trang: phường/xã nếu có, không thì tỉnh/thành */

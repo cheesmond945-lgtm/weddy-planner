@@ -56,8 +56,11 @@ export function ServiceInfoPanel({ service, packageExtra, packageBadge, packages
         subtitle={packagesSubtitle ?? 'Lựa chọn gói phù hợp cho ngày trọng đại của bạn'}
         icon={<Flower2 className="size-9" strokeWidth={1.25} />}
       >
-        {service.packageLayout === 'tiles' ? (
-          <PackageTiles service={service} />
+        {!service.packages.length ? (
+          // NCC chưa đăng gói: nói rõ thay cho lưới trống, cùng cách ghi với trang So sánh
+          <p className="text-[15px] text-muted-foreground">Nhà cung cấp chưa cập nhật gói. Bạn có thể nhắn tin để hỏi báo giá.</p>
+        ) : service.packageLayout === 'tiles' ? (
+          <PackageTiles service={service} extra={packageExtra} />
         ) : (
           // 2 cột khi cột nội dung (tabpanel, @container/content) rộng từ 700px, hẹp hơn thì 1 cột
           <div className="grid grid-cols-1 gap-5 @min-[700px]/content:grid-cols-2">

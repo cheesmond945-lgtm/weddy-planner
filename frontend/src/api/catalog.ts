@@ -7,6 +7,10 @@ export const catalogApi = {
   listCategories: (): Promise<Category[]> =>
     http.get('/categories'),
 
+  /** Chi phí thấp nhất từng hạng mục cho số khách (kiểm tra ngân sách tối thiểu ở form thông tin đám cưới) */
+  categoryMinCosts: (guests: number): Promise<{ slug: string; minCost: number }[]> =>
+    http.get(`/categories/min-costs?guests=${guests}`),
+
   listLocations: (): Promise<string[]> =>
     http.get('/services/locations'),
 

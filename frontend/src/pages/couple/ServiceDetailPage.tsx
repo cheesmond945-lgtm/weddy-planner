@@ -10,10 +10,10 @@ import { HallCalendar, HallDayBadge, HallsVerdict } from '@/features/halls/compo
 import { useMyOrders } from '@/features/orders/hooks'
 import { RESTAURANT_SLUG } from '@/features/vendors/constants'
 import { useWedding } from '@/features/weddings/hooks'
-import { AddToPlanButton, OpenChatButton, usePlanItemOf } from '@/features/weddings/planActions'
+import { AddToPlanButton, ChoosePackageButton, OpenChatButton, usePlanItemOf } from '@/features/weddings/planActions'
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { formatDate } from '@/lib/date'
-import { formatMoney } from '@/lib/format'
+import { formatUnitPrice } from '@/features/catalog/price'
 import { paths } from '@/routes/paths'
 
 /** Trang chi tiết dịch vụ (2.2). */
@@ -74,7 +74,15 @@ export default function ServiceDetailPage() {
         <ServiceDetailView
           service={service}
           sidebarLead={halls ? <HallsVerdict serviceId={service.id} weddingDate={wedding?.date} bookedHall={bookedHall} /> : undefined}
-          packageExtra={halls ? (pkg) => <HallCalendar packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
+          // Cuối khung chi tiết gói: lịch sảnh (trung tâm tiệc) và nút chọn gói này cho kế hoạch
+          packageExtra={(pkg) => (
+            <>
+              {halls && <HallCalendar packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} />}
+              <div className="mt-4">
+                <ChoosePackageButton service={service} packageId={pkg.id} packageName={pkg.name} />
+              </div>
+            </>
+          )}
           packageBadge={halls ? (pkg) => <HallDayBadge packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
           packagesSubtitle={halls && wedding?.date ? `Sảnh bận hay còn trống vào ngày cưới của bạn (${formatDate(wedding.date)}). Bấm Xem chi tiết để xem lịch tháng.` : undefined}
           headActions={<FavoriteButton service={service} variant="icon" />}
@@ -91,7 +99,8 @@ export default function ServiceDetailPage() {
                 Trạng thái trong kế hoạch của bạn: <b>{PLAN_STATUS[planItem.status].label}</b>.
               </>
             ) : (
-              'Nhắn tin sẽ tự thêm dịch vụ này vào kế hoạch với trạng thái Đang trao đổi. Chọn Thêm vào kế hoạch nếu bạn muốn lưu trước, chưa liên hệ.'
+              // Nhắn tin chỉ để hỏi, không thêm vào kế hoạch: khách có thể nhắn nhiều NCC cùng hạng mục rồi mới chọn một
+              'Nhắn tin không thêm dịch vụ vào kế hoạch, bạn có thể hỏi nhiều nhà cung cấp cùng lúc. Ưng nhà cung cấp nào thì bấm Thêm vào kế hoạch.'
             )
           }
         />
@@ -104,7 +113,7 @@ export default function ServiceDetailPage() {
           <div className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 border-t border-line bg-surface/95 px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] backdrop-blur-[10px] min-[901px]:hidden">
             <div className="min-w-0">
               <span className="block text-xs text-ink-2">Giá tham khảo</span>
-              <b className="block truncate text-base font-semibold text-gold-700">Từ {formatMoney(service.priceFrom)}</b>
+              <b className="block truncate text-base font-semibold text-gold-700">Từ {formatUnitPrice(service.priceFrom, service)}</b>
             </div>
             <OpenChatButton service={service} label="Nhắn tin" className="shrink-0 px-5" />
           </div>

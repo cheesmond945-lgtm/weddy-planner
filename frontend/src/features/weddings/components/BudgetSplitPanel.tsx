@@ -1,5 +1,5 @@
-import { AlertTriangle, Info, LoaderCircle, Lock, LockOpen, PiggyBank, RotateCcw, SlidersHorizontal } from 'lucide-react'
-import { useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { AlertTriangle, ChevronDown, Info, LoaderCircle, Lock, LockOpen, PiggyBank, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import { MoneyInput } from '@/components/MoneyInput'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
@@ -28,7 +28,7 @@ import { presetMarkers, presetsSame, type SplitRowView, type SplitView } from '.
 import { useBudgetMutations, useSaveWedding, useWedding } from '../hooks'
 import { PRESET_LABEL } from '../presets'
 import type { useBudgetSplit } from '../useBudgetSplit'
-import { BudgetPresetPicker } from './BudgetPresetPicker'
+import { BudgetPresetPicker, presetCardClass } from './BudgetPresetPicker'
 
 /** Tiền hiển thị ở tab Ngân sách: làm tròn 10.000đ (backend giữ số chính xác) */
 const money = (x: number) => formatMoney(displayMoney(x))
@@ -57,7 +57,7 @@ type Split = ReturnType<typeof useBudgetSplit>
  * Lưới chung của các dòng chia (dịch vụ và Dự phòng): tên, thanh kéo, ô % quỹ, ô số tiền, cột nút. Cột nút rộng cố định để dòng
  * không có nút (Dự phòng, mức có sẵn) vẫn thẳng cột với dòng có nút khóa / Tự lo.
  */
-const ROW_GRID = 'grid grid-cols-[140px_1fr_118px_150px_96px] items-center gap-3 text-sm max-[760px]:grid-cols-[1fr_110px_130px]'
+const ROW_GRID = 'grid grid-cols-[140px_1fr_118px_150px_96px] items-center gap-3 text-sm max-[760px]:grid-cols-[1fr_110px_130px] max-[480px]:grid-cols-2 max-[480px]:gap-x-2.5'
 
 /**
  * Phần chia ngân sách cho dịch vụ (tài liệu "Luồng Tùy chỉnh ngân sách" v1.2, mục 3–7):
@@ -86,6 +86,14 @@ export function BudgetSplitPanel({
 }) {
   const { settings, removeExtraCost } = useBudgetMutations()
   const [cost, setCost] = useState<number | null>(null)
+  // Thu gọn khung (chỉ còn một dòng tóm tắt): tự thu gọn khi không còn dịch vụ nào để chia, tự mở lại khi có; khách bấm nút để đổi
+  const empty = view.rows.length === 0
+  const [collapsed, setCollapsed] = useState(empty)
+  const wasEmpty = useRef(empty)
+  useEffect(() => {
+    if (wasEmpty.current !== empty) setCollapsed(empty)
+    wasEmpty.current = empty
+  }, [empty])
   const st = split.draft
   const custom = view.custom && !!st
   const sb = b.fund.serviceBudget
@@ -171,46 +179,83 @@ export function BudgetSplitPanel({
   const openingCustom = settings.isPending && settings.variables?.budgetPreset === 'CUSTOM'
 
   return (
-    <section ref={panelRef} className="mb-5 flex flex-col gap-4 rounded-lg border border-line bg-surface px-[22px] py-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          {presetLocked || same ? (
+    <section ref={panelRef} className="relative mb-5 flex flex-col gap-4 rounded-lg border border-line bg-surface px-[22px] py-5">
+      {/* Nút thu gọn / mở rộng (chỉ biểu tượng), luôn ở góc trên bên phải */}
+      <button
+        type="button"
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? 'Mở rộng mức chia ngân sách' : 'Thu gọn mức chia ngân sách'}
+        title={collapsed ? 'Mở rộng' : 'Thu gọn'}
+        onClick={() => setCollapsed((c) => !c)}
+        className="absolute top-3.5 right-3.5 grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent-soft hover:text-ink"
+      >
+        <ChevronDown className={cn('size-[18px] transition-transform', !collapsed && 'rotate-180')} aria-hidden />
+      </button>
+      {collapsed ? (
+        // Thu gọn: một dòng tóm tắt mức chia và quỹ dịch vụ
+        <p className="flex flex-wrap items-baseline gap-x-2 pr-10 text-sm text-muted-foreground">
+          <b className="font-semibold text-ink">Mức chia ngân sách</b>
+          <span>· {b.presetLabel}</span>
+          <span>
+            · Quỹ dịch vụ <b className="font-semibold text-ink tabular-nums">{money(sb)}</b>
+          </span>
+          {empty && <span>· Mọi dịch vụ đã chọn gói{view.excluded.length > 0 || b.ownVenue ? ' hoặc tự lo' : ''}</span>}
+        </p>
+      ) : (
+      <>
+      {/* Thẻ "Tùy chỉnh" (thứ tư, cùng hàng ba mức có sẵn): đang Tùy chỉnh thì sáng và ghi trạng thái lưu ngay trong thẻ.
+          Vào Tùy chỉnh mất vài giây (backend tính lại cả bảng): biểu tượng quay vòng, chữ "Đang mở…". */}
+      {(() => {
+        const open = () => settings.mutate({ budgetPreset: 'CUSTOM' }, { onSuccess: () => toast('Đã chuyển sang Tùy chỉnh. Kéo hoặc nhập % cho từng dịch vụ bên dưới.') })
+        const icon = openingCustom ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <SlidersHorizontal className="size-4" aria-hidden />
+        const customCard = (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={custom}
+            aria-busy={openingCustom}
+            disabled={settings.isPending || custom}
+            onClick={open}
+            className={cn(presetCardClass(custom || openingCustom), custom && 'disabled:cursor-default', surplus && 'hidden')}
+          >
+            <span className={cn('flex items-center gap-1.5 text-sm font-semibold', (custom || openingCustom) && 'text-gold-700')}>
+              {icon}
+              {openingCustom ? 'Đang mở Tùy chỉnh…' : 'Tùy chỉnh'}
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              {custom ? <SaveStatus status={split.status} unsaved={split.unsaved} idle="Đang dùng tỷ lệ của bạn." /> : 'Tự kéo tỷ lệ cho từng dịch vụ.'}
+            </span>
+          </button>
+        )
+        return presetLocked || same ? (
+          // Ba mức bị khóa / giống nhau: chỉ tiêu đề và nút Tùy chỉnh gọn bên phải (chừa chỗ cho nút thu gọn ở góc)
+          <div className="flex flex-wrap items-center justify-between gap-3 pr-9">
             <h2 className="leading-tight">Mức chia ngân sách</h2>
-          ) : (
+            <div className={cn('flex items-center gap-2.5', surplus && 'hidden')}>
+              {custom && <SaveStatus status={split.status} unsaved={split.unsaved} />}
+              <Button variant={custom || openingCustom ? 'default' : 'outline'} size="sm" disabled={settings.isPending || custom} aria-busy={openingCustom} onClick={open}>
+                {icon}
+                {custom ? 'Đang Tùy chỉnh' : openingCustom ? 'Đang mở Tùy chỉnh…' : 'Tùy chỉnh'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="pr-9">
             <BudgetPresetPicker
               value={b.preset}
               disabled={settings.isPending}
               hint={false}
               optional={false}
+              extra={customCard}
               onChange={(budgetPreset) => {
                 split.flush()
                 settings.mutate({ budgetPreset }, { onSuccess: () => toast(`Đã chuyển sang mức chia ${PRESET_LABEL[budgetPreset]}`) })
               }}
             />
-          )}
-        </div>
-        <div className={cn('flex flex-col items-end gap-1.5', surplus && 'hidden')}>
-          {/* Vào Tùy chỉnh mất vài giây (backend tính lại cả bảng): nút quay vòng và đổi chữ để khách biết đang xử lý */}
-          <Button
-            variant={custom || openingCustom ? 'default' : 'outline'}
-            size="sm"
-            disabled={settings.isPending || custom}
-            aria-busy={openingCustom}
-            onClick={() => settings.mutate({ budgetPreset: 'CUSTOM' }, { onSuccess: () => toast('Đã chuyển sang Tùy chỉnh. Kéo hoặc nhập % cho từng dịch vụ bên dưới.') })}
-          >
-            {openingCustom ? <LoaderCircle className="animate-spin" /> : <SlidersHorizontal />}
-            {custom ? 'Đang Tùy chỉnh' : openingCustom ? 'Đang mở Tùy chỉnh…' : 'Tùy chỉnh'}
-          </Button>
-          {custom ? (
-            <>
-              <span className="text-[12px] text-muted-foreground">Đang dùng tỷ lệ của bạn</span>
-              <SaveStatus status={split.status} unsaved={split.unsaved} />
-            </>
-          ) : (
-            settings.isPending && !openingCustom && <span className="text-[12px] text-muted-foreground">Đang đổi mức chia…</span>
-          )}
-        </div>
-      </div>
+            {settings.isPending && !openingCustom && <p className="mt-1.5 text-[12px] text-muted-foreground">Đang đổi mức chia…</p>}
+          </div>
+        )
+      })()}
 
       <FundArea
         b={b}
@@ -223,7 +268,8 @@ export function BudgetSplitPanel({
 
       {view.rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Bạn đang tự lo mọi dịch vụ, không còn gì để chia.{view.leftover > 0 && ` Còn dư ${money(view.leftover)}.`}
+          {/* Không còn dịch vụ nào để chia: thường là đã chọn gói hết (gói đã chọn không nằm trong phần chia), có thể kèm vài dịch vụ tự lo */}
+          {view.excluded.length > 0 || b.ownVenue ? 'Mọi dịch vụ đã chọn gói hoặc tự lo' : 'Mọi dịch vụ đã chọn gói'}, không còn gì để chia.{view.leftover > 0 && ` Còn dư ${money(view.leftover)}.`}
         </p>
       ) : (
         <div className="flex flex-col gap-3">
@@ -346,6 +392,8 @@ export function BudgetSplitPanel({
           </div>
         </div>
       )}
+      </>
+      )}
     </section>
   )
 }
@@ -387,9 +435,10 @@ function OwnServiceCost({ b, name }: { b: Budget; name: string }) {
   )
 }
 
-function SaveStatus({ status, unsaved }: { status: Split['status']; unsaved: boolean }) {
+/** Trạng thái lưu của Tùy chỉnh; `idle`: chữ hiện khi chưa sửa gì (mặc định không hiện) */
+function SaveStatus({ status, unsaved, idle }: { status: Split['status']; unsaved: boolean; idle?: string }) {
   if (unsaved) return <span className="text-[12px] font-medium text-gold-700">Có thay đổi chưa lưu</span>
-  if (status === 'idle') return null
+  if (status === 'idle') return idle ? <span>{idle}</span> : null
   const text = { saving: 'Đang lưu…', saved: 'Đã lưu', error: 'Chưa lưu được' }[status]
   return (
     <span role="status" className={cn('text-[12px]', status === 'error' ? 'text-warn' : 'text-muted-foreground')}>

@@ -190,7 +190,7 @@ export function BudgetPackagePicker({
                   onClick={() => select(null)}
                   className={cn('block w-full px-3.5 py-2 text-left text-sm hover:bg-accent-soft', pkg?.source === 'PLANNED' && 'font-semibold text-gold-700')}
                 >
-                  Dùng gói dự kiến (gói rẻ nhất)
+                  Dùng gói dự kiến (gói rẻ nhất đủ chỗ)
                 </button>
               </li>
               {options.map((p) => {

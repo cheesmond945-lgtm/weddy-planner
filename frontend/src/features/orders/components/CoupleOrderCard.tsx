@@ -1,4 +1,4 @@
-import { Clock, MessageCircle } from 'lucide-react'
+import { Clock } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
@@ -76,7 +76,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   const { user } = useAuth()
   const [opening, setOpening] = useState(false)
 
-  // "Nhắn NCC" (thẻ ở Kế hoạch): mở khung chat trượt bên phải như nút Nhắn tin ở thẻ dịch vụ thay vì chuyển sang trang Tin nhắn;
+  // "Nhắn tin" (thẻ ở Kế hoạch): mở khung chat trượt bên phải như nút Nhắn tin ở thẻ dịch vụ thay vì chuyển sang trang Tin nhắn;
   // không tìm thấy hội thoại (danh sách chưa tải được) thì mới mở trang Tin nhắn
   const openChat = async (conversationId: string) => {
     const page = () => navigate(`${paths.chat}?c=${encodeURIComponent(conversationId)}`)
@@ -233,9 +233,8 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
             </Button>
           )}
           {!chat && o.conversationId && (
-            <Button variant="ghost" size="sm" disabled={opening} onClick={() => void openChat(o.conversationId!)}>
-              <MessageCircle />
-              {opening ? 'Đang mở…' : 'Nhắn NCC'}
+            <Button size="sm" disabled={opening} onClick={() => void openChat(o.conversationId!)}>
+              {opening ? 'Đang mở…' : 'Nhắn tin'}
             </Button>
           )}
         </div>

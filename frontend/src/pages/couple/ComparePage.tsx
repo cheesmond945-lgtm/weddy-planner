@@ -96,7 +96,8 @@ export default function ComparePage() {
               result={d}
               updating={result.isFetching}
               onPick={(serviceId, packageId) => setPicked((m) => ({ ...m, [serviceId]: packageId }))}
-              renderAdd={(s) => <AddToPlanButton service={s} primary />}
+              // Khách đã đổi gói ở ô chọn gói: thêm vào kế hoạch kèm đúng gói đó (không thì gói dự kiến)
+              renderAdd={(s) => <AddToPlanButton service={s} primary pkg={picked[s.id] ? (d.comparison.columns.find((c) => c.id === s.id)?.package ?? null) : null} />}
               renderQuote={(s) => <OpenChatButton service={s} />}
             />
           </>

@@ -26,13 +26,15 @@ interface PlanSlotsProps {
   onRevise: (order: Order) => void
   /** Số khách dự kiến (cảnh báo gói không đủ chỗ) */
   guestCount?: number
+  /** Hạng mục khách tự lo (tab Ngân sách): chưa có NCC thì ghi "Tự lo" thay cho gợi ý chọn dịch vụ */
+  ownSlugs?: string[]
 }
 
 /**
  * Các hạng mục của kế hoạch, mỗi hạng mục một dịch vụ (planServices trong prototype), kèm các đơn dịch vụ của hạng mục đó
- * (Thanh toán cọc, Yêu cầu chỉnh sửa, Xem chi tiết, Nhắn NCC). Hạng mục có đơn nhưng không còn trong kế hoạch vẫn hiện ở cuối.
+ * (Thanh toán cọc, Yêu cầu chỉnh sửa, Xem chi tiết, Nhắn tin). Hạng mục có đơn nhưng không còn trong kế hoạch vẫn hiện ở cuối.
  */
-export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, guestCount = 0 }: PlanSlotsProps) {
+export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, guestCount = 0, ownSlugs = [] }: PlanSlotsProps) {
   const { data: categories = [] } = useCategories()
   const { openChat } = usePlanActions()
   const remove = useRemovePlanItem()
@@ -84,39 +86,60 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, 
             </h2>
             {catItems.length ? (
               <div className="flex flex-col gap-2.5">
-                {catItems.map((item) => (
-                  <article key={item.id} className="flex flex-wrap items-center gap-4 rounded-lg border border-line bg-surface px-[22px] py-[18px]">
-                    <div className="min-w-[200px] flex-1">
-                      <b className="font-serif text-[19px] font-semibold">{item.service.name}</b>
-                      <RatingMeta service={item.service} />
-                      <PackageSwitcher item={item} guestCount={guestCount} />
-                    </div>
-                    <Badge tone={PLAN_STATUS[item.status].tone}>{PLAN_STATUS[item.status].label}</Badge>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant={item.status === 'PLANNED' || item.status === 'DISCUSSING' ? 'default' : 'outline'}
-                        onClick={() => openChat(item.service)}
-                      >
-                        Nhắn tin
-                      </Button>
-                      {(item.status === 'PLANNED' || item.status === 'DISCUSSING') && (
+                {catItems.map((item) => {
+                  // Đơn của chính NCC này nằm ngay trong thẻ (dưới đường kẻ), thay cho khối "Đơn hàng" riêng bên dưới
+                  const mine = catOrders.filter((o) => o.serviceId === item.service.id)
+                  // Có đơn đang chạy (chờ cọc, đang chỉnh sửa, đã cọc, hoàn thành) thì không cho bỏ khỏi kế hoạch
+                  const busy = mine.some((o) => o.status !== 'Expired' && o.status !== 'Cancelled' && o.status !== 'Draft')
+                  return (
+                    <article key={item.id} className="flex flex-wrap items-center gap-4 rounded-lg border border-line bg-surface px-[22px] py-[18px]">
+                      <div className="min-w-[200px] flex-1">
+                        <b className="font-serif text-[19px] font-semibold">{item.service.name}</b>
+                        <RatingMeta service={item.service} />
+                        <PackageSwitcher item={item} guestCount={guestCount} hideLocked={mine.length > 0} />
+                      </div>
+                      <Badge tone={PLAN_STATUS[item.status].tone}>{PLAN_STATUS[item.status].label}</Badge>
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-muted-foreground hover:text-warn"
-                          aria-label={`Bỏ ${item.service.name} khỏi kế hoạch`}
-                          disabled={remove.isPending}
-                          onClick={() => remove.mutate(item.id)}
+                          size="sm"
+                          variant={item.status === 'PLANNED' || item.status === 'DISCUSSING' ? 'default' : 'outline'}
+                          onClick={() => openChat(item.service)}
                         >
-                          <Trash2 className="size-[15px]" />
+                          Nhắn tin
                         </Button>
+                        {(item.status === 'PLANNED' || item.status === 'DISCUSSING') && !busy && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground hover:text-warn"
+                            aria-label={`Bỏ ${item.service.name} khỏi kế hoạch`}
+                            disabled={remove.isPending}
+                            onClick={() => remove.mutate(item)}
+                          >
+                            <Trash2 className="size-[15px]" />
+                          </Button>
+                        )}
+                      </div>
+                      {mine.length > 0 && (
+                        <div className="basis-full border-t border-line pt-2.5">
+                          <CategoryOrders orders={mine} onRevise={onRevise} embedded />
+                        </div>
                       )}
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  )
+                })}
               </div>
-            ) : extra ? null : (
+            ) : extra ? null : ownSlugs.includes(slug) ? (
+              <div className="flex flex-wrap items-center gap-4 rounded-lg border border-line bg-surface px-[22px] py-[18px]">
+                <div className="min-w-[200px] flex-1">
+                  <b className="font-semibold">Tự lo</b>
+                  <p className="mt-0.5 text-[13px] text-muted-foreground">Bạn tự lo hạng mục này ngoài Forever. Chi phí (nếu có) nhập ở tab Ngân sách.</p>
+                </div>
+                <Button asChild variant="outline" size="sm">
+                  <Link to={paths.planTab.budget}>Xem ngân sách</Link>
+                </Button>
+              </div>
+            ) : (
               <div className="flex flex-wrap items-center gap-4 rounded-lg border border-dashed border-line-strong/60 px-[22px] py-[18px]">
                 <div className="min-w-[200px] flex-1 text-[15px] text-muted-foreground">Chưa chọn dịch vụ cho hạng mục này.</div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -131,7 +154,8 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, 
                 </div>
               </div>
             )}
-            <CategoryOrders orders={catOrders} onRevise={onRevise} />
+            {/* Đơn của NCC không còn trong kế hoạch (đã bỏ / đổi NCC): vẫn hiện riêng dưới hạng mục */}
+            <CategoryOrders orders={catOrders.filter((o) => !catItems.some((i) => i.service.id === o.serviceId))} onRevise={onRevise} />
           </section>
         )
       })}

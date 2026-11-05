@@ -14,6 +14,6 @@ export const PRESET_OPTIONS: { value: Exclude<BudgetPreset, 'CUSTOM'>; label: st
 
 export const PRESET_LABEL: Record<BudgetPreset, string> = { BALANCED: 'Cân bằng', SPACE: 'Ưu tiên không gian', VISUAL: 'Ưu tiên hình ảnh', CUSTOM: 'Tùy chỉnh' }
 
-export const PRESET_HINT = 'Dùng để chia phần ngân sách còn lại cho các dịch vụ chưa chọn. Tự đặt tỷ lệ (Tùy chỉnh) ở tab Ngân sách.'
+export const PRESET_HINT = 'Chia phần ngân sách còn lại cho các dịch vụ chưa chọn.'
 
 // Tỷ lệ Tùy chỉnh (số nguyên theo 0,01%, tự cân bằng, khóa, bỏ khỏi phần chia): budgetSplit.ts

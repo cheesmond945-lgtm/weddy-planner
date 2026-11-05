@@ -43,7 +43,7 @@ export function LetterDialogContent({ title, description, children, className, .
           {/* Form chiếm phần bên trái, chừa bên phải cho ảnh cô dâu chú rể */}
           <div className="md:max-w-[min(470px,60%)]">
             {/* Tiêu đề và nét hoa văn căn giữa cột form (giữa hai ô tên cô dâu, chú rể) như đầu thư */}
-            <DialogHeader className="mb-4 pr-0 text-center">
+            <DialogHeader className="static mx-0 mt-0 mb-4 border-0 bg-transparent px-0 pt-0 pr-0 pb-0 text-center max-sm:px-0 max-sm:pr-0">
               {/* Chữ viết tay uốn lượn, nét thanh đậm tương phản (Ballet, có dấu tiếng Việt); chỉ có nét 400 nên bỏ đậm, cỡ lớn để nét thanh đọc rõ */}
               {/* Đặt font bằng style: class font-[...] tự viết bị tailwind-merge coi là độ đậm và gạt mất khi gộp với font-serif mặc định của DialogTitle.
                   Ballet chỉ có nét 400, nên làm đậm bằng viền chữ cùng màu (text-stroke) */}

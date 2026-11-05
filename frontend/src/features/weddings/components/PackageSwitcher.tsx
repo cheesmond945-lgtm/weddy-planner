@@ -10,7 +10,8 @@ import { useChoosePackage } from '../hooks'
  * Gói đang tính của một nhà cung cấp trong kế hoạch: "Gói dự kiến, bấm để đổi" hoặc tên gói đã chọn, kèm danh sách đổi gói.
  * Đã có đơn thì khóa, giá theo đơn. Gói không đủ chỗ ghi "Không đủ cho N khách".
  */
-export function PackageSwitcher({ item, guestCount }: { item: PlanItem; guestCount: number }) {
+/** `hideLocked`: đã có đơn và dòng đơn đã hiện ngay trong thẻ (gói, tổng tiền) thì không ghi lại dòng giá theo đơn */
+export function PackageSwitcher({ item, guestCount, hideLocked = false }: { item: PlanItem; guestCount: number; hideLocked?: boolean }) {
   const choose = useChoosePackage()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -35,6 +36,7 @@ export function PackageSwitcher({ item, guestCount }: { item: PlanItem; guestCou
     choose.mutate({ vendorId: item.id, packageId })
   }
 
+  if (locked && hideLocked) return null
   const label = packageLabel(pkg)
   const text = (
     <span>
@@ -62,7 +64,7 @@ export function PackageSwitcher({ item, guestCount }: { item: PlanItem; guestCou
         <ul role="listbox" aria-label={`Đổi gói của ${item.service.name}`} className="absolute top-full left-0 z-30 mt-1 max-h-[320px] w-[min(420px,90vw)] overflow-auto rounded-md border border-line bg-surface py-1 shadow-[0_8px_24px_rgb(var(--shadow-rgb)/0.16)]">
           <li>
             <button type="button" role="option" aria-selected={pkg?.source === 'PLANNED'} onClick={() => select(null)} className={cn('block w-full px-3.5 py-2 text-left text-sm hover:bg-accent-soft', pkg?.source === 'PLANNED' && 'font-semibold text-gold-700')}>
-              Dùng gói dự kiến (lớn nhất vừa ngân sách hạng mục)
+              Dùng gói dự kiến (gói rẻ nhất đủ chỗ)
             </button>
           </li>
           {item.packages.map((p) => {

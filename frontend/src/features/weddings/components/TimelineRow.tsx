@@ -1,4 +1,4 @@
-import { Ban, CalendarDays, Check, Clock, Heart, Hourglass, Lock, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { Ban, CalendarDays, Check, Clock, Hourglass, Lock, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { CategoryIcon, categoryColor } from '@/features/catalog/categoryIcons'
@@ -28,16 +28,17 @@ export const dm = (s: string) => {
   return `${d.getDate()}/${d.getMonth() + 1}`
 }
 
-/** Nhãn dịch vụ của việc (icon + tên, màu theo danh mục) để lướt timeline vẫn biết việc thuộc dịch vụ nào; việc không gắn dịch vụ là "Việc chung". */
+/** Nhãn dịch vụ của việc (icon + tên, màu theo danh mục) để lướt timeline vẫn biết việc thuộc dịch vụ nào; việc không gắn dịch vụ (việc của hai bạn) không có nhãn. */
 function ServiceTag({ item }: { item: TimelineItem }) {
   const slug = item.category?.slug
+  if (!slug) return null
   return (
     <span
-      style={{ '--cc': slug ? categoryColor(slug) : 'var(--muted-foreground)' } as CSSProperties}
+      style={{ '--cc': categoryColor(slug) } as CSSProperties}
       className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-[color-mix(in_srgb,var(--cc)_14%,transparent)] px-2 py-0.5 text-[12px] leading-none font-semibold text-(--cc)"
     >
-      {slug ? <CategoryIcon slug={slug} size={13} strokeWidth={2} /> : <Heart className="size-[13px]" strokeWidth={2} aria-hidden />}
-      {item.category?.name ?? 'Việc chung'}
+      <CategoryIcon slug={slug} size={13} strokeWidth={2} />
+      {item.category!.name}
     </span>
   )
 }
@@ -81,7 +82,7 @@ interface TimelineCardProps {
   onComplete: (item: TimelineItem) => void
   onEdit: (item: TimelineItem) => void
   onRemove: (item: TimelineItem) => void
-  /** "Nhắn NCC" cho việc chi tiết đang chờ khách / cùng NCC chưa chốt lịch */
+  /** "Nhắn tin" cho việc chi tiết đang chờ khách / cùng NCC chưa chốt lịch */
   onChat?: (item: TimelineItem) => void
   /** Việc con trong thẻ nhóm: nhỏ gọn hơn, thụt vào */
   nested?: boolean
@@ -116,7 +117,7 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
   const hintId = `hint-${item.id}`
 
   // Việc chi tiết của đơn: khách chỉ xem, không tick được nên không có vòng tròn bên trái.
-  // Hàng 1: tên (trái) + tag trạng thái (phải) · Hàng 2: chip ngày (trái) + "Nhắn NCC" (phải) · Hàng 3: dòng phụ nhỏ (nếu có). Đã xong: cả thẻ xám mờ, không dòng phụ và nút.
+  // Hàng 1: tên (trái) + tag trạng thái (phải) · Hàng 2: chip ngày (trái) + "Nhắn tin" (phải) · Hàng 3: dòng phụ nhỏ (nếu có). Đã xong: cả thẻ xám mờ, không dòng phụ và nút.
   if (vendorOwned) {
     const askVendor = (waiting || togetherUnconfirmed) && !!onChat && !!item.serviceId
     const notes = done
@@ -153,8 +154,8 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
             <DateChip dueDate={item.dueDate!} overdue={overdue} isDone={done} />
           </span>
           {askVendor && (
-            <Button variant="outline" size="sm" className="ml-auto" onClick={() => onChat!(item)}>
-              Nhắn NCC
+            <Button size="sm" className="ml-auto" onClick={() => onChat!(item)}>
+              Nhắn tin
             </Button>
           )}
         </div>
@@ -216,7 +217,7 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
         {autoDone && !done && (
           <div className="mt-1 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
             <Lock className="size-3.5" aria-hidden />
-            Các việc phục vụ của nhà cung cấp mở ra sau khi bạn đặt cọc
+            Đặt cọc xong, các bước tiếp theo cùng nhà cung cấp sẽ hiện ở đây
           </div>
         )}
         {autoDone && done && conflictDate && (
@@ -261,11 +262,12 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
         )}
       </div>
 
+      {/* Chú thích hiện dưới mép trái thẻ (không đè nút Sửa / Xóa ở mép phải) */}
       {autoDone && !done && (
         <span
           id={hintId}
           role="tooltip"
-          className="pointer-events-none absolute top-1/2 right-5 z-10 hidden -translate-y-1/2 rounded-md bg-ink px-3 py-1.5 text-xs text-bg shadow-card group-focus-visible:block group-hover:block"
+          className="pointer-events-none absolute top-full left-5 z-10 mt-1.5 hidden rounded-md bg-ink px-3 py-1.5 text-xs text-bg shadow-card group-focus-visible:block group-hover:block"
         >
           Tự hoàn thành khi bạn đặt cọc cho nhà cung cấp
         </span>
