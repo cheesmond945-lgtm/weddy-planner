@@ -11,7 +11,7 @@ interface Props {
   error?: string | null
   onCancel: () => void
   onConfirm: () => void
-  /** Nhắn NCC chỉnh sửa đơn lệch ngày */
+  /** Nhắn tin cho NCC chỉnh sửa đơn lệch ngày */
   onMessageVendor: (serviceId: string, orderCode: string, eventDate: string) => void
 }
 
@@ -38,8 +38,8 @@ export function DateChangePreviewDialog({ newDate, preview, pending, error, onCa
             {preview.warnings.map((w) => (
               <li key={w.orderCode} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-warn bg-warn-soft px-3.5 py-2.5 text-sm text-warn">
                 <span className="min-w-[220px] flex-1">{w.message}</span>
-                <Button type="button" variant="outline" size="sm" onClick={() => onMessageVendor(w.serviceId, w.orderCode, w.eventDate)}>
-                  Nhắn NCC
+                <Button type="button" size="sm" onClick={() => onMessageVendor(w.serviceId, w.orderCode, w.eventDate)}>
+                  Nhắn tin
                 </Button>
               </li>
             ))}

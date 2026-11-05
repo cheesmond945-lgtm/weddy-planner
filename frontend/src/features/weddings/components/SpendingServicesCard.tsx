@@ -17,7 +17,7 @@ export function SpendingServicesCard({ wedding, onEdit }: { wedding: Wedding; on
   return (
     <section className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface px-[22px] py-5">
       <div className="flex items-center justify-between gap-2.5">
-        <h2 className="text-lg">Mức chia và dịch vụ</h2>
+        <h2>Mức chia và dịch vụ</h2>
         {onEdit && (
           <button type="button" className="text-[13px] font-medium text-primary underline underline-offset-[3px]" onClick={onEdit}>
             Chỉnh sửa

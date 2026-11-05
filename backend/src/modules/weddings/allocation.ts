@@ -12,7 +12,10 @@
 import { VENUE_SLUG, type BudgetPreset } from './allocation.config';
 import { fitsGuests, packageCost, plannedPackage, tableCount, type EnginePackage, type EnginePlanVendor } from './budget-engine';
 import {
+  displayMoney,
+  fitToMax,
   initFromMode,
+  markersOf,
   pickPackage,
   reconcile,
   splitAmounts,
@@ -27,6 +30,8 @@ import { normalizePlace } from './suggest-rules';
 
 export interface AllocPackage extends EnginePackage {
   vendorName: string;
+  /** Tỉnh/thành của nhà cung cấp (lọc gợi ý như "Gợi ý cho bạn"); không có thì coi như khác nơi tổ chức */
+  city?: string | null;
   /** Phường/xã của nhà cung cấp */
   ward: string | null;
   rating: number | null;
@@ -64,6 +69,8 @@ export interface AllocInput {
   /** Hạng mục trong kế hoạch (khách chọn ở "Dịch vụ muốn sử dụng" và hạng mục của NCC đã có trong kế hoạch) */
   categories: AllocCategory[];
   planVendors: AllocPlanVendor[];
+  /** Tỉnh/thành nơi tổ chức: gợi ý chỉ lấy NCC cùng tỉnh/thành (như "Gợi ý cho bạn"); không có thì không lọc */
+  city?: string | null;
   /** Nơi tổ chức (xếp hạng, không phải điều kiện ngân sách) */
   ward?: string | null;
   styles?: string[];
@@ -204,10 +211,16 @@ export function chosenItem(v: AllocPlanVendor, guestCount: number, tables: numbe
   return { ...base, packageSource: selected ? 'SELECTED' : 'PLANNED', cost: est?.cost ?? 0, costSource: 'PLANNED', deposited: 0 };
 }
 
-/** Gói kèm tiêu chí xếp hạng của pickPackage: cùng phường/xã với nơi tổ chức, phong cách trùng */
-function toCandidates(c: AllocCategory, guestCount: number, tables: number, ward?: string | null, styles: string[] = []): (CandidatePackage & { p: AllocPackage })[] {
+/**
+ * Gói gợi ý được kèm tiêu chí xếp hạng của pickPackage (cùng phường/xã với nơi tổ chức, phong cách trùng). Lọc như "Gợi ý cho bạn"
+ * (suggest-rules.ts hardFilter): NCC cùng tỉnh/thành với nơi tổ chức, chưa có trong kế hoạch (kể cả đơn đã hủy).
+ */
+function toCandidates(c: AllocCategory, guestCount: number, tables: number, input: Pick<AllocInput, 'city' | 'ward' | 'styles' | 'planVendors'>): (CandidatePackage & { p: AllocPackage })[] {
+  const { city, ward, styles = [] } = input;
   const want = new Set(styles.map(normalizePlace));
-  return candidates(c, guestCount, tables).map(({ p, cost, chargedTables }) => ({
+  const inPlan = new Set(input.planVendors.map((v) => v.vendorId));
+  const shown = candidates(c, guestCount, tables).filter(({ p }) => !inPlan.has(p.vendorId) && (!city || normalizePlace(p.city) === normalizePlace(city)));
+  return shown.map(({ p, cost, chargedTables }) => ({
     p,
     id: p.id,
     cost,
@@ -337,7 +350,7 @@ export function allocate(input: AllocInput) {
     const row = rows.get(venueOpen.id)!;
     const limit = remaining - sum(members.map((m) => m.median));
     row.limit = row.shareLimit = round(Math.max(0, limit));
-    row.suggestion = suggestionOf(toCandidates(venueOpen, guests, tables, input.ward, input.styles), limit);
+    row.suggestion = suggestionOf(toCandidates(venueOpen, guests, tables, input), limit);
     row.cost = suggestedVenueCost = row.suggestion?.cost ?? 0;
     venueStatus = 'SUGGESTED';
   }
@@ -362,14 +375,15 @@ export function allocate(input: AllocInput) {
     }
   }
   const baseMode: BaseMode = state ? state.baseMode : (input.preset as BaseMode);
-  const items = state ? state.items : initFromMode(members, baseMode);
+  // Phương án có sẵn: không hạng mục nào quá giá gói cao nhất, phần thừa sang hạng mục còn thiếu (fitToMax)
+  const items = state ? state.items : fitToMax(initFromMode(members, baseMode), markersOf(members.map((m) => m.id), (id) => levels.get(id)?.max ?? null, serviceBudget));
   const { amounts, leftover } = splitAmounts(items, serviceBudget, state?.capAmount ?? null);
 
   for (const it of items) {
     const row = rows.get(it.id)!;
     const amount = amounts[it.id];
     const cat = groupCats.find((c) => c.id === it.id)!;
-    const pool = toCandidates(cat, guests, tables, input.ward, input.styles);
+    const pool = toCandidates(cat, guests, tables, input);
     row.ratio = it.ratio;
     row.share = it.ratio / TOTAL;
     row.limit = row.shareLimit = round(amount);
@@ -380,7 +394,7 @@ export function allocate(input: AllocInput) {
 
   // Hạng mục đã bỏ khỏi phần chia: vẫn gửi gói để client tính ngay khi khách bấm "Thêm lại"
   for (const c of openServices.filter((c) => excluded.has(c.id))) {
-    rows.get(c.id)!.packages = toCandidates(c, guests, tables, input.ward, input.styles).map(({ p: _p, ...x }) => x);
+    rows.get(c.id)!.packages = toCandidates(c, guests, tables, input).map(({ p: _p, ...x }) => x);
   }
 
   // Mục 5. Hạng mục đã chọn hoặc có đơn chưa cọc (dịch vụ, không phải tiệc): giới hạn gợi ý theo tỷ lệ ảo; đã cọc thì không có

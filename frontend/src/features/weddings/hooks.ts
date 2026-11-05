@@ -3,7 +3,7 @@ import { weddingsApi } from '@/api/weddings'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/store/auth'
 import { ApiError } from '@/api/client'
-import type { Budget, BudgetSettings, NewTask, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
+import type { Budget, BudgetSettings, NewTask, PlanItem, Timeline, TimelineItemPatch, Wedding, WeddingInput, WeddingPatch } from '@/types/wedding'
 
 /** Khóa cache theo người dùng để đổi tài khoản không lẫn dữ liệu. */
 export const planningKeys = {
@@ -91,13 +91,19 @@ export function usePlan() {
   return useQuery({ queryKey: planningKeys.plan(uid), queryFn: weddingsApi.getPlan, enabled: !!uid })
 }
 
+/**
+ * Bỏ NCC khỏi kế hoạch (tin nhắn, đơn giữ nguyên). Có Hoàn tác: thêm lại đúng gói khách đã chọn (gói dự kiến thì để backend tự chọn).
+ */
 export function useRemovePlanItem() {
   const refresh = useRefreshPlanning()
   return useMutation({
-    mutationFn: weddingsApi.removePlanItem,
-    onSuccess: () => {
-      toast('Đã bỏ dịch vụ khỏi kế hoạch')
+    mutationFn: (item: PlanItem) => weddingsApi.removePlanItem(item.id),
+    onSuccess: (_, item) => {
       void refresh()
+      const packageId = item.package?.source === 'SELECTED' ? item.package.id : null
+      toast(`Đã bỏ ${item.service.name} khỏi kế hoạch`, {
+        action: { label: 'Hoàn tác', onClick: () => void weddingsApi.addPlanItem(item.id, false, packageId).then(refresh, (e: Error) => toast(e.message)) },
+      })
     },
     onError: (e) => toast(e.message),
   })
@@ -150,10 +156,30 @@ function useAfterBudgetWrite() {
 
 /** Mức chia / tiệc tự lo, chi phí khác. API trả ngân sách mới, ghi thẳng vào cache. */
 export function useBudgetMutations() {
+  const uid = useCoupleId()
+  const qc = useQueryClient()
   const version = useVersion()
   const after = useAfterBudgetWrite()
   return {
-    settings: useMutation({ mutationFn: (body: BudgetSettings) => weddingsApi.updateBudgetSettings({ ...body, version: version() }), ...after }),
+    // Đổi sang một mức có sẵn: bảng chia và gói gợi ý tính lại ở client (splitView) nên đổi ngay trên cache, không chờ máy chủ
+    // (vài giây); máy chủ trả về thì ghi đè bằng số chính xác, lỗi thì trả về như cũ. Vào Tùy chỉnh vẫn chờ máy chủ tạo cấu hình.
+    settings: useMutation({
+      mutationFn: (body: BudgetSettings) => weddingsApi.updateBudgetSettings({ ...body, version: version() }),
+      onMutate: async (body) => {
+        const preset = body.budgetPreset
+        if (!preset || preset === 'CUSTOM') return undefined
+        const key = planningKeys.budget(uid)
+        await qc.cancelQueries({ queryKey: key })
+        const before = qc.getQueryData<Budget>(key)
+        if (before) qc.setQueryData<Budget>(key, { ...before, preset, split: { ...before.split, mode: preset, baseMode: preset } })
+        return { before }
+      },
+      onSuccess: after.onSuccess,
+      onError: (e: Error, _body, ctx) => {
+        if (ctx?.before) qc.setQueryData(planningKeys.budget(uid), ctx.before)
+        after.onError(e)
+      },
+    }),
     addExtraCost: useMutation({ mutationFn: (body: { name: string; amount: number }) => weddingsApi.addExtraCost({ ...body, version: version() }), onSuccess: after.onSuccess }),
     updateExtraCost: useMutation({
       mutationFn: ({ id, ...body }: { id: string; name?: string; amount?: number }) => weddingsApi.updateExtraCost(id, { ...body, version: version() }),

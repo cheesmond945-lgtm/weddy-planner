@@ -55,12 +55,12 @@ Tạo hoặc cập nhật. Body: `Wedding` không có `id` và `location`. Respo
 - **Lần đầu tạo**: lưu ngày tạo làm mốc bắt đầu, tạo 4 việc mặc định (việc đầu đã xong): Xác định ngân sách và quy mô tiệc; Lập danh sách khách mời sơ bộ; Thiết kế và gửi thiệp mời; Xác nhận lần cuối với các nhà cung cấp.
 - **Đổi `date`**: các hạn trên timeline **tự tính lại theo tỷ lệ** thời gian giữa mốc bắt đầu và ngày cưới (prototype lưu mỗi mốc dạng tỷ lệ 0..1).
 
-Lỗi: 400 `VALIDATION_ERROR`, `details` theo từng trường (`groomName`, `brideName`, `date`, `ward`, `guestCount`, `budget`, `budgetPreset`, `categorySlugs`)
+Lỗi: 400 `VALIDATION_ERROR`, `details` theo từng trường (`groomName`, `brideName`, `date`, `ward`, `guestCount`, `budget`, `budgetPreset`, `categorySlugs`); 400 `BUDGET_TOO_LOW` khi `budget` nhỏ hơn gói rẻ nhất trên Forever, hoặc nhỏ hơn tổng giá thấp nhất của các `categorySlugs` đã chọn theo số khách (`details.budget`, `details.categorySlugs`; cùng quy tắc với form, xem `GET /categories/min-costs` ở catalog.md)
 
 ### PATCH /weddings/me
 Đổi nhanh ở tab Ngân sách. Body: một hoặc nhiều trường `{ "budget"?, "guestCount"?, "tableCountOverride"? (null: về số tự tính, 1–500) }` kèm `"version"` (bắt buộc). Phân bổ tính lại khi đọc. Mức chia, tiệc tự lo: `PATCH /weddings/me/budget/settings` (mục 7). Response 200: `{ "data": Wedding }`.
 
-Lỗi: 400 `VALIDATION_ERROR`, 400 `VERSION_REQUIRED`, 409 `STALE_DATA`
+Lỗi: 400 `VALIDATION_ERROR`, 400 `VERSION_REQUIRED`, 409 `STALE_DATA`, 400 `BUDGET_TOO_LOW` (đổi `budget` nhỏ hơn gói rẻ nhất trên Forever; ở đây không kiểm tổng các dịch vụ vì dịch vụ tự lo không cần đủ tiền)
 
 ---
 
@@ -167,7 +167,7 @@ Chọn gói cho nhà cung cấp trong kế hoạch. Body `{ "packageId": "pk-1" 
 Lỗi: 404 `PLAN_ITEM_NOT_FOUND`, 400 `PACKAGE_NOT_AVAILABLE` (gói không thuộc nhà cung cấp, chưa duyệt hoặc đã ẩn), 409 `PLAN_VENDOR_LOCKED` (đã có đơn, giá theo đơn), 400 `VERSION_REQUIRED`, 409 `STALE_DATA`
 
 ### DELETE /weddings/me/plan-items/:id
-Chỉ khi `PLANNED` hoặc `DISCUSSING`. Bỏ luôn hội thoại của dịch vụ. Response 200: `{ "data": null }`.
+Chỉ khi `PLANNED` hoặc `DISCUSSING` và NCC không có đơn đang `NeedRevision`. Chỉ bỏ NCC khỏi kế hoạch: hội thoại, tin nhắn và đơn giữ nguyên (cũng vậy khi thay NCC cùng hạng mục bằng `replace`). Response 200: `{ "data": null }`.
 
 Lỗi: 404 `PLAN_ITEM_NOT_FOUND`, 409 `PLAN_ITEM_LOCKED`
 
@@ -253,17 +253,21 @@ Một endpoint cho toàn bộ subtab Tổng quan. Cặp đôi luôn nhận đủ
   "tasks": {
     "done": 5, "total": 18, "overdue": 1,
     "upcoming": [{ "id": "…", "title": "Chốt nhà hàng", "dueDate": "2026-11-05", "daysLeft": 7, "category": { "slug": "nha-hang", "…": "CategoryRef" } }],
-    "byCategory": [{ "slug": "nha-hang", "name": "Trung tâm tổ chức sự kiện", "done": 1, "total": 3 }, { "slug": null, "name": "Việc chung", "done": 2, "total": 4 }]
+    "byCategory": [{ "slug": "nha-hang", "name": "Trung tâm tổ chức sự kiện", "done": 1, "total": 3 }]
   },
+  "services": { "total": 5, "deposited": 1, "ordered": 1, "planned": 2, "open": 1, "own": 1 },
   "budget": {
-    "total": 500000000, "planned": 260000000, "deposited": 30000000, "remaining": 240000000,
+    "total": 500000000, "planned": 260000000, "deposited": 30000000, "lostDeposits": 0, "remaining": 240000000,
     "slices": [{ "slug": "nha-hang", "name": "…", "amount": 200000000, "budget": 200000000, "isOver": false }, { "slug": "other", "name": "Chi phí khác", "amount": 8000000, "budget": 0, "isOver": false }]
   }
 }
 ```
 
-- `tasks` không tính việc `LOCKED`. `upcoming`: 5 việc chưa xong có hạn sớm nhất (gồm cả việc quá hạn, `daysLeft` âm).
-- `budget.slices`: các hạng mục có giá > 0, cộng lát "Chi phí khác" (`slug: "other"`) nếu có.
+- `tasks` không tính việc `LOCKED`. `upcoming`: tối đa 3 việc chưa xong có hạn từ hôm nay trở đi, hạn sớm nhất trước (việc quá hạn không nằm ở đây, chỉ đếm ở `overdue`).
+- `byCategory`: tiến độ theo dịch vụ; việc không gắn dịch vụ chỉ tính vào `done`/`total`.
+- `services`: mỗi hạng mục của kế hoạch ở đúng một trạng thái (ưu tiên: tự lo `own`, đã cọc, có đơn chờ cọc `ordered`, gói dự kiến `planned`, chưa chọn `open`); `total` không gồm tự lo. `null` khi link công khai không chia sẻ tab Dịch vụ.
+- `budget.slices`: các hạng mục đã chọn có giá > 0, cộng các lát "Tiệc tự lo" (`own-venue`), "Cọc mất (đơn đã hủy)" (`lost`), "Chi phí khác" (`other`) nếu có; tổng các lát bằng `planned`. `deposited` lấy theo tab Ngân sách (đơn còn hiệu lực mới nhất của NCC trong kế hoạch); `lostDeposits` là cọc mất, đã nằm trong `planned`.
+- `tasks.overdue` không tính việc thanh toán đợt 2 (cùng quy tắc với Timeline).
 
 ---
 

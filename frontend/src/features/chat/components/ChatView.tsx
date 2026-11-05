@@ -1,6 +1,6 @@
 import { Filter, Receipt, Search, Send } from 'lucide-react'
 import { effectiveSender } from '../messageSender'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { useStickToBottom } from '@/lib/useStickToBottom'
 import { Link } from 'react-router'
 import { Badge, type BadgeTone } from '@/components/Badge'
@@ -27,6 +27,10 @@ import { useSendAttachment } from '../useSendAttachment'
 import { coupleWording } from '../wording'
 import { AttachmentContent, ComposerTools, ImageAlbum } from './ChatAttachments'
 import { imagesOf, MessageShell, ReplyBar, type NameOf } from './MessageExtras'
+import { shortVendorName } from '@/lib/vendorName'
+import { usePlan } from '@/features/weddings/hooks'
+import { chosenPackageName, quickReplies } from '../quickReplies'
+import { QuickReplyChips } from './QuickReplyChips'
 
 interface ChatViewProps {
   conversations: Conversation[]
@@ -54,12 +58,91 @@ function orderBadge(c: Conversation) {
   return { ...b, urgent }
 }
 
+/** Độ rộng cột danh sách hội thoại (máy tính): mặc định, giới hạn kéo, khóa lưu trong trình duyệt */
+const INBOX_W = {
+  def: 400,
+  min: 300,
+  max: 560,
+  key: 'forever.chat.inboxWidth',
+}
+const clampW = (w: number) => Math.min(INBOX_W.max, Math.max(INBOX_W.min, Math.round(w)))
+function savedWidth() {
+  try {
+    const v = Number(localStorage.getItem(INBOX_W.key))
+    return v ? clampW(v) : INBOX_W.def
+  } catch {
+    return INBOX_W.def
+  }
+}
+
+/**
+ * Cột danh sách hội thoại kéo rộng / hẹp được (thanh mảnh ở mép phải, chỉ máy tính): kéo chuột, hoặc focus rồi dùng phím ← →;
+ * bấm đúp để về mặc định. Độ rộng nhớ theo trình duyệt.
+ */
+function useInboxWidth() {
+  const [width, setWidth] = useState(savedWidth)
+  const save = (w: number) => {
+    setWidth(w)
+    try {
+      localStorage.setItem(INBOX_W.key, String(w))
+    } catch {
+      /* trình duyệt chặn lưu: chỉ giữ trong phiên */
+    }
+  }
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const left = e.currentTarget.parentElement!.getBoundingClientRect().left
+    let last = width
+    const move = (ev: PointerEvent) => setWidth((last = clampW(ev.clientX - left)))
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.style.removeProperty('cursor')
+      document.body.style.removeProperty('user-select')
+      save(last)
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 40 : 16
+    if (e.key === 'ArrowLeft') save(clampW(width - step))
+    else if (e.key === 'ArrowRight') save(clampW(width + step))
+    else return
+    e.preventDefault()
+  }
+  return { width, onPointerDown, onKeyDown, reset: () => save(INBOX_W.def) }
+}
+
 /** Hộp thư: danh sách hội thoại + khung trò chuyện (renderChat trong prototype). */
 export function ChatView({ conversations, activeId, onSelect }: ChatViewProps) {
   const active = conversations.find((c) => c.id === activeId) ?? conversations[0]
+  const inbox = useInboxWidth()
   return (
-    <div className="grid h-[calc(100dvh-142px)] max-h-[900px] min-h-[610px] grid-cols-[340px_minmax(0,1fr)] overflow-hidden rounded-[26px] bg-surface shadow-panel max-[900px]:h-[calc(100dvh-170px)] max-[900px]:min-h-[560px] max-[900px]:grid-cols-[260px_minmax(0,1fr)] max-[640px]:h-auto max-[640px]:max-h-none max-[640px]:grid-cols-1">
+    <div
+      style={{ '--inbox-w': `${inbox.width}px` } as CSSProperties}
+      className="relative grid h-[calc(100dvh-142px)] max-h-[900px] min-h-[610px] grid-cols-[var(--inbox-w)_minmax(0,1fr)] overflow-hidden rounded-[26px] bg-surface shadow-panel max-[900px]:h-[calc(100dvh-170px)] max-[900px]:min-h-[560px] max-[900px]:grid-cols-[260px_minmax(0,1fr)] max-[640px]:h-auto max-[640px]:max-h-none max-[640px]:grid-cols-1"
+    >
       <Inbox conversations={conversations} activeId={active.id} onSelect={onSelect} />
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Kéo để đổi độ rộng danh sách hội thoại"
+        aria-valuemin={INBOX_W.min}
+        aria-valuemax={INBOX_W.max}
+        aria-valuenow={inbox.width}
+        tabIndex={0}
+        title="Kéo để đổi độ rộng (bấm đúp để về mặc định)"
+        onPointerDown={inbox.onPointerDown}
+        onKeyDown={inbox.onKeyDown}
+        onDoubleClick={inbox.reset}
+        style={{ left: 'calc(var(--inbox-w) - 4px)' }}
+        className="group absolute inset-y-0 z-10 w-2 cursor-col-resize outline-none max-[900px]:hidden"
+      >
+        <span className="mx-auto block h-full w-px bg-transparent transition-colors group-hover:bg-gold-700/50 group-focus-visible:bg-gold-700 group-active:bg-gold-700" />
+      </div>
       <Thread key={active.id} conversation={active} />
     </div>
   )
@@ -155,7 +238,9 @@ function Inbox({ conversations, activeId, onSelect }: ChatViewProps) {
         >
           <img src={c.service.coverImageUrl} alt="" className="row-span-2 size-[46px] rounded-full bg-accent-soft object-cover" />
           <span className="flex min-w-0 items-center gap-1.5">
-            <b className="truncate text-[13px] font-semibold">{c.service.name}</b>
+            <b className="truncate text-[13px] font-semibold" title={c.service.name}>
+              {shortVendorName(c.service.name)}
+            </b>
             {(() => {
               const b = orderBadge(c)
               return (
@@ -187,6 +272,13 @@ function Thread({ conversation }: { conversation: Conversation }) {
   const send = useSendMessage(conversation.id)
   const [text, setText] = useState('')
   const [revising, setRevising] = useState<Order | null>(null)
+  // Câu soạn sẵn như khung chat nổi: theo đơn mới nhất, nhắc tên gói khách đã chọn trong kế hoạch
+  const { data: plan } = usePlan()
+  const chips = quickReplies({
+    order: conversation.latestOrder ?? null,
+    categorySlug: conversation.service.category.slug,
+    packageName: chosenPackageName(plan?.items.find((i) => i.service.id === conversation.service.id)),
+  })
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   // Trả lời một tin cụ thể và thả cảm xúc (như Messenger); đổi hội thoại thì bỏ tin đang trả lời
@@ -231,12 +323,12 @@ function Thread({ conversation }: { conversation: Conversation }) {
       <header className="flex min-h-[82px] items-center gap-3 border-b border-line-soft px-6 py-4 max-[900px]:p-3">
         <img src={conversation.service.coverImageUrl} alt="" className="size-[46px] shrink-0 rounded-full object-cover" />
         <div className="min-w-0">
-          <div className="truncate font-semibold">
-            {conversation.service.name} <span className="text-sage">●</span>
+          <div className="truncate font-semibold" title={conversation.service.name}>
+            {shortVendorName(conversation.service.name)}
           </div>
           <div className="mt-[3px] text-xs text-muted-foreground max-[640px]:hidden">
-            {conversation.service.category.name} <span className="px-1">•</span>
-            <span className="inline-flex items-center gap-[5px] rounded-pill border border-sage/30 bg-sage-soft px-[9px] py-0.5 text-[11px] text-sage">● Trực tuyến</span>
+            {/* Không có trạng thái trực tuyến thật của NCC nên không ghi "Trực tuyến" */}
+            {conversation.service.category.name}
           </div>
         </div>
         <Button asChild variant="outline" className="ml-auto rounded-pill whitespace-nowrap max-[900px]:px-1.5 max-[900px]:text-[11px] max-[640px]:hidden">
@@ -265,31 +357,41 @@ function Thread({ conversation }: { conversation: Conversation }) {
           ))}
       </div>
 
-      {replying && (
-        <div className="border-t border-line-soft bg-surface px-6 pt-2.5">
-          <ReplyBar reply={replying} nameOf={nameOf} onCancel={() => setReplying(null)} />
-        </div>
-      )}
-      <form onSubmit={submit} className={cn('flex items-center gap-2.5 bg-surface px-6 pt-3.5 pb-[18px]', !replying && 'border-t border-line-soft')}>
-        <ComposerTools
-          className="min-w-0 flex-1"
-          sending={attach.isPending}
-          onFiles={(files) => void attach.sendFiles(files, replying?.id).then(() => setReplying(null))}
-          onVoice={(clip) => void attach.send({ file: clip.blob, name: clip.name, durationSec: clip.durationSec, replyToId: replying?.id }).then(() => setReplying(null), () => undefined)}
-        >
-          <input
-            ref={inputRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Nhập tin nhắn..."
-            aria-label="Tin nhắn"
-            className="min-w-0 flex-1 rounded-pill border-0 bg-bg px-[18px] py-[15px] text-[15px] text-ink outline-none focus:outline-1 focus:outline-primary"
-          />
-          <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending} className="ml-1 size-12 rounded-full">
-            <Send className="size-[19px]" />
-          </Button>
-        </ComposerTools>
-      </form>
+      <div className="border-t border-line-soft bg-surface px-6 pt-3 pb-[18px] max-[900px]:px-4">
+        <QuickReplyChips
+          chips={chips}
+          onPick={(t) => {
+            setText(t)
+            inputRef.current?.focus()
+          }}
+          className="mb-2.5"
+        />
+        {replying && (
+          <div className="mb-2.5">
+            <ReplyBar reply={replying} nameOf={nameOf} onCancel={() => setReplying(null)} />
+          </div>
+        )}
+        <form onSubmit={submit} className="flex items-center gap-2.5">
+          <ComposerTools
+            className="min-w-0 flex-1"
+            sending={attach.isPending}
+            onFiles={(files) => void attach.sendFiles(files, replying?.id).then(() => setReplying(null))}
+            onVoice={(clip) => void attach.send({ file: clip.blob, name: clip.name, durationSec: clip.durationSec, replyToId: replying?.id }).then(() => setReplying(null), () => undefined)}
+          >
+            <input
+              ref={inputRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Nhập tin nhắn..."
+              aria-label="Tin nhắn"
+              className="min-w-0 flex-1 rounded-pill border-0 bg-bg px-[18px] py-[15px] text-[15px] text-ink outline-none focus:outline-1 focus:outline-primary"
+            />
+            <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending} className="ml-1 size-12 rounded-full">
+              <Send className="size-[19px]" />
+            </Button>
+          </ComposerTools>
+        </form>
+      </div>
 
       <ReviseOrderDialog order={revising} onClose={() => setRevising(null)} />
     </section>

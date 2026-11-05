@@ -22,7 +22,7 @@ const toCompareItem = (s: ServiceSummary): CompareItem => ({
 
 /** Danh sách yêu thích nhóm theo hạng mục (renderFavorites trong prototype, 3.2). */
 export function FavoriteGroups() {
-  const { favorites, isPending } = useFavorites()
+  const { favorites, isPending, isError, error, refetch } = useFavorites()
   const { data: categories = [] } = useCategories()
   const hasSelection = useCompare().length > 0
   const toggleFavorite = useToggleFavorite()
@@ -47,6 +47,21 @@ export function FavoriteGroups() {
 
   if (isPending) {
     return <div className="h-[280px] animate-pulse rounded-[15px] bg-muted" aria-busy="true" aria-label="Đang tải" />
+  }
+
+  // Lỗi tải: báo rõ, không hiện như danh sách trống (khách tưởng mất các dịch vụ đã lưu)
+  if (isError) {
+    return (
+      <EmptyState
+        title="Không tải được danh sách yêu thích"
+        description={error.message}
+        action={
+          <Button variant="outline" onClick={() => refetch()}>
+            Thử lại
+          </Button>
+        }
+      />
+    )
   }
 
   if (!favorites.length) {

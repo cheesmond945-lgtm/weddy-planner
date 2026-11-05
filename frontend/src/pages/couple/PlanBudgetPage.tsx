@@ -15,7 +15,7 @@ import { BudgetPackagePicker } from '@/features/weddings/components/BudgetPackag
 import { BudgetSplitPanel } from '@/features/weddings/components/BudgetSplitPanel'
 import { StatCard, StatGrid } from '@/features/weddings/components/StatCard'
 import { BudgetSuggestionPicker, ChooseAllSuggestions, type ShownSuggestion } from '@/features/weddings/components/BudgetSuggestionPicker'
-import { useBudget, useBudgetMutations, usePatchWedding, usePlan } from '@/features/weddings/hooks'
+import { useBudget, useBudgetMutations, usePatchWedding, usePlan, useRefreshPlanning } from '@/features/weddings/hooks'
 import { ImportDialog } from '@/features/weddings/import/ImportDialog'
 import { displayMoney } from '@/features/weddings/budgetSplit'
 import { fundChangeReason, fundSnapshot, presetsLocked, splitView, type SplitView } from '@/features/weddings/budgetSplitView'
@@ -24,7 +24,8 @@ import { PLAN_STATUS } from '@/features/weddings/status'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
-import type { Budget, BudgetCategory, PlanItem } from '@/types/wedding'
+import type { Budget, BudgetCategory, BudgetVendor, PlanItem } from '@/types/wedding'
+import { shortVendorName } from '@/lib/vendorName'
 
 /** Tiền phân bổ hiển thị làm tròn 10.000đ (backend giữ số chính xác) */
 const money = (x: number) => formatMoney(displayMoney(x))
@@ -192,12 +193,17 @@ function SuggestCell({ c, view }: { c: BudgetCategory; view: SplitView }) {
     amount = c.limit
   }
   if (amount === null) return <span className="text-muted-foreground">—</span>
+  // 0đ là chưa phân bổ (Tùy chỉnh kéo về 0%, hoặc quỹ đã hết), không phải đã tiêu hết: không báo "Vượt"
+  if (displayMoney(amount) === 0) return <span className="text-[13px] text-muted-foreground italic">Chưa phân bổ</span>
   return (
     <div className="flex flex-col gap-0.5">
       <span className="font-medium tabular-nums">{money(amount)}</span>
+      {/* Không có gói nào trong mức này: gợi ý là gói rẻ nhất, nói rõ là gói đó vượt (đã chọn thì là gói đang chọn vượt) */}
       {over > 0 && (
-        <span className="self-start">
-          <Badge tone="warn">Vượt {money(over)}</Badge>
+        <span className="self-start" title={r ? 'Chưa có gói nào trong mức ngân sách này, đang gợi ý gói rẻ nhất.' : undefined}>
+          <Badge tone="wait">
+            {r ? 'Gói rẻ nhất vượt' : 'Gói đã chọn vượt'} {money(over)}
+          </Badge>
         </span>
       )}
     </div>
@@ -230,6 +236,43 @@ function suggestionsToChoose(b: Budget, view: SplitView) {
 }
 
 /** Cột "Dịch vụ / gói": đã chọn thì tên + trạng thái + ô chọn gói; chưa chọn thì gói gợi ý */
+/**
+ * "Bỏ chọn" nhà cung cấp chưa có đơn: bỏ khỏi kế hoạch, hạng mục quay lại thanh chia (backend tự đưa lại nhóm chia) và hiện gợi ý.
+ * Có Hoàn tác: thêm lại đúng gói đang chọn (trạng thái về Dự kiến).
+ */
+function UnchooseButton({ vendor: v }: { vendor: BudgetVendor }) {
+  const refresh = useRefreshPlanning()
+  const [busy, setBusy] = useState(false)
+  const unchoose = async () => {
+    setBusy(true)
+    try {
+      await weddingsApi.removePlanItem(v.id)
+      await refresh()
+      toast(`Đã bỏ chọn ${v.name}, hạng mục quay lại phần chia ngân sách`, {
+        action: {
+          label: 'Hoàn tác',
+          onClick: () => void weddingsApi.addPlanItem(v.id, false, v.package.id).then(refresh, (e: Error) => toast(e.message)),
+        },
+      })
+    } catch (e) {
+      toast((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => void unchoose()}
+      title="Bỏ nhà cung cấp này khỏi kế hoạch để chia lại ngân sách và xem gợi ý"
+      className="ml-1 rounded-sm px-1 text-[12px] text-muted-foreground underline-offset-2 hover:text-gold-700 hover:underline disabled:opacity-50"
+    >
+      {busy ? 'Đang bỏ…' : 'Bỏ chọn'}
+    </button>
+  )
+}
+
 function ServiceCell({ c, b, view, items }: { c: BudgetCategory; b: Budget; view: SplitView; items: PlanItem[] }) {
   const withTables = c.kind === 'VENUE' || c.vendors.some((v) => v.package.unit === 'TABLE')
   if (c.vendors.length) {
@@ -238,17 +281,19 @@ function ServiceCell({ c, b, view, items }: { c: BudgetCategory; b: Budget; view
         {c.vendors.map((v) => (
           <div key={v.id} className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-1.5">
-              <Link to={paths.serviceDetail(v.id)} className="font-medium hover:underline">
-                {v.name}
+              <Link to={paths.serviceDetail(v.id)} className="font-medium hover:underline" title={v.name}>
+                {shortVendorName(v.name)}
               </Link>
               {v.status && <Badge tone={PLAN_STATUS[v.status].tone}>{PLAN_STATUS[v.status].label}</Badge>}
+              {/* Chưa có đơn: bỏ chọn để hạng mục quay lại thanh chia và có gợi ý như hạng mục chưa chọn */}
+              {(v.status === 'PLANNED' || v.status === 'DISCUSSING') && !v.hasOrder && <UnchooseButton vendor={v} />}
             </div>
             <BudgetPackagePicker
               vendor={v}
               item={items.find((i) => i.id === v.id)}
               budget={b}
               withTables={withTables}
-              changeVendorSlug={c.kind === 'SERVICE' ? c.slug : undefined}
+              changeVendor={c.kind === 'SERVICE' && !v.hasOrder ? { slug: c.slug, name: c.name } : undefined}
             />
             {v.overCapacity && <span className="text-[12px] text-warn">Không còn phù hợp: vượt sức chứa. Hãy đổi trung tâm tiệc.</span>}
           </div>
@@ -297,13 +342,8 @@ function BudgetStats({ b, onEditTotal }: { b: Budget; onEditTotal: () => void })
           </span>
         }
         value={formatMoney(t.total)}
-        sub={
-          b.status === 'OVER_BUDGET' ? (
-            <span className="font-medium text-warn">Vượt ngân sách</span>
-          ) : (
-            `${b.guestCount.toLocaleString('vi-VN')} khách · ${b.tables.count} bàn`
-          )
-        }
+        // Vượt ngân sách đã có ở thẻ thứ tư và thông báo bên dưới: thẻ này luôn ghi số khách, số bàn
+        sub={`${b.guestCount.toLocaleString('vi-VN')} khách · ${b.tables.count} bàn`}
       />
       <StatCard label="Đã cọc" value={formatMoney(t.deposited)} sub={`Còn phải trả NCC ${formatMoney(t.owed)}`} />
       <StatCard label="Dự kiến chưa chốt" value={formatMoney(displayMoney(t.plannedTotal))} sub="Dịch vụ đã chọn, chưa có đơn" />
@@ -311,7 +351,7 @@ function BudgetStats({ b, onEditTotal }: { b: Budget; onEditTotal: () => void })
         label={over ? 'Vượt ngân sách' : 'Còn lại'}
         value={formatMoney(displayMoney(Math.abs(t.remaining)))}
         tone={over ? 'warn' : 'good'}
-        sub="Cho các hạng mục chưa chọn"
+        sub={over ? 'Chi phí dự kiến cao hơn tổng ngân sách' : 'Cho các hạng mục chưa chọn'}
       />
     </StatGrid>
   )
@@ -390,7 +430,7 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
 
       <section className="mb-5 rounded-lg border border-line bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-2.5 px-[22px] pt-5 pb-3">
-          <h2 className="text-lg">Theo hạng mục</h2>
+          <h2>Theo hạng mục</h2>
           <span className="ml-auto" />
           <ChooseAllSuggestions list={suggestionsToChoose(b, view)} />
           <Button variant="outline" size="sm" onClick={() => weddingsApi.downloadExport('budget').catch((e: Error) => toast(e.message))}>
@@ -404,7 +444,19 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
               <thead className="text-[13px] text-muted-foreground">
                 <tr className="border-t border-line">
                   <th className="px-[22px] py-2.5 font-medium">Hạng mục</th>
-                  <th className="px-3 py-2.5 font-medium">Gợi ý</th>
+                  {/* "Ngân sách gợi ý" (không chỉ "Gợi ý") để khỏi nhầm với nhà cung cấp gợi ý ở cột bên cạnh */}
+                  <th className="px-3 py-2.5 font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      Ngân sách gợi ý
+                      <span
+                        tabIndex={0}
+                        title="Phần quỹ dịch vụ chia cho hạng mục theo mức chia ngân sách (theo mặt bằng giá của từng dịch vụ và mức ưu tiên, không quá gói đắt nhất)."
+                        className="inline-grid cursor-help place-items-center text-muted-foreground"
+                      >
+                        <Info className="size-3.5" aria-label="Cách chia ngân sách gợi ý" />
+                      </span>
+                    </span>
+                  </th>
                   <th className="px-3 py-2.5 font-medium">Dịch vụ / gói</th>
                   <th className="px-[22px] py-2.5 text-right font-medium">Chi phí</th>
                 </tr>
@@ -426,16 +478,22 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
                         {c.vendors.length || c.status === 'OWN_VENUE' ? (
                           <span>{formatMoney(c.cost)}</span>
                         ) : s && !excluded ? (
-                          <span className="text-muted-foreground">{formatMoney(s.cost)}</span>
+                          // Chưa chọn: số của gói gợi ý, nhạt và có nhãn để không nhầm với chi phí đã chọn
+                          <>
+                            <span className="text-muted-foreground">{formatMoney(s.cost)}</span>
+                            <div className="text-[12px] text-muted-foreground italic">Nếu chọn gợi ý</div>
+                          </>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
-                        {/* Nhãn nguồn dưới số: "Dự kiến" / "Theo đơn" / "Đã cọc {x}" */}
-                        {c.vendors.map((v) => (
-                          <div key={v.id} className="text-[12px] text-muted-foreground">
-                            {costSourceText(v.costSource, v.deposited)}
-                          </div>
-                        ))}
+                        {/* Nhãn nguồn dưới số: "Theo đơn" / "Đã cọc {x}"; "Dự kiến" đã có ở nhãn trạng thái cạnh tên NCC nên không lặp */}
+                        {c.vendors
+                          .filter((v) => v.costSource !== 'PLANNED')
+                          .map((v) => (
+                            <div key={v.id} className="text-[12px] text-muted-foreground">
+                              {costSourceText(v.costSource, v.deposited)}
+                            </div>
+                          ))}
                       </td>
                     </tr>
                   )
@@ -451,7 +509,7 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
 
       <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface px-[22px] py-5">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <h2 className="text-lg">Chi phí khác ngoài Forever</h2>
+          <h2>Chi phí khác ngoài Forever</h2>
           <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
             <FileSpreadsheet />
             Nhập từ Excel

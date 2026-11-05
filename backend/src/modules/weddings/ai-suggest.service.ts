@@ -5,7 +5,8 @@ import { CAPACITY_CATEGORIES } from './budget.config';
 import { BudgetCalcService } from './budget-calc.service';
 import { packageCost, type EnginePackage } from './budget-engine';
 import { SUGGESTION_COUNT } from './suggest.config';
-import { buildReasons, dropSharedReasons, hardFilter, rankSuggestions, type SuggestCandidate, type SuggestContext } from './suggest-rules';
+import { topVendors } from './budget-split';
+import { buildReasons, dropSharedReasons, estimateCost, hardFilter, normalizePlace, type SuggestCandidate, type SuggestContext } from './suggest-rules';
 import { versionOf } from './wedding-version';
 import { WeddingsService } from './weddings.service';
 
@@ -28,7 +29,7 @@ export function costCalculation(p: EnginePackage, tables: number, withMinNote = 
 
 /**
  * "Gợi ý cho bạn" theo hạng mục: thuật toán theo luật (không gọi mô hình ngôn ngữ), chạy trên dữ liệu thật.
- * Lọc cứng, xếp hạng và lý do nằm ở hàm thuần suggest-rules.ts (có unit test); ở đây chỉ gom dữ liệu từ DB.
+ * Lọc cứng và lý do nằm ở hàm thuần suggest-rules.ts; xếp hạng dùng topVendors (budget-split.ts) như ô gợi ý ở tab Ngân sách.
  * Ngân sách hạng mục ("Giới hạn") và số bàn dự kiến lấy như tab Ngân sách (allocation.ts).
  */
 @Injectable()
@@ -94,7 +95,19 @@ export class AiSuggestService {
     });
 
     const { passed, overBudget, noCapacity } = hardFilter(candidates, ctx);
-    const picked = rankSuggestions(passed, ctx).slice(0, SUGGESTION_COUNT);
+    // Xếp như ô gợi ý ở tab Ngân sách (topVendors, cùng tiêu chí với pickPackage): mỗi NCC lấy gói tốt nhất trong ngân sách,
+    // NCC xếp theo gói đó. Điểm đánh giá, phong cách theo gói lấy từ dữ liệu tab Ngân sách để hai nơi ra cùng thứ tự.
+    const passedById = new Map(passed.map((c) => [c.id, c]));
+    const want = new Set(weddingStyles.map(normalizePlace));
+    const options = packages.flatMap((p) => {
+      const c = passedById.get(p.vendorId);
+      const estimate = c ? estimateCost([p], ctx.slug, ctx.guestCount, ctx.tables) : null;
+      if (!c || !estimate) return [];
+      const place = ward ? (c.ward && normalizePlace(c.ward) === normalizePlace(ward) ? 0 : 1) : 0;
+      const overlap = p.styles.filter((s) => want.has(normalizePlace(s))).length;
+      return [{ id: p.id, vendorId: c.id, cost: estimate.cost, place, rating: p.rating, reviewCount: p.reviewCount, overlap, c, estimate }];
+    });
+    const picked = topVendors(options, ctx.budget, SUGGESTION_COUNT).map((o) => ({ ...o.c, estimate: o.estimate }));
     // Không gợi ý nào: dịch vụ có chi phí ước tính thấp nhất ngoài ngân sách (để gợi ý tăng ngân sách)
     const cheapest = picked.length ? null : ([...overBudget].sort((a, b) => a.estimate.cost - b.estimate.cost)[0] ?? null);
     const pkgDto = (c: (typeof passed)[number]) => ({
@@ -116,7 +129,10 @@ export class AiSuggestService {
       ward,
       guestCount: isVenue ? ctx.guestCount : null,
       tables: isVenue ? ctx.tables : null,
-      suggestions: dropSharedReasons(picked.map((c) => ({ service: summaries.get(c.id)!, ...buildReasons(c, ctx), package: pkgDto(c) }))),
+      // sameWard: NCC cùng phường/xã với nơi tổ chức (tiêu chí xếp hạng đầu tiên), giao diện gắn nhãn "Cùng phường"
+      suggestions: dropSharedReasons(
+        picked.map((c) => ({ service: summaries.get(c.id)!, ...buildReasons(c, ctx), package: pkgDto(c), sameWard: !!ward && !!c.ward && normalizePlace(c.ward) === normalizePlace(ward) })),
+      ),
       /** Số dịch vụ đang hiển thị của hạng mục (để ghi "Xem thêm n dịch vụ") */
       totalInCategory: visibleIds.length,
       /** Qua mọi điều kiện trừ ngân sách */

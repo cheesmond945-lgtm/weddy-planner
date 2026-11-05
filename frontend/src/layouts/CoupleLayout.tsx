@@ -255,7 +255,7 @@ function BackToTop({ hideClassName }: { hideClassName?: string }) {
       aria-hidden={!shown}
       onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}
       className={cn(
-        'btn-gold fixed bottom-[22px] left-[18px] z-40 grid size-[46px] place-items-center rounded-full border border-transparent shadow-fab transition-[transform,box-shadow,opacity] hover:-translate-y-0.5 hover:shadow-fab-hover max-sm:bottom-3.5 max-sm:left-3 max-sm:size-[42px] [&_svg]:size-[23px]',
+        'back-to-top btn-gold fixed bottom-[22px] left-[18px] z-40 grid size-[46px] place-items-center rounded-full border border-transparent shadow-fab transition-[transform,box-shadow,opacity] hover:-translate-y-0.5 hover:shadow-fab-hover max-sm:bottom-3.5 max-sm:left-3 max-sm:size-[42px] [&_svg]:size-[23px]',
         shown ? 'opacity-100' : 'pointer-events-none translate-y-2 opacity-0',
         hideClassName,
       )}

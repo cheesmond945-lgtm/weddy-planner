@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from '@/components/ui/toast'
 import { useRequireCouple } from '@/features/auth/useRequireCouple'
 import { CHAT_MODE, CHAT_PARAM, chatPanel } from '@/features/chat/chatPanel'
+import { chosenPackageName } from '@/features/chat/quickReplies'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 import type { ServiceDetail, ServiceSummary } from '@/types/catalog'
@@ -135,12 +136,13 @@ export function usePlanActions() {
       }
       return requireCouple(
         async () => {
-          // NCC đã có trong kế hoạch với một gói thì soạn sẵn câu hỏi giá chốt (mở chat không thêm NCC vào kế hoạch)
+          // NCC đã có trong kế hoạch với gói khách tự chọn thì soạn sẵn câu mở lời nhắc tên gói (gói dự kiến thì không);
+          // mở chat không thêm NCC vào kế hoạch
           const before = await weddingsApi
             .getPlan()
             .then((p) => p.items.find((i) => i.service.id === service.id) ?? null)
             .catch(() => null)
-          const packageName = before?.packageName || null
+          const packageName = chosenPackageName(before)
           // Chỉ mở chat, kế hoạch giữ nguyên (thêm NCC vào kế hoạch bằng nút Thêm vào kế hoạch)
           const conv = await chatApi.start(service.id, false).catch((e: Error) => {
             toast(e.message)
@@ -150,7 +152,7 @@ export function usePlanActions() {
             void refresh()
             chatPanel.open({
               conversation: conv,
-              draft: opts?.draft ?? (packageName ? `Mình muốn hỏi giá chốt cho gói ${packageName} ạ.` : ''),
+              draft: opts?.draft ?? (packageName ? `Mình đang quan tâm gói ${packageName}, muốn được tư vấn thêm ạ.` : ''),
               packageName,
               workingHours: service.workingHours,
             })
@@ -236,11 +238,14 @@ interface AddToPlanButtonProps {
   className?: string
   primary?: boolean
   size?: 'sm' | 'default' | 'lg'
+  /** Gói khách đã chọn (vd. ô chọn gói ở trang So sánh): thêm kèm đúng gói này; không có thì backend dùng gói dự kiến */
+  pkg?: { id: string; name: string } | null
 }
 
-export function AddToPlanButton({ service, variant = 'button', addedLabel = 'Trong kế hoạch', className, primary, size = 'sm' }: AddToPlanButtonProps) {
+export function AddToPlanButton({ service, variant = 'button', addedLabel = 'Trong kế hoạch', className, primary, size = 'sm', pkg }: AddToPlanButtonProps) {
   const inPlan = !!usePlanItemOf(service.id)
-  const { addToPlan } = usePlanActions()
+  const { addToPlan: addDefault, choosePackage } = usePlanActions()
+  const addToPlan = (s: ServiceSummary) => (pkg ? choosePackage(s, pkg.id, pkg.name) : addDefault(s))
 
   if (variant === 'icon') {
     return (

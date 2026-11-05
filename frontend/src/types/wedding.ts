@@ -164,11 +164,15 @@ export interface Overview {
     /** slug null là "Việc ngoài dịch vụ" */
     byCategory: { slug: string | null; name: string; done: number; total: number }[]
   } | null
+  /** Số hạng mục theo trạng thái (total không gồm tự lo); null khi không được xem tab Dịch vụ */
+  services: { total: number; deposited: number; ordered: number; planned: number; open: number; own: number } | null
   /** null khi không được xem tab Ngân sách */
   budget: {
     total: number
     planned: number
     deposited: number
+    /** Tiền cọc đã mất của đơn bị hủy (đã trả, nằm trong planned) */
+    lostDeposits: number
     remaining: number
     /** Chi phí theo hạng mục; slug "other" là Chi phí khác */
     slices: { slug: string; name: string; amount: number; budget: number; isOver: boolean }[]
@@ -457,6 +461,8 @@ export interface AiSuggestion {
   /** Dưới ngưỡng số lượt đánh giá: nhãn "Ít đánh giá" */
   fewReviews?: boolean
   package?: AiSuggestedPackage
+  /** Cùng phường/xã với nơi tổ chức (gợi ý xếp những NCC này trước); dữ liệu giả có thể không có */
+  sameWard?: boolean
 }
 
 export interface AiSuggestionResult {

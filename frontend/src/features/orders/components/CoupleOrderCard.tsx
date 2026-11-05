@@ -1,9 +1,13 @@
-import { Clock, MessageCircle, Star } from 'lucide-react'
+import { Clock, Star } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
+import { chatApi } from '@/api/chat'
 import { Badge } from '@/components/Badge'
 import { FormError } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
+import { chatPanel } from '@/features/chat/chatPanel'
+import { planningKeys } from '@/features/weddings/hooks'
 import { canRequestRevision, formatDayTime } from '@/features/vendorOrders/calc'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
 import { ReviewDialog } from '@/features/reviews/components/ReviewDialog'
@@ -17,6 +21,7 @@ import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
+import { useAuth } from '@/store/auth'
 import { openRevision } from '@/features/vendorOrders/calc'
 import type { InvoiceType, Order } from '@/types/order'
 import { depositChip, endedReason, itemsSummaryParts } from '../cardSummary'
@@ -69,6 +74,26 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   const [termsOpen, setTermsOpen] = useState(false)
   const [agreed, setAgreed] = useState(false)
   const deposit = useCreateDeposit()
+  const qc = useQueryClient()
+  const { user } = useAuth()
+  const [opening, setOpening] = useState(false)
+
+  // "Nhắn tin" (thẻ ở Kế hoạch): mở khung chat trượt bên phải như nút Nhắn tin ở thẻ dịch vụ thay vì chuyển sang trang Tin nhắn;
+  // không tìm thấy hội thoại (danh sách chưa tải được) thì mới mở trang Tin nhắn
+  const openChat = async (conversationId: string) => {
+    const page = () => navigate(`${paths.chat}?c=${encodeURIComponent(conversationId)}`)
+    setOpening(true)
+    try {
+      const list = await qc.fetchQuery({ queryKey: planningKeys.conversations(user?.id), queryFn: chatApi.listConversations, staleTime: 30_000 })
+      const conversation = list.find((c) => c.id === conversationId)
+      if (conversation) chatPanel.open({ conversation, draft: '', packageName: null })
+      else page()
+    } catch {
+      page()
+    } finally {
+      setOpening(false)
+    }
+  }
 
   const chat = variant === 'chat'
   const status = ORDER_STATUS[o.status]
@@ -212,9 +237,8 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
             </Button>
           )}
           {!chat && o.conversationId && (
-            <Button variant="ghost" size="sm" onClick={() => navigate(`${paths.chat}?c=${encodeURIComponent(o.conversationId)}`)}>
-              <MessageCircle />
-              Nhắn NCC
+            <Button size="sm" disabled={opening} onClick={() => void openChat(o.conversationId!)}>
+              {opening ? 'Đang mở…' : 'Nhắn tin'}
             </Button>
           )}
         </div>

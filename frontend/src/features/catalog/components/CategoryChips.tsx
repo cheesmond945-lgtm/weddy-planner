@@ -14,13 +14,12 @@ const SHORT_NAMES: Record<string, string> = { 'nha-hang': 'Trung tâm tiệc cư
 
 /**
  * Chip lọc theo danh mục (13): một hàng, cuộn ngang (snap), ẩn thanh cuộn, mép phải mờ dần khi còn chip bị khuất.
- * Bấm chip lọc ngay. Chip đang chọn nền rêu chữ trắng, số đếm là badge nhỏ.
+ * Bấm chip lọc ngay. Chip đang chọn nền rêu chữ trắng. Không ghi số dịch vụ (số kết quả đã có ở thanh kết quả).
  */
 export function CategoryChips({ categories, value, onChange }: CategoryChipsProps) {
   const railRef = useRef<HTMLDivElement>(null)
   const [moreRight, setMoreRight] = useState(false)
-  const total = categories.reduce((sum, c) => sum + c.serviceCount, 0)
-  const items = [{ slug: '', name: 'Tất cả', serviceCount: total }, ...categories]
+  const items = [{ slug: '', name: 'Tất cả' }, ...categories]
 
   // Còn chip bị cắt bên phải thì hiện lớp mờ ở mép phải
   useEffect(() => {
@@ -60,14 +59,6 @@ export function CategoryChips({ categories, value, onChange }: CategoryChipsProp
             >
               {c.slug && <CategoryIcon slug={c.slug} />}
               {SHORT_NAMES[c.slug] ?? c.name}
-              <span
-                className={cn(
-                  'inline-grid h-5 min-w-5 place-items-center rounded-pill px-1.5 text-xs leading-none font-semibold',
-                  active ? 'bg-white/20 text-white' : 'bg-gold-100 text-gold-800',
-                )}
-              >
-                {c.serviceCount}
-              </span>
             </button>
           )
         })}

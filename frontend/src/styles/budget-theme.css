@@ -1,22 +1,21 @@
 /*
  * Tab Ngân sách (.budget-theme, đặt cùng .plan-theme để lấy bộ màu xanh rêu / giấy kem của moodboard).
- * - Chữ Lexend (hình học, tròn, đủ dấu tiếng Việt, số dễ đọc) cho cả trang, kể cả số tiền và tiêu đề.
+ * - Chữ thường cùng font chung của web (Be Vietnam Pro, var(--sans)) để chuyển tab Kế hoạch không đổi kiểu chữ; số tiền chữ số đều.
  * - Thẻ bo tròn lớn, viền mảnh, nền kem; thanh kéo màu xanh rêu; bảng thoáng, tiêu đề cột chữ nhỏ in hoa.
  * Chế độ tối giữ bộ màu tối hiện có, chỉ đổi font và hình khối.
  */
 .budget-theme {
-  --budget-font: 'Lexend', 'Be Vietnam Pro', system-ui, sans-serif;
+  --budget-font: var(--sans);
   font-family: var(--budget-font);
-  font-weight: 300;
-  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
 }
 
-.budget-theme :is(h2, h3, strong, b, th, button, label, dt, dd, .font-medium, .font-semibold) {
+.budget-theme :is(strong, b, th, button, label, dt, dd, .font-medium, .font-semibold):not(h1, h2, h3) {
   font-family: var(--budget-font);
 }
 
-/* Số liệu: bỏ serif của thẻ số, dùng Lexend chữ số đều nhau */
-.budget-theme .font-serif {
+/* Số liệu: bỏ serif của thẻ số, dùng font chung chữ số đều nhau */
+.budget-theme .font-serif:not(h1, h2, h3) {
   font-family: var(--budget-font);
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -24,14 +23,6 @@
 .budget-theme .tabular-nums,
 .budget-theme input {
   font-variant-numeric: tabular-nums;
-}
-
-/* Tiêu đề khối: gọn, không serif (đè kiểu tạp chí của .plan-theme) */
-.budget-theme h2 {
-  font-size: 1.05rem;
-  font-weight: 500;
-  letter-spacing: 0;
-  line-height: 1.3;
 }
 
 /* Thẻ: bo lớn, viền nhạt */
@@ -143,17 +134,20 @@
   backdrop-filter: blur(4px);
 }
 
-/* Tiêu đề khối: chữ có chân thanh mảnh, nghiêng nhẹ (như "WEDNESDAY 9 JULY") */
-.budget-theme h2 {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: 1.55rem;
+/* Tiêu đề khối: Playfair Display đứng (cùng font tiêu đề toàn web, như "Dịch vụ yêu thích") */
+.budget-theme :is(h1, h2, h3) {
+  font-family: var(--serif);
+  font-style: normal;
   font-weight: 600;
-  font-style: italic;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.015em;
+}
+.budget-theme h2 {
+  font-size: 1.55rem;
+  line-height: 1.25;
 }
 
 
-/* Khung Mức chia: dòng Tiệc dạng nhãn bo tròn, hộp hướng dẫn tím nhạt */
+/* Khung Mức chia: dòng Tiệc dạng nhãn bo tròn, hộp hướng dẫn nền rêu nhạt (cùng tông trang) */
 .budget-chip {
   border-radius: 999px;
   padding: 4px 12px;
@@ -166,62 +160,57 @@
 .budget-note {
   border-radius: 14px;
   padding: 10px 14px;
-  background: #ece8f6;
-  color: #463c6b;
+  background: var(--accent-soft);
+  color: var(--moss-700);
 }
 :root[data-theme='dark'] .budget-chip,
 :root[data-theme='dark'] .budget-note {
-  background: color-mix(in srgb, #e8e4f4 14%, #1b1d16);
-  color: #ddd6f3;
+  background: color-mix(in srgb, #dfe8cf 14%, #1b1d16);
+  color: #d8e2c6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .budget-chip,
+  :root:not([data-theme='light']) .budget-note {
+    background: color-mix(in srgb, #dfe8cf 14%, #1b1d16);
+    color: #d8e2c6;
+  }
 }
 
 /* Danh sách mức chi khi ba mức có sẵn bị khóa: mỗi dịch vụ một màu pastel (chấm, thanh, nền khi rê chuột) */
-.budget-spend li {
-  --dot: #9dbf82;
-  --dot-soft: #eef4e5;
-  transition: background-color 0.15s ease;
+/*
+ * Danh sách mức chi khi quỹ dư (chỉ đọc): một tông ô liu cùng thanh quỹ thay cho mỗi dịch vụ một màu, thanh mảnh, dòng phân cách
+ * bằng đường kẻ. Thanh dài theo mức chi so với dịch vụ chi nhiều nhất.
+ */
+.budget-spend {
+  --spend: #8a8e56;
+  --spend-soft: #b4b682;
+  --spend-track: color-mix(in srgb, #8a8e56 11%, transparent);
 }
-.budget-spend li:nth-child(5n + 2) {
-  --dot: #efa98a;
-  --dot-soft: #fcefe6;
+:root[data-theme='dark'] .budget-spend {
+  --spend: #c2c48c;
+  --spend-soft: #8f9160;
+  --spend-track: color-mix(in srgb, #c2c48c 14%, transparent);
 }
-.budget-spend li:nth-child(5n + 3) {
-  --dot: #a99adb;
-  --dot-soft: #f1eef9;
-}
-.budget-spend li:nth-child(5n + 4) {
-  --dot: #e6c35c;
-  --dot-soft: #fbf5df;
-}
-.budget-spend li:nth-child(5n + 5) {
-  --dot: #e79aa8;
-  --dot-soft: #fcecef;
-}
-.budget-spend li:hover {
-  background: var(--dot-soft);
-}
-:root[data-theme='dark'] .budget-spend li:hover {
-  background: color-mix(in srgb, var(--dot) 12%, transparent);
-}
-.budget-dot {
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--dot);
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .budget-spend {
+    --spend: #c2c48c;
+    --spend-soft: #8f9160;
+    --spend-track: color-mix(in srgb, #c2c48c 14%, transparent);
+  }
 }
 .budget-bar {
   display: block;
-  height: 8px;
+  height: 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--dot) 18%, transparent);
+  background: var(--spend-track);
   overflow: hidden;
 }
 .budget-bar > i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--dot);
+  background: linear-gradient(90deg, var(--spend-soft), var(--spend));
+  transition: width 0.3s ease;
 }
 
 /* Thanh quỹ dịch vụ (chỉ đọc, khác thanh kéo): phần chi tối đa màu ô liu đặc, phần còn dư sọc chéo nhạt; không có núm */

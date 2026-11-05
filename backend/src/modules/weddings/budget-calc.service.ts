@@ -142,7 +142,7 @@ export class BudgetCalcService {
         min_tables: true,
         package_tags: { select: { tag: true } },
         vendor_profiles: {
-          select: { category_id: true, business_name: true, ward: true },
+          select: { category_id: true, business_name: true, ward: true, city: true },
         },
       },
       orderBy: [{ price: 'asc' }, { id: 'asc' }],
@@ -156,6 +156,7 @@ export class BudgetCalcService {
               categoryId: r.vendor_profiles.category_id,
               vendorName: r.vendor_profiles.business_name ?? '',
               ward: r.vendor_profiles.ward ?? null,
+              city: r.vendor_profiles.city ?? null,
               styles: r.package_tags.map((t) => t.tag),
             },
           ]
@@ -334,6 +335,7 @@ export class BudgetCalcService {
       lostDeposits,
       categories,
       planVendors,
+      city: w.city ?? null,
       ward: (w as { ward?: string | null }).ward ?? null,
       styles: (w.style ?? '')
         .split(',')

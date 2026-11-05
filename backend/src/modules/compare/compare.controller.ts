@@ -11,6 +11,7 @@ import { hallConflict } from '../halls/hall-busy';
 import { loadBusy } from '../halls/hall-store';
 import { allocate, consequenceOf } from '../weddings/allocation';
 import { compareServices, isVenue, round10k, type DayAvailability } from './compare-rules';
+import { MAX_REVIEW_QUOTES, VENUE_SLUG } from './compare.config';
 
 const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);
@@ -115,12 +116,29 @@ export class CompareController {
       select: { id: true, ward: true },
     });
     const wardOf = new Map(profiles.map((p) => [p.id, p.ward]));
+    // Bình luận của khách cho dòng Đánh giá: trích nguyên văn, mới nhất trước, tối đa MAX_REVIEW_QUOTES mỗi NCC
+    const reviewRows = await this.prisma.reviews.findMany({
+      where: { order_items: { orders: { vendor_id: { in: ids } } } },
+      orderBy: { created_date: 'desc' },
+      select: { rating: true, content: true, order_items: { select: { orders: { select: { vendor_id: true } } } } },
+    });
+    const quotesOf = new Map<string, { rating: number; content: string }[]>();
+    for (const r of reviewRows) {
+      const v = r.order_items.orders?.vendor_id;
+      const list = v ? (quotesOf.get(v) ?? []) : [];
+      if (v && r.content.trim() && list.length < MAX_REVIEW_QUOTES) quotesOf.set(v, [...list, { rating: r.rating, content: r.content.trim() }]);
+    }
     const categoryId = items[0].category.id;
 
     // Đám cưới của người gọi (có thể chưa thiết lập). Ngân sách hạng mục = giới hạn của hàm phân bổ (tab Ngân sách);
     // hạng mục chưa nằm trong kế hoạch thì tính thêm hạng mục đó.
     const wedding = await this.weddings.findWedding(req.user.sub);
     const calc = wedding ? await this.calc.compute(wedding.id, [categoryId]) : null;
+    // Trung tâm tiệc đang có trong kế hoạch (chưa hủy): phường của sảnh là nơi tổ chức thật khi so các hạng mục khác
+    const venueVendor = isVenue(slug) ? null : (calc?.input.planVendors.find((v) => v.slug === VENUE_SLUG && !v.cancelled) ?? null);
+    const venueWard = venueVendor
+      ? officialWard((await this.prisma.vendor_profiles.findUnique({ where: { id: venueVendor.vendorId }, select: { ward: true } }))?.ward)
+      : null;
     const guestCount = calc && calc.input.guestCount > 0 ? calc.input.guestCount : null;
     // Mốc so sánh = giới hạn gợi ý của hạng mục như khi chưa chọn NCC nào (không dùng giá đơn đang có): tính lại phân bổ
     // sau khi bỏ các NCC của hạng mục này khỏi kế hoạch
@@ -175,6 +193,7 @@ export class CompareController {
         ward: officialWard(wardOf.get(s.id)),
         rating: s.reviewCount > 0 ? s.rating : null,
         reviewCount: s.reviewCount,
+        quotes: quotesOf.get(s.id) ?? [],
         availability: availability ?? undefined,
         order: orderOf.get(s.id) ?? null,
         packages: s.packages.map((p) => ({
@@ -192,7 +211,8 @@ export class CompareController {
         guestCount,
         tables: guestCount !== null ? calc!.result.tables : null,
         budget,
-        weddingWard: (wedding as { ward?: string | null } | null)?.ward ?? null,
+        weddingWard: venueWard ?? (wedding as { ward?: string | null } | null)?.ward ?? null,
+        venueName: venueWard ? venueVendor!.vendorName : null,
         weddingDate,
         lockedBy: deposited?.vendorName ?? null,
         lockedDeposit: deposited?.orderDeposited ?? 0,

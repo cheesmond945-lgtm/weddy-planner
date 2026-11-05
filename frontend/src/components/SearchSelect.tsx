@@ -113,7 +113,7 @@ export function SearchSelect({ groups, value, onChange, placeholder, searchPlace
         aria-controls={listId}
         aria-invalid={invalid || undefined}
         onClick={() => (open ? setOpen(false) : openPanel())}
-        className="flex min-h-10 w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border border-line bg-white/85 px-3.5 py-2 text-left text-sm font-medium text-ink hover:border-gold aria-expanded:border-gold aria-invalid:border-destructive"
+        className="flex min-h-10 w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border border-line bg-surface/85 px-3.5 py-2 text-left text-sm font-medium text-ink hover:border-gold aria-expanded:border-gold aria-invalid:border-destructive"
         {...aria}
       >
         {icon && (
@@ -144,7 +144,7 @@ export function SearchSelect({ groups, value, onChange, placeholder, searchPlace
                 setActive(0)
               }}
               onKeyDown={onKey}
-              className="h-9 w-full rounded-lg border border-line bg-white/85 pr-3 pl-9 text-sm focus:border-ring focus:outline-2 focus:outline-offset-0 focus:outline-ring"
+              className="h-9 w-full rounded-lg border border-line bg-surface/85 pr-3 pl-9 text-sm focus:border-ring focus:outline-2 focus:outline-offset-0 focus:outline-ring"
             />
           </div>
           <ul ref={listRef} id={listId} role="listbox" style={{ maxHeight: LIST_MAX_H }} className="overflow-auto">

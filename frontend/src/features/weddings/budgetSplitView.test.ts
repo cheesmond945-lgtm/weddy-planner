@@ -3,7 +3,8 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { configBody, fundChangeReason, presetsLocked, splitView, stateFromConfig, type FundSnapshot } from './budgetSplitView.ts'
+import { displayMoney } from './budgetSplit.ts'
+import { configBody, fundChangeReason, presetPicks, presetsLocked, presetsSame, splitView, stateFromConfig, type FundSnapshot } from './budgetSplitView.ts'
 import type { Budget, BudgetCategory, BudgetFund } from '@/types/wedding'
 
 const M = 1_000_000
@@ -78,18 +79,30 @@ const budget = (preset: Budget['preset']): Budget =>
   }) as unknown as Budget
 
 describe('splitView', () => {
-  it('phương án có sẵn: chia theo trung vị, gói gợi ý trong giới hạn, giới hạn gợi ý cho hạng mục đã chọn', () => {
+  it('phương án có sẵn: chia theo trung vị, cắt về giá gói cao nhất, gói gợi ý trong giới hạn, giới hạn gợi ý cho hạng mục đã chọn', () => {
     const v = splitView(budget('BALANCED'), null)
+    // 50/50 của 20tr = 10tr mỗi bên > gói cao nhất 6tr: cả hai về vạch 30%, 40% còn lại là Dự phòng (8tr)
     assert.deepEqual(v.rows.map((r) => [r.item.id, r.item.ratio, r.amount, r.suggestion?.pkg.cost]), [
-      ['TT', 5000, 10 * M, 6 * M],
-      ['HC', 5000, 10 * M, 6 * M],
+      ['TT', 3000, 6 * M, 6 * M],
+      ['HC', 3000, 6 * M, 6 * M],
     ])
+    assert.equal(v.leftover, 8 * M)
     // Tỷ lệ ảo 1/3, pool = 20 + 8 = 28tr
     assert.equal(v.limits.CA, 9_333_333)
-    // 10tr > gói cao nhất 6tr: cảnh báo, vạch ở 30%
-    assert.deepEqual([v.rows[0].warn, v.rows[0].unused, v.rows[0].marker], [true, 4 * M, 3000])
+    assert.deepEqual([v.rows[0].warn, v.rows[0].marker], [false, 3000])
     // Gói đắt nhất 6tr × 2 = 12tr < quỹ 20tr: quỹ dư, dự kiến chi tối đa 12tr, còn dư 8tr
     assert.deepEqual([v.surplus, v.spendMax, v.unspent], [true, 12 * M, 8 * M])
+  })
+  it('phương án có sẵn, quỹ không đủ mọi gói cao nhất: phần vượt sang hạng mục còn thiếu, dùng hết quỹ', () => {
+    const b = budget('BALANCED')
+    const cats = [category('TT', 'decor', { maxPackagePrice: 4 * M }), category('HC', 'hoa-cuoi', { maxPackagePrice: 12 * M }), b.categories[2]]
+    const v = splitView({ ...b, fund: { ...b.fund, serviceBudget: 14 * M, serviceBudgetRaw: 14 * M }, categories: cats }, null)
+    // 50/50 = 7tr mỗi bên; TT về vạch 28,57% (≈ 4tr), phần thừa sang HC (≈ 10tr ≤ 12tr)
+    assert.deepEqual(v.rows.map((r) => [r.item.id, r.item.ratio, displayMoney(r.amount)]), [
+      ['TT', 2857, 4 * M],
+      ['HC', 7143, 10 * M],
+    ])
+    assert.equal(v.leftover, 0)
   })
   it('quỹ nhỏ hơn tổng giá gói cao nhất: không phải quỹ dư, chi tối đa bằng tiền phân bổ', () => {
     const b = budget('BALANCED')
@@ -117,22 +130,42 @@ describe('splitView', () => {
   })
 })
 
-describe('presetsLocked: khóa 3 mức có sẵn khi mọi dịch vụ ở cả 3 mức đều được chia ≥ gói đắt nhất', () => {
-  // Hai dịch vụ cùng trung vị, gói đắt nhất 6tr. Mức Ưu tiên không gian cho Trang trí 13/23, Hoa cưới 10/23 → Hoa cưới nhận ít nhất
+describe('presetsLocked: khóa 3 mức có sẵn khi quỹ đủ cho gói đắt nhất của mọi dịch vụ', () => {
+  // Hai dịch vụ, gói đắt nhất 6tr mỗi bên: tổng 12tr. Các mức đã cắt về vạch nên khi quỹ ≥ 12tr cả 3 mức cho cùng kết quả
   const at = (sbTr: number) => {
     const b = budget('BALANCED')
     return { ...b, fund: { ...b.fund, serviceBudget: sbTr * M, serviceBudgetRaw: sbTr * M } } as Budget
   }
-  it('một hạng mục ở một mức không đủ thì không khóa', () => {
-    // 13tr: Hoa cưới ở mức Không gian = 13 × 10/23 ≈ 5,65tr < 6tr
-    assert.equal(presetsLocked(at(13), false), false)
-  })
+  it('quỹ dưới tổng giá gói đắt nhất thì không khóa', () => assert.equal(presetsLocked(at(11), false), false))
   it('bật khóa cần dư 5%, tắt chỉ khi không còn đủ (chống nhấp nháy)', () => {
-    // Ngưỡng đủ: Hoa cưới ≥ 6tr ⇔ quỹ ≥ 13,8tr; bật cần ≥ 6,3tr ⇔ quỹ ≥ 14,49tr
-    assert.equal(presetsLocked(at(14), false), false)
-    assert.equal(presetsLocked(at(14.5), false), true)
-    assert.equal(presetsLocked(at(14), true), true)
-    assert.equal(presetsLocked(at(13.7), true), false)
+    // Bật cần ≥ 12 × 1,05 = 12,6tr; đang khóa thì giữ tới 12tr
+    assert.equal(presetsLocked(at(12.5), false), false)
+    assert.equal(presetsLocked(at(12.6), false), true)
+    assert.equal(presetsLocked(at(12), true), true)
+    assert.equal(presetsLocked(at(11.9), true), false)
   })
   it('quỹ 0 hoặc nhóm rỗng: không khóa', () => assert.equal(presetsLocked(at(0), true), false))
+})
+
+describe('presetsSame: so ba mức theo gói gợi ý, không theo số tiền', () => {
+  // Trang trí và Chụp ảnh cùng trung vị, gói 2–6tr: Ưu tiên hình ảnh bớt Trang trí (×0,8), thêm Chụp ảnh (×1,8)
+  const pk = (id: string) => [2, 3, 4, 5, 6].map((tr) => ({ id: `${id}-${tr}`, cost: tr * M, place: 0, rating: null, reviewCount: 0, overlap: 0, vendorId: `${id}-v${tr}`, vendorName: `${id} ${tr}tr`, name: `${tr}tr`, chargedTables: null, unit: 'PACKAGE' as const }))
+  const at = (sbTr: number) => {
+    const b = budget('BALANCED')
+    return {
+      ...b,
+      split: { ...b.split, eligible: [{ categoryId: 'TT', slug: 'decor', median: 10 * M }, { categoryId: 'CA', slug: 'chup-anh', median: 10 * M }] },
+      categories: [category('TT', 'decor', { packages: pk('TT') }), category('CA', 'chup-anh', { packages: pk('CA') })],
+      fund: { ...b.fund, serviceBudget: sbTr * M, serviceBudgetRaw: sbTr * M },
+    } as Budget
+  }
+  it('quỹ 8tr: Cân bằng 4tr / 4tr; Ưu tiên hình ảnh Trang trí xuống gói 2tr, Chụp ảnh lên gói 5tr', () => {
+    assert.equal(presetsSame(at(8)), false)
+    const p = presetPicks(at(8))!
+    assert.deepEqual([p.BALANCED, p.VISUAL].map((m) => m.picks.map((x) => x.pkg?.cost)), [
+      [4 * M, 4 * M],
+      [2 * M, 5 * M],
+    ])
+  })
+  it('quỹ đủ gói đắt nhất (12tr): mọi mức cùng gói 6tr / 6tr, ẩn ba thẻ', () => assert.equal(presetsSame(at(12.5)), true))
 })

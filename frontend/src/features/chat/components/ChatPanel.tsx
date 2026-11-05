@@ -6,13 +6,16 @@ import { useStickToBottom } from '@/lib/useStickToBottom'
 import { Link } from 'react-router'
 import { chatApi } from '@/api/chat'
 import { planningKeys } from '@/features/weddings/hooks'
+import { Badge } from '@/components/Badge'
+import { ORDER_STATUS } from '@/features/vendorOrders/constants'
+import { formatDayTime } from '@/features/vendorOrders/calc'
 import { formatMessageTime } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
 import type { Message } from '@/types/chat'
 import { coupleWording } from '../wording'
-import { chatPanel, isWithinHours, useChatPanel, type ChatPanelState } from '../chatPanel'
+import { chatPanel, useChatPanel, type ChatPanelState } from '../chatPanel'
 import { useMarkReadOnView, useMessages } from '../hooks'
 import { groupAlbums } from '../albums'
 import { useMessageReaction } from '../useMessageReaction'
@@ -20,6 +23,9 @@ import { useRecallMessage } from '../useRecallMessage'
 import { useSendAttachment } from '../useSendAttachment'
 import { AttachmentContent, ComposerTools, ImageAlbum } from './ChatAttachments'
 import { imagesOf, MessageShell, ReplyBar, type NameOf } from './MessageExtras'
+import { shortVendorName } from '@/lib/vendorName'
+import { quickReplies } from '../quickReplies'
+import { QuickReplyChips } from './QuickReplyChips'
 
 /** Ô nhập tự giãn tối đa 4 dòng (cao mỗi dòng 22px + đệm trên dưới 20px). */
 const LINE = 22
@@ -36,23 +42,31 @@ interface PendingMessage {
 
 /**
  * Khung chat với NCC mở từ nút "Nhắn tin với NCC".
- * Máy tính: trượt từ phải, rộng 380px, cao hết màn hình. Điện thoại (< 900px): toàn màn hình, có nút quay lại.
- * Dialog của Radix lo phần giữ focus trong khung, Esc để đóng và trả focus về nút đã bấm.
+ * Máy tính: hộp nhỏ nổi ở góc dưới bên phải (kiểu Messenger), không phủ mờ trang, vẫn xem và bấm trang phía sau được;
+ * chỉ đóng bằng nút X hoặc Esc. Điện thoại (< 900px): toàn màn hình, có nút quay lại.
  */
 export function ChatPanel() {
   const panel = useChatPanel()
+  // Đánh dấu trên <html> khi hộp chat mở: khay so sánh và thông báo nhanh tránh sang trái để không bị hộp che (index.css)
+  const open = !!panel
+  useEffect(() => {
+    if (!open) return
+    document.documentElement.dataset.chat = 'open'
+    return () => void delete document.documentElement.dataset.chat
+  }, [open])
   return (
-    <DialogPrimitive.Root open={!!panel} onOpenChange={(o) => !o && chatPanel.close()}>
+    <DialogPrimitive.Root open={!!panel} modal={false} onOpenChange={(o) => !o && chatPanel.close()}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgb(43_38_32/0.25)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 max-[900px]:hidden" />
         <DialogPrimitive.Content
-          aria-describedby="chat-panel-status"
+          aria-describedby={undefined}
           // Mở khung thì đưa focus vào ô nhập tin (Radix mặc định focus nút đầu tiên là nút quay lại)
           onOpenAutoFocus={(e) => {
             e.preventDefault()
             ;(e.currentTarget as HTMLElement).querySelector('textarea')?.focus()
           }}
-          className="fixed inset-y-0 right-0 z-50 flex h-dvh w-[380px] flex-col border-l border-line bg-surface text-ink shadow-[-12px_0_40px_rgb(60_45_20/0.12)] outline-none data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:animate-in data-[state=open]:slide-in-from-right max-[900px]:w-full max-[900px]:border-l-0"
+          // Bấm ra ngoài (xem tiếp trang dịch vụ) không đóng hộp chat
+          onInteractOutside={(e) => e.preventDefault()}
+          className="fixed right-6 bottom-6 z-50 flex h-[min(560px,calc(100dvh-48px))] w-[360px] flex-col overflow-hidden rounded-[20px] border border-line bg-surface text-ink shadow-[0_18px_48px_-12px_rgb(60_45_20/0.35)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-bottom-4 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom-4 max-[900px]:inset-0 max-[900px]:h-dvh max-[900px]:w-full max-[900px]:rounded-none max-[900px]:border-0"
         >
           {panel && <PanelBody key={panel.conversation.id} panel={panel} />}
         </DialogPrimitive.Content>
@@ -62,7 +76,7 @@ export function ChatPanel() {
 }
 
 function PanelBody({ panel }: { panel: ChatPanelState }) {
-  const { conversation, packageName, workingHours } = panel
+  const { conversation, packageName } = panel
   const { service } = conversation
   const { user } = useAuth()
   const qc = useQueryClient()
@@ -75,7 +89,6 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
   const [pending, setPending] = useState<PendingMessage[]>([])
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const online = isWithinHours(workingHours)
   // Trả lời một tin cụ thể và thả cảm xúc (như Messenger)
   const [replying, setReplying] = useState<Message | null>(null)
   useEffect(() => setReplying(null), [conversation.id])
@@ -153,26 +166,23 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
     }
   }
 
-  const chips = [
-    { label: 'Hỏi giá chốt', text: `Mình muốn hỏi giá chốt cho ${packageName ? `gói ${packageName}` : 'gói dịch vụ bên mình'} ạ.` },
-    { label: 'Xem lịch trống', text: 'Cho mình hỏi bên mình còn lịch trống vào ngày cưới của mình không ạ?' },
-    { label: 'Đặt lịch tham quan', text: 'Mình muốn đặt lịch qua tham quan và tư vấn trực tiếp. Bên mình có khung giờ nào phù hợp không ạ?' },
-  ]
-  const iconBtn = 'grid size-10 shrink-0 place-items-center rounded-full text-ink-2 transition-colors hover:bg-gold-100 hover:text-ink [&_svg]:size-5'
+  // Câu soạn sẵn theo giai đoạn với NCC (chưa có đơn / chờ cọc / đã cọc / hoàn thành)
+  const order = conversation.latestOrder ?? null
+  const chips = quickReplies({ order, categorySlug: service.category.slug, packageName })
+  // Đầu hộp màu than (tách hẳn khỏi trang kem phía sau): nút biểu tượng chữ kem
+  const iconBtn = 'grid size-9 shrink-0 place-items-center rounded-full text-[#e9e1d2] transition-colors hover:bg-white/10 hover:text-white [&_svg]:size-[18px]'
 
   return (
     <>
-      <header className="flex items-center gap-3 border-b border-line px-4 py-3 pt-[max(12px,env(safe-area-inset-top))]">
+      <header className="flex items-center gap-3 bg-[#2f2a24] px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] text-[#f6efe2]">
         <DialogPrimitive.Close aria-label="Quay lại" className={cn(iconBtn, 'min-[901px]:hidden')}>
           <ArrowLeft strokeWidth={1.75} />
         </DialogPrimitive.Close>
-        <img src={service.coverImageUrl} alt="" className="size-11 shrink-0 rounded-full border border-line bg-gold-100 object-cover" />
+        <img src={service.coverImageUrl} alt="" className="size-10 shrink-0 rounded-full border border-white/20 bg-gold-100 object-cover" />
         <div className="min-w-0 flex-1">
-          <DialogPrimitive.Title className="truncate font-serif text-lg leading-tight font-semibold">{service.name}</DialogPrimitive.Title>
-          <p id="chat-panel-status" className="mt-0.5 flex items-center gap-1.5 text-[13px] text-ink-2">
-            <span aria-hidden className={cn('size-2 shrink-0 rounded-full', online ? 'bg-sage' : 'bg-ink-3')} />
-            {online ? 'Thường trả lời trong ~1 giờ' : 'NCC sẽ trả lời sớm nhất có thể'}
-          </p>
+          <DialogPrimitive.Title className="truncate font-serif text-base leading-tight font-semibold" title={service.name}>
+            {shortVendorName(service.name)}
+          </DialogPrimitive.Title>
         </div>
         <Link
           to={`${paths.chat}?c=${conversation.id}`}
@@ -187,6 +197,20 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
           <X strokeWidth={1.75} />
         </DialogPrimitive.Close>
       </header>
+
+      {/* Đơn mới nhất với NCC: một dòng gọn (mã đơn, trạng thái, hạn cọc nếu đang chờ), chi tiết xem ở thẻ đơn tab Dịch vụ */}
+      {conversation.latestOrder && (
+        <div className="flex items-center justify-between gap-3 border-b border-line bg-surface-2 px-4 py-2 text-[13px]">
+          <span className="flex min-w-0 items-center gap-1.5 text-ink-2">
+            <FileText className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+            <span className="truncate">
+              Đơn <b className="font-semibold text-ink">{conversation.latestOrder.orderCode}</b>
+              {conversation.latestOrder.status === 'Pending' && conversation.latestOrder.depositDueDate && ` · Hạn cọc ${formatDayTime(conversation.latestOrder.depositDueDate)}`}
+            </span>
+          </span>
+          <Badge tone={ORDER_STATUS[conversation.latestOrder.status].tone}>{ORDER_STATUS[conversation.latestOrder.status].label}</Badge>
+        </div>
+      )}
 
       <div ref={listRef} aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
         {isPending ? (
@@ -229,23 +253,16 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
         ))}
       </div>
 
-      <div className="border-t border-line px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+      <div className="border-t border-line bg-surface px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
         {/* Chip gợi ý: bấm là điền vào ô nhập, không tự gửi */}
-        <div className="mb-2.5 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {chips.map((c) => (
-            <button
-              key={c.label}
-              type="button"
-              onClick={() => {
-                setText(c.text)
-                inputRef.current?.focus()
-              }}
-              className="shrink-0 rounded-pill border border-line bg-bg px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:border-gold-700 hover:text-gold-700"
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
+        <QuickReplyChips
+          chips={chips}
+          onPick={(t) => {
+            setText(t)
+            inputRef.current?.focus()
+          }}
+          className="mb-2.5"
+        />
         {replying && (
           <div className="mb-2">
             <ReplyBar reply={replying} nameOf={nameOf} onCancel={() => setReplying(null)} />
@@ -276,7 +293,6 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKeyDown}
-              placeholder="Hỏi NCC về giá, lịch trống, thực đơn..."
               aria-label={`Tin nhắn gửi ${service.name}`}
               style={{ lineHeight: `${LINE}px` }}
               className="min-w-0 flex-1 resize-none rounded-[20px] border border-line bg-bg px-4 py-2.5 text-[15px] text-ink placeholder:text-ink-3 focus:border-gold-700 focus:outline-none"
@@ -292,7 +308,6 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
             </button>
           </ComposerTools>
         </form>
-        <p className="mt-1.5 text-xs text-ink-3 max-[900px]:hidden">Enter để gửi, Shift + Enter để xuống dòng</p>
       </div>
     </>
   )

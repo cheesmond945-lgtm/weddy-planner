@@ -166,7 +166,7 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
   }
 
   const chip = (active: boolean) =>
-    cn('rounded-pill border px-3.5 py-1.5 text-[13px] font-medium transition-colors', active ? 'border-ink bg-ink text-bg' : 'border-line bg-surface text-ink hover:border-primary')
+    cn('rounded-pill border px-3.5 py-1.5 text-[13px] font-medium transition-colors', active ? 'border-(--accent) bg-(--accent) text-(--accent-ink)' : 'border-line bg-surface text-ink hover:border-primary')
 
   return (
     <>

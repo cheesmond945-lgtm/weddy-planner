@@ -15,6 +15,17 @@ export const catalogKeys = {
   reviewSummary: (id: string) => ['catalog', 'service', id, 'review-summary'] as const,
 }
 
+/** Chi phí thấp nhất từng hạng mục theo số khách, dạng { slug: chi phí }; chưa có số khách thì vẫn tính (1 bàn) */
+export function useCategoryMinCosts(guests: number) {
+  return useQuery({
+    queryKey: ['category-min-costs', guests],
+    queryFn: () => catalogApi.categoryMinCosts(guests),
+    select: (rows) => Object.fromEntries(rows.map((r) => [r.slug, r.minCost])) as Record<string, number>,
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+  })
+}
+
 export function useCategories() {
   return useQuery({ queryKey: catalogKeys.categories, queryFn: catalogApi.listCategories, staleTime: 5 * 60_000 })
 }

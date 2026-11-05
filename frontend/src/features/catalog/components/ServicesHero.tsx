@@ -78,13 +78,23 @@ export function ServicesHero({ search }: { search: ReactNode }) {
       <span aria-hidden className="absolute inset-x-0 top-0 -z-10 h-40 bg-gradient-to-b from-[rgb(20_15_10/0.55)] to-transparent" />
       <span aria-hidden className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_55%_75%_at_50%_45%,rgb(20_15_10/0.55),rgb(20_15_10/0.12))]" />
 
-      <span className="mb-4 inline-flex rounded-pill border border-white/35 bg-white/15 px-3.5 py-1.5 text-xs leading-snug font-semibold tracking-[0.16em] text-white backdrop-blur-[6px]">
-        FOREVER · NỀN TẢNG DỊCH VỤ CƯỚI
+      {/* Nhãn trên tiêu đề: serif Cormorant Garamond in hoa giãn rộng (thanh lịch, vẫn dễ đọc), "Forever" đậm hơn phần mô tả */}
+      <span
+        style={{ fontFamily: "'Cormorant Garamond', var(--font-serif), serif" }}
+        className="mb-5 inline-flex items-center gap-2.5 rounded-pill border border-white/30 bg-white/10 px-5 py-1.5 text-[14px] leading-snug font-medium tracking-[0.24em] text-white/95 uppercase backdrop-blur-[6px]"
+      >
+        <span className="font-semibold text-[#f3d9a0]">Forever</span>
+        <span aria-hidden className="h-3 w-px bg-white/45" />
+        Nền tảng dịch vụ cưới
       </span>
-      {/* Ngắt dòng cố định sau "Hiện thực hóa", cụm chữ script không bị tách đôi */}
-      <h1 className="mx-auto mb-7 text-[clamp(34px,4.6vw,56px)] leading-[1.12] tracking-[-0.02em] text-balance text-white [text-shadow:0_2px_16px_rgb(0_0_0/0.35)]">
+      {/* Cả dòng chữ viết tay Fleur De Leah (một độ đậm nên không tô đậm thêm), sáng nhẹ như chữ trên thiệp; ngắt dòng cố định sau
+          "Hiện thực hóa", cụm chữ vàng không bị tách đôi */}
+      <h1
+        style={{ fontFamily: "'Fleur De Leah', var(--font-script), cursive" }}
+        className="mx-auto mb-7 text-[clamp(46px,6.2vw,80px)] leading-[1.15] font-normal tracking-normal text-balance text-white [text-shadow:0_0_14px_rgb(255_255_255/0.35),0_2px_16px_rgb(0_0_0/0.45)]"
+      >
         Hiện thực hóa <br />
-        <span className="font-script text-[1.25em] leading-none font-normal tracking-normal whitespace-nowrap text-[#f3d9a0]">giấc mơ cưới</span> của bạn
+        <span className="text-[1.08em] leading-none whitespace-nowrap text-[#f3d9a0]">giấc mơ cưới</span> của bạn
       </h1>
       {search}
     </section>

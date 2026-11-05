@@ -9,6 +9,7 @@ import { notifyVendorsOfWeddingDate, onWeddingCategories, planWeddingDateChange 
 import { bumpVersion, versionOf } from './wedding-version';
 import { dbFeatures, requireDbFeature } from '../../prisma/db-features';
 import { isHanoiWard } from './wards';
+import { budgetFloorErrors } from './budget-floor';
 
 const fail = (code: string, message: string, status: number, details?: unknown): never => {
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
@@ -62,6 +63,11 @@ export class WeddingsService {
   ) {}
 
   // ---------- Thông tin đám cưới ----------
+
+  /** Chi phí thấp nhất từng hạng mục theo số khách, dạng { slug: chi phí } */
+  private async minCostMap(guests: number) {
+    return Object.fromEntries((await this.services.minCosts(guests)).map((r) => [r.slug, r.minCost])) as Record<string, number>;
+  }
 
   private async categoryMaps() {
     const cats = await this.prisma.service_categories.findMany();
@@ -136,6 +142,9 @@ export class WeddingsService {
     if (!slugs.length) errors.categorySlugs = 'Vui lòng chọn ít nhất 1 dịch vụ.';
     else if (slugs.some((s) => !idBySlug.has(s))) errors.categorySlugs = 'Hạng mục không hợp lệ.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin đám cưới chưa hợp lệ.', 400, errors);
+    // Ngân sách tối thiểu: đủ gói rẻ nhất trên Forever và đủ tổng giá thấp nhất của các dịch vụ đã chọn (theo số khách)
+    const floor = budgetFloorErrors(budget, guest!, slugs, await this.minCostMap(guest!));
+    if (Object.keys(floor).length) return fail('BUDGET_TOO_LOW', floor.budget!, 400, floor);
 
     const existing = await this.findWedding(userId);
     // Cột style giữ trong DB nhưng không dùng nữa (bỏ phong cách 30/10/2026)
@@ -204,6 +213,11 @@ export class WeddingsService {
     }
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin chưa hợp lệ.', 400, errors);
     if (!Object.keys(data).length) return fail('VALIDATION_ERROR', 'Không có gì để cập nhật.', 400);
+    // Sửa ở tab Ngân sách: chỉ chặn ngân sách nhỏ hơn gói rẻ nhất trên Forever (dịch vụ tự lo ở tab này không cần đủ tiền)
+    if (data.budget !== undefined) {
+      const floor = budgetFloorErrors(data.budget, data.guest_count ?? w.guest_count ?? 0, null, await this.minCostMap(data.guest_count ?? w.guest_count ?? 0));
+      if (floor.budget) return fail('BUDGET_TOO_LOW', floor.budget, 400, floor);
+    }
     await this.prisma.$transaction(async (tx) => {
       await bumpVersion(tx, w.id, body.version);
       await tx.weddings.update({ where: { id: w.id }, data });
@@ -397,23 +411,18 @@ export class WeddingsService {
     if (!vendor) return fail('PLAN_ITEM_NOT_FOUND', 'Không tìm thấy mục trong kế hoạch.', 404);
     const st = (await this.statuses(w.user_id, w.id, [vendor])).get(id)!;
     if (['AWAITING_DEPOSIT', 'CONFIRMED'].includes(st.status)) return fail('PLAN_ITEM_LOCKED', 'Dịch vụ đang chờ cọc hoặc đã chốt, không thể bỏ.', 409);
+    // Đơn NCC đang chờ chỉnh sửa theo yêu cầu của khách: chưa bỏ được (bỏ thì đơn mất chỗ hiện trong hạng mục)
+    const revising = await this.prisma.orders.count({ where: { wedding_id: w.id, vendor_id: id, status: 'NeedRevision' } });
+    if (revising) return fail('PLAN_ITEM_LOCKED', 'Nhà cung cấp đang chỉnh sửa đơn theo yêu cầu của bạn, chưa bỏ khỏi kế hoạch được. Hãy nhắn nhà cung cấp hoặc chờ đơn mới.', 409);
     await this.purge(w.id, vendor);
     return null;
   }
 
-  /** Bỏ NCC khỏi kế hoạch cùng hội thoại và các đơn chưa cọc (Nháp, Chờ cọc, Cần sửa). */
-  private async purge(weddingId: string, vendor: { id: string; user_id: string | null }) {
-    const wedding = await this.prisma.weddings.findUnique({ where: { id: weddingId }, select: { user_id: true } });
-    const orders = await this.prisma.orders.findMany({ where: { wedding_id: weddingId, vendor_id: vendor.id, status: { in: ['Draft', 'Pending', 'NeedRevision'] } }, select: { id: true } });
-    const orderIds = orders.map((o) => o.id);
-    const conv = wedding?.user_id && vendor.user_id ? await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: wedding.user_id, vendor_id: vendor.user_id } } }) : null;
-    await this.prisma.$transaction([
-      this.prisma.messages.deleteMany({ where: { OR: [{ order_id: { in: orderIds } }, ...(conv ? [{ conversation_id: conv.id }] : [])] } }),
-      this.prisma.payments.deleteMany({ where: { order_id: { in: orderIds } } }),
-      this.prisma.timeline_tasks.updateMany({ where: { order_id: { in: orderIds } }, data: { order_id: null } }),
-      this.prisma.orders.deleteMany({ where: { id: { in: orderIds } } }),
-      ...(conv ? [this.prisma.conversations.deleteMany({ where: { id: conv.id } })] : []),
-      this.prisma.plan_vendors.deleteMany({ where: { wedding_id: weddingId, vendor_id: vendor.id } }),
-    ]);
+  /**
+   * Bỏ NCC khỏi kế hoạch (chỉ dòng plan_vendors). Hội thoại, tin nhắn và đơn giữ nguyên: nhắn tin không gắn với kế hoạch,
+   * khách có thể đã hỏi nhiều NCC cùng hạng mục, bỏ khỏi kế hoạch không được làm mất lịch sử trao đổi.
+   */
+  private async purge(weddingId: string, vendor: { id: string }) {
+    await this.prisma.plan_vendors.deleteMany({ where: { wedding_id: weddingId, vendor_id: vendor.id } });
   }
 }

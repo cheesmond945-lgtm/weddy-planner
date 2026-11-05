@@ -44,4 +44,25 @@ describe('validateWeddingForm', () => {
   it('không chọn dịch vụ nào: báo lỗi', () => {
     assert.ok(validateWeddingForm({ ...valid, services: [] }, TODAY).services)
   })
+
+  describe('ngân sách tối thiểu theo giá thấp nhất từng hạng mục', () => {
+    const minCosts = { 'nha-hang': 135_000_000, decor: 10_000_000, 'hoa-cuoi': 800_000, makeup: 1_300_000 }
+    const all = Object.keys(minCosts)
+
+    it('nhỏ hơn gói rẻ nhất trên Forever: báo không đủ cho dịch vụ nào', () => {
+      const e = validateWeddingForm({ ...valid, budget: 500_000, services: all }, TODAY, minCosts)
+      assert.match(e.budget!, /gói rẻ nhất trên Forever khoảng 800.000đ/)
+    })
+
+    it('chỉ đủ vài dịch vụ đã chọn: báo tối thiểu và số dịch vụ vừa ngân sách', () => {
+      const e = validateWeddingForm({ ...valid, budget: 50_000_000, services: all }, TODAY, minCosts)
+      assert.match(e.budget!, /chưa đủ cho 4 dịch vụ đã chọn: tối thiểu khoảng 147.100.000đ cho 300 khách/)
+      assert.match(e.services!, /chỉ đủ khoảng 3 dịch vụ/)
+    })
+
+    it('đủ cho các dịch vụ đã chọn, hoặc chưa có dữ liệu giá: không báo', () => {
+      assert.deepEqual(validateWeddingForm({ ...valid, budget: 50_000_000, services: ['decor', 'makeup'] }, TODAY, minCosts), {})
+      assert.deepEqual(validateWeddingForm({ ...valid, budget: 1_000, services: all }, TODAY), {})
+    })
+  })
 })

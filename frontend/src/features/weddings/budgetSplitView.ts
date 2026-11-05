@@ -1,8 +1,11 @@
 import {
   BASE_MODES,
+  fitToMax,
   initFromMode,
+  markersOf,
   pickPackage,
   priceMarker,
+  reserveOf,
   splitAmounts,
   suggestedLimit,
   type BaseMode,
@@ -58,6 +61,8 @@ export interface SplitView {
   /** Hạng mục đã bỏ khỏi phần chia (chỉ Tùy chỉnh) */
   excluded: BudgetCategory[]
   leftover: number
+  /** Dự phòng (tỷ lệ chưa giao cho hạng mục nào, chỉ Tùy chỉnh từ 2 hạng mục); tiền của nó nằm trong `leftover` */
+  reserve: number
   capAmount: number | null
   /**
    * Dự kiến chi tối đa của nhóm chia: mỗi hạng mục tiêu tối đa min(tiền phân bổ, giá gói cao nhất).
@@ -73,6 +78,14 @@ export interface SplitView {
   /** Giới hạn gợi ý của hạng mục đã chọn / có đơn chưa cọc, theo categoryId */
   limits: Record<string, number>
 }
+
+/** Vạch giá gói cao nhất của nhóm chia (cho fitToMax ở phương án có sẵn và khi đặt lại Tùy chỉnh) */
+export const presetMarkers = (group: GroupMember[], b: Pick<Budget, 'categories' | 'fund'>) =>
+  markersOf(
+    group.map((m) => m.id),
+    (id) => b.categories.find((c) => c.categoryId === id)?.maxPackagePrice ?? null,
+    b.fund.serviceBudget,
+  )
 
 /** Đã cọc: chỉ hiện giá trị đơn, không giới hạn gợi ý */
 export const isDeposited = (c: BudgetCategory) => c.vendors.some((v) => v.costSource === 'DEPOSITED')
@@ -91,11 +104,12 @@ export function splitView(b: Budget, state: SplitState | null, surplus = false):
     .filter((e) => !excludedIds.includes(e.categoryId))
     .map((e) => ({ id: e.categoryId, slug: e.slug, median: e.median }))
   const baseMode: BaseMode = saved ? state!.baseMode : b.split.baseMode
-  const items = custom ? state!.items : initFromMode(group, baseMode)
-  const capAmount = custom ? state!.capAmount : null
   const sb = b.fund.serviceBudget
-  const { amounts, leftover } = splitAmounts(items, sb, capAmount)
   const byId = new Map(b.categories.map((c) => [c.categoryId, c]))
+  // Phương án có sẵn: như backend, không hạng mục nào quá giá gói cao nhất, phần thừa sang hạng mục còn thiếu
+  const items = custom ? state!.items : fitToMax(initFromMode(group, baseMode), presetMarkers(group, b))
+  const capAmount = custom ? state!.capAmount : null
+  const { amounts, leftover } = splitAmounts(items, sb, capAmount)
   const rows = items.flatMap((item) => {
     const category = byId.get(item.id)
     if (!category) return []
@@ -119,6 +133,7 @@ export function splitView(b: Budget, state: SplitState | null, surplus = false):
     rows,
     excluded: excludedIds.flatMap((id) => byId.get(id) ?? []),
     leftover,
+    reserve: custom ? reserveOf(items) : 0,
     capAmount,
     limits,
   }
@@ -128,26 +143,57 @@ export function splitView(b: Budget, state: SplitState | null, surplus = false):
 export const PRESET_LOCK_MARGIN = 1.05
 
 /**
- * Ba mức chia có sẵn có còn ảnh hưởng gợi ý không. Không còn (trả true, khóa ba thẻ) khi ở CẢ 3 mức, MỌI dịch vụ trong nhóm
- * (chưa trừ hạng mục bỏ khỏi phần chia, vì mức có sẵn không bỏ) đều được chia ≥ giá gói đắt nhất của nó: quỹ × ratio_i(mức) ≥ max_i.
- * Chống nhấp nháy: đang mở thì cần dư PRESET_LOCK_MARGIN mới khóa; đang khóa thì chỉ mở khi không còn đủ (biên 1).
+ * Ba mức chia có sẵn có còn ảnh hưởng gợi ý không. Các mức đã cắt về giá gói đắt nhất và chuyển phần thừa (fitToMax), nên khi quỹ
+ * ≥ tổng giá gói đắt nhất của nhóm (chưa trừ hạng mục bỏ khỏi phần chia, vì mức có sẵn không bỏ) thì cả 3 mức cho cùng kết quả:
+ * trả true, khóa ba thẻ. Chống nhấp nháy: đang mở thì cần dư PRESET_LOCK_MARGIN mới khóa; đang khóa thì chỉ mở khi không còn đủ.
  * Chỉ là hiển thị, không đổi cấu hình đã lưu.
  */
 export function presetsLocked(b: Budget, wasLocked: boolean) {
   const sb = b.fund.serviceBudget
-  const group: GroupMember[] = b.split.eligible.map((e) => ({ id: e.categoryId, slug: e.slug, median: e.median }))
-  if (!(sb > 0) || !group.length) return false
-  const margin = wasLocked ? 1 : PRESET_LOCK_MARGIN
+  if (!(sb > 0) || !b.split.eligible.length) return false
   const maxOf = new Map(b.categories.map((c) => [c.categoryId, c.maxPackagePrice]))
-  return BASE_MODES.every((mode) => {
-    const items = initFromMode(group, mode)
-    const { amounts } = splitAmounts(items, sb, null)
-    return items.every((it) => {
-      const max = maxOf.get(it.id)
-      return max != null && amounts[it.id] >= max * margin
-    })
-  })
+  const maxes = b.split.eligible.map((e) => maxOf.get(e.categoryId))
+  if (maxes.some((m) => m == null)) return false
+  return sb >= maxes.reduce((t: number, m) => t + m!, 0) * (wasLocked ? 1 : PRESET_LOCK_MARGIN)
 }
+
+/**
+ * Ba mức có sẵn (đã cắt về giá gói đắt nhất) cho cùng số tiền hiển thị: quỹ gần đủ cho gói đắt nhất của mọi dịch vụ nên gần như
+ * dịch vụ nào cũng chạm vạch, chọn mức nào cũng như nhau. Khi đó ẩn ba thẻ (Tùy chỉnh vẫn dùng được, khác presetsLocked).
+ */
+export function presetsSame(b: Budget) {
+  const picks = presetPicks(b)
+  if (!picks) return false
+  return BASE_MODES.every((m) => picks[m].key === picks.BALANCED.key)
+}
+
+/** Gói gợi ý của một dịch vụ ở một mức có sẵn */
+export interface PresetPick {
+  category: BudgetCategory
+  pkg: BudgetCandidatePackage | null
+}
+
+/**
+ * Gói gợi ý của từng dịch vụ ở cả 3 mức có sẵn (đã cắt về giá gói đắt nhất, như backend): số tiền chỉ có ý nghĩa ở chỗ nó chọn ra
+ * gói nào, nên ba mức được so theo gói chứ không theo số tiền. `key`: chuỗi id gói để so nhanh. null: quỹ ≤ 0 hoặc nhóm rỗng.
+ */
+export function presetPicks(b: Budget): Record<BaseMode, { key: string; picks: PresetPick[] }> | null {
+  const sb = b.fund.serviceBudget
+  const group: GroupMember[] = b.split.eligible.map((e) => ({ id: e.categoryId, slug: e.slug, median: e.median }))
+  if (!(sb > 0) || !group.length) return null
+  const markers = presetMarkers(group, b)
+  const byId = new Map(b.categories.map((c) => [c.categoryId, c]))
+  const of = (mode: BaseMode) => {
+    const { amounts } = splitAmounts(fitToMax(initFromMode(group, mode), markers), sb, null)
+    const picks = group.flatMap((m) => {
+      const category = byId.get(m.id)
+      return category ? [{ category, pkg: pickPackage(category.packages, amounts[m.id] ?? 0)?.pkg ?? null }] : []
+    })
+    return { key: picks.map((p) => p.pkg?.id ?? '-').join(), picks }
+  }
+  return { BALANCED: of('BALANCED'), SPACE: of('SPACE'), VISUAL: of('VISUAL') }
+}
+
 
 /** Ảnh chụp các đầu vào của quỹ để biết vì sao quỹ đổi khi khách không chạm vào thanh */
 export interface FundSnapshot {

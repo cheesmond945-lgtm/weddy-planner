@@ -56,7 +56,11 @@ const TORN_STYLE = { '--torn-paper': tornPolygon(11, 12, 0.8), '--torn-photo': t
 
 /** Đầu trang Kế hoạch: "Chú rể & Cô dâu", ngày cưới, số ngày còn lại, các nút (hubHead trong prototype). */
 export function PlanHubHeader({ wedding, onEdit }: { wedding: Wedding; onEdit: () => void }) {
-  const left = Math.max(0, daysBetween(today(), parseDate(wedding.date)))
+  // Âm: ngày cưới đã qua (ghi "Đã cưới N ngày" thay vì mãi "Hôm nay")
+  const diff = daysBetween(today(), parseDate(wedding.date))
+  const left = Math.max(0, diff)
+  const past = diff < 0 ? -diff : 0
+  const cal = left ? { head: 'Còn', num: String(left), foot: 'ngày nữa', label: `Còn ${left} ngày đến ngày cưới` } : past ? { head: 'Đã cưới', num: String(past), foot: 'ngày', label: `Đã cưới được ${past} ngày` } : { head: 'Hôm nay', num: '♥', foot: 'ngày cưới', label: 'Hôm nay là ngày cưới' }
   const [sharing, setSharing] = useState(false)
   // Đám cưới tạo từ bản cũ có thể chưa có tên: hiện vai trò mờ thay cho tên
   const name = (value: string, fallback: string) => value || <span className="opacity-70">{fallback}</span>
@@ -73,10 +77,10 @@ export function PlanHubHeader({ wedding, onEdit }: { wedding: Wedding; onEdit: (
       {/* Bọc ảnh để mép xé của ảnh đổ bóng mảnh lên dải giấy (bóng phải nằm ngoài phần tử bị clip-path) */}
       <div className="couple-photo-shadow">
         {/* Đếm ngược kiểu thiệp: "CÒN" / số trắng nét dày / "NGÀY NỮA", đường chỉ vàng dọc ngăn với khối tên; ẩn trên màn hẹp */}
-        <div className="couple-calendar" role="img" aria-label={left ? `Còn ${left} ngày đến ngày cưới` : 'Hôm nay là ngày cưới'}>
-          <span className="couple-calendar-head">{left ? 'Còn' : 'Hôm nay'}</span>
-          <span className="couple-calendar-num">{left || '♥'}</span>
-          <span className="couple-calendar-foot">{left ? 'ngày nữa' : 'ngày cưới'}</span>
+        <div className="couple-calendar" role="img" aria-label={cal.label}>
+          <span className="couple-calendar-head">{cal.head}</span>
+          <span className="couple-calendar-num">{cal.num}</span>
+          <span className="couple-calendar-foot">{cal.foot}</span>
         </div>
         <div className="couple-card" style={{ '--couple-photo': `url("${couplePhoto}")` } as CSSProperties}>
           <div className="couple-text">
@@ -96,7 +100,7 @@ export function PlanHubHeader({ wedding, onEdit }: { wedding: Wedding; onEdit: (
                 {/* Màn hẹp không hiện số đếm ngược bên trái: ghi ngay dòng ngày cưới */}
                 <span className="couple-meta-left">
                   {' '}
-                  <span aria-hidden>·</span> {left ? `còn ${left} ngày` : 'hôm nay'}
+                  <span aria-hidden>·</span> {left ? `còn ${left} ngày` : past ? `đã cưới ${past} ngày` : 'hôm nay'}
                 </span>
               </p>
               <div className="flex flex-wrap items-center justify-center gap-2">

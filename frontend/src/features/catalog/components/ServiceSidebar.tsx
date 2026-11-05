@@ -1,8 +1,7 @@
-import { Clock, ExternalLink, MapPin } from 'lucide-react'
+import { Clock } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { formatMoney } from '@/lib/format'
 import type { ServiceDetail } from '@/types/catalog'
-import { mapsHref } from './GoogleMapsLink'
 import { isTablePriced } from '../price'
 
 interface ServiceSidebarProps {
@@ -23,8 +22,13 @@ export function ServiceSidebar({ service, actions, tip, lead }: ServiceSidebarPr
       <div className="text-center text-[13px] text-muted-foreground">{perTable ? 'Giá tham khảo mỗi bàn (10 khách)' : 'Mức giá tham khảo'}</div>
       <div className="mt-1.5 mb-1 text-center text-[26px] leading-tight font-semibold text-gold">
         {formatMoney(service.priceFrom)}
-        <span className="block text-sm leading-tight font-medium text-muted-foreground">đến</span>
-        {formatMoney(service.priceTo)}
+        {/* Một mức giá (một gói, hoặc gói đắt nhất cùng giá) thì không ghi "X đến X" */}
+        {service.priceTo != null && service.priceTo > service.priceFrom && (
+          <>
+            <span className="block text-sm leading-tight font-medium text-muted-foreground">đến</span>
+            {formatMoney(service.priceTo)}
+          </>
+        )}
       </div>
       <p className="mb-4 text-center text-[13px] text-muted-foreground">
         {perTable ? 'Giá bàn đã gồm sảnh và dịch vụ đi kèm. Menu và số bàn chốt khi trao đổi với nhà cung cấp.' : 'Nhà cung cấp xác nhận giá cuối cùng khi trao đổi.'}
@@ -35,23 +39,7 @@ export function ServiceSidebar({ service, actions, tip, lead }: ServiceSidebarPr
 
       {lead}
 
-      <InfoRow
-        icon={<MapPin className="size-[18px]" />}
-        label="Địa chỉ"
-        value={
-          <a
-            href={mapsHref(service)}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Xem trên Google Maps"
-            className="text-gold-700 underline underline-offset-[3px] hover:text-gold"
-          >
-            {service.address}
-            <ExternalLink className="ml-1 inline size-3.5 align-[-2px]" aria-hidden />
-            <span className="sr-only">(mở Google Maps trong tab mới)</span>
-          </a>
-        }
-      />
+      {/* Địa chỉ đã có ở đầu trang (link Google Maps), không lặp lại ở đây */}
       <InfoRow icon={<Clock className="size-[18px]" />} label="Giờ làm việc" value={service.workingHours} />
 
       {tip && <div className="mt-1.5 rounded-xl bg-accent-soft px-3.5 py-3 text-[12.5px] leading-[1.55] text-ink">{tip}</div>}
