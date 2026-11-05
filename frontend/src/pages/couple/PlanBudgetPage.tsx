@@ -17,9 +17,11 @@ import { StatCard, StatGrid } from '@/features/weddings/components/StatCard'
 import { BudgetSuggestionPicker, ChooseAllSuggestions, type ShownSuggestion } from '@/features/weddings/components/BudgetSuggestionPicker'
 import { useBudget, useBudgetMutations, usePatchWedding, usePlan, useRefreshPlanning } from '@/features/weddings/hooks'
 import { ImportDialog } from '@/features/weddings/import/ImportDialog'
-import { displayMoney } from '@/features/weddings/budgetSplit'
+import { byOrder, displayMoney } from '@/features/weddings/budgetSplit'
 import { fundChangeReason, fundSnapshot, presetsLocked, splitView, type SplitView } from '@/features/weddings/budgetSplitView'
 import { useBudgetSplit } from '@/features/weddings/useBudgetSplit'
+import { ownCostRow, useOwnService } from '@/features/weddings/useOwnService'
+import { OwnServiceCost } from '@/features/weddings/components/OwnServiceCost'
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -29,6 +31,14 @@ import { shortVendorName } from '@/lib/vendorName'
 
 /** Tiền phân bổ hiển thị làm tròn 10.000đ (backend giữ số chính xác) */
 const money = (x: number) => formatMoney(displayMoney(x))
+type OwnService = ReturnType<typeof useOwnService>
+
+/**
+ * Thứ tự hạng mục của bảng "Theo hạng mục": cùng thứ tự với các thanh chia ở khung Mức chia (SPLIT_ORDER) để khách dò không nhầm dòng;
+ * Trung tâm tiệc cưới không nằm trong phần chia (đã có dòng Tiệc ở khung trên) nên đứng đầu.
+ */
+const tableOrder = (cats: BudgetCategory[]) =>
+  [...cats].sort((a, b) => Number(b.kind === 'VENUE') - Number(a.kind === 'VENUE') || byOrder({ id: a.categoryId, slug: a.slug }, { id: b.categoryId, slug: b.slug }))
 
 /** Popup sửa nhanh tổng ngân sách (cùng trường với "Chỉnh sửa thông tin"), kèm Hoàn tác. */
 function TotalBudgetDialog({ total, open, onOpenChange }: { total: number; open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -273,7 +283,7 @@ function UnchooseButton({ vendor: v }: { vendor: BudgetVendor }) {
   )
 }
 
-function ServiceCell({ c, b, view, items }: { c: BudgetCategory; b: Budget; view: SplitView; items: PlanItem[] }) {
+function ServiceCell({ c, b, view, items, own }: { c: BudgetCategory; b: Budget; view: SplitView; items: PlanItem[]; own: OwnService }) {
   const withTables = c.kind === 'VENUE' || c.vendors.some((v) => v.package.unit === 'TABLE')
   if (c.vendors.length) {
     return (
@@ -303,7 +313,23 @@ function ServiceCell({ c, b, view, items }: { c: BudgetCategory; b: Budget; view
   }
   if (c.status === 'OWN_VENUE') return <span className="text-muted-foreground">Tự lo tiệc ngoài nền tảng</span>
   if (c.status === 'NO_VENDOR') return <span className="text-muted-foreground">{c.message}</span>
-  if (view.excluded.some((x) => x.categoryId === c.categoryId)) return <span className="text-muted-foreground">Tự lo</span>
+  // Dịch vụ tự lo: một chỗ duy nhất để nhập chi phí dự kiến và thêm lại
+  if (view.excluded.some((x) => x.categoryId === c.categoryId)) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Badge tone="neutral">Tự lo</Badge>
+        <OwnServiceCost b={b} name={c.name} />
+        <button
+          type="button"
+          disabled={own.busy}
+          onClick={() => own.include(c.categoryId)}
+          className="text-[13px] font-medium text-gold-700 underline underline-offset-[3px] disabled:text-muted-foreground disabled:no-underline"
+        >
+          Thêm lại
+        </button>
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col gap-1.5">
       <BudgetSuggestionPicker
@@ -311,6 +337,8 @@ function ServiceCell({ c, b, view, items }: { c: BudgetCategory; b: Budget; view
         suggestion={suggestionOf(c, view)}
         packages={c.packages}
         limit={view.rows.find((x) => x.item.id === c.categoryId)?.amount ?? c.limit ?? 0}
+        onOwn={c.kind === 'SERVICE' ? () => own.exclude(c.categoryId) : undefined}
+        ownBusy={own.busy}
       />
       {withTables && <BudgetPackagePicker budget={b} withTables />}
     </div>
@@ -357,7 +385,7 @@ function BudgetStats({ b, onEditTotal }: { b: Budget; onEditTotal: () => void })
   )
 }
 
-/** Thông báo "Quỹ dịch vụ vừa thay đổi vì …" hiện trong khoảng này (cờ hành vi, mục 9) */
+/** Thông báo "Quỹ chưa phân bổ vừa thay đổi vì …" hiện trong khoảng này (cờ hành vi, mục 9) */
 const FUND_NOTICE_MS = 8000
 
 /**
@@ -394,7 +422,9 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
   const surplusRef = useRef(false)
   const surplus = presetsLocked(b, surplusRef.current)
   surplusRef.current = surplus
-  const view = splitView(b, split.draft, surplus)
+  const view = splitView(b, split.draft)
+  // Tự lo thao tác ở bảng Theo hạng mục (một chỗ duy nhất); khung Mức chia chỉ hiện tóm tắt
+  const own = useOwnService({ b, split, view, onTouch: () => setFundNotice(null) })
   const t = b.totals
 
   // "Quỹ dịch vụ vừa thay đổi vì …": quỹ đổi do đầu vào khác (số bàn, gói, chi phí ngoài…), không phải do khách kéo thanh
@@ -450,7 +480,7 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
                       Ngân sách gợi ý
                       <span
                         tabIndex={0}
-                        title="Phần quỹ dịch vụ chia cho hạng mục theo mức chia ngân sách (theo mặt bằng giá của từng dịch vụ và mức ưu tiên, không quá gói đắt nhất)."
+                        title="Phần quỹ chưa phân bổ chia cho hạng mục theo mức chia ngân sách (theo mặt bằng giá của từng dịch vụ và mức ưu tiên, không quá gói đắt nhất)."
                         className="inline-grid cursor-help place-items-center text-muted-foreground"
                       >
                         <Info className="size-3.5" aria-label="Cách chia ngân sách gợi ý" />
@@ -462,7 +492,7 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
                 </tr>
               </thead>
               <tbody>
-                {b.categories.map((c) => {
+                {tableOrder(b.categories).map((c) => {
                   const s = c.vendors.length ? null : suggestionOf(c, view)
                   const excluded = view.excluded.some((x) => x.categoryId === c.categoryId)
                   return (
@@ -472,7 +502,7 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
                         <SuggestCell c={c} view={view} />
                       </td>
                       <td className="px-3 py-3 text-[13px]">
-                        <ServiceCell c={c} b={b} view={view} items={planItems} />
+                        <ServiceCell c={c} b={b} view={view} items={planItems} own={own} />
                       </td>
                       <td className="px-[22px] py-3 text-right tabular-nums">
                         {c.vendors.length || c.status === 'OWN_VENUE' ? (
@@ -482,6 +512,12 @@ function BudgetContent({ b, planItems }: { b: Budget; planItems: PlanItem[] }) {
                           <>
                             <span className="text-muted-foreground">{formatMoney(s.cost)}</span>
                             <div className="text-[12px] text-muted-foreground italic">Nếu chọn gợi ý</div>
+                          </>
+                        ) : excluded && ownCostRow(b, c.name) ? (
+                          // Tự lo có chi phí dự kiến: số nằm trong "Chi phí khác", ghi ở đây để khách dò theo dòng
+                          <>
+                            <span>{formatMoney(ownCostRow(b, c.name)!.amount)}</span>
+                            <div className="text-[12px] text-muted-foreground">Tự lo</div>
                           </>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -600,7 +636,7 @@ function BudgetSummary({ b }: { b: Budget }) {
       {t.leftover > 0 && (
         <p className="col-span-full flex items-center gap-2 rounded-md bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
           <Info className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          Còn dư {money(t.leftover)}: phần quỹ dịch vụ chưa giao cho hạng mục nào.
+          Còn dư {money(t.leftover)}: phần quỹ chưa giao cho hạng mục nào.
         </p>
       )}
     </dl>

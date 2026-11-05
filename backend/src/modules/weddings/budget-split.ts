@@ -361,11 +361,12 @@ export const ratioText = (ratio: number) => `${Math.floor(ratio / 100)},${String
 /**
  * 5.1. Vạch giá gói cao nhất và cảnh báo (chỉ báo, không chặn, không đổi tỷ lệ). Quỹ ≤ 0 thì không vạch, không cảnh báo.
  * `marker`: tỷ lệ tương ứng giá gói cao nhất (đơn vị 0,01%); chỉ vẽ khi < 10000. `unused`: phần tiền không dùng hết.
+ * Vượt chưa tới một bước tỷ lệ (quỹ / 10000) không tính là vượt: tỷ lệ nguyên không đặt đúng được giá gói (nâng hạng gói làm tròn lên).
  */
 export function priceMarker(amount: number, maxPackagePrice: number | null, serviceBudget: number) {
   if (!(serviceBudget > 0) || maxPackagePrice === null) return { marker: null, warn: false, unused: 0 };
   const marker = Math.floor((maxPackagePrice * TOTAL) / serviceBudget);
-  const warn = amount > maxPackagePrice;
+  const warn = amount - maxPackagePrice >= serviceBudget / TOTAL;
   return { marker, warn, unused: warn ? amount - maxPackagePrice : 0 };
 }
 
@@ -435,6 +436,87 @@ export function pickPackage<T extends SplitPackage>(packages: T[], limit: number
     pkg: cheapest,
     over: Math.round(cheapest.cost - Math.max(0, limit)),
   };
+}
+
+/**
+ * Nâng hạng gói cho hai mức Ưu tiên (đầu vào: tỷ lệ của mức đó và của Cân bằng, đã fitToMax). Dịch vụ được ưu tiên (h > 1) mà ra
+ * cùng gói với Cân bằng thì nâng lên gói kế trên: tỷ lệ vừa đủ để gói gợi ý đổi sang gói đắt hơn (không quá giá gói cao nhất).
+ * Tiền bù lấy từ dịch vụ không ưu tiên: trước hết phần thừa trên gói đang gợi ý của chúng, thiếu thì hạ mỗi dịch vụ xuống gói kế dưới
+ * (một bậc). Không gom đủ thì giữ nguyên. Xét dịch vụ ưu tiên cao trước. Tổng tỷ lệ giữ nguyên. `pools`: gói của từng hạng mục.
+ */
+export function boostPreset(
+  items: SplitItem[],
+  balanced: SplitItem[],
+  mode: BaseMode,
+  pools: Record<string, SplitPackage[]>,
+  serviceBudget: number,
+  markers: Record<string, number | null>,
+): SplitItem[] {
+  if (mode === 'BALANCED' || !(serviceBudget > 0) || items.length < 2) return items;
+  const h = (slug: string) => H10[mode][slug] ?? 10;
+  // Tỷ lệ ít nhất để số tiền đủ mua gói giá `cost`; gói gợi ý (chỉ tính gói trong giới hạn) ở tỷ lệ r
+  const need = (cost: number) => Math.ceil((cost * TOTAL) / serviceBudget);
+  const within = (id: string, r: number) => {
+    const p = pickPackage(pools[id] ?? [], (serviceBudget * r) / TOTAL);
+    return p && p.over === null ? p.pkg : null;
+  };
+  const ratio = new Map(items.map((i) => [i.id, i.ratio]));
+  const base = new Map(balanced.map((i) => [i.id, i.ratio]));
+  const downgraded = new Set<string>();
+  const donors = items.filter((i) => h(i.slug) < 10);
+  const prio = items.filter((i) => h(i.slug) > 10).sort((a, b) => h(b.slug) - h(a.slug) || byOrder(a, b));
+
+  for (const p of prio) {
+    const basePick = within(p.id, base.get(p.id) ?? 0);
+    const baseCost = basePick?.cost ?? -1;
+    const now = within(p.id, ratio.get(p.id)!);
+    if (now && now.cost > baseCost) continue; // đã khác Cân bằng
+    // Gói kế trên: giá nhỏ nhất (trên gói Cân bằng, không quá vạch giá gói cao nhất) làm gói gợi ý đổi sang gói đắt hơn
+    const cap = markers[p.id] ?? TOTAL;
+    const costs = [...new Set((pools[p.id] ?? []).map((k) => k.cost))].filter((c) => c > baseCost).sort((a, b) => a - b);
+    const target = costs.map(need).find((r) => r <= cap + 1 && (within(p.id, r)?.cost ?? -1) > baseCost);
+    if (target === undefined) continue;
+    let extra = target - ratio.get(p.id)!;
+    if (extra <= 0) continue;
+
+    // Phần thừa của từng dịch vụ không ưu tiên (giữ gói đang gợi ý), rồi phần có được khi hạ một bậc
+    const offers = donors.map((d) => {
+      const r = ratio.get(d.id)!;
+      const pick = within(d.id, r);
+      // Chưa mua nổi gói nào (đang báo Vượt) thì không lấy bớt
+      const keep = pick ? need(pick.cost) : r;
+      const lower = pick && !downgraded.has(d.id) ? Math.max(-1, ...(pools[d.id] ?? []).map((k) => k.cost).filter((c) => c < pick.cost)) : -1;
+      const keepLower = lower >= 0 && within(d.id, need(lower)) ? need(lower) : keep;
+      return { id: d.id, spare: Math.max(0, r - keep), down: Math.max(0, Math.min(r, keep) - keepLower) };
+    });
+    const available = offers.reduce((s, o) => s + o.spare + o.down, 0);
+    if (available < extra) continue;
+    ratio.set(p.id, target);
+    for (const stage of ['spare', 'down'] as const) {
+      for (const o of [...offers].sort((a, b) => b[stage] - a[stage])) {
+        if (extra <= 0) break;
+        const take = Math.min(extra, o[stage]);
+        if (!take) continue;
+        ratio.set(o.id, ratio.get(o.id)! - take);
+        if (stage === 'down') downgraded.add(o.id);
+        extra -= take;
+      }
+    }
+  }
+  return items.map((i) => (ratio.get(i.id) === i.ratio ? i : { ...i, ratio: ratio.get(i.id)! }));
+}
+
+/** Tỷ lệ của một mức có sẵn như khách thấy: khởi tạo theo trung vị × h, cắt về giá gói cao nhất, hai mức Ưu tiên nâng hạng gói */
+export function presetItems(
+  group: GroupMember[],
+  mode: BaseMode,
+  markers: Record<string, number | null>,
+  pools: Record<string, SplitPackage[]>,
+  serviceBudget: number,
+): SplitItem[] {
+  const fitted = fitToMax(initFromMode(group, mode), markers);
+  if (mode === 'BALANCED') return fitted;
+  return boostPreset(fitted, fitToMax(initFromMode(group, 'BALANCED'), markers), mode, pools, serviceBudget, markers);
 }
 
 export type PercentInput = { kind: 'empty' } | { kind: 'invalid' } | { kind: 'ok'; ratio: number; negative: boolean };

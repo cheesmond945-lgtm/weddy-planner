@@ -4,7 +4,7 @@ import { BUDGET_PRESETS, PRESET_LABEL, VENUE_SLUG, type BudgetPreset } from './a
 import { consequenceOf, costOf, venueFits, type AllocRow, type ChosenItem } from './allocation';
 import { BudgetCalcService, parseSplitConfig, serializeSplit } from './budget-calc.service';
 import { tableCount } from './budget-engine';
-import { BASE_MODES, fitToMax, initFromMode, isValidSplit, markersOf, TOTAL, type BaseMode, type SplitState } from './budget-split';
+import { BASE_MODES, isValidSplit, markersOf, presetItems, TOTAL, type BaseMode, type SplitState } from './budget-split';
 import { bumpVersion, versionOf } from './wedding-version';
 import { requireDbFeature } from '../../prisma/db-features';
 import { WeddingsService } from './weddings.service';
@@ -145,6 +145,8 @@ export class BudgetService {
           .filter((r) => r.kind === 'SERVICE' && (r.status === 'SUGGESTED' || r.status === 'EXCLUDED') && r.medianPrice !== null)
           .map((r) => ({ categoryId: r.categoryId, slug: r.slug, median: r.medianPrice! })),
         notices: split.unlocked.map((id) => `Hạng mục ${nameOf.get(id) ?? ''} đã được mở khóa để cân đối tỷ lệ vì một hạng mục không còn trong phần chia.`),
+        /** Dịch vụ tự lo (bỏ khỏi phần chia) ở mọi mức chia, không riêng Tùy chỉnh */
+        excluded: result.rows.filter((r) => r.status === 'EXCLUDED').map((r) => r.categoryId),
       },
       categories: result.rows.map((r) => ({
         categoryId: r.categoryId,
@@ -205,8 +207,8 @@ export class BudgetService {
   }
 
   /**
-   * PATCH …/budget/settings: mức chia, tiệc tự lo và chi phí tự lo. Chọn Tùy chỉnh lần đầu thì khởi tạo cấu hình từ phương án đang dùng;
-   * đã có cấu hình thì dùng lại. Chỉ lưu đầu vào; phân bổ tính lại khi đọc (không có cột số tiền phân bổ).
+   * PATCH …/budget/settings: mức chia, tiệc tự lo và chi phí tự lo. Chọn Tùy chỉnh từ một phương án có sẵn thì khởi tạo lại cấu hình
+   * từ phương án đang dùng (không dùng lại cấu hình cũ). Chỉ lưu đầu vào; phân bổ tính lại khi đọc (không có cột số tiền phân bổ).
    */
   async updateSettings(userId: string, body: Record<string, unknown>) {
     requireDbFeature('budgetAllocation');
@@ -227,22 +229,51 @@ export class BudgetService {
       if (n !== null && (!Number.isInteger(n) || n < 0 || n > 1e13)) errors.ownVenueCost = 'Chi phí tự lo là số nguyên không âm.';
       else data.own_venue_cost = n;
     }
+    // Đánh dấu / bỏ Tự lo một dịch vụ ở mức có sẵn: { categoryId, own }. Lưu vào danh sách excluded của cấu hình chia (dùng ở mọi mức).
+    // Ở Tùy chỉnh client sửa excluded trong bản nháp rồi lưu bằng PUT …/budget/split
+    let ownService: { categoryId: string; own: boolean } | null = null;
+    if (body.ownService !== undefined) {
+      const o = body.ownService as { categoryId?: unknown; own?: unknown } | null;
+      if (!o || typeof o.categoryId !== 'string' || typeof o.own !== 'boolean') errors.ownService = 'Cần { categoryId, own }.';
+      else if (data.budget_preset === 'CUSTOM') errors.ownService = 'Không đổi mức chia và Tự lo trong cùng một lần lưu.';
+      else ownService = { categoryId: o.categoryId, own: o.own };
+    }
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin chưa hợp lệ.', 400, errors);
-    if (!Object.keys(data).length) return fail('VALIDATION_ERROR', 'Không có gì để cập nhật.', 400);
+    if (!Object.keys(data).length && !ownService) return fail('VALIDATION_ERROR', 'Không có gì để cập nhật.', 400);
 
-    // Vào Tùy chỉnh lần đầu: tỷ lệ khởi tạo từ phương án đang dùng (mục 4.2), mọi hạng mục mở khóa.
-    // Đã có cấu hình Tùy chỉnh từ trước thì giữ nguyên, khỏi tính cả bảng ngân sách (DB ở xa, mỗi lần tính mất vài giây)
-    if (data.budget_preset === 'CUSTOM' && !parseSplitConfig((w as { custom_weights?: unknown }).custom_weights)) {
-      const { input, result } = await this.calc.compute(w.id);
-      if (!input.stored) {
-        const baseMode: BaseMode = input.preset === 'CUSTOM' ? 'BALANCED' : input.preset;
-        // Cùng tỷ lệ khách đang thấy ở phương án đó (đã cắt về giá gói cao nhất, phần thừa ở Dự phòng nếu quỹ dư)
-        const maxOf = (id: string) => result.rows.find((r) => r.categoryId === id)?.maxPackagePrice ?? null;
-        const members = result.split.members;
-        const items = fitToMax(initFromMode(members, baseMode), markersOf(members.map((m) => m.id), maxOf, result.fund.serviceBudget));
-        const state: SplitState = { baseMode, excluded: [], capAmount: null, items };
-        data.custom_weights = serializeSplit(state, 1, null);
+    // Vào Tùy chỉnh từ một phương án có sẵn: tỷ lệ khởi tạo lại từ đúng phương án khách đang thấy (mục 4.2), mọi hạng mục mở khóa.
+    // Không dùng lại cấu hình Tùy chỉnh cũ: tỷ lệ cũ đặt theo quỹ cũ, quỹ đã đổi thì vừa vào đã có dịch vụ vượt gói đắt nhất.
+    // Đang ở Tùy chỉnh (gửi lại CUSTOM) thì giữ nguyên, khỏi tính cả bảng ngân sách (DB ở xa, mỗi lần tính mất vài giây)
+    const currentPreset = (w as { budget_preset?: string }).budget_preset;
+    const storedSplit = parseSplitConfig((w as { custom_weights?: unknown }).custom_weights);
+    if (ownService) {
+      const { result } = await this.calc.compute(w.id);
+      const row = result.rows.find((r) => r.categoryId === ownService!.categoryId);
+      // Chỉ dịch vụ chưa chọn, có gói (đang được chia hoặc đang tự lo); tiệc dùng ownVenue
+      if (!row || row.kind !== 'SERVICE' || (row.status !== 'SUGGESTED' && row.status !== 'EXCLUDED')) {
+        return fail('VALIDATION_ERROR', 'Dịch vụ này đã chọn nhà cung cấp hoặc không có trong phần chia.', 400, { ownService: 'Dịch vụ không hợp lệ.' });
       }
+      const prev = storedSplit?.state ?? null;
+      const baseMode: BaseMode = (BASE_MODES as string[]).includes(currentPreset ?? '') ? (currentPreset as BaseMode) : (prev?.baseMode ?? 'BALANCED');
+      const excluded = new Set(prev?.excluded ?? []);
+      if (ownService.own) excluded.add(ownService.categoryId);
+      else excluded.delete(ownService.categoryId);
+      const state: SplitState = { baseMode, capAmount: null, items: [], ...prev, excluded: [...excluded] };
+      data.custom_weights = serializeSplit(state, (storedSplit?.version ?? 0) + 1, prev);
+    }
+    if (data.budget_preset === 'CUSTOM' && (currentPreset !== 'CUSTOM' || !storedSplit)) {
+      const { input, result } = await this.calc.compute(w.id);
+      const baseMode: BaseMode = input.preset === 'CUSTOM' ? (input.stored?.state.baseMode ?? 'BALANCED') : input.preset;
+      // Cùng tỷ lệ khách đang thấy ở phương án đó (đã cắt về giá gói cao nhất, phần thừa ở Dự phòng nếu quỹ dư)
+      const maxOf = (id: string) => result.rows.find((r) => r.categoryId === id)?.maxPackagePrice ?? null;
+      const members = result.split.members;
+      const pools = Object.fromEntries(result.rows.map((r) => [r.categoryId, r.packages]));
+      const items = presetItems(members, baseMode, markersOf(members.map((m) => m.id), maxOf, result.fund.serviceBudget), pools, result.fund.serviceBudget);
+      // Giữ các dịch vụ đang tự lo (đã nằm ngoài nhóm chia ở mức đang xem)
+      const excluded = result.rows.filter((r) => r.status === 'EXCLUDED').map((r) => r.categoryId);
+      const state: SplitState = { baseMode, excluded, capAmount: null, items };
+      // Version tăng tiếp để bản Tùy chỉnh đang mở ở tab khác (nếu có) bị 409 thay vì ghi đè
+      data.custom_weights = serializeSplit(state, (input.stored?.version ?? 0) + 1, null);
     }
     await this.prisma.$transaction(async (tx) => {
       await bumpVersion(tx, w.id, body.version);

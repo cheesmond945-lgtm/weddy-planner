@@ -1,9 +1,8 @@
 import {
   BASE_MODES,
-  fitToMax,
-  initFromMode,
   markersOf,
   pickPackage,
+  presetItems,
   priceMarker,
   reserveOf,
   splitAmounts,
@@ -87,19 +86,30 @@ export const presetMarkers = (group: GroupMember[], b: Pick<Budget, 'categories'
     b.fund.serviceBudget,
   )
 
+/** Tỷ lệ của một mức có sẵn như backend (cắt về giá gói cao nhất, hai mức Ưu tiên nâng hạng gói): bảng chia, so gói, Đặt lại */
+export const presetItemsOf = (group: GroupMember[], mode: BaseMode, b: Pick<Budget, 'categories' | 'fund'>) =>
+  presetItems(
+    group,
+    mode,
+    presetMarkers(group, b),
+    Object.fromEntries(b.categories.map((c) => [c.categoryId, c.packages])),
+    b.fund.serviceBudget,
+  )
+
 /** Đã cọc: chỉ hiện giá trị đơn, không giới hạn gợi ý */
 export const isDeposited = (c: BudgetCategory) => c.vendors.some((v) => v.costSource === 'DEPOSITED')
 
 /**
  * Tính bảng chia: phương án có sẵn khởi tạo lại từ trung vị × h; Tùy chỉnh dùng `state` (bản đang sửa).
  * Hạng mục đã chọn chưa cọc nhận giới hạn gợi ý theo tỷ lệ ảo trên nhóm hiện tại.
- * `surplus` (quỹ đủ cho gói đắt nhất của mọi dịch vụ, xem presetsLocked): Tùy chỉnh tạm không áp dụng, tính như phương án nền
- * nhưng vẫn giữ các hạng mục khách đã chọn Tự lo. Chỉ là hiển thị, cấu hình đã lưu giữ nguyên.
+ * Quỹ dư (quỹ đủ cho gói đắt nhất của mọi dịch vụ, xem presetsLocked) vẫn dùng Tùy chỉnh như backend: khách đặt mức chi thấp hơn
+ * gói đắt nhất để tiết kiệm thì giữ đúng mức đó (danh sách chỉ đọc cắt phần vượt về giá gói đắt nhất).
  */
-export function splitView(b: Budget, state: SplitState | null, surplus = false): SplitView {
+export function splitView(b: Budget, state: SplitState | null): SplitView {
   const saved = b.preset === 'CUSTOM' && !!state
-  const custom = saved && !surplus
-  const excludedIds = saved ? state!.excluded : []
+  const custom = saved
+  // Dịch vụ tự lo áp dụng ở mọi mức: Tùy chỉnh lấy từ bản nháp, mức có sẵn lấy danh sách backend trả về
+  const excludedIds = saved ? state!.excluded : (b.split.excluded ?? [])
   const group: GroupMember[] = b.split.eligible
     .filter((e) => !excludedIds.includes(e.categoryId))
     .map((e) => ({ id: e.categoryId, slug: e.slug, median: e.median }))
@@ -107,7 +117,7 @@ export function splitView(b: Budget, state: SplitState | null, surplus = false):
   const sb = b.fund.serviceBudget
   const byId = new Map(b.categories.map((c) => [c.categoryId, c]))
   // Phương án có sẵn: như backend, không hạng mục nào quá giá gói cao nhất, phần thừa sang hạng mục còn thiếu
-  const items = custom ? state!.items : fitToMax(initFromMode(group, baseMode), presetMarkers(group, b))
+  const items = custom ? state!.items : presetItemsOf(group, baseMode, b)
   const capAmount = custom ? state!.capAmount : null
   const { amounts, leftover } = splitAmounts(items, sb, capAmount)
   const rows = items.flatMap((item) => {
@@ -150,9 +160,12 @@ export const PRESET_LOCK_MARGIN = 1.05
  */
 export function presetsLocked(b: Budget, wasLocked: boolean) {
   const sb = b.fund.serviceBudget
-  if (!(sb > 0) || !b.split.eligible.length) return false
+  // Dịch vụ tự lo không nằm trong phần chia nên không tính vào tổng giá gói đắt nhất
+  const own = new Set(b.split.excluded ?? [])
+  const eligible = b.split.eligible.filter((e) => !own.has(e.categoryId))
+  if (!(sb > 0) || !eligible.length) return false
   const maxOf = new Map(b.categories.map((c) => [c.categoryId, c.maxPackagePrice]))
-  const maxes = b.split.eligible.map((e) => maxOf.get(e.categoryId))
+  const maxes = eligible.map((e) => maxOf.get(e.categoryId))
   if (maxes.some((m) => m == null)) return false
   return sb >= maxes.reduce((t: number, m) => t + m!, 0) * (wasLocked ? 1 : PRESET_LOCK_MARGIN)
 }
@@ -179,12 +192,12 @@ export interface PresetPick {
  */
 export function presetPicks(b: Budget): Record<BaseMode, { key: string; picks: PresetPick[] }> | null {
   const sb = b.fund.serviceBudget
-  const group: GroupMember[] = b.split.eligible.map((e) => ({ id: e.categoryId, slug: e.slug, median: e.median }))
+  const own = new Set(b.split.excluded ?? [])
+  const group: GroupMember[] = b.split.eligible.filter((e) => !own.has(e.categoryId)).map((e) => ({ id: e.categoryId, slug: e.slug, median: e.median }))
   if (!(sb > 0) || !group.length) return null
-  const markers = presetMarkers(group, b)
   const byId = new Map(b.categories.map((c) => [c.categoryId, c]))
   const of = (mode: BaseMode) => {
-    const { amounts } = splitAmounts(fitToMax(initFromMode(group, mode), markers), sb, null)
+    const { amounts } = splitAmounts(presetItemsOf(group, mode, b), sb, null)
     const picks = group.flatMap((m) => {
       const category = byId.get(m.id)
       return category ? [{ category, pkg: pickPackage(category.packages, amounts[m.id] ?? 0)?.pkg ?? null }] : []
@@ -221,5 +234,5 @@ export function fundChangeReason(prev: FundSnapshot, next: FundSnapshot): string
   if (a.selfVenueCost !== z.selfVenueCost) reasons.push('chi phí tiệc tự lo')
   if (a.externalCost !== z.externalCost) reasons.push('chi phí ngoài nền tảng')
   if (a.totalBudget !== z.totalBudget) reasons.push('tổng ngân sách')
-  return reasons.length ? `Quỹ dịch vụ vừa thay đổi vì ${reasons.join(', ')}.` : null
+  return reasons.length ? `Quỹ chưa phân bổ vừa thay đổi vì ${reasons.join(', ')}.` : null
 }

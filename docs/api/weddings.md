@@ -307,7 +307,7 @@ Thuật toán, **không gọi AI**. Đặc tả gốc của luồng Tùy chỉnh
 **Nhóm chia**: các dịch vụ (không phải tiệc) **chưa chọn**, có gói hợp lệ, chưa bị bỏ khỏi phần chia. Hạng mục đã chọn, có đơn, đã cọc, bị bỏ và tiệc nằm ngoài nhóm.
 
 - Tỷ lệ (`ratio`) là số nguyên theo 0,01%, tổng nhóm đúng 10000. Mọi phép chia qua `distribute` (BigInt, làm tròn xuống rồi cộng phần thiếu cho phần lẻ lớn nhất, hòa theo thứ tự Trang trí, Chụp ảnh, Trang phục, Trang điểm, Hoa cưới).
-- Phương án có sẵn: tỷ lệ = trung vị × h (h nhân 10: `H10`), khởi tạo lại mỗi lần đọc.
+- Phương án có sẵn: tỷ lệ = trung vị × h (h nhân 10: `H10`), khởi tạo lại mỗi lần đọc, cắt về giá gói cao nhất (`fitToMax`). Hai mức Ưu tiên nâng hạng gói (`presetItems` / `boostPreset`): dịch vụ được ưu tiên (h > 1) mà ra cùng gói với Cân bằng thì nhận tỷ lệ vừa đủ để gói gợi ý đổi sang gói kế trên (không quá giá gói cao nhất); tiền lấy từ dịch vụ không ưu tiên, trước hết phần thừa trên gói đang gợi ý, thiếu thì hạ mỗi dịch vụ một bậc gói; không gom đủ thì giữ nguyên. Tổng tỷ lệ không đổi. Vượt giá gói cao nhất dưới một bước tỷ lệ (quỹ / 10000) không tính là vượt.
 
 | Mức | h |
 |---|---|
@@ -324,8 +324,8 @@ Thuật toán, **không gọi AI**. Đặc tả gốc của luồng Tùy chỉnh
 
 **Tùy chỉnh** (`CUSTOM`)
 
-- Cấu hình lưu ở `weddings.custom_weights` (jsonb, không cần SQL mới): `{ format: 2, version, baseMode, excluded: [categoryId], capAmount, items: [{ categoryId, slug, ratio, locked, updatedAt }], updatedAt }`. Dạng cũ (slug → %) coi như chưa có cấu hình. `version` là số phiên bản riêng của cấu hình (không đổi `weddings.updated_date`).
-- Vào Tùy chỉnh lần đầu: khởi tạo từ phương án đang dùng (`baseMode`), mọi hạng mục mở khóa. Đổi sang phương án có sẵn không xóa cấu hình; quay lại Tùy chỉnh thì dùng lại.
+- Cấu hình lưu ở `weddings.custom_weights` (jsonb, không cần SQL mới): `{ format: 2, version, baseMode, excluded: [categoryId], capAmount, items: [{ categoryId, slug, ratio, locked, updatedAt }], updatedAt }`. Dạng cũ (slug → %) coi như chưa có cấu hình. `version` là số phiên bản riêng của cấu hình (không đổi `weddings.updated_date`). `excluded` (dịch vụ tự lo) áp dụng ở **mọi** mức chia, không riêng Tùy chỉnh; response trả ở `split.excluded`.
+- Vào Tùy chỉnh từ một phương án có sẵn: khởi tạo lại từ đúng phương án đang dùng (`baseMode`, đã cắt về giá gói cao nhất và nâng hạng gói như khách đang thấy), mọi hạng mục mở khóa. Không dùng lại cấu hình Tùy chỉnh cũ (tỷ lệ cũ đặt theo quỹ cũ, quỹ đổi thì có thể vượt gói đắt nhất ngay khi vào).
 - Tự cân bằng: hạng mục k (mở khóa) đặt p, kẹp về [0, 10000 − L] (L = tổng các mục khóa), các mục mở khóa khác chia 10000 − L − p theo tương quan hiện tại (đều 0 thì chia đều). Mục mở khóa duy nhất luôn bằng 10000 − L. Nhập %: tối đa 2 chữ số thập phân. Nhập số tiền: floor(số tiền × 10000 / quỹ).
 - Khóa: không khóa được mục mở khóa cuối cùng; khóa mục 0% thì nhắc kèm lối tắt "Bỏ khỏi phần chia".
 - Nhóm chia đổi (đọc lại khi khách chọn gói, có đơn, hủy đơn, bỏ / thêm lại): mục rời nhóm thì phần của nó chia cho các mục mở khóa; nếu mọi mục còn lại đều khóa thì mở khóa đúng mục lớn nhất và báo. Mục quay lại nhận tỷ lệ khởi đầu theo trọng số phương án nền. Sau mỗi thay đổi nhóm, giá trần bị xóa. Backend áp các thay đổi này khi đọc `GET /budget` và lưu lại (`split.notices` chứa thông báo mở khóa).
@@ -395,7 +395,7 @@ Thuật toán, **không gọi AI**. Đặc tả gốc của luồng Tùy chỉnh
 Response 200: `{ "data": Budget }`. Đang Tùy chỉnh mà nhóm chia đã đổi từ lần lưu trước: backend áp onGroupChange, lưu lại (version + 1) rồi trả về.
 
 ### PATCH /weddings/me/budget/settings
-Mức chia, tiệc tự lo. Body: một hoặc nhiều trường `budgetPreset` (`BALANCED` | `SPACE` | `VISUAL` | `CUSTOM`), `ownVenue` (boolean), `ownVenueCost` (số nguyên ≥ 0 hoặc null), kèm `version`. Chọn `CUSTOM` lần đầu thì khởi tạo cấu hình từ phương án đang dùng. Response 200: `Budget`. Lỗi: 400 `VALIDATION_ERROR`, 409 `STALE_DATA`, 503 `DB_MIGRATION_PENDING`.
+Mức chia, tiệc tự lo, dịch vụ tự lo. Body: một hoặc nhiều trường `budgetPreset` (`BALANCED` | `SPACE` | `VISUAL` | `CUSTOM`), `ownVenue` (boolean), `ownVenueCost` (số nguyên ≥ 0 hoặc null), `ownService` (`{ "categoryId": "…", "own": true }`: đánh dấu / bỏ Tự lo một dịch vụ chưa chọn khi đang ở mức có sẵn; không gửi cùng `budgetPreset: "CUSTOM"`), kèm `version`. Chọn `CUSTOM` từ mức có sẵn thì khởi tạo lại cấu hình từ phương án đang dùng (giữ các dịch vụ đang tự lo). Response 200: `Budget`. Lỗi: 400 `VALIDATION_ERROR`, 409 `STALE_DATA`, 503 `DB_MIGRATION_PENDING`.
 
 ### PUT /weddings/me/budget/split
 Tự lưu toàn bộ cấu hình Tùy chỉnh. Body `{ "version": 4, "baseMode": "BALANCED", "excluded": ["<categoryId>"], "capAmount": null, "items": [{ "categoryId": "…", "ratio": 6400, "locked": false }] }`.

@@ -282,7 +282,7 @@ export interface BudgetCategory {
   vendors: BudgetVendor[]
 }
 
-/** Quỹ dịch vụ (mục 3): chi tiết sau ⓘ và dòng Tiệc chỉ đọc */
+/** Quỹ chưa phân bổ (quỹ dịch vụ, mục 3): chi tiết sau ⓘ và dòng Tiệc chỉ đọc */
 export interface BudgetFund {
   totalBudget: number
   selectedCost: number
@@ -321,6 +321,8 @@ export interface BudgetSplitInfo {
   eligible: { categoryId: string; slug: string; median: number }[]
   /** Hạng mục tự mở khóa khi nhóm đổi */
   notices: string[]
+  /** Dịch vụ tự lo (bỏ khỏi phần chia) ở mọi mức chia, không riêng Tùy chỉnh */
+  excluded?: string[]
 }
 
 export interface ExtraCost {
@@ -381,6 +383,8 @@ export interface BudgetSettings {
   budgetPreset?: BudgetPreset
   ownVenue?: boolean
   ownVenueCost?: number | null
+  /** Đánh dấu / bỏ Tự lo một dịch vụ khi đang ở mức có sẵn (Tùy chỉnh sửa trong bản nháp) */
+  ownService?: { categoryId: string; own: boolean }
 }
 
 // ---- Nhập và xuất (9) ----
