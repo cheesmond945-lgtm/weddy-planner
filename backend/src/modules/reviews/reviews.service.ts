@@ -2,7 +2,6 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { containsBannedWord } from '../../common/utils/banned-words';
 import { ServicesService } from '../catalog/services.service';
-import { notify } from '../chat/chat-messages';
 import { parseTags, publicName, replyIssue, REVIEW_EDIT_DAYS, reviewEditable, reviewEditableUntil } from './review-rules';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -118,14 +117,9 @@ export class ReviewsService {
     return o.order_items.flatMap((i) => (i.reviews ? [{ orderItemId: i.id, name: i.service_packages?.name ?? i.item_name, review: this.own(i.reviews) }] : []));
   }
 
-  /** NCC phản hồi một lần dưới đánh giá của khách (hiện công khai trên trang dịch vụ, báo khách). */
+  /** NCC phản hồi một lần dưới đánh giá của khách (hiện công khai trên trang dịch vụ; không gửi thông báo cho khách). */
   async reply(userId: string, reviewId: string, body: { content?: unknown }) {
-    const r = UUID.test(reviewId)
-      ? await this.prisma.reviews.findFirst({
-          where: { id: reviewId, order_items: { orders: { vendor_profiles: { user_id: userId } } } },
-          include: { order_items: { include: { orders: { select: { id: true, order_code: true, weddings: { select: { user_id: true } }, vendor_profiles: { select: { business_name: true } } } } } } },
-        })
-      : null;
+    const r = UUID.test(reviewId) ? await this.prisma.reviews.findFirst({ where: { id: reviewId, order_items: { orders: { vendor_profiles: { user_id: userId } } } } }) : null;
     if (!r) return fail('REVIEW_NOT_FOUND', 'Không tìm thấy đánh giá.', 404);
     if (r.vendor_reply) return fail('REVIEW_ALREADY_REPLIED', 'Bạn đã phản hồi đánh giá này.', 409);
     const issue = replyIssue(body?.content);
@@ -133,17 +127,6 @@ export class ReviewsService {
     const content = String(body.content).trim();
     if (containsBannedWord(content)) return fail('REVIEW_BANNED_CONTENT', 'Nội dung phản hồi chứa ngôn từ không phù hợp.', 400);
     const saved = await this.prisma.reviews.update({ where: { id: r.id }, data: { vendor_reply: content, vendor_reply_date: new Date() } });
-    const o = r.order_items.orders;
-    if (o?.weddings?.user_id) {
-      await notify(this.prisma, {
-        userId: o.weddings.user_id,
-        type: 'ReviewReplied',
-        title: `${o.vendor_profiles?.business_name ?? 'Nhà cung cấp'} đã phản hồi đánh giá của bạn`,
-        content: content.length > 120 ? `${content.slice(0, 117)}...` : content,
-        referenceType: 'Order',
-        referenceId: o.id,
-      }).catch(() => undefined);
-    }
     return this.own(saved);
   }
 

@@ -7,7 +7,7 @@ import { useReplyReview, useVendorOrderReviews } from '../hooks'
 
 /**
  * Trang chi tiết đơn của NCC: đánh giá của khách (đơn Hoàn thành) và ô phản hồi. NCC phản hồi MỘT lần, phản hồi hiện công khai dưới
- * đánh giá trên trang dịch vụ và khách được báo. Chưa có đánh giá thì không hiện gì.
+ * đánh giá trên trang dịch vụ (không gửi thông báo cho khách). Chưa có đánh giá thì không hiện gì.
  */
 export function VendorOrderReviews({ orderId, completed }: { orderId: string; completed: boolean }) {
   const q = useVendorOrderReviews(orderId, completed)

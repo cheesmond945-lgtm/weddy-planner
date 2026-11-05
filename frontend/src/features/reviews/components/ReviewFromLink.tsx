@@ -2,7 +2,7 @@ import { useSearchParams } from 'react-router'
 import { ReviewDialog } from './ReviewDialog'
 
 /**
- * Mở form đánh giá từ link "?review=<orderId>" (thông báo "Đơn … đã hoàn thành, chia sẻ cảm nhận", hoặc NCC phản hồi đánh giá).
+ * Mở form đánh giá từ link "?review=<orderId>" (thông báo "Đơn … đã hoàn thành, chia sẻ cảm nhận").
  * Đặt một lần trong layout phía khách; đóng form thì bỏ tham số khỏi địa chỉ.
  */
 export function ReviewFromLink() {

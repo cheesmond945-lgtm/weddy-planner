@@ -17,7 +17,6 @@ const ICON: Record<string, LucideIcon> = {
   TaskScheduled: ListChecks,
   TaskDateChanged: CalendarClock,
   ReviewInvite: Star,
-  ReviewReplied: Star,
   TaskDueSoon: AlarmClock,
   TaskOverdue: AlarmClock,
   TaskDigest: AlarmClock,
@@ -27,8 +26,8 @@ const ICON: Record<string, LucideIcon> = {
 function targetOf(n: VendorNotification): string | null {
   if (n.type === 'NewMessage') return n.refId ? `${paths.chat}?c=${encodeURIComponent(n.refId)}` : paths.chat
   if (n.type === 'TaskDateChanged') return null
-  // Mời đánh giá / NCC phản hồi đánh giá: mở form đánh giá của đơn (ReviewFromLink trong layout khách)
-  if (n.type === 'ReviewInvite' || n.type === 'ReviewReplied') return n.refId ? `${paths.planTab.services}?review=${encodeURIComponent(n.refId)}` : paths.planTab.services
+  // Mời đánh giá (đơn vừa hoàn thành): mở form đánh giá của đơn (ReviewFromLink trong layout khách)
+  if (n.type === 'ReviewInvite') return n.refId ? `${paths.planTab.services}?review=${encodeURIComponent(n.refId)}` : paths.planTab.services
   if (n.type.startsWith('Task')) return paths.timeline
   if (n.type.startsWith('Order') || n.type === 'RestPaymentReceived') return paths.planTab.services
   return null
