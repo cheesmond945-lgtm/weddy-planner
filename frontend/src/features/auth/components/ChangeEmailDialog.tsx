@@ -92,7 +92,7 @@ function ChangeEmailFlow({ onDone }: { onDone: () => void }) {
         hint="Chúng tôi sẽ gửi mã xác minh tới email này."
       />
       <FormError message={formError} />
-      <DialogFooter className="mt-1">
+      <DialogFooter>
         <Button type="button" variant="outline" onClick={onDone} disabled={request.isPending}>
           Hủy
         </Button>
@@ -161,7 +161,7 @@ function VerifyStep({ sent, onResent, onBack, onDone }: { sent: OtpSent; onResen
           </button>
         )}
       </div>
-      <DialogFooter className="mt-1">
+      <DialogFooter>
         <Button type="submit" disabled={verify.isPending}>
           {verify.isPending && <LoaderCircle className="animate-spin" />}
           Xác nhận đổi email

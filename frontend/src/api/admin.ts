@@ -64,6 +64,9 @@ export const adminApi = {
   approvePackage: (id: string): Promise<AdminPackage> => http.post(`/admin/packages/${id}/approve`),
   requestPackageRevision: (id: string, note: string): Promise<AdminPackage> =>
     http.post(`/admin/packages/${id}/request-revision`, { note }),
+  /** Ẩn gói đang đăng (bắt buộc lý do) / khôi phục gói đang ẩn */
+  hidePackage: (id: string, reason: string): Promise<AdminPackage> => http.post(`/admin/packages/${id}/hide`, { reason }),
+  unhidePackage: (id: string): Promise<AdminPackage> => http.post(`/admin/packages/${id}/unhide`),
 
   // Thanh toán hoa hồng
   getStatement: (id: string): Promise<AdminStatementDetail> => http.get(`/admin/commissions/${id}`),

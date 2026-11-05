@@ -1,3 +1,4 @@
+import { isVnPhone, PHONE_MESSAGE } from '@/lib/phone'
 import { useMutation } from '@tanstack/react-query'
 import { ArrowRight, CircleCheck, Info, LayoutGrid, LoaderCircle, Mail, Phone, Store, UserRound } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
@@ -14,7 +15,6 @@ type Errors = Partial<Record<'brandName' | 'contactName' | 'phone' | 'email' | '
 type Step = 'form' | 'confirm' | 'done'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const PHONE_RE = /^0\d{9}$/
 const EMPTY = { brandName: '', contactName: '', phone: '', email: '', categoryId: '' }
 
 const Row = ({ label, children }: { label: string; children: string | undefined }) => (
@@ -65,7 +65,7 @@ export function PartnerRegistrationDialog({ open, onOpenChange }: { open: boolea
     const e: Errors = {}
     if (!v.brandName.trim()) e.brandName = 'Nhập tên thương hiệu.'
     if (!v.contactName.trim()) e.contactName = 'Nhập tên người liên hệ.'
-    if (!PHONE_RE.test(v.phone.trim())) e.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.'
+    if (!isVnPhone(v.phone)) e.phone = PHONE_MESSAGE
     if (!EMAIL_RE.test(v.email.trim())) e.email = 'Email chưa hợp lệ.'
     if (!v.categoryId) e.categoryId = 'Chọn lĩnh vực hoạt động.'
     setErrors(e)

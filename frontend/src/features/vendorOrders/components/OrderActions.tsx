@@ -31,13 +31,20 @@ export function OrderActions({ order: o, onOpenForm, onView, onViewInvoice }: Or
             variant={a.primary ? 'default' : 'outline'}
             className={a.primary ? '' : a.danger ? 'border-warn/60 text-warn hover:bg-warn-soft hover:text-warn' : 'border-line-strong'}
             disabled={!!a.disabledReason || (busy && (a.key === 'complete' || a.key === 'invoice' || a.key === 'receiveRest' || a.key === 'unreceiveRest'))}
-            title={a.disabledReason}
             onClick={() => run(a.key, o)}
           >
             {a.label}
           </Button>
         ))}
       </div>
+      {/* Lý do nút bị khóa hiện sẵn thành chữ (điện thoại không có tooltip) */}
+      {actions.some((a) => a.disabledReason) && (
+        <ul className="mt-1.5 grid gap-0.5 text-[12.5px] text-muted-foreground">
+          {actions.filter((a) => a.disabledReason).map((a) => (
+            <li key={a.key}>{a.disabledReason}</li>
+          ))}
+        </ul>
+      )}
       {dialogs}
     </>
   )

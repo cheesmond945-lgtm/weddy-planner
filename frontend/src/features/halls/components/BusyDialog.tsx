@@ -2,6 +2,7 @@ import { LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
 import { ApiError } from '@/api'
 import { Button } from '@/components/ui/button'
+import { DateField } from '@/components/DateField'
 import { Input } from '@/components/ui/input'
 import { PanelDialog } from '@/features/vendorOrders/components/PanelDialog'
 import { controlClass, Field } from '@/features/vendors/components/FormParts'
@@ -121,10 +122,10 @@ export function BusyDialog({ halls, initial, onClose }: BusyDialogProps) {
         </Field>
         <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
           <Field label="Từ ngày *" error={errors.startDate}>
-            <Input className={controlClass} type="date" min={now} aria-invalid={errors.startDate ? true : undefined} value={start} onChange={(e) => setStart(e.target.value)} />
+            <DateField className={controlClass} min={now} invalid={!!errors.startDate} value={start} onValueChange={setStart} />
           </Field>
           <Field label="Đến ngày" error={errors.endDate} hint="Bỏ trống nếu chỉ bận một ngày.">
-            <Input className={controlClass} type="date" min={start || now} aria-invalid={errors.endDate ? true : undefined} value={end} onChange={(e) => setEnd(e.target.value)} />
+            <DateField className={controlClass} min={start || now} invalid={!!errors.endDate} clearable value={end} onValueChange={setEnd} />
           </Field>
         </div>
         <Field label="Lý do *" error={errors.reason} hint="Chỉ bạn thấy lý do; khách chỉ thấy sảnh bận.">

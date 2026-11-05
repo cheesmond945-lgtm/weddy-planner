@@ -230,8 +230,9 @@ export class BudgetService {
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin chưa hợp lệ.', 400, errors);
     if (!Object.keys(data).length) return fail('VALIDATION_ERROR', 'Không có gì để cập nhật.', 400);
 
-    // Vào Tùy chỉnh lần đầu: tỷ lệ khởi tạo từ phương án đang dùng (mục 4.2), mọi hạng mục mở khóa
-    if (data.budget_preset === 'CUSTOM') {
+    // Vào Tùy chỉnh lần đầu: tỷ lệ khởi tạo từ phương án đang dùng (mục 4.2), mọi hạng mục mở khóa.
+    // Đã có cấu hình Tùy chỉnh từ trước thì giữ nguyên, khỏi tính cả bảng ngân sách (DB ở xa, mỗi lần tính mất vài giây)
+    if (data.budget_preset === 'CUSTOM' && !parseSplitConfig((w as { custom_weights?: unknown }).custom_weights)) {
       const { input, result } = await this.calc.compute(w.id);
       if (!input.stored) {
         const baseMode: BaseMode = input.preset === 'CUSTOM' ? 'BALANCED' : input.preset;

@@ -27,14 +27,10 @@ export interface Wedding {
   version?: string
   /** Danh mục dịch vụ muốn sử dụng (slug) */
   categorySlugs: string[]
-  /** Giờ chính của ngày cưới "HH:mm" (đón khách / làm lễ), mốc xếp giờ có mặt của các NCC; null là chưa nhập */
-  mainTime: string | null
 }
 
-/** Không gửi mainTime thì backend giữ nguyên giờ chính; null là xóa */
-export type WeddingInput = Omit<Wedding, 'id' | 'location' | 'tableCountOverride' | 'version' | 'budgetPreset' | 'mainTime'> & {
+export type WeddingInput = Omit<Wedding, 'id' | 'location' | 'tableCountOverride' | 'version' | 'budgetPreset'> & {
   budgetPreset?: Exclude<BudgetPreset, 'CUSTOM'>
-  mainTime?: string | null
   version?: string
 }
 
@@ -49,55 +45,8 @@ export interface WeddingPatch {
 // ---- Chia sẻ ----
 
 /** Subtab của Kế hoạch (link xem công khai chọn phần nào được xem) */
-export type PlanTab = 'overview' | 'timeline' | 'services' | 'budget' | 'guests'
-export const PLAN_TABS: PlanTab[] = ['overview', 'timeline', 'services', 'budget', 'guests']
-
-// ---- Lịch trình ngày cưới theo giờ (docs/LICH_TRINH_NGAY_CUOI.md) ----
-
-export interface DaySlotIssue {
-  code: 'BEFORE_VENUE_OPEN' | 'NEEDS_EARLY_ACCESS' | 'ENDS_AFTER_MAIN'
-  /** warn: phải xử lý; info: nên hỏi lại */
-  level: 'warn' | 'info'
-  message: string
-}
-
-/** Khung giờ có mặt của một NCC trong ngày cưới */
-export interface DaySlot {
-  orderId: string
-  orderCode: string
-  vendorName: string
-  categorySlug: string
-  categoryName: string
-  /** Đơn của sảnh (Nhà hàng / Trung tâm tiệc cưới) */
-  isVenue: boolean
-  /** Giờ VN "YYYY-MM-DDTHH:mm" (có thể là tối hôm trước); null khi chưa có giờ chính và NCC chưa chốt */
-  start: string | null
-  end: string | null
-  /** CONFIRMED: NCC đã chốt; PACKAGE: dự kiến theo gói NCC khai; DEFAULT: dự kiến theo lĩnh vực */
-  source: 'CONFIRMED' | 'PACKAGE' | 'DEFAULT'
-  confirmedAt: string | null
-  issues: DaySlotIssue[]
-}
-
-export interface DayVenue {
-  name: string
-  hallName: string | null
-  /** Giờ đơn vị khác được vào sảnh setup "HH:mm" */
-  openAt: string
-  /** Sảnh chưa khai, đang dùng giờ mặc định */
-  openIsDefault: boolean
-  /** Hôm trước sảnh có tiệc khác; null: không biết */
-  prevDayBusy: boolean | null
-}
-
-/** GET /weddings/me/day-schedule */
-export interface DaySchedule {
-  /** Ngày cưới "YYYY-MM-DD"; null khi chưa có */
-  date: string | null
-  mainTime: string | null
-  venue: DayVenue | null
-  slots: DaySlot[]
-}
+export type PlanTab = 'overview' | 'timeline' | 'services' | 'budget'
+export const PLAN_TABS: PlanTab[] = ['overview', 'timeline', 'services', 'budget']
 
 // ---- Timeline (4.2, 4.4) ----
 
@@ -224,8 +173,6 @@ export interface Overview {
     /** Chi phí theo hạng mục; slug "other" là Chi phí khác */
     slices: { slug: string; name: string; amount: number; budget: number; isOver: boolean }[]
   } | null
-  /** null khi không được xem tab Khách mời */
-  guests: GuestStats | null
 }
 
 // ---- Ngân sách (7) ----
@@ -256,7 +203,7 @@ export interface BudgetPackageOption {
   cost: number
   chargedTables: number | null
   fits: boolean
-  /** "Gói này làm 5 dịch vụ còn lại thiếu khoảng Z so với gói rẻ nhất của chúng." (làm tròn 10.000đ); null khi không thiếu */
+  /** Cảnh báo thiếu tiền nếu chọn gói (vượt bao nhiêu, dịch vụ chưa chọn nào cần bao nhiêu, nên làm gì); null khi không thiếu */
   consequence: string | null
 }
 
@@ -432,48 +379,9 @@ export interface BudgetSettings {
   ownVenueCost?: number | null
 }
 
-// ---- Khách mời (8) ----
-
-export type GuestSide = 'BRIDE' | 'GROOM'
-export type GuestRsvp = 'PENDING' | 'ATTENDING' | 'DECLINED'
-export const GUEST_GROUPS = ['Gia đình', 'Họ hàng', 'Bạn bè', 'Đồng nghiệp', 'Khác']
-
-export interface Guest {
-  id: string
-  fullName: string
-  side: GuestSide
-  group: string
-  partySize: number
-  isInvited: boolean
-  rsvp: GuestRsvp
-  createdDate: string
-}
-
-export type GuestInput = Omit<Guest, 'id' | 'createdDate'>
-
-/** Thống kê theo số người */
-export interface GuestStats {
-  total: number
-  expected: number
-  invited: number
-  attending: number
-  declined: number
-  /** Đã mời, chưa phản hồi */
-  pending: number
-  notInvited: number
-  bride: number
-  groom: number
-  rows: number
-}
-
-export interface GuestList {
-  items: Guest[]
-  stats: GuestStats
-}
-
 // ---- Nhập và xuất (9) ----
 
-export type ImportType = 'guests' | 'tasks' | 'expenses'
+export type ImportType = 'tasks' | 'expenses'
 
 export interface ImportRequest {
   rows: Record<string, string>[]

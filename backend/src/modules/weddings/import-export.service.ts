@@ -1,12 +1,10 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BudgetService, MAX_EXTRA_COSTS } from './budget.service';
-import { GuestsService, MAX_GUESTS } from './guests.service';
 import {
   IMPORT_MAX_ROWS,
   canBeMonthFirst,
   normalizeExpenses,
-  normalizeGuests,
   normalizeTasks,
   toCsv,
   type DateOrder,
@@ -25,7 +23,7 @@ const fail = (code: string, message: string, status: number, details?: unknown):
 export interface ImportBody {
   /** Các dòng đã ghép cột ở frontend: khóa là tên trường (name, side, ...), giá trị là chữ trong ô */
   rows?: unknown;
-  /** APPEND (mặc định) hoặc REPLACE (thay toàn bộ, chỉ khách mời và chi phí khác) */
+  /** APPEND (mặc định) hoặc REPLACE (thay toàn bộ, chỉ chi phí khác) */
   mode?: unknown;
   /** true: chỉ kiểm tra, không ghi */
   dryRun?: unknown;
@@ -34,11 +32,8 @@ export interface ImportBody {
 }
 
 const PLAN_STATUS_LABEL: Record<string, string> = { PLANNED: 'Dự kiến', DISCUSSING: 'Đang trao đổi', AWAITING_DEPOSIT: 'Chờ thanh toán cọc', CONFIRMED: 'Đã chốt' };
-const SIDE_LABEL = { BRIDE: 'Nhà gái', GROOM: 'Nhà trai' } as const;
-const RSVP_LABEL = { PENDING: 'Chưa phản hồi', ATTENDING: 'Sẽ đến', DECLINED: 'Từ chối' } as const;
 
 /** Tiêu đề cột của file mẫu và file tải về (frontend ghép cột tự động theo các tên này và từ đồng nghĩa). */
-export const GUEST_HEADER = ['Tên khách', 'Bên', 'Nhóm', 'Số người', 'Đã mời', 'Phản hồi'];
 export const TASK_HEADER = ['Việc', 'Hạn', 'Ghi chú'];
 export const EXPENSE_HEADER = ['Khoản chi', 'Số tiền'];
 
@@ -54,7 +49,6 @@ export class ImportExportService {
     private readonly prisma: PrismaService,
     private readonly weddings: WeddingsService,
     private readonly timeline: TimelineService,
-    private readonly guests: GuestsService,
     private readonly budget: BudgetService,
   ) {}
 
@@ -78,24 +72,6 @@ export class ImportExportService {
       // Chỉ trả các dòng có lỗi hoặc cảnh báo để payload nhỏ
       issues: results.filter((r) => r.errors.length || r.warnings.length).map(({ row, errors, warnings }) => ({ row, errors, warnings })),
     };
-  }
-
-  async importGuests(userId: string, body: ImportBody) {
-    requireDbFeature('guests');
-    const w = await this.weddings.requireWedding(userId);
-    const { rows, mode, dryRun } = this.parse(body, true);
-    const existing = mode === 'REPLACE' ? new Set<string>() : await this.guests.existingKeys(w.id);
-    const results = normalizeGuests(rows, existing);
-    const values = results.flatMap((r) => (r.value ? [r.value] : []));
-    if (dryRun || !values.length) return this.report(results, 0);
-    const current = mode === 'REPLACE' ? 0 : await this.prisma.wedding_guests.count({ where: { wedding_id: w.id } });
-    if (current + values.length > MAX_GUESTS) return fail('GUEST_LIMIT', `Tối đa ${MAX_GUESTS} khách.`, 409);
-    const data = values.map((v) => ({ wedding_id: w.id, full_name: v.fullName, side: v.side, group_name: v.group, party_size: v.partySize, is_invited: v.isInvited, rsvp_status: v.rsvp }));
-    await this.prisma.$transaction([
-      ...(mode === 'REPLACE' ? [this.prisma.wedding_guests.deleteMany({ where: { wedding_id: w.id } })] : []),
-      this.prisma.wedding_guests.createMany({ data }),
-    ]);
-    return this.report(results, data.length);
   }
 
   /** Công việc chỉ thêm vào (không thay toàn bộ, vì việc mẫu gắn với hạng mục và đơn). */
@@ -144,14 +120,6 @@ export class ImportExportService {
 
   // ---------- Xuất CSV ----------
 
-  async guestsCsv(userId: string) {
-    const { items } = await this.guests.list(userId);
-    return toCsv(
-      GUEST_HEADER,
-      items.map((g) => [g.fullName, SIDE_LABEL[g.side], g.group, g.partySize, g.isInvited ? 'Có' : 'Không', RSVP_LABEL[g.rsvp]]),
-    );
-  }
-
   async tasksCsv(userId: string) {
     const { items } = await this.timeline.get(userId);
     return toCsv(
@@ -184,8 +152,7 @@ export class ImportExportService {
 
 
   /** File mẫu để nhập (tiêu đề + 2 dòng ví dụ). */
-  template(type: 'guests' | 'tasks' | 'expenses') {
-    if (type === 'guests') return toCsv(GUEST_HEADER, [['Nguyễn Văn An', 'Nhà trai', 'Bạn bè', 2, 'Có', 'Sẽ đến'], ['Trần Thị Bình', 'Nhà gái', 'Gia đình', 1, 'Không', '']]);
+  template(type: 'tasks' | 'expenses') {
     if (type === 'tasks') return toCsv(TASK_HEADER, [['Đặt thiệp cưới', '15/01/2027', 'Chọn mẫu thiệp màu kem'], ['Thuê xe hoa', '20/02/2027', '']]);
     return toCsv(EXPENSE_HEADER, [['Thiệp cưới', '3tr'], ['Xe đưa đón', '5.000.000']]);
   }

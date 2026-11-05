@@ -1,7 +1,7 @@
 import { CalendarCheck, CalendarX, CalendarClock } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { VENUE_SLUG } from '@/features/availability/status'
+import { RESTAURANT_SLUG as VENUE_SLUG } from '@/features/vendors/constants'
 import { Button } from '@/components/ui/button'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'

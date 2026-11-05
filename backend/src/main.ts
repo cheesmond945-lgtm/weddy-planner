@@ -26,6 +26,6 @@ async function bootstrap() {
   });
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
-  console.log(`Everly API: http://localhost:${port}/api/health`);
+  console.log(`Forever API: http://localhost:${port}/api/health`);
 }
 bootstrap();

@@ -10,8 +10,6 @@ import { Pool } from 'pg';
 export const dbFeatures = {
   /** backend/prisma/sql/2026-10-29-02-timeline-notes.sql */
   timelineNotes: true,
-  /** backend/prisma/sql/2026-10-29-04-guests.sql */
-  guests: true,
   /** backend/prisma/manual/2026-10-30-01-budget-tiers.sql */
   budgetTiers: true,
   /** backend/prisma/manual/2026-10-30-02-share-links.sql */
@@ -28,7 +26,6 @@ export const dbFeatures = {
 
 const SQL_FILE: Record<keyof typeof dbFeatures, string> = {
   timelineNotes: 'backend/prisma/sql/2026-10-29-02-timeline-notes.sql',
-  guests: 'backend/prisma/sql/2026-10-29-04-guests.sql',
   budgetTiers: 'backend/prisma/manual/2026-10-30-01-budget-tiers.sql',
   sharing: 'backend/prisma/manual/2026-10-30-02-share-links.sql',
   availability: 'backend/prisma/manual/2026-10-30-03-package-availability.sql',
@@ -46,7 +43,7 @@ export async function detectDbFeatures(connectionString: string | undefined) {
       `SELECT table_name AS t, column_name AS c FROM information_schema.columns
        WHERE table_schema = 'public' AND (
          (table_name = 'timeline_tasks' AND column_name = 'note')
-         OR table_name IN ('wedding_guests', 'wedding_category_budgets', 'wedding_extra_costs', 'wedding_share_links', 'package_availability', 'package_resources', 'order_adjustments')
+         OR table_name IN ('wedding_category_budgets', 'wedding_extra_costs', 'wedding_share_links', 'package_availability', 'package_resources', 'order_adjustments')
          OR (table_name = 'orders' AND column_name IN ('guest_count', 'cancel_requested_date', 'cancel_request_note'))
          OR (table_name = 'weddings' AND column_name IN ('spending_tier', 'table_count_override', 'ward', 'budget_preset', 'custom_weights', 'own_venue', 'own_venue_cost'))
          OR (table_name = 'service_packages' AND column_name = 'unit')
@@ -54,7 +51,6 @@ export async function detectDbFeatures(connectionString: string | undefined) {
     );
     const has = (t: string, c?: string) => rows.some((r) => r.t === t && (!c || r.c === c));
     dbFeatures.timelineNotes = has('timeline_tasks', 'note');
-    dbFeatures.guests = has('wedding_guests');
     dbFeatures.budgetTiers =
       has('weddings', 'spending_tier') &&
       has('weddings', 'table_count_override') &&

@@ -27,7 +27,7 @@ Luật thuần: `backend/src/modules/halls/hall-busy.ts`; đọc CSDL: `hall-sto
 | NCC **Gửi / Cập nhật / Tạo lại** đơn | Phải chọn sảnh của mình (gói đang đăng); sảnh không bận ngày thực hiện | `400 VALIDATION_ERROR` (`details.packageId`), `409 HALL_BUSY` |
 | NCC **Chỉnh sửa sau cọc** | Đổi sảnh hoặc ngày thì sảnh mới phải trống ngày đó (khóa và kiểm lại trong transaction); giữ nguyên thì không kiểm. Đơn cũ chưa có sảnh: phải chọn | `409 HALL_BUSY` |
 | Khách **bấm đặt cọc** | Sảnh không bận ngày thực hiện (chặn trước khi chuyển tiền) | `409 HALL_BUSY` |
-| **Ghi nhận cọc** (giả lập, trang quay về VNPay, IPN) | Khóa `pg_advisory_xact_lock('hall:<sảnh>:<ngày>')` rồi kiểm lại; chỉ mục duy nhất là lớp chặn cuối | Không ghi nhận; đã thu tiền thì báo liên hệ hoàn tiền (như `CATEGORY_ALREADY_DEPOSITED`) |
+| **Ghi nhận cọc** (giả lập, xác nhận qua SePay (VietQR)) | Khóa `pg_advisory_xact_lock('hall:<sảnh>:<ngày>')` rồi kiểm lại; chỉ mục duy nhất là lớp chặn cuối | Không ghi nhận; đã thu tiền thì báo liên hệ hoàn tiền (như `CATEGORY_ALREADY_DEPOSITED`) |
 
 Lời báo: NCC thấy nguồn ("đơn DH… đã đặt cọc", "bạn đã đánh dấu bận: …"); khách chỉ thấy "Sảnh … đã có khách khác đặt cọc ngày …" hoặc "… không nhận tiệc ngày …", không lộ khách, đơn hay lý do.
 
@@ -69,3 +69,10 @@ Tạo qua API của app cho **Trống Đồng Palace** (`ncc18@example.com`), m�
 | Bận thủ công | Sảnh Hoa Hồng Màn LED 10–12/11/2026 (bảo trì màn LED); Lễ Đường Ngoài Trời Xanh 20–22/11/2026 (cải tạo bãi cỏ); Sảnh Gỗ Ấm Áp 29/12/2026 (sự kiện riêng); Sảnh New Space Xanh 15/01/2027 (tiệc ngoài hệ thống); cả 5 sảnh 05–09/02/2027 (nghỉ Tết) | Nút **Gỡ bận** ở Lịch làm việc > Lịch bận (bấm vào ngày) |
 
 Xem nhanh: khách `chi.bui12@example.com` (cưới 15/01/2027) thấy "Còn 4/5 sảnh trống" và Sảnh New Space Xanh bận ngày cưới; khách `thao.trinh01@example.com` thấy "Bạn đã đặt cọc Sảnh Hoàng Gia Trắng Vàng". Mật khẩu tài khoản mẫu: xem `HUONG_DAN_CHAY.md`.
+
+## Form đơn của NCC: chọn sảnh / gói một lần (cập nhật 04/11/2026)
+
+- **Lĩnh vực lấy từ hồ sơ NCC**, không suy từ gói đầu tiên: NCC Trung tâm tiệc cưới chưa có sảnh đang đăng vẫn thấy ô Sảnh kèm "Bạn chưa có sảnh nào đang đăng" và link Quản lý gói dịch vụ.
+- **Trung tâm tiệc cưới:** chỉ một dropdown **Sảnh** (đầu phần báo giá). Chọn sảnh tự tạo dòng 1 (tên sảnh, đơn vị Bàn, đơn giá và số bàn tối thiểu theo gói; khoá tên, đơn vị, gói; không xoá được; sửa được số lượng và đơn giá). Đổi sảnh thì dòng 1 đổi theo, hỏi xác nhận nếu đã sửa số lượng / đơn giá. Các dòng sau là dòng tự nhập.
+- **Lĩnh vực khác:** bỏ ô "Chọn gói…" ở đầu bảng; mỗi dòng có một dropdown gói ("Không gắn gói" cho dòng tự nhập), dòng gắn gói khoá đơn vị theo gói. Không dòng nào gắn gói thì hỏi trước khi gửi; dòng chưa gắn mà tên gần trùng một gói thì gợi ý gắn nhanh.
+- **Liên kết việc chi tiết chỉ theo gói của dòng** (`order_items.package_id`), không theo tên dòng. Sửa sau cọc: khoá chọn gói, backend giữ gói của dòng **theo id dòng** (`carryItemPackages`), dòng sảnh đổi theo sảnh mới nếu đổi sảnh. Việc timeline đã tạo theo sảnh cũ không tự thay đổi. Lịch bận sảnh, sinh việc khi cọc và hoa hồng không đổi.

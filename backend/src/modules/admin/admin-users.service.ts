@@ -1,3 +1,4 @@
+import { normalizePhone, PHONE_MESSAGE, VN_PHONE_RE } from '../../common/phone.ts';
 import { Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'node:crypto';
@@ -7,7 +8,7 @@ import { fail, matches, UUID } from './admin-common';
 
 const ROLE_OUT: Record<string, string> = { Couple: 'COUPLE', Vendor: 'VENDOR', Admin: 'ADMIN' };
 const ROLE_IN: Record<string, string> = { COUPLE: 'Couple', VENDOR: 'Vendor', ADMIN: 'Admin' };
-const PHONE_RE = /^0\d{9}$/;
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Bỏ các ký tự dễ nhầm (0/O, 1/l/I) vì người dùng đọc mật khẩu từ email rồi gõ lại; ký tự đặc biệt chọn loại dễ gõ, không lẫn với dấu câu
 const PASSWORD_SETS = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnpqrstuvwxyz', '23456789', '!@#$%&*?'];
@@ -125,10 +126,10 @@ export class AdminUsersService {
     const errors: Record<string, string> = {};
     const username = b.username?.trim() ?? '';
     const email = b.email?.trim().toLowerCase() ?? '';
-    const phone = b.phone?.trim() ?? '';
+    const phone = normalizePhone(b.phone);
     if (!username || username.length > 50) errors.username = 'Nhập tên đăng nhập (tối đa 50 ký tự).';
     if (!EMAIL_RE.test(email)) errors.email = 'Email chưa hợp lệ.';
-    if (!PHONE_RE.test(phone)) errors.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.';
+    if (!VN_PHONE_RE.test(phone)) errors.phone = PHONE_MESSAGE;
     if (!b.role || !(b.role in ROLE_IN)) errors.role = 'Chọn vai trò người dùng.';
     // Tài khoản cặp đôi do khách tự đăng ký, Admin không tạo
     else if (creating && b.role === 'COUPLE') errors.role = 'Tài khoản cặp đôi do khách tự đăng ký, quản trị viên không tạo được.';

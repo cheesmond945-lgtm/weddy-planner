@@ -3,6 +3,7 @@ import { useState, type ComponentProps } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
+import { Notice } from '@/features/vendors/components/FormParts'
 import type { CategoryRef } from '@/types/catalog'
 import type { VendorProfile } from '@/types/vendor'
 import type { VendorPackage } from '@/types/vendorPackage'
@@ -24,13 +25,14 @@ interface PackageDetailsProps {
  * Gói chờ duyệt / đã đăng / đang ẩn: xem trên cùng form ở chế độ chỉ đọc.
  * - Chờ duyệt, hoặc bản cập nhật đang chờ duyệt: không có thao tác.
  * - Đã đăng: Cập nhật, Ẩn.
- * - Đang ẩn: chỉ Khôi phục (khôi phục rồi mới cập nhật được).
+ * - Đang ẩn: chỉ Khôi phục (khôi phục rồi mới cập nhật được). Gói do Admin ẩn thì không có nút, hiện lý do.
  */
 export function PackageDetails({ pkg, profile, category, onEdit, editorExtras }: PackageDetailsProps) {
   const action = usePackageAction()
   const listHref = useListHref()
   const [confirm, setConfirm] = useState<'hide' | 'republish' | null>(null)
   const published = pkg.status === 'PUBLISHED' && !pkg.pendingUpdate
+  const hiddenByAdmin = pkg.status === 'HIDDEN' && pkg.hiddenBy === 'ADMIN'
 
   const actions = (
     <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>*]:flex-1">
@@ -49,7 +51,7 @@ export function PackageDetails({ pkg, profile, category, onEdit, editorExtras }:
           </Button>
         </>
       )}
-      {pkg.status === 'HIDDEN' && (
+      {pkg.status === 'HIDDEN' && !hiddenByAdmin && (
         <Button className="h-10" disabled={action.isPending} onClick={() => setConfirm('republish')}>
           <RotateCcw />
           Khôi phục
@@ -64,5 +66,17 @@ export function PackageDetails({ pkg, profile, category, onEdit, editorExtras }:
     </div>
   )
 
-  return <PackageEditor key={pkg.updatedAt} pkg={pkg} profile={profile} category={category} readOnly actions={actions} {...editorExtras} />
+  return (
+    <>
+      {hiddenByAdmin && (
+        <Notice tone="warn" title="Gói đã bị Admin ẩn">
+          <p>
+            <b>Lý do:</b> {pkg.hiddenReason}
+          </p>
+          <p>Bạn chưa tự khôi phục được gói này. Vui lòng liên hệ Forever để được hỗ trợ.</p>
+        </Notice>
+      )}
+      <PackageEditor key={pkg.updatedAt} pkg={pkg} profile={profile} category={category} readOnly actions={actions} {...editorExtras} />
+    </>
+  )
 }

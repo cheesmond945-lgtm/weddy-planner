@@ -3,7 +3,6 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { BudgetService } from './budget.service';
-import { GuestsService, type GuestBody } from './guests.service';
 import { ImportExportService, type ExtraCostImportBody, type ImportBody } from './import-export.service';
 import { OverviewService } from './overview.service';
 
@@ -14,7 +13,7 @@ function csv(res: Response, name: string, body: string) {
 }
 
 /**
- * Các subtab Tổng quan, Ngân sách, Khách mời và phần nhập/xuất (docs/api/weddings.md mục 6-9), trên đám cưới của người gọi.
+ * Các subtab Tổng quan, Ngân sách và phần nhập/xuất (docs/api/weddings.md mục 6-9), trên đám cưới của người gọi.
  */
 @UseGuards(JwtAuthGuard)
 @Roles('Couple')
@@ -23,7 +22,6 @@ export class PlanTabsController {
   constructor(
     private readonly overview: OverviewService,
     private readonly budget: BudgetService,
-    private readonly guests: GuestsService,
     private readonly io: ImportExportService,
   ) {}
 
@@ -77,39 +75,7 @@ export class PlanTabsController {
     return this.budget.removeExtraCost(req.user.sub, id, version);
   }
 
-  // ---------- Khách mời ----------
-
-  @Get('guests')
-  listGuests(@Req() req: any) {
-    return this.guests.list(req.user.sub);
-  }
-
-  @Post('guests')
-  addGuest(@Req() req: any, @Body() body: GuestBody) {
-    return this.guests.create(req.user.sub, body ?? {});
-  }
-
-  @Post('guests/bulk')
-  addGuests(@Req() req: any, @Body() body: { names?: unknown; side?: unknown; group?: unknown }) {
-    return this.guests.bulk(req.user.sub, body ?? {});
-  }
-
-  @Patch('guests/:id')
-  updateGuest(@Req() req: any, @Param('id') id: string, @Body() body: GuestBody) {
-    return this.guests.update(req.user.sub, id, body ?? {});
-  }
-
-  @Delete('guests/:id')
-  removeGuest(@Req() req: any, @Param('id') id: string) {
-    return this.guests.remove(req.user.sub, id);
-  }
-
   // ---------- Nhập (frontend gửi các dòng đã ghép cột) ----------
-
-  @Post('import/guests')
-  importGuests(@Req() req: any, @Body() body: ImportBody) {
-    return this.io.importGuests(req.user.sub, body ?? {});
-  }
 
   @Post('import/tasks')
   importTasks(@Req() req: any, @Body() body: ImportBody) {
@@ -123,11 +89,6 @@ export class PlanTabsController {
 
   // ---------- File mẫu và tải về ----------
 
-  @Get('import/guests/template.csv')
-  guestsTemplate(@Res({ passthrough: true }) res: Response) {
-    return csv(res, 'mau-khach-moi.csv', this.io.template('guests'));
-  }
-
   @Get('import/tasks/template.csv')
   tasksTemplate(@Res({ passthrough: true }) res: Response) {
     return csv(res, 'mau-cong-viec.csv', this.io.template('tasks'));
@@ -136,11 +97,6 @@ export class PlanTabsController {
   @Get('import/expenses/template.csv')
   expensesTemplate(@Res({ passthrough: true }) res: Response) {
     return csv(res, 'mau-chi-phi-khac.csv', this.io.template('expenses'));
-  }
-
-  @Get('export/guests.csv')
-  async exportGuests(@Req() req: any, @Res({ passthrough: true }) res: Response) {
-    return csv(res, 'khach-moi.csv', await this.io.guestsCsv(req.user.sub));
   }
 
   @Get('export/tasks.csv')

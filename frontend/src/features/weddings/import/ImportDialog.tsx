@@ -10,9 +10,9 @@ import { cn } from '@/lib/utils'
 import type { ImportRequest, ImportType } from '@/types/wedding'
 import { IMPORT_FIELDS, IMPORT_MAX_BYTES, IMPORT_MAX_ROWS, PREVIEW_ROWS, autoMap, canBeMonthFirst, mapRows } from './columns'
 
-const TITLE: Record<ImportType, string> = { guests: 'Nhập khách mời từ Excel', tasks: 'Nhập công việc từ Excel', expenses: 'Nhập chi phí khác từ Excel' }
+const TITLE: Record<ImportType, string> = { tasks: 'Nhập công việc từ Excel', expenses: 'Nhập chi phí khác từ Excel' }
 /** Dữ liệu cần làm mới sau khi nhập */
-const REFRESH: Record<ImportType, string[]> = { guests: ['guests', 'overview'], tasks: ['timeline', 'overview'], expenses: ['budget', 'overview', 'wedding'] }
+const REFRESH: Record<ImportType, string[]> = { tasks: ['timeline', 'overview'], expenses: ['budget', 'overview', 'wedding'] }
 
 interface Sheet {
   fileName: string
@@ -40,7 +40,7 @@ async function readSheet(file: File): Promise<Sheet> {
 
 /**
  * Nhập Excel/CSV (P6): chọn file, ghép cột (tự động, sửa được), xem trước 50 dòng kèm lỗi do backend kiểm tra (dryRun),
- * rồi nhập các dòng hợp lệ. Khách mời và chi phí khác chọn được "Thêm vào" hoặc "Thay toàn bộ".
+ * rồi nhập các dòng hợp lệ. Chi phí khác chọn được "Thêm vào" hoặc "Thay toàn bộ".
  */
 export function ImportDialog({ type, open, onOpenChange, version }: { type: ImportType; open: boolean; onOpenChange: (open: boolean) => void; /** Chi phí khác: phiên bản ngân sách đã đọc */ version?: string }) {
   return (
@@ -238,7 +238,7 @@ function ImportBody({ type, version, onClose }: { type: ImportType; version?: st
       )}
 
       <FormError message={error ?? (check.error as Error | null)?.message} />
-      <DialogFooter className="mt-1">
+      <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
           Hủy
         </Button>

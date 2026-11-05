@@ -2,17 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PLAN_TABS, type PlanTab } from '../wedding-sharing/plan-tabs';
 import { BudgetService } from './budget.service';
-import { guestStats } from './guests.service';
 import { todayVNDate, toYmd } from './timeline-hooks';
 import { TimelineService } from './timeline.service';
 import { WeddingsService } from './weddings.service';
-import { dbFeatures } from '../../prisma/db-features';
 
 const DAY = 86_400_000;
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / DAY);
 
 /**
- * Tab Tổng quan (P2): một endpoint gom số liệu của Timeline, Ngân sách, Khách mời.
+ * Tab Tổng quan (P2): một endpoint gom số liệu của Timeline, Ngân sách.
  * Xem qua link công khai: phần của tab không được chia sẻ thì trả null (không lộ số liệu).
  */
 @Injectable()
@@ -27,12 +25,8 @@ export class OverviewService {
   async get(userId: string, tabs: readonly PlanTab[] = PLAN_TABS) {
     const w = await this.weddings.requireWedding(userId);
     const can = (t: PlanTab) => tabs.includes(t);
-    const [tasks, budget, guests] = await Promise.all([
-      can('timeline') ? this.tasks(userId) : null,
-      can('budget') ? this.budgetPart(w) : null,
-      can('guests') && dbFeatures.guests ? this.guests(w.id, w.guest_count ?? 0) : null,
-    ]);
-    return { tasks, budget, guests };
+    const [tasks, budget] = await Promise.all([can('timeline') ? this.tasks(userId) : null, can('budget') ? this.budgetPart(w) : null]);
+    return { tasks, budget };
   }
 
   private async tasks(userId: string) {
@@ -77,10 +71,5 @@ export class OverviewService {
     if (s.totals.extraCosts > 0) slices.push({ slug: 'other', name: 'Chi phí khác', amount: s.totals.extraCosts, budget: 0, isOver: false });
     const planned = s.totals.total - s.totals.remaining;
     return { total: s.totals.total, planned, deposited: Number(deposits._sum.deposit_amount ?? 0), remaining: s.totals.remaining, slices };
-  }
-
-  private async guests(weddingId: string, expected: number) {
-    const rows = await this.prisma.wedding_guests.findMany({ where: { wedding_id: weddingId }, select: { side: true, party_size: true, is_invited: true, rsvp_status: true } });
-    return guestStats(rows, expected);
   }
 }

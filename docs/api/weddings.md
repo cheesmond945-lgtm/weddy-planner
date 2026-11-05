@@ -1,4 +1,4 @@
-# API: weddings (thông tin đám cưới, timeline, kế hoạch, gợi ý AI, tổng quan, ngân sách, khách mời, nhập/xuất)
+# API: weddings (thông tin đám cưới, timeline, kế hoạch, gợi ý AI, tổng quan, ngân sách, nhập/xuất)
 
 > **Bản nháp** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/planning.ts`).
 > Quy ước chung: [README.md](README.md). `ServiceSummary`, `CategoryRef`: xem [catalog.md](catalog.md). `Order`: xem [orders.md](orders.md).
@@ -258,8 +258,7 @@ Một endpoint cho toàn bộ subtab Tổng quan. Cặp đôi luôn nhận đủ
   "budget": {
     "total": 500000000, "planned": 260000000, "deposited": 30000000, "remaining": 240000000,
     "slices": [{ "slug": "nha-hang", "name": "…", "amount": 200000000, "budget": 200000000, "isOver": false }, { "slug": "other", "name": "Chi phí khác", "amount": 8000000, "budget": 0, "isOver": false }]
-  },
-  "guests": "GuestStats (mục 8) hoặc null"
+  }
 }
 ```
 
@@ -419,53 +418,15 @@ Response 200: `Budget`. Lỗi: 404 `EXTRA_COST_NOT_FOUND`.
 
 ---
 
-## 8. Khách mời
+## 8. Khách mời (đã bỏ 04/11/2026)
 
-`Guest`
-
-```json
-{ "id": "…", "fullName": "Nguyễn Văn An", "side": "GROOM", "group": "Bạn bè", "partySize": 2, "isInvited": true, "rsvp": "ATTENDING", "createdDate": "…" }
-```
-
-| Trường | Quy tắc |
-|---|---|
-| `fullName` | Bắt buộc, tối đa 100 ký tự. Trùng **tên (bỏ dấu, không phân biệt hoa thường) + bên** với khách đã có thì 409 `GUEST_DUPLICATE` |
-| `side` | `GROOM` (nhà trai) hoặc `BRIDE` (nhà gái) |
-| `group` | Gia đình, Họ hàng, Bạn bè, Đồng nghiệp, Khác (mặc định) hoặc tự nhập tối đa 30 ký tự |
-| `partySize` | Số người tính cả khách, 1–50, mặc định 1 |
-| `isInvited` | Mặc định `false` |
-| `rsvp` | `PENDING` (chưa phản hồi), `ATTENDING` (sẽ đến), `DECLINED` (từ chối). Chỉ khác `PENDING` khi đã mời; bỏ `isInvited` thì tự về `PENDING` |
-
-`GuestStats` (tính theo số người, `rows` là số dòng):
-
-```json
-{ "total": 320, "expected": 300, "invited": 250, "attending": 180, "declined": 20, "pending": 50, "notInvited": 70, "bride": 150, "groom": 170, "rows": 140 }
-```
-
-### GET /weddings/me/guests
-Response 200: `{ "data": { "items": Guest[], "stats": GuestStats } }`
-
-### POST /weddings/me/guests
-Body: `Guest` không có `id`, `createdDate`. Response 201: danh sách mới (như GET).
-
-### POST /weddings/me/guests/bulk
-Thêm nhiều khách, mỗi dòng một tên: `{ "names": ["Trần Bình", "Lê Cường"], "side": "BRIDE", "group": "Gia đình" }` (tối đa 500 tên). Có tên trùng thì không thêm gì, trả 409 `GUEST_DUPLICATE` với `details.duplicates`. Response 201: danh sách mới.
-
-### PATCH /weddings/me/guests/:id
-Body: một hoặc nhiều trường của `Guest`. Chọn `rsvp` khác `PENDING` khi chưa mời: 400 `VALIDATION_ERROR`. Response 200: danh sách mới.
-
-### DELETE /weddings/me/guests/:id
-Response 200: danh sách mới.
-
-Lỗi chung: 400 `VALIDATION_ERROR` (`details` theo trường), 404 `GUEST_NOT_FOUND`, 409 `GUEST_DUPLICATE`, 409 `GUEST_LIMIT` (tối đa 2000 khách).
-
----
+Đã bỏ tính năng danh sách khách mời: không còn API `/weddings/me/guests`, nhập/xuất khách mời và bảng `wedding_guests` (backend/prisma/manual/2026-11-04-02-drop-wedding-guests.sql). Số khách dự kiến vẫn là `guestCount` của đám cưới (mục 1).
 
 ## 9. Nhập và xuất Excel/CSV
 
 FE đọc file (.xlsx, .xls, .csv; tối đa 500 dòng, 2 MB) bằng SheetJS, tự ghép cột theo từ đồng nghĩa (bỏ dấu, có ô chọn tay), rồi gửi các dòng đã ghép cho BE. **BE kiểm tra lại từng dòng** (hàm thuần `backend/src/modules/weddings/import-rows.ts`); FE gọi `dryRun` để xem trước lỗi, nên hai bên luôn ra cùng một kết quả.
 
-### POST /weddings/me/import/{guests|tasks|expenses}
+### POST /weddings/me/import/{tasks|expenses}
 
 ```json
 { "rows": [{ "name": "Nguyễn An", "side": "Nhà trai", "partySize": "2" }], "mode": "APPEND", "dryRun": true, "dateOrder": "DMY" }
@@ -473,11 +434,10 @@ FE đọc file (.xlsx, .xls, .csv; tối đa 500 dòng, 2 MB) bằng SheetJS, t�
 
 | Loại | Trường của mỗi dòng | Ghi chú |
 |---|---|---|
-| `guests` | `name`*, `side`*, `group`, `partySize`, `invited`, `rsvp` | Bên nhận "Nhà trai/Nhà gái", "Trai/Gái", "CR/CD". Đã mời nhận "x", "có", "rồi"… Có phản hồi thì tính là đã mời (cảnh báo). Trùng tên + bên trong file hoặc với danh sách hiện có là lỗi |
 | `tasks` | `title`*, `dueDate`*, `note` | Chỉ thêm vào. Hạn: `YYYY-MM-DD`, `ngày/tháng/năm`, số ngày của Excel; `dateOrder: "MDY"` chỉ được khi cột có ngày mà số thứ hai > 12 và không ngày nào số đầu > 12. |
 | `expenses` | `title`*, `amount`* | Chi phí khác ngoài WebPlan (bảng `wedding_extra_costs`, cột `name`). Số tiền nhận "5tr", "5 triệu", "1,5tr", "500k", "5.000.000đ". Khi ghi (không `dryRun`) phải gửi `version` như mục 7 |
 
-- `mode`: `APPEND` (mặc định) hoặc `REPLACE` (xóa hết rồi thêm; chỉ `guests`, `expenses`).
+- `mode`: `APPEND` (mặc định) hoặc `REPLACE` (xóa hết rồi thêm; chỉ `expenses`).
 - Không `dryRun`: chỉ ghi các dòng hợp lệ, bỏ qua dòng lỗi.
 
 Response 200:
@@ -493,10 +453,9 @@ File CSV UTF-8 có BOM (Excel mở đúng tiếng Việt), không bọc `{ data 
 
 | Endpoint | File | Cột |
 |---|---|---|
-| `GET /weddings/me/export/guests.csv` | `khach-moi.csv` | Tên khách, Bên, Nhóm, Số người, Đã mời, Phản hồi |
 | `GET /weddings/me/export/tasks.csv` | `cong-viec.csv` | Việc, Hạn, Ghi chú, Hạng mục, Trạng thái (không gồm việc `LOCKED`) |
 | `GET /weddings/me/export/budget.csv` | `ngan-sach.csv` | Loại, Tên, Ngân sách, Dịch vụ đã chọn, Trạng thái, Giá, Giá cao nhất, Chênh lệch |
-| `GET /weddings/me/import/{guests\|tasks\|expenses}/template.csv` | `mau-….csv` | Tiêu đề + 2 dòng ví dụ, nhập lại được ngay |
+| `GET /weddings/me/import/{tasks\|expenses}/template.csv` | `mau-….csv` | Tiêu đề + 2 dòng ví dụ, nhập lại được ngay |
 
 ---
 

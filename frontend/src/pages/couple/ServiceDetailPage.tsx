@@ -6,12 +6,13 @@ import { ServiceDetailView } from '@/features/catalog/components/ServiceDetailVi
 import { PackageCardSkeleton } from '@/features/catalog/components/ServiceInfoPanel'
 import { useService } from '@/features/catalog/hooks'
 import { FavoriteButton } from '@/features/favorites/components/FavoriteButton'
-import { HallCalendar, HallsVerdict } from '@/features/halls/components/HallCalendar'
+import { HallCalendar, HallDayBadge, HallsVerdict } from '@/features/halls/components/HallCalendar'
 import { useMyOrders } from '@/features/orders/hooks'
 import { RESTAURANT_SLUG } from '@/features/vendors/constants'
 import { useWedding } from '@/features/weddings/hooks'
 import { AddToPlanButton, OpenChatButton, usePlanItemOf } from '@/features/weddings/planActions'
 import { PLAN_STATUS } from '@/features/weddings/status'
+import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { paths } from '@/routes/paths'
 
@@ -74,6 +75,8 @@ export default function ServiceDetailPage() {
           service={service}
           sidebarLead={halls ? <HallsVerdict serviceId={service.id} weddingDate={wedding?.date} bookedHall={bookedHall} /> : undefined}
           packageExtra={halls ? (pkg) => <HallCalendar packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
+          packageBadge={halls ? (pkg) => <HallDayBadge packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
+          packagesSubtitle={halls && wedding?.date ? `Sảnh bận hay còn trống vào ngày cưới của bạn (${formatDate(wedding.date)}). Bấm Xem chi tiết để xem lịch tháng.` : undefined}
           headActions={<FavoriteButton service={service} variant="icon" />}
           sidebarActions={
             <>

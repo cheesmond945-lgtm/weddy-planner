@@ -178,7 +178,7 @@ test('14. chọn 4 dịch vụ đắt rồi chọn tiệc: không chặn, có h�
   assert.equal(first.status, 'OVER_BUDGET');
   const c = a.consequenceOf(input({ categories, planVendors: services }), v.id, 232 * M);
   assert.equal(c.shortfall > 0, true);
-  assert.match(c.message, /^Gói này làm 1 dịch vụ còn lại thiếu khoảng .*đ so với gói rẻ nhất của chúng.$/);
+  assert.match(c.message, /^Nếu chọn gói này, .*dịch vụ chưa chọn \(.+\).* thiếu .*Hãy chọn gói rẻ hơn hoặc tăng tổng ngân sách\.$/);
 });
 
 test('15. không gói tiệc nào trong giới hạn: gói rẻ nhất kèm "Vượt Y", quỹ dịch vụ trừ theo gói đó', () => {

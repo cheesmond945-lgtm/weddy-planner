@@ -2,13 +2,11 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
-import { VendorAvailabilityManager } from '@/features/availability/components/VendorAvailabilityManager'
 import { Button } from '@/components/ui/button'
 import { hasEditableUpdate, isEditablePackage, packageCategoryOf } from '@/features/vendorPackages/constants'
 import { PackageDetails } from '@/features/vendorPackages/components/PackageDetails'
 import { PackageEditor } from '@/features/vendorPackages/components/PackageEditor'
 import { PackageHeader } from '@/features/vendorPackages/components/PackageHeader'
-import { PackageDayPlanCard } from '@/features/vendorPackages/components/PackageDayPlanCard'
 import { PackageTasksTab } from '@/features/vendorPackages/components/PackageTasksTab'
 import { usePackage, usePackageTasksDraft } from '@/features/vendorPackages/hooks'
 import { useVendorProfile } from '@/features/vendors/hooks'
@@ -83,7 +81,6 @@ export default function VendorPackagePage() {
   // Gói đã có (đã lưu) thì tab Công việc có thêm "Thời gian trong ngày cưới" ở trên danh sách việc
   const tasksPanel = (
     <>
-      {p?.dayPlan && <PackageDayPlanCard key={p.id} packageId={p.id} plan={p.dayPlan} />}
       <PackageTasksTab draft={tasks} />
     </>
   )
@@ -120,8 +117,6 @@ export default function VendorPackagePage() {
       ) : (
         <PackageDetails pkg={p} profile={profile.data} category={category} onEdit={() => setEditingAt(p.updatedAt)} editorExtras={extras} />
       )}
-      {/* Lịch khả dụng theo từng gói (gói đã gửi duyệt trở đi) */}
-      {p && p.status !== 'DRAFT' && tab === 'info' && <VendorAvailabilityManager packageId={p.id} packageName={p.name} />}
     </div>
   )
 }

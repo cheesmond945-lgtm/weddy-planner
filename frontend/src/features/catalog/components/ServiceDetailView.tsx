@@ -1,4 +1,4 @@
-import { Check, ExternalLink, Info, Lock, MapPin, Star } from 'lucide-react'
+import { ExternalLink, Info, Lock, MapPin, Star } from 'lucide-react'
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { formatNumber } from '@/lib/format'
@@ -29,10 +29,13 @@ interface ServiceDetailViewProps {
   sidebarLead?: ReactNode
   /** Phần thêm trong khung chi tiết gói (lịch bận của sảnh, module halls) */
   packageExtra?: (pkg: ServicePackage) => ReactNode
+  /** Nhãn dưới card gói (sảnh bận / trống ngày cưới, module halls) */
+  packageBadge?: (pkg: ServicePackage) => ReactNode
+  packagesSubtitle?: string
 }
 
 /** Nội dung trang chi tiết dịch vụ (2.2), như renderDetail trong prototype. */
-export function ServiceDetailView({ service, headActions, sidebarActions, sidebarTip, sidebarLead, packageExtra }: ServiceDetailViewProps) {
+export function ServiceDetailView({ service, headActions, sidebarActions, sidebarTip, sidebarLead, packageExtra, packageBadge, packagesSubtitle }: ServiceDetailViewProps) {
   const [tab, setTab] = useState<Tab>('info')
   const [galleryOpen, setGalleryOpen] = useState(false)
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -53,12 +56,6 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
   return (
     <>
       <div className="mt-1 mb-2.5 flex flex-wrap gap-2">
-        {service.isVerified && (
-          <span className="inline-flex items-center gap-1.5 rounded-pill bg-info-soft px-3 py-[5px] text-xs font-semibold text-info">
-            <Check className="size-3.5" strokeWidth={2.2} aria-hidden />
-            Đã xác minh
-          </span>
-        )}
         {service.isGuaranteed && (
           <span className="inline-flex items-center gap-1.5 rounded-pill bg-sage-soft px-3 py-[5px] text-xs font-semibold text-sage">
             <Lock className="size-3.5" strokeWidth={2} aria-hidden />
@@ -131,7 +128,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
           {/* @container/content: lưới gói đo theo bề rộng cột nội dung này (2 cột khi từ 700px) */}
           <div id="service-tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="@container/content">
             {tab === 'info' ? (
-              <ServiceInfoPanel service={service} packageExtra={packageExtra} />
+              <ServiceInfoPanel service={service} packageExtra={packageExtra} packageBadge={packageBadge} packagesSubtitle={packagesSubtitle} />
             ) : (
               <WebReviewsPanel serviceId={service.id} />
             )}

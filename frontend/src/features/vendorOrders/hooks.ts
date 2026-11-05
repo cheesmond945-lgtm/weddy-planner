@@ -14,7 +14,7 @@ function useVendorId() {
   return user?.role === 'VENDOR' ? user.id : undefined
 }
 
-/** Sau khi đơn đổi: cập nhật đơn trong cache, tải lại tin, hội thoại, danh sách và số đếm. */
+/** Sau khi đơn đổi: chỉnh sửa đơn trong cache, tải lại tin, hội thoại, danh sách và số đếm. */
 export function useSyncOrder() {
   const uid = useVendorId()
   const qc = useQueryClient()
@@ -82,12 +82,12 @@ export function useOrder(orderId: string | null) {
 
 export type SaveOrderInput =
   | { kind: 'create'; conversationId: string; content: OrderContent; send: boolean }
-  | { kind: 'draft'; orderId: string; content: OrderContent }
-  | { kind: 'send'; orderId: string; content: OrderContent; resend: boolean }
-  | { kind: 'edit'; orderId: string; content: OrderContent; changeNote: string }
+  | { kind: 'draft'; orderId: string; content: OrderContent; expectedVersion?: string }
+  | { kind: 'send'; orderId: string; content: OrderContent; resend: boolean; expectedVersion?: string }
+  | { kind: 'edit'; orderId: string; content: OrderContent; changeNote: string; expectedVersion?: string }
 
 /**
- * Lưu nháp, gửi đơn, "Cập nhật đơn" hoặc sửa sau cọc từ form đơn trong chat.
+ * Lưu nháp, gửi đơn, "Chỉnh sửa đơn" hoặc sửa sau cọc từ form đơn trong chat.
  * create: đơn mới (nháp hoặc gửi luôn). draft: lưu bản nháp. send: gửi bản nháp, hoặc sửa và gửi lại đơn đang chờ cọc / chờ chỉnh sửa.
  * edit: sửa đơn đã cọc.
  */
@@ -99,11 +99,11 @@ export function useSaveOrder() {
         case 'create':
           return vendorOrdersApi.create({ conversationId: i.conversationId, content: i.content, send: i.send })
         case 'draft':
-          return vendorOrdersApi.saveDraft(i.orderId, i.content)
+          return vendorOrdersApi.saveDraft(i.orderId, i.content, i.expectedVersion)
         case 'send':
-          return vendorOrdersApi.send(i.orderId, i.content)
+          return vendorOrdersApi.send(i.orderId, i.content, i.expectedVersion)
         case 'edit':
-          return vendorOrdersApi.edit(i.orderId, i.content, i.changeNote)
+          return vendorOrdersApi.edit(i.orderId, i.content, i.changeNote, i.expectedVersion)
       }
     },
     onSuccess: (o, i) => {
@@ -113,9 +113,9 @@ export function useSaveOrder() {
         draft
           ? `Đã lưu nháp ${o.orderCode}, chỉ bạn nhìn thấy, chưa gửi cho khách.`
           : i.kind === 'edit'
-            ? `Đã cập nhật đơn ${o.orderCode}.`
+            ? `Đã chỉnh sửa đơn ${o.orderCode}.`
             : i.kind === 'send' && i.resend
-              ? `Đã cập nhật đơn ${o.orderCode}, hạn cọc mới là 24 giờ.`
+              ? `Đã chỉnh sửa đơn ${o.orderCode}, hạn cọc mới là 24 giờ.`
               : `Đã gửi đơn ${o.orderCode} cho khách, hạn cọc 24 giờ.`,
       )
     },
@@ -184,38 +184,10 @@ export function useOrderTasks(orderId: string | null, enabled = true) {
   })
 }
 
-/** Giờ có mặt ngày cưới của đơn; khóa nằm dưới việc của đơn nên tải lại cùng (realtime `task`, khách đổi giờ chính). */
-const daySlotKey = (uid: string | undefined, orderId: string) => [...vendorKeys.orderTasks(uid, orderId), 'day-slot'] as const
-
-export function useDaySlot(orderId: string) {
-  const uid = useVendorId()
-  return useQuery({ queryKey: daySlotKey(uid, orderId), queryFn: () => vendorOrdersApi.daySlot(orderId), enabled: !!uid })
-}
-
-/** Chốt giờ có mặt ({ start, end }) hoặc bỏ chốt (null); khách được báo khi chốt. */
-export function useSetDaySlot(orderId: string) {
-  const uid = useVendorId()
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (v: { start: string; end: string } | null) => (v ? vendorOrdersApi.confirmDaySlot(orderId, v) : vendorOrdersApi.clearDaySlot(orderId)),
-    onSuccess: (data, v) => {
-      qc.setQueryData(daySlotKey(uid, orderId), data)
-      toast(v ? 'Đã xác nhận giờ có mặt, khách đã được báo.' : 'Đã bỏ xác nhận, quay về giờ dự kiến.')
-    },
-    onError: (e: unknown) => toast(e instanceof Error ? e.message : 'Không lưu được giờ có mặt.'),
-  })
-}
-
 /** Tiến độ tóm tắt của mọi đơn đang thực hiện ({ [orderId]: OrderProgress }), để hiện nhãn "Trễ tiến độ". */
 export function useOrderProgress() {
   const uid = useVendorId()
   return useQuery({ queryKey: vendorKeys.orderProgress(uid), queryFn: vendorOrdersApi.progress, enabled: !!uid, staleTime: 60_000 })
-}
-
-/** Bảng việc (kanban): mọi việc của các đơn đang thực hiện. */
-export function useTaskBoard() {
-  const uid = useVendorId()
-  return useQuery({ queryKey: vendorKeys.taskBoard(uid), queryFn: vendorOrdersApi.board, enabled: !!uid })
 }
 
 /** Lịch làm việc trong khoảng ngày của lưới tháng đang xem. */

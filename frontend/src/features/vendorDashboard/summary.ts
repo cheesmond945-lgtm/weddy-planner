@@ -73,7 +73,7 @@ export function todoItems({ orders, conversations, packages, statements }: TodoI
     items.push({ key: 'revision', count: revision.length, label: 'đơn khách yêu cầu chỉnh sửa', hint: codes(revision), href: o ? chatHref(o.conversationId) : ordersHref('status=NeedRevision'), urgent: true })
   }
 
-  // Đơn đã qua ngày thực hiện: đánh dấu hoàn thành (hệ thống tự hoàn thành sau 7 ngày)
+  // Đơn đã qua ngày thực hiện: đánh dấu hoàn thành (hệ thống tự hoàn thành khi quá ngày thực hiện hơn 7 ngày)
   const toComplete = orders.filter((o) => o.status === 'Deposited' && eventPassed(o))
   if (toComplete.length) {
     const o = one(toComplete)

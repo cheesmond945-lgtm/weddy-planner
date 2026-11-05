@@ -146,16 +146,14 @@ export class ChatService {
   }
 
   /**
-   * POST /conversations: mở (hoặc tạo) hội thoại với NCC của một dịch vụ, tự thêm dịch vụ vào kế hoạch.
-   * Hạng mục đã có NCC khác chờ cọc / đã chốt (PLAN_CATEGORY_LOCKED): vẫn mở hội thoại để khách tư vấn tự do,
-   * chỉ KHÔNG thêm NCC này vào kế hoạch (hội thoại trả planStatus = null). Nếu khách cọc đơn của NCC này thì
-   * NCC được thêm vào kế hoạch lúc cọc, hạng mục có hai NCC.
+   * POST /conversations: mở (hoặc tạo) hội thoại với NCC của một dịch vụ. Không đụng tới kế hoạch: khách tự thêm NCC bằng
+   * "Thêm vào kế hoạch" (lúc đó mới hỏi thay / báo hạng mục đã chốt); khách cọc đơn của NCC thì NCC vào kế hoạch lúc cọc.
+   * `replace` giữ cho client cũ, không còn dùng.
    */
   async startForCouple(userId: string, serviceId: string, replace: boolean) {
-    await this.weddings.addPlanItem(userId, serviceId, replace, true).catch((e: unknown) => {
-      if (e instanceof HttpException && (e.getResponse() as { code?: string }).code === 'PLAN_CATEGORY_LOCKED') return null;
-      throw e;
-    });
+    // Nhắn tin chỉ mở hội thoại, KHÔNG thêm NCC vào kế hoạch (khách tự bấm "Thêm vào kế hoạch"; cọc đơn thì NCC vào kế hoạch lúc cọc)
+    void replace;
+    if (!/^[0-9a-f-]{36}$/i.test(serviceId) || !(await this.services.isVisible(serviceId))) return fail('SERVICE_NOT_FOUND', 'Không tìm thấy dịch vụ.', 404);
     const vendor = await this.prisma.vendor_profiles.findUniqueOrThrow({ where: { id: serviceId }, include: { service_categories: { select: { name: true } } } });
     let conv = await this.prisma.conversations.findUnique({ where: { couple_id_vendor_id: { couple_id: userId, vendor_id: vendor.user_id! } } });
     if (!conv) {

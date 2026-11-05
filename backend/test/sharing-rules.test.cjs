@@ -4,7 +4,9 @@ const assert = require('node:assert/strict');
 const r = require('../dist/modules/wedding-sharing/sharing-rules');
 
 test('tab: bỏ trùng, theo thứ tự chuẩn, tắt được mọi tab miễn còn ít nhất 1', () => {
-  assert.deepEqual(r.normalizeTabs(['guests', 'overview', 'guests']), ['overview', 'guests']);
+  assert.deepEqual(r.normalizeTabs(['budget', 'overview', 'budget']), ['overview', 'budget']);
+  // Tab Khách mời đã bỏ: gửi 'guests' là không hợp lệ
+  assert.equal(r.normalizeTabs(['guests', 'overview']), null);
   assert.deepEqual(r.normalizeTabs(['budget']), ['budget']);
   assert.equal(r.normalizeTabs([]), null);
   assert.equal(r.normalizeTabs(['chat']), null);

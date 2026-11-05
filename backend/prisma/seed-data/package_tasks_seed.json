@@ -10993,7 +10993,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11005,13 +11005,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11026,6 +11026,12 @@
      "title": "Tổ chức tiệc cưới",
      "owner": "BOTH",
      "offsetDays": 0
+    },
+    {
+     "sort": 7,
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
+     "owner": "VENDOR",
+     "offsetDays": -2
     }
    ]
   },
@@ -11037,7 +11043,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11049,13 +11055,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11067,13 +11073,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -11111,25 +11117,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11155,25 +11161,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11199,7 +11205,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11211,13 +11217,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11229,12 +11235,18 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
+     "owner": "VENDOR",
+     "offsetDays": -2
+    },
+    {
+     "sort": 8,
      "title": "Tổ chức tiệc cưới",
      "owner": "BOTH",
      "offsetDays": 0
@@ -11249,7 +11261,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11261,13 +11273,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11279,13 +11291,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -11323,7 +11335,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11335,13 +11347,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11353,13 +11365,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -11397,13 +11409,13 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
@@ -11415,13 +11427,13 @@
     },
     {
      "sort": 4,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 5,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11447,25 +11459,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11491,13 +11503,13 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
@@ -11509,13 +11521,13 @@
     },
     {
      "sort": 4,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 5,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11527,7 +11539,7 @@
     },
     {
      "sort": 7,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
@@ -11547,7 +11559,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11559,13 +11571,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11577,13 +11589,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -11621,25 +11633,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11665,7 +11677,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11677,13 +11689,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11695,13 +11707,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -11739,13 +11751,13 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
@@ -11757,13 +11769,13 @@
     },
     {
      "sort": 4,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 5,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11789,25 +11801,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11833,7 +11845,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11845,13 +11857,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11863,12 +11875,18 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
+     "owner": "VENDOR",
+     "offsetDays": -2
+    },
+    {
+     "sort": 8,
      "title": "Tổ chức tiệc cưới",
      "owner": "BOTH",
      "offsetDays": 0
@@ -11883,7 +11901,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11901,13 +11919,13 @@
     },
     {
      "sort": 4,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 5,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11919,13 +11937,13 @@
     },
     {
      "sort": 7,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 8,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -11963,7 +11981,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -11975,13 +11993,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -11993,13 +12011,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -12037,25 +12055,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12081,25 +12099,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12125,7 +12143,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -12137,13 +12155,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12155,12 +12173,18 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
+     "owner": "VENDOR",
+     "offsetDays": -2
+    },
+    {
+     "sort": 8,
      "title": "Tổ chức tiệc cưới",
      "owner": "BOTH",
      "offsetDays": 0
@@ -12175,7 +12199,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -12187,13 +12211,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12205,13 +12229,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -12249,7 +12273,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -12261,13 +12285,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12279,13 +12303,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -12323,25 +12347,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12367,25 +12391,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12411,7 +12435,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -12423,13 +12447,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12441,12 +12465,18 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
+     "owner": "VENDOR",
+     "offsetDays": -2
+    },
+    {
+     "sort": 8,
      "title": "Tổ chức tiệc cưới",
      "owner": "BOTH",
      "offsetDays": 0
@@ -12461,7 +12491,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -12473,13 +12503,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12491,13 +12521,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },
@@ -12535,25 +12565,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12579,25 +12609,25 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
     {
      "sort": 2,
-     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, nghi thức cắt bánh, rót rượu, nhạc",
+     "title": "Chốt chương trình tiệc: giờ đón khách, giờ khai tiệc, các nghi thức, nhạc",
      "owner": "BOTH",
      "offsetDays": -14
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12609,7 +12639,7 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
@@ -12629,7 +12659,7 @@
    "tasks": [
     {
      "sort": 1,
-     "title": "Chốt thực đơn chính thức (mâm 10 người): món, đồ uống, bánh, tháp ly",
+     "title": "Chốt thực đơn chính thức: món, đồ uống, bánh, tháp ly",
      "owner": "CUSTOMER",
      "offsetDays": -30
     },
@@ -12641,13 +12671,13 @@
     },
     {
      "sort": 3,
-     "title": "Chốt số mâm chính thức và mâm dự phòng",
+     "title": "Chốt số bàn chính thức và bàn dự phòng",
      "owner": "CUSTOMER",
      "offsetDays": -7
     },
     {
      "sort": 4,
-     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, mâm dự phòng",
+     "title": "Gửi sơ đồ bàn: khu vực gia đình hai họ, bàn dự phòng",
      "owner": "VENDOR",
      "offsetDays": -5
     },
@@ -12659,13 +12689,13 @@
     },
     {
      "sort": 6,
-     "title": "Gửi thực đơn in đặt trên từng mâm",
+     "title": "Gửi thực đơn in đặt trên từng bàn",
      "owner": "VENDOR",
      "offsetDays": -3
     },
     {
      "sort": 7,
-     "title": "Chuẩn bị bánh cưới, tháp ly theo ưu đãi của gói (nếu đủ điều kiện)",
+     "title": "Chuẩn bị bánh cưới, tháp ly tặng kèm",
      "owner": "VENDOR",
      "offsetDays": -2
     },

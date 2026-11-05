@@ -28,7 +28,6 @@ async function cleanup() {
   await prisma.notifications.deleteMany({ where: { user_id: { in: ids } } });
   await prisma.wedding_share_links.deleteMany({ where: { wedding_id: { in: weddings } } });
   await prisma.timeline_tasks.deleteMany({ where: { wedding_id: { in: weddings } } });
-  await prisma.wedding_guests.deleteMany({ where: { wedding_id: { in: weddings } } });
   await prisma.wedding_extra_costs.deleteMany({ where: { wedding_id: { in: weddings } } });
   await prisma.wedding_category_budgets.deleteMany({ where: { wedding_id: { in: weddings } } });
   await prisma.plan_vendors.deleteMany({ where: { wedding_id: { in: weddings } } });
@@ -77,38 +76,6 @@ after(async () => {
   } finally {
     if (app) await app.close();
   }
-});
-
-test('khách mời: thêm, chặn trùng tên + bên, chưa mời thì chưa có phản hồi', async () => {
-  const add = await call('owner', 'POST', '/api/weddings/me/guests', { fullName: 'Nguyễn An', side: 'GROOM', group: 'Bạn bè', partySize: 2 });
-  assert.equal(add.status, 201);
-  assert.equal(add.body.data.stats.total, 2);
-  const dup = await call('owner', 'POST', '/api/weddings/me/guests', { fullName: 'nguyen an', side: 'GROOM' });
-  assert.equal(dup.body.error.code, 'GUEST_DUPLICATE');
-  const id = add.body.data.items[0].id;
-  assert.equal((await call('owner', 'PATCH', `/api/weddings/me/guests/${id}`, { rsvp: 'ATTENDING' })).status, 400);
-  const invited = await call('owner', 'PATCH', `/api/weddings/me/guests/${id}`, { isInvited: true, rsvp: 'ATTENDING' });
-  assert.equal(invited.body.data.stats.attending, 2);
-  // Bỏ "đã mời" thì phản hồi về chưa phản hồi
-  const back = await call('owner', 'PATCH', `/api/weddings/me/guests/${id}`, { isInvited: false });
-  assert.equal(back.body.data.items[0].rsvp, 'PENDING');
-  const bulk = await call('owner', 'POST', '/api/weddings/me/guests/bulk', { names: ['Trần Bình', 'Lê Cường'], side: 'BRIDE', group: 'Gia đình' });
-  assert.equal(bulk.body.data.stats.rows, 3);
-});
-
-test('nhập khách: dryRun không ghi, dòng lỗi bị bỏ qua, thay toàn bộ', async () => {
-  const rows = [{ name: 'Phạm Dũng', side: 'Nhà trai' }, { name: 'Trần Bình', side: 'Nhà gái' }, { name: 'X', side: 'hàng xóm' }];
-  const dry = await call('owner', 'POST', '/api/weddings/me/import/guests', { rows, dryRun: true });
-  assert.deepEqual([dry.body.data.valid, dry.body.data.invalid, dry.body.data.created], [1, 2, 0]);
-  assert.equal((await call('owner', 'GET', '/api/weddings/me/guests')).body.data.stats.rows, 3);
-  const real = await call('owner', 'POST', '/api/weddings/me/import/guests', { rows });
-  assert.equal(real.body.data.created, 1);
-  const replace = await call('owner', 'POST', '/api/weddings/me/import/guests', { rows, mode: 'REPLACE' });
-  assert.equal(replace.body.data.created, 2);
-  assert.equal((await call('owner', 'GET', '/api/weddings/me/guests')).body.data.stats.rows, 2);
-  const csv = await fetch(`${base}/api/weddings/me/export/guests.csv`, { headers: { authorization: `Bearer ${u.owner.token}` } });
-  assert.match(csv.headers.get('content-type'), /text\/csv/);
-  assert.ok((await csv.text()).startsWith('\uFEFFTên khách,Bên'));
 });
 
 test('ngân sách: sửa tay, ghi đồng thời, đổi mức chi giữ ô sửa tay, cân đối, chi phí khác', async () => {

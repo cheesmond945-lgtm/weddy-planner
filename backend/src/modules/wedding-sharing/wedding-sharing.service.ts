@@ -3,7 +3,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { requireDbFeature } from '../../prisma/db-features';
 import { ymd } from '../orders/order-mapping';
 import { BudgetService } from '../weddings/budget.service';
-import { GuestsService } from '../weddings/guests.service';
 import { OverviewService } from '../weddings/overview.service';
 import { TimelineService } from '../weddings/timeline.service';
 import { WeddingsService } from '../weddings/weddings.service';
@@ -33,7 +32,6 @@ export class WeddingSharingService {
     private readonly overview: OverviewService,
     private readonly timeline: TimelineService,
     private readonly budget: BudgetService,
-    private readonly guests: GuestsService,
   ) {}
 
   // ---------- Quản lý link (cặp đôi) ----------
@@ -127,7 +125,6 @@ export class WeddingSharingService {
       const { version: _v, ...b } = await this.budget.summary(ownerId);
       return b;
     }
-    if (tab === 'guests') return this.guests.list(ownerId);
     return fail('SHARE_TAB_NOT_FOUND', 'Phần này không được chia sẻ.', 404);
   }
 }

@@ -28,6 +28,14 @@ interface DatePickPopoverProps {
   /** Bấm một ngày = đổi ngày và chốt luôn (nơi gọi đóng popover và cập nhật lạc quan) */
   onPick: (date: string) => void
   onClose: () => void
+  /** Ngày sớm nhất chọn được: mặc định hôm nay; null là không giới hạn (ô chọn ngày dùng chung, DateField) */
+  min?: string | null
+  /** Ngày muộn nhất chọn được: mặc định ngày thực hiện + 120; null là không giới hạn */
+  max?: string | null
+  /** Có thì chân lịch có nút "Xóa ngày" (ô ngày tùy chọn) */
+  onClear?: () => void
+  /** Việc phải xong TRƯỚC ngày thực hiện: ngày muộn nhất chọn được là ngày hôm trước ngày thực hiện (khớp backend scheduleDateIssue) */
+  beforeEvent?: boolean
   /** true (mặc định): bấm một ngày chỉ CHỌN, chân lịch hỏi "Đổi sang dd/mm/yyyy và báo khách?" rồi mới gọi onPick khi Xác nhận. false: bấm ngày là gọi onPick ngay. */
   confirmStep?: boolean
 }
@@ -37,12 +45,20 @@ interface DatePickPopoverProps {
  * Ngày hiện tại của việc tô đặc, hôm nay có viền, ngày thực hiện của đơn có chấm nhỏ; trước hôm nay và sau ngày thực hiện + 120 bị mờ.
  * Rộng 280px, tự lật lên / xuống, đóng khi bấm ra ngoài hoặc Esc.
  */
-export function DatePickPopover({ anchor, value, eventDate, onPick, onClose, confirmStep = true }: DatePickPopoverProps) {
+export function DatePickPopover({ anchor, value, eventDate, onPick, onClose, confirmStep = true, min: minProp, max: maxProp, onClear, beforeEvent }: DatePickPopoverProps) {
   const [chosen, setChosen] = useState<string | null>(null)
   const now = toISODate(today())
-  const min = now
-  const max = eventDate ? toISODate(addDays(parseDate(eventDate), SCHEDULE_MAX_AFTER_EVENT)) : undefined
-  const [month, setMonth] = useState(monthOf(value < min ? min : value))
+  const min = minProp === undefined ? now : (minProp ?? undefined)
+  const max =
+    maxProp === undefined
+      ? eventDate
+        ? toISODate(addDays(parseDate(eventDate), beforeEvent ? -1 : SCHEDULE_MAX_AFTER_EVENT))
+        : undefined
+      : (maxProp ?? undefined)
+  const [month, setMonth] = useState(() => {
+    const start = value || now
+    return monthOf(min && start < min ? min : max && start > max ? max : start)
+  })
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const days = useMemo(() => pickerDays(month, { value, today: now, eventDate, min, max }), [month, value, now, eventDate, min, max])
@@ -123,7 +139,7 @@ export function DatePickPopover({ anchor, value, eventDate, onPick, onClose, con
             data-selected={d.selected}
             aria-label={`${formatDate(d.date)}${d.isEvent ? ', ngày thực hiện của đơn' : ''}${d.isToday ? ', hôm nay' : ''}`}
             aria-pressed={d.selected}
-            title={d.isEvent ? 'Ngày thực hiện của đơn' : d.disabled ? (d.date < min ? 'Đã qua' : 'Quá xa ngày thực hiện') : undefined}
+            title={d.isEvent ? 'Ngày thực hiện của đơn' : d.disabled && eventDate ? (min && d.date < min ? 'Đã qua' : beforeEvent ? 'Việc này phải xong trước ngày thực hiện' : 'Quá xa ngày thực hiện') : undefined}
             onClick={() => (confirmStep ? setChosen(d.date) : onPick(d.date))}
             className={cn(
               'relative mx-auto grid size-9 place-items-center rounded-full text-[13px] tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-gold',
@@ -160,6 +176,11 @@ export function DatePickPopover({ anchor, value, eventDate, onPick, onClose, con
             <i aria-hidden className="size-1.5 rounded-full bg-gold-ink" />
             Ngày thực hiện
           </span>
+        )}
+        {onClear && (
+          <button type="button" onClick={onClear} className="ml-auto font-medium text-gold-ink hover:underline">
+            Xóa ngày
+          </button>
         )}
       </p>
       )}

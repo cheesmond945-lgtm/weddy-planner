@@ -1,5 +1,6 @@
+import { isVnPhone, PHONE_MESSAGE } from '@/lib/phone'
 import { todayVN } from '@/lib/clock'
-import { DEPOSIT_PERCENT_MIN, isDepositTooLarge } from '@/lib/deposit'
+import { depositPercentError, isDepositTooLarge } from '@/lib/deposit'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { filledItems, totalOf, type OrderFormValues } from './calc'
@@ -8,7 +9,6 @@ import { filledItems, totalOf, type OrderFormValues } from './calc'
 export type OrderErrors = Record<string, string>
 
 // Quy tắc theo docs/api/orders.md (backend kiểm tra lại)
-const PHONE_RE = /^[0-9 +().-]{9,15}$/
 
 /** Ngày sự kiện hợp lệ: đủ "YYYY-MM-DD", năm 4 chữ số (ô ngày của trình duyệt cho gõ năm 5 chữ số, giá trị thành "55555-05-12"). */
 const eventDateError = (date: string) => {
@@ -35,13 +35,14 @@ export function validateDraft(v: OrderFormValues): OrderErrors {
  */
 export function validateOrder(
   v: OrderFormValues,
-  opts: { minTotal?: number; changeNote?: string; originalEventDate?: string; deposit?: boolean; weddingDate?: string | null; afterDeposit?: boolean; requireHall?: boolean } = {},
+  opts: { minTotal?: number; changeNote?: string; originalEventDate?: string; deposit?: boolean; weddingDate?: string | null; afterDeposit?: boolean; requireHall?: boolean; hallHidden?: boolean; hallTablesError?: { index: number; message: string } } = {},
 ): OrderErrors {
   const e: OrderErrors = {}
   if (opts.changeNote !== undefined && !opts.changeNote.trim()) e.changeNote = 'Ghi nội dung thay đổi để khách biết đơn đã đổi gì.'
   if (opts.requireHall && !v.packageId) e.packageId = 'Chọn sảnh cho đơn.'
+  else if (opts.hallHidden) e.packageId = 'Sảnh này đang ẩn, không nhận đơn mới. Chọn sảnh khác.'
   if (!v.customerName.trim()) e.customerName = 'Nhập tên khách hàng.'
-  if (!PHONE_RE.test(v.customerPhone.trim())) e.customerPhone = 'Nhập số điện thoại hợp lệ (9–15 chữ số).'
+  if (!isVnPhone(v.customerPhone)) e.customerPhone = PHONE_MESSAGE
   const date = eventDateError(v.eventDate)
   if (date) e.eventDate = date
   else if (v.eventDate !== opts.originalEventDate && v.eventDate < todayVN()) e.eventDate = 'Ngày diễn ra sự kiện phải từ hôm nay trở đi.'
@@ -51,9 +52,8 @@ export function validateOrder(
     e.eventDate = `Ngày thực hiện không được sau ngày cưới của khách (${formatDate(opts.weddingDate)}).`
   }
   // Sửa sau cọc (deposit = false): tỷ lệ đã khóa, đơn cũ có thể dưới mức tối thiểu nên không kiểm
-  if (opts.deposit !== false && (!(v.depositPercent >= DEPOSIT_PERCENT_MIN && v.depositPercent < 100) || !Number.isInteger(v.depositPercent))) {
-    e.depositPercent = `Tỷ lệ cọc là số nguyên từ ${DEPOSIT_PERCENT_MIN} đến 99 (%).`
-  }
+  const percentError = opts.deposit !== false ? depositPercentError(v.depositPercent) : undefined
+  if (percentError) e.depositPercent = percentError
 
   const rows = v.items.map((it, index) => ({ it, index })).filter(({ it }) => filledItems([it]).length)
   if (!rows.length) e.items = 'Thêm ít nhất một hạng mục báo giá.'
@@ -62,6 +62,7 @@ export function validateOrder(
     if (!(Number.isInteger(it.quantity) && it.quantity > 0)) e[`item:${index}:quantity`] = 'Số lượng là số nguyên > 0.'
     if (!(it.unitPrice >= 0)) e[`item:${index}:unitPrice`] = 'Đơn giá không âm.'
   }
+  if (opts.hallTablesError) e[`item:${opts.hallTablesError.index}:quantity`] ??= opts.hallTablesError.message
   const total = totalOf(filledItems(v.items))
   if (opts.deposit !== false && rows.length && isDepositTooLarge(total, v.depositPercent) && !e.depositPercent) e.deposit = 'Tổng đơn quá nhỏ để đặt cọc.'
   if (rows.length && total <= 0) e.items ??= 'Tổng giá trị đơn phải lớn hơn 0.'

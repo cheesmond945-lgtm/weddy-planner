@@ -196,7 +196,7 @@ export function compareServices(items: CmpItem[], ctx: CmpContext, picked: Recor
                     : `${num(cost.chargedTables)} bàn, theo dự kiến của bạn`,
             warning:
               cost.byMinimum && !cost.assumed && ctx.tables !== null
-                ? `Gói này yêu cầu tối thiểu ${num(pkg.minTables!)} bàn, nhiều hơn ${num(pkg.minTables! - ctx.tables)} bàn so với dự kiến của bạn`
+                ? `Gói này yêu cầu đặt tối thiểu ${num(pkg.minTables!)} bàn: chọn gói này bạn phải đặt ít nhất ${num(pkg.minTables!)} bàn (nhiều hơn ${num(pkg.minTables! - ctx.tables)} bàn so với ${num(ctx.tables)} bàn dự kiến). Không cần thêm bàn thì chọn gói khác`
                 : null,
           }
         : null;

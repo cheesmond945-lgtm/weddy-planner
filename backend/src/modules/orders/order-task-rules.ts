@@ -43,11 +43,15 @@ export function checkVendorTaskEdit(c: TaskCheck): RuleError | null {
   return null;
 }
 
-/** Ngày chốt / đổi: từ hôm nay đến E + 120. null nếu hợp lệ. */
-export function scheduleDateIssue(date: unknown, ctx: { today: string; event: string }): RuleError | null {
+/**
+ * Ngày chốt / đổi: từ hôm nay đến E + 120. null nếu hợp lệ.
+ * beforeEvent: việc của gói có mốc trước ngày thực hiện (offset âm) phải xong TRƯỚC ngày thực hiện, nên không chọn trùng hoặc sau ngày thực hiện.
+ */
+export function scheduleDateIssue(date: unknown, ctx: { today: string; event: string; beforeEvent?: boolean }): RuleError | null {
   if (!isYmd(date)) return { code: 'VALIDATION_ERROR', message: 'Chọn ngày hợp lệ (YYYY-MM-DD).', status: 400 };
   const dmy = (s: string) => s.split('-').reverse().join('/');
   if (date < ctx.today) return { code: 'DUE_DATE_OUT_OF_RANGE', message: 'Ngày không được trước hôm nay.', status: 400 };
+  if (ctx.beforeEvent && ctx.event && date >= ctx.event) return { code: 'DUE_DATE_OUT_OF_RANGE', message: `Việc này phải xong trước ngày thực hiện (${dmy(ctx.event)}), hãy chọn ngày sớm hơn.`, status: 400 };
   if (dayOf(date) > dayOf(ctx.event) + SCHEDULE_MAX_AFTER_EVENT) return { code: 'DUE_DATE_OUT_OF_RANGE', message: `Ngày không được quá ${SCHEDULE_MAX_AFTER_EVENT} ngày sau ngày thực hiện (${dmy(ctx.event)}).`, status: 400 };
   return null;
 }

@@ -461,7 +461,10 @@ export function consequenceOf(input: AllocInput, categoryId: string, cost: numbe
   const chosenOthers = sum(others.map((v) => chosenItem(v, input.guestCount, tables).cost));
   const chosenIds = new Set([...others.map((v) => v.categoryId), categoryId]);
   const openCats = input.categories.filter((c) => !chosenIds.has(c.id) && !(input.ownVenue && c.slug === VENUE_SLUG));
-  const mins = openCats.map((c) => priceLevels(c, input.guestCount, tables).min).filter((m): m is number => m !== null);
+  const open = openCats
+    .map((c) => ({ name: c.name, min: priceLevels(c, input.guestCount, tables).min }))
+    .filter((x): x is { name: string; min: number } => x.min !== null);
+  const mins = open.map((x) => x.min);
   const available = round(input.total - chosenOthers - cost - (input.lostDeposits ?? 0) - (input.extraCosts ?? 0) - (input.ownVenue ? Math.max(0, input.ownVenueCost ?? 0) : 0));
   const need = round(sum(mins));
   const shortfall = Math.max(0, need - available);
@@ -470,11 +473,22 @@ export function consequenceOf(input: AllocInput, categoryId: string, cost: numbe
     available,
     need,
     shortfall,
-    message:
-      shortfall > 0
-        ? mins.length
-          ? `Gói này làm ${mins.length} dịch vụ còn lại thiếu khoảng ${vnd(displayMoney(shortfall))} so với gói rẻ nhất của chúng.`
-          : `Gói này làm vượt ngân sách khoảng ${vnd(displayMoney(shortfall))}.`
-        : null,
+    message: shortfall > 0 ? consequenceMessage(open.map((x) => x.name), available, need, shortfall) : null,
   };
+}
+
+/**
+ * Cảnh báo cho cặp đôi khi chọn gói làm thiếu tiền: chuyện gì xảy ra (vượt bao nhiêu, dịch vụ nào chưa đủ tiền) và nên làm gì.
+ * `names`: các hạng mục chưa chọn dịch vụ; `available`: tiền còn lại cho chúng (âm là đã vượt); `need`: tổng gói rẻ nhất của chúng.
+ */
+function consequenceMessage(names: string[], available: number, need: number, shortfall: number) {
+  const fix = 'Hãy chọn gói rẻ hơn hoặc tăng tổng ngân sách.';
+  if (!names.length) return `Nếu chọn gói này, kế hoạch sẽ vượt ngân sách ${vnd(shortfall)}. ${fix}`;
+  const list = names.map((n) => n.toLowerCase()).join(', ');
+  const rest = `${names.length > 1 ? `${names.length} dịch vụ chưa chọn` : 'dịch vụ chưa chọn'} (${list})`;
+  if (available <= 0) {
+    const over = available < 0 ? `kế hoạch sẽ vượt ngân sách ${vnd(-available)}, ` : 'ngân sách sẽ hết, ';
+    return `Nếu chọn gói này, ${over}trong khi ${rest} vẫn cần ít nhất ${vnd(need)}. Tổng cộng bạn thiếu ${vnd(shortfall)}. ${fix}`;
+  }
+  return `Nếu chọn gói này, chỉ còn ${vnd(available)} cho ${rest}, nhưng gói rẻ nhất cũng cần ${vnd(need)}. Bạn sẽ thiếu ${vnd(shortfall)}. ${fix}`;
 }

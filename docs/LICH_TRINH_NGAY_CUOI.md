@@ -1,5 +1,9 @@
 # Lịch trình ngày cưới theo giờ
 
+> **Tính năng đã bỏ (04/11/2026, nhóm quyết định).** Không còn giờ đón khách / làm lễ, khối "Lịch trình ngày cưới" của khách, khối "Giờ có mặt ngày cưới" trong chi tiết đơn của NCC, thẻ "Thời gian trong ngày cưới" của gói (tab Công việc) cùng `PUT /vendors/me/packages/:id/day-plan` và trường `dayPlan` của gói, các API `GET /weddings/me/day-schedule`, `GET|PUT|DELETE /vendors/me/orders/:id/day-slot`, trường `mainTime` của `PUT /weddings/me` và hai thông báo `WeddingTimeChanged`, `DaySlotConfirmed`. Tài liệu bên dưới chỉ giữ để tham khảo, **không còn đúng**.
+>
+> **Cột CSDL không còn dùng (giữ nguyên, không xóa):** `weddings.main_time`; `orders.dayof_start_at`, `orders.dayof_end_at`, `orders.dayof_confirmed_at`; `service_packages.dayof_lead_minutes`, `service_packages.dayof_duration_minutes`, `service_packages.setup_open_time` (trước dùng cho thẻ của gói; thẻ và API đã bỏ).
+
 Trước đây cả hệ thống chỉ tính theo ngày: biết decor làm "ngày 20/10" nhưng không biết phải vào sảnh từ mấy giờ. Phần này thêm **giờ** cho ngày cưới:
 khách nhập giờ đón khách / làm lễ, mỗi gói khai thời gian cần trong ngày cưới, hệ thống xếp giờ có mặt cho từng NCC và cảnh báo khi thiếu giờ
 (ví dụ cưới 11:00 ngày 20/10, ngày 19/10 sảnh có tiệc khác nên decor chỉ vào được từ giờ sảnh mở sáng 20/10). NCC chốt giờ với khách cho từng đơn.
@@ -74,7 +78,7 @@ Chốt / bỏ chốt phát sự kiện realtime `task` nên timeline của khác
 
 ## 6. Giao diện
 
-- **Khách:** form thông tin đám cưới có ô "Giờ đón khách / làm lễ" (không bắt buộc). Timeline có thẻ **Lịch trình ngày cưới** (dưới các dải nhắc), chỉ hiện khi có NCC làm đúng ngày cưới:
+- **Khách:** form thông tin đám cưới có ô "Giờ đón khách / làm lễ" (không bắt buộc). Timeline có thẻ **Lịch trình ngày cưới** (dưới các dải nhắc), chỉ hiện khi có NCC làm đúng ngày cưới. **Mặc định thu gọn thành một dòng** ("Lịch trình ngày cưới · Đón khách 09:00 · 1 nhà cung cấp", kèm số cảnh báo), bấm "Xem" mới mở chi tiết:
   các khung giờ theo thứ tự, mốc giờ đón khách chen vào đúng chỗ, nhãn "Đã chốt" / "Dự kiến", cảnh báo. Chưa có giờ chính thì nhắc nhập.
 - **NCC, chi tiết đơn:** mục **Giờ có mặt ngày cưới** (trên Tiến độ đơn): khung của đơn, nút Chốt giờ này / Đổi giờ… / Bỏ chốt, giờ sảnh mở, các đơn vị khác trong ngày.
   Hộp Đổi giờ chọn được có mặt từ hôm trước.

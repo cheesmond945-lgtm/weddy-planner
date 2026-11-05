@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { toISODate, today } from '@/lib/date'
@@ -23,17 +23,18 @@ export function TimelineCalendar({ items, weddingDate, renderCard }: TimelineCal
   const now = toISODate(today())
   const [month, setMonth] = useState(monthOf(now))
   const [selected, setSelected] = useState<string | null>(now)
+  const listRef = useRef<HTMLElement>(null)
 
   const dated = useMemo(() => items.filter((i) => i.dueDate), [items])
   const events: CalendarEvent[] = useMemo(
     () =>
       dated.map((i) => {
-        const tone: CalendarTone = i.isDone ? 'done' : i.dueDate! < now ? 'overdue' : 'todo'
+        const tone: CalendarTone = i.isDone ? 'done' : !i.isRestPayment && i.dueDate! < now ? 'overdue' : 'todo'
         return { id: i.id, date: i.dueDate!, title: i.title, tone }
       }),
     [dated, now],
   )
-  const overdue = useMemo(() => dated.filter((i) => !i.isDone && i.dueDate! < now).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!)), [dated, now])
+  const overdue = useMemo(() => dated.filter((i) => !i.isDone && !i.isRestPayment && i.dueDate! < now).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!)), [dated, now])
   const ofDay = selected ? dated.filter((i) => i.dueDate === selected) : []
 
   const goToday = () => {
@@ -46,6 +47,14 @@ export function TimelineCalendar({ items, weddingDate, renderCard }: TimelineCal
   const goOverdue = () => {
     setMonth(monthOf(overdue[0].dueDate!))
     setSelected(overdue[0].dueDate!)
+  }
+
+  // Bấm ngày có việc: chọn ngày rồi cuộn mượt xuống danh sách việc của ngày đó (chừa chỗ cho thanh menu dính trên cùng)
+  const pickDay = (date: string) => {
+    setSelected(date)
+    if (!dated.some((i) => i.dueDate === date)) return
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    requestAnimationFrame(() => listRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' }))
   }
 
   return (
@@ -84,12 +93,12 @@ export function TimelineCalendar({ items, weddingDate, renderCard }: TimelineCal
         events={events}
         today={now}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={pickDay}
         marks={[{ date: weddingDate, label: 'Ngày cưới' }]}
         onToday={goToday}
       />
 
-      <section aria-label="Việc trong ngày" className="mt-5">
+      <section ref={listRef} aria-label="Việc trong ngày" className="mt-5 scroll-mt-28">
         {selected ? (
           <>
             <h3 className="mb-3 flex items-baseline gap-2 font-serif text-xl leading-tight">

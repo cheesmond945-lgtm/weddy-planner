@@ -59,8 +59,7 @@ export class CompareController {
 
   /**
    * Lịch ngày cưới của từng gói (packageId -> trạng thái). Tiệc: sảnh có đơn đã cọc của khách khác hoặc NCC đánh dấu bận là
-   * "Đã kín", còn lại "Còn trống" (cùng cách tính nhãn "Còn x/y sảnh trống" ở danh sách); lịch khả dụng NCC khai "Đã kín" /
-   * "Giữ chỗ" vẫn được tính. Hạng mục khác: theo lịch khả dụng NCC khai (Còn trống / Đã kín), chưa khai thì "Chưa xác nhận".
+   * "Đã kín", còn lại "Còn trống" (chỉ theo lịch bận của sảnh, cùng cách tính nhãn "Còn x/y sảnh trống" ở danh sách). Hạng mục khác: theo lịch khả dụng NCC khai (Còn trống / Đã kín), chưa khai thì "Chưa xác nhận".
    * Đơn của chính khách (đám cưới `weddingId`) không làm sảnh kín với khách đó.
    */
   private async dayAvailability(slug: string, packageIds: string[], serviceIds: string[], date: string, weddingId: string) {
@@ -87,7 +86,7 @@ export class CompareController {
         out[id] = 'MINE';
         continue;
       }
-      if (isVenue(slug)) out[id] = hallConflict(id, date, others, busy.manual) || st === 'BOOKED' ? 'FULL' : st === 'HELD' ? 'UNCONFIRMED' : 'FREE';
+      if (isVenue(slug)) out[id] = hallConflict(id, date, others, busy.manual) ? 'FULL' : 'FREE';
       else out[id] = st === 'BOOKED' ? 'FULL' : st === 'AVAILABLE' ? 'FREE' : 'UNCONFIRMED';
     }
     return out;

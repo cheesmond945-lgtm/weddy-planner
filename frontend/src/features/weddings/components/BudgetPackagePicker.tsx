@@ -8,7 +8,7 @@ import type { Budget, BudgetVendor, PlanItem } from '@/types/wedding'
 import { chargedTables } from '@/features/catalog/price'
 import { packageLabel, packageOptionText } from '../budgetView'
 import { useChoosePackage, usePatchWedding } from '../hooks'
-import { SuggestionsDialog } from './SuggestionsPanel'
+import { openSuggestions } from '../suggestDialog'
 
 /**
  * Ô "Gói" trên một dòng của bảng Ngân sách: bấm để đổi gói (cùng danh sách gói với tab Dịch vụ).
@@ -29,7 +29,6 @@ export function BudgetPackagePicker({
   withTables: boolean
   changeVendor?: { slug: string; name: string }
 }) {
-  const [suggesting, setSuggesting] = useState(false)
   const choose = useChoosePackage()
   const patch = usePatchWedding()
   const [open, setOpen] = useState(false)
@@ -96,10 +95,15 @@ export function BudgetPackagePicker({
   // Hệ quả của gói đang chọn (khách tự chọn gói vượt trần cứng): "Chọn gói này, … thiếu Z."
   const current = options.find((o) => o.id === pkg?.id)
   const consequence = !locked && current?.consequence && <div className="mt-1 text-[12px] text-warn">{current.consequence}</div>
-  // Không ẩn gói: khách có thể chấp nhận đặt thêm bàn, chỉ báo rõ chi phí đang tính theo số tối thiểu
+  // Không ẩn gói: khách có thể chấp nhận đặt thêm bàn; báo rõ phải đặt đủ số tối thiểu và chỉ ra gói khác vừa số bàn dự kiến
+  const fitting = options.filter((o) => o.id !== pkg?.id && (o.minTables ?? 0) <= count).length
   const minimumNote = byMinimum && !locked && (
     <div className="mt-1 text-[12px] text-warn">
-      Gói này yêu cầu tối thiểu {minTables} bàn, nhiều hơn {charged.shortBy} bàn so với dự kiến của bạn
+      Gói này yêu cầu đặt tối thiểu {minTables} bàn. Nếu chọn gói này, bạn phải đặt ít nhất {minTables} bàn (nhiều hơn {charged.shortBy} bàn so
+      với {count} bàn dự kiến) và chi phí được tính theo {minTables} bàn.{' '}
+      {fitting > 0
+        ? `Nếu không cần thêm bàn, hãy đổi sang gói khác ở ô chọn gói phía trên (có ${fitting} gói phù hợp với ${count} bàn).`
+        : 'Nếu không cần thêm bàn, hãy chọn trung tâm tiệc cưới khác có gói ít bàn hơn.'}
     </div>
   )
 
@@ -217,7 +221,7 @@ export function BudgetPackagePicker({
           {changeVendor && (
             <button
               type="button"
-              onClick={() => (setOpen(false), setSuggesting(true))}
+              onClick={() => (setOpen(false), openSuggestions(changeVendor.slug))}
               className="flex w-full items-center gap-1.5 border-t border-line px-3.5 py-2 text-left text-[13px] font-medium text-gold-700 hover:bg-accent-soft"
             >
               <Sparkles className="size-3.5" aria-hidden />
@@ -226,7 +230,6 @@ export function BudgetPackagePicker({
           )}
         </div>
       )}
-      {changeVendor && <SuggestionsDialog categorySlug={changeVendor.slug} categoryName={changeVendor.name} open={suggesting} onOpenChange={setSuggesting} />}
     </div>
   )
 }

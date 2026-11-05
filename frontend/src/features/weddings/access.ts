@@ -1,7 +1,7 @@
 import { PLAN_TABS, type PlanTab } from '@/types/wedding'
 
 /** Tên subtab (dùng ở hộp chia sẻ và trang xem công khai) */
-export const PLAN_TAB_LABEL: Record<PlanTab, string> = { overview: 'Tổng quan', timeline: 'Timeline', services: 'Dịch vụ', budget: 'Ngân sách', guests: 'Khách mời' }
+export const PLAN_TAB_LABEL: Record<PlanTab, string> = { overview: 'Tổng quan', timeline: 'Timeline', services: 'Dịch vụ', budget: 'Ngân sách' }
 
 /**
  * Các subtab hiện trong Kế hoạch của tôi (Timeline là trang riêng). Tab 'timeline' của link xem công khai quyết định

@@ -1,4 +1,4 @@
-import { EyeOff, Send, Sparkles, Trash2 } from 'lucide-react'
+import { Clock, Eye, EyeOff, Send, Sparkles, Trash2 } from 'lucide-react'
 import { AiWriteDialog } from '@/components/AiWriteDialog'
 import { formatMoney } from '@/lib/format'
 import { vendorPackagesApi } from '@/api/vendorPackages'
@@ -73,7 +73,7 @@ interface PackageEditorProps {
 
 /**
  * Form gói dịch vụ, hai khung: thông tin gói; hình ảnh dịch vụ (cùng cách trình bày với trang Hồ sơ NCC).
- * Thứ tự: tên gói, giá (trung tâm tổ chức sự kiện: giá mỗi bàn), tags, sức chứa và số bàn tối thiểu (trung tâm tổ chức sự kiện), mô tả (có "Tạo với AI"), ảnh.
+ * Thứ tự: tên gói, giá (trung tâm tiệc cưới: giá mỗi bàn), tags, sức chứa và số bàn tối thiểu (trung tâm tiệc cưới), mô tả (có "Tạo với AI"), ảnh.
  * Lưu nháp: cần tên gói và giá. Gửi duyệt: thêm mô tả, ít nhất một ảnh, và hồ sơ đã được duyệt đúng lĩnh vực.
  * Đặt key theo pkg.updatedAt để nạp lại sau khi lưu.
  */
@@ -192,14 +192,6 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
               <TagsInput tags={values.tags} onChange={(tags) => set({ tags })} disabled={off} />
             </Field>
             {venue && (
-              <Field label="Đơn vị tính giá">
-                <select className={input()} disabled={off} value={values.unit} onChange={(e) => set({ unit: e.target.value as 'TABLE' | 'PACKAGE' })}>
-                  <option value="TABLE">Theo bàn (giá một bàn)</option>
-                  <option value="PACKAGE">Trọn gói</option>
-                </select>
-              </Field>
-            )}
-            {venue && (
               <Field label="Sức chứa tối đa (khách)" error={errors.capacity} hint="Tùy chọn · tính theo khách, không quy đổi sang bàn.">
                 <WithUnit unit="khách">
                   <input
@@ -217,7 +209,7 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
                 </WithUnit>
               </Field>
             )}
-            {venue && values.unit === 'TABLE' && (
+            {venue && (
               <Field
                 label="Số bàn tối thiểu"
                 error={errors.minTables}
@@ -405,13 +397,17 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
         onOpenChange={(o) => !o && setConfirm(null)}
         title={isUpdate ? (resubmit ? 'Gửi lại bản cập nhật để duyệt?' : 'Gửi bản cập nhật để duyệt?') : resubmit ? 'Gửi lại gói để duyệt?' : 'Gửi gói để duyệt?'}
         confirmLabel="Gửi duyệt"
+        icon={<Send />}
         onConfirm={() => doSave(true)}
       >
-        <p>
-          {isUpdate
-            ? 'Sau khi gửi, bản cập nhật chỉ đọc cho tới khi Admin xử lý. Trong thời gian này khách vẫn thấy phiên bản đang đăng.'
-            : 'Sau khi gửi, gói chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý. Gói chưa hiển thị công khai cho tới khi được duyệt.'}
-        </p>
+        <ul className="mt-0! list-none! space-y-2.5 pl-0!">
+          <SubmitStep icon={<Clock />}>
+            {isUpdate ? 'Bản cập nhật chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý.' : 'Gói chuyển sang chờ duyệt và chỉ đọc cho tới khi Admin xử lý.'}
+          </SubmitStep>
+          <SubmitStep icon={<Eye />}>
+            {isUpdate ? 'Khách vẫn thấy phiên bản đang đăng cho tới khi bản cập nhật được duyệt.' : 'Gói chưa hiển thị công khai cho tới khi được duyệt.'}
+          </SubmitStep>
+        </ul>
       </ConfirmDialog>
       <ConfirmDialog
         open={confirm === 'remove'}
@@ -449,7 +445,9 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
         blocked={
           values.name.trim() && (Number(values.price) > 0 || values.tags.length || (venue && values.capacity.trim()))
             ? null
-            : 'Hãy nhập Tên gói và ít nhất một trong: Giá, Sức chứa, Phong cách (tags) để AI có thông tin thật mà viết.'
+            : venue
+              ? 'AI chưa có đủ dữ liệu để viết. Bạn điền Tên gói, rồi thêm Giá mỗi bàn, Sức chứa hoặc vài Phong cách (tags) nhé.'
+              : 'AI chưa có đủ dữ liệu để viết. Bạn điền Tên gói, rồi thêm Giá hoặc vài Phong cách (tags) nhé.'
         }
         styles={PACKAGE_AI_STYLES}
         write={(style) =>
@@ -459,5 +457,14 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
       />
       <UnsavedChangesGuard when={((dirty && !readOnly) || tasksDirty) && !busy} />
     </form>
+  )
+}
+
+function SubmitStep({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <li className="flex gap-2.5 text-muted-foreground">
+      <span className="mt-0.5 shrink-0 text-gold [&_svg]:size-4">{icon}</span>
+      <span>{children}</span>
+    </li>
   )
 }

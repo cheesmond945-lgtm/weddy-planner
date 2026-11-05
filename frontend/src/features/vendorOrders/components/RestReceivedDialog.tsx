@@ -7,9 +7,9 @@ import { formatMoney } from '@/lib/format'
  */
 export function RestReceivedDialog({ open, amount, onOpenChange, onConfirm }: { open: boolean; amount?: number; onOpenChange: (open: boolean) => void; onConfirm: () => void }) {
   return (
-    <ConfirmDialog open={open} onOpenChange={onOpenChange} title="Đã nhận tiền mặt?" confirmLabel="Xác nhận đã nhận" onConfirm={onConfirm}>
+    <ConfirmDialog open={open} onOpenChange={onOpenChange} title="Đã nhận đủ tiền?" confirmLabel="Xác nhận đã nhận" onConfirm={onConfirm}>
       <p>
-        Xác nhận đã nhận đủ {amount !== undefined ? <b>{formatMoney(amount)}</b> : 'số tiền còn lại'} tiền mặt từ khách? Khách sẽ nhận thông báo.
+        Xác nhận đã nhận đủ {amount !== undefined ? <b>{formatMoney(amount)}</b> : 'số tiền còn lại'} từ khách? Khách sẽ nhận thông báo.
       </p>
     </ConfirmDialog>
   )

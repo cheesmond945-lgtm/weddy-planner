@@ -17,7 +17,7 @@ test('gói tiệc 5,8tr/bàn, tối thiểu 40 bàn, kế hoạch 30 bàn: 232tr
   assert.equal(a.total, 232 * M);
   assert.equal(a.formula, '40 × 5.800.000đ');
   assert.equal(a.tables.text, '40 bàn, tối thiểu của gói');
-  assert.equal(a.tables.warning, 'Gói này yêu cầu tối thiểu 40 bàn, nhiều hơn 10 bàn so với dự kiến của bạn');
+  assert.equal(a.tables.warning, 'Gói này yêu cầu đặt tối thiểu 40 bàn: chọn gói này bạn phải đặt ít nhất 40 bàn (nhiều hơn 10 bàn so với 30 bàn dự kiến). Không cần thêm bàn thì chọn gói khác');
   assert.equal(r.columns[1].tables.text, '30 bàn, theo dự kiến của bạn');
   assert.equal(r.columns[1].tables.warning, null);
 });

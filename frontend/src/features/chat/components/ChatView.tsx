@@ -9,6 +9,7 @@ import { OrderCard } from '@/features/orders/components/OrderCard'
 import { ReviseOrderDialog } from '@/features/orders/components/ReviseOrderDialog'
 import { useOrder } from '@/features/orders/hooks'
 import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
+import { formatStamp } from '@/features/vendorOrders/calc'
 import { formatMessageTime } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
@@ -266,9 +267,27 @@ function MessageItem({
     return <ReceiptCard message={message} vendorName={conversation.service.name} />
   }
   const base = 'max-w-[78%] rounded-[20px] px-[15px] py-[11px] text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere] max-[640px]:max-w-[94%]'
-  if (message.sender === 'SYSTEM') return <div className={cn(base, 'self-center bg-sage-soft text-sage')}>{coupleWording(message.content, conversation.service.name)}</div>
-  if (message.sender === 'COUPLE') return <div className={cn(base, 'self-end rounded-br-[5px] bg-primary text-primary-foreground')}>{message.content}</div>
-  return <div className={cn(base, 'self-start rounded-bl-[5px] bg-bg text-nav')}>{message.content}</div>
+  const time = <time className="mt-1 px-1 text-[11px] text-muted-foreground">{formatStamp(message.sentDate)}</time>
+  if (message.sender === 'SYSTEM')
+    return (
+      <div className="flex flex-col items-center">
+        <div className={cn(base, 'bg-sage-soft text-sage')}>{coupleWording(message.content, conversation.service.name)}</div>
+        {time}
+      </div>
+    )
+  if (message.sender === 'COUPLE')
+    return (
+      <div className="flex flex-col items-end">
+        <div className={cn(base, 'rounded-br-[5px] bg-primary text-primary-foreground')}>{message.content}</div>
+        {time}
+      </div>
+    )
+  return (
+    <div className="flex flex-col items-start">
+      <div className={cn(base, 'rounded-bl-[5px] bg-bg text-nav')}>{message.content}</div>
+      {time}
+    </div>
+  )
 }
 
 /** Thẻ Giấy xác nhận cọc / Hóa đơn cuối trong chat, có nút Xem (docs/THE_DON_PHIA_KHACH.md mục 4). */
@@ -279,10 +298,11 @@ function ReceiptCard({ message, vendorName }: { message: Message; vendorName: st
   // Suy theo loại tin: giấy xác nhận cọc là tin hệ thống GIỮA khung ("Forever xác nhận"); hóa đơn cuối của NCC bên TRÁI kèm tên NCC
   const system = effectiveSender(message) === 'SYSTEM'
   return (
+    <div className={cn('flex flex-col', system ? 'items-center self-center' : 'items-start self-start')}>
     <div
       className={cn(
         'w-[min(360px,100%)] border px-4 py-3',
-        system ? 'self-center rounded-[22px] border-sage/25 bg-sage-soft' : 'self-start rounded-[22px] rounded-bl-[4px] border-line bg-surface shadow-bubble',
+        system ? 'rounded-[22px] border-sage/25 bg-sage-soft' : 'rounded-[22px] rounded-bl-[4px] border-line bg-surface shadow-bubble',
       )}
     >
       {system ? <p className="mb-1 text-[11px] font-semibold tracking-[0.06em] text-sage uppercase">Forever xác nhận</p> : <p className="mb-1 text-[12px] font-semibold text-muted-foreground">{vendorName}</p>}
@@ -296,6 +316,8 @@ function ReceiptCard({ message, vendorName }: { message: Message; vendorName: st
         </Button>
       )}
       {open && order && <InvoiceDialog order={order} type={type} vendorName={order.vendorName ?? vendorName} onClose={() => setOpen(false)} />}
+    </div>
+      <time className="mt-1 px-1 text-[11px] text-muted-foreground">{formatStamp(message.sentDate)}</time>
     </div>
   )
 }

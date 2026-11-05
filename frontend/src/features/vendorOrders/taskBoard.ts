@@ -2,11 +2,11 @@ import { TASK_LABELS } from '../../lib/taskLabels.ts'
 import type { BoardTask, TaskStatus } from '@/types/vendorOrder'
 
 /*
- * Bảng việc (kanban) ở Lịch làm việc của NCC: cột, luật kéo thả, nhắc chốt lịch, khoảng thời gian, lưu trữ, tìm kiếm. Hàm thuần: không đụng giao diện,
+ * Bảng việc (kanban) ở Lịch làm việc của NCC: cột, luật kéo thả, nhắc chốt lịch, bộ lọc nhanh, lưu trữ, tìm kiếm. Hàm thuần: không đụng giao diện,
  * không đọc đồng hồ ("hôm nay" do nơi gọi truyền vào, "YYYY-MM-DD").
  * Cột theo trạng thái việc Todo / Waiting / Done (docs/TIMELINE.md "Hướng mới 11/2026"); NCC đổi được trạng thái mọi việc của đơn mình.
  * Không tự sắp thứ tự trong cột (display_order dùng chung với timeline của khách).
- * Nhiều khách (hàng trăm): không chia hàng theo khách mà luôn chỉ 3 cột, thu hẹp bằng khoảng thời gian, tìm kiếm, chọn khách;
+ * Nhiều khách (hàng trăm): không chia hàng theo khách mà luôn chỉ 3 cột, thu hẹp bằng chọn khách, tìm kiếm, bộ lọc nhanh (quá hạn, sắp đến hạn, cần chốt ngày);
  * đơn đã xong hết việc rời bảng sang Lưu trữ (splitBoard).
  */
 
@@ -41,26 +41,41 @@ export const CONFIRM_SOON_DAYS = 7
 export const needsScheduleConfirm = (t: { owner: string; isDone: boolean; dateStatus: string; dueDate: string }, todayYmd: string) =>
   t.owner === 'BOTH' && !t.isDone && t.dateStatus !== 'CONFIRMED' && !!t.dueDate && dayNum(t.dueDate) - dayNum(todayYmd) <= CONFIRM_SOON_DAYS
 
-/** "Sắp đến hạn" trong tóm tắt đầu bảng: hạn từ hôm nay đến từng này ngày tới. */
+/** "Sắp đến hạn": hạn từ hôm nay đến từng này ngày tới. */
 export const SOON_DAYS = 7
 
-/** Khoảng thời gian của bảng (mặc định soon). */
-export type BoardHorizon = 'soon' | 'month' | 'all'
-export const HORIZONS: readonly { key: BoardHorizon; label: string; days: number | null }[] = [
-  { key: 'soon', label: 'Quá hạn + 14 ngày tới', days: 14 },
-  { key: 'month', label: '30 ngày tới', days: 30 },
-  { key: 'all', label: 'Tất cả', days: null },
+/**
+ * Bộ lọc nhanh của bảng (bấm một chip, kèm số việc): all là tất cả; late là việc NCC đang làm đã quá hạn; soon là việc NCC đang làm
+ * hạn trong SOON_DAYS ngày tới; confirm là việc "Hai bên" cần chốt lịch với khách (ở cột nào cũng tính).
+ */
+export type BoardFilter = 'all' | 'late' | 'soon' | 'confirm'
+export const BOARD_FILTERS: readonly { key: BoardFilter; label: string }[] = [
+  { key: 'all', label: 'Tất cả' },
+  { key: 'late', label: 'Quá hạn' },
+  { key: 'soon', label: `Sắp đến hạn (${SOON_DAYS} ngày)` },
+  { key: 'confirm', label: 'Cần chốt ngày' },
 ]
 
-/**
- * Việc có nằm trong khoảng không. Chưa xong: quá hạn luôn hiện, còn lại hạn trong `days` ngày tới.
- * Đã xong: xong trong `days` ngày qua (việc xong từ lâu không chiếm chỗ); không rõ ngày xong thì coi như đã lâu.
- */
-export function inHorizon(t: Pick<BoardTask, 'isDone' | 'dueDate' | 'completedDate'>, horizon: BoardHorizon, today: string): boolean {
-  const days = HORIZONS.find((h) => h.key === horizon)?.days ?? null
-  if (days === null) return true
-  if (t.isDone) return !!t.completedDate && dayNum(today) - dayNum(t.completedDate) <= days
-  return !t.dueDate || dayNum(t.dueDate) - dayNum(today) <= days
+type FilterTask = Pick<BoardTask, 'isDone' | 'status' | 'overdue' | 'dueDate' | 'owner' | 'dateStatus'>
+
+export function matchesFilter(t: FilterTask, filter: BoardFilter, today: string): boolean {
+  switch (filter) {
+    case 'all':
+      return true
+    case 'late':
+      return columnOf(t) === 'todo' && t.overdue
+    case 'soon':
+      return columnOf(t) === 'todo' && !t.overdue && !!t.dueDate && dayNum(t.dueDate) - dayNum(today) <= SOON_DAYS
+    case 'confirm':
+      return needsScheduleConfirm(t, today)
+  }
+}
+
+/** Số việc của từng bộ lọc nhanh, tính trên các việc đã qua ô chọn khách, tìm kiếm và "Việc của tôi" nên chip luôn khớp với những gì sẽ thấy. */
+export function filterCounts(tasks: readonly FilterTask[], today: string): Record<BoardFilter, number> {
+  const out: Record<BoardFilter, number> = { all: tasks.length, late: 0, soon: 0, confirm: 0 }
+  for (const t of tasks) for (const f of ['late', 'soon', 'confirm'] as const) if (matchesFilter(t, f, today)) out[f]++
+  return out
 }
 
 /** Đơn đã xong hết việc (trên bảng là đơn Đã cọc): chờ NCC bấm Hoàn tất đơn, nằm ở Lưu trữ. */
@@ -99,24 +114,6 @@ export function boardColumns(tasks: readonly BoardTask[]): Record<BoardColumn, B
   out.todo.sort(byDue)
   out.done.sort((a, b) => (b.completedDate ?? '').localeCompare(a.completedDate ?? '') || byDue(a, b))
   return out
-}
-
-/**
- * Tóm tắt đầu bảng: việc Cần làm, trong đó quá hạn, sắp đến hạn (SOON_DAYS ngày tới); việc chờ khách; việc "Hai bên" cần chốt lịch
- * (needsScheduleConfirm, ở cột nào cũng tính).
- */
-export function boardSummary(tasks: readonly BoardTask[], today: string) {
-  const s = { todo: 0, late: 0, soon: 0, waiting: 0, confirm: 0 }
-  for (const t of tasks) {
-    if (needsScheduleConfirm(t, today)) s.confirm++
-    const col = columnOf(t)
-    if (col === 'customer') s.waiting++
-    if (col !== 'todo') continue
-    s.todo++
-    if (t.overdue) s.late++
-    else if (t.dueDate && dayNum(t.dueDate) - dayNum(today) <= SOON_DAYS) s.soon++
-  }
-  return s
 }
 
 /** Một đơn đang làm: khách, mã đơn, tên gói, số việc xong và số việc đã chốt lịch ("x/y việc xong · a/b đã chốt lịch"). */

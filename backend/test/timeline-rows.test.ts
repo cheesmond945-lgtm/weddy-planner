@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { syncOrderPackageTasks, type SyncDb } from '../src/modules/weddings/order-package-sync.ts';
 import { packagesOfOrder } from '../src/modules/weddings/package-task-meta.ts';
-import { cancelPlan, frameRows, initialStatus, orderTaskRows, payDate, payCode, pkgCode, pkgTaskIdOf, replanOrderTasks, taskTitle, type OrderTaskState, type PackageTaskRef, type TaskRow } from '../src/modules/weddings/timeline-rows.ts';
+import { baseCode, cancelPlan, frameRows, hiddenByCategory, initialStatus, isRemovedCode, removedCode, orderTaskRows, payDate, payCode, pkgCode, pkgTaskIdOf, replanOrderTasks, taskTitle, type OrderTaskState, type PackageTaskRef, type TaskRow } from '../src/modules/weddings/timeline-rows.ts';
 import { TIMELINE_TEMPLATES } from '../src/modules/weddings/timeline-templates.ts';
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -54,15 +54,14 @@ describe('orderTaskRows: việc chi tiết của đơn từ gói', () => {
     const { rows, vendorProcessMissing } = rowsOf([]);
     assert.equal(vendorProcessMissing, true);
     assert.deepEqual(rows.map((r) => r.task_code), [payCode(ORDER)]);
-    assert.equal(ymd(rows[0].scheduled_date), '2027-03-27'); // E + 7
+    assert.equal(ymd(rows[0].scheduled_date), '2027-03-20'); // hạn = đúng ngày thực hiện E
     assert.equal(rows[0].title, 'Thanh toán phần còn lại cho Studio A');
   });
 
-  it('hạn thanh toán = max(E+7, hạn lớn nhất của việc gói)', () => {
-    assert.equal(ymd(rowsOf([task('a', -5)]).rows.at(-1)!.scheduled_date), '2027-03-27');
-    assert.equal(ymd(rowsOf([task('a', 20)]).rows.at(-1)!.scheduled_date), '2027-04-09'); // E + 20 > E + 7
-    assert.equal(payDate(E, '2027-03-01'), '2027-03-27');
-    assert.equal(payDate(E, '2027-05-01'), '2027-05-01');
+  it('hạn thanh toán = đúng ngày thực hiện E, không phụ thuộc việc cuối của gói', () => {
+    assert.equal(ymd(rowsOf([task('a', -5)]).rows.at(-1)!.scheduled_date), E);
+    assert.equal(ymd(rowsOf([task('a', 20)]).rows.at(-1)!.scheduled_date), E); // việc gói sau E vẫn không đẩy hạn
+    assert.equal(payDate(E), E);
   });
 
   it('cọc muộn: không việc gói nào trước D+2, thứ tự giữ nguyên', () => {
@@ -171,7 +170,7 @@ describe('syncOrderPackageTasks (CSDL giả)', () => {
 describe('replanOrderTasks: NCC sửa ngày thực hiện', () => {
   const offsets = new Map([['a', -30], ['b', -7], ['c', 0], ['d', 3]]);
   const state = (id: string, code: string, date: string, extra: Partial<OrderTaskState> = {}): OrderTaskState => ({ id, code, status: 'Todo', confirmed: false, date, ...extra });
-  const base = [state('ta', pkgCode('a', ORDER), '2027-02-18'), state('tb', pkgCode('b', ORDER), '2027-03-13'), state('tc', pkgCode('c', ORDER), '2027-03-20'), state('td', pkgCode('d', ORDER), '2027-03-23'), state('tp', payCode(ORDER), '2027-03-27')];
+  const base = [state('ta', pkgCode('a', ORDER), '2027-02-18'), state('tb', pkgCode('b', ORDER), '2027-03-13'), state('tc', pkgCode('c', ORDER), '2027-03-20'), state('td', pkgCode('d', ORDER), '2027-03-23'), state('tp', payCode(ORDER), '2027-03-20')];
   const ctx = { today: '2026-12-01', event: '2027-04-20', deposit: '2026-12-01' };
 
   it('dời E: tính lại việc chưa xong, chưa chốt (kể cả việc đã xóa mềm khỏi gói nhờ offsets) và PAY', () => {
@@ -181,7 +180,7 @@ describe('replanOrderTasks: NCC sửa ngày thực hiện', () => {
     assert.equal(m.get('tb'), '2027-04-13');
     assert.equal(m.get('tc'), '2027-04-20');
     assert.equal(m.get('td'), '2027-04-23');
-    assert.equal(m.get('tp'), '2027-04-27'); // max(E + 7, hạn cuối)
+    assert.equal(m.get('tp'), '2027-04-20'); // đúng ngày thực hiện mới
     assert.deepEqual(r.needsRecheck, []);
   });
 
@@ -257,5 +256,32 @@ describe('mã việc gói không trùng giữa các đơn', () => {
     const newCodes = fresh.created.map((c) => c.task_code);
     assert.equal(newCodes.filter((c) => oldCodes.includes(c)).length, 0, 'không trùng mã đơn cũ');
     assert.equal(new Set([...oldCodes, ...newCodes]).size, 6);
+  });
+});
+
+describe('hiddenByCategory: bỏ chọn hạng mục thì ẩn việc khung, không xóa', () => {
+  const venue = 'cat-venue';
+  const active = new Set(['cat-decor']);
+  it('việc mẫu của hạng mục đã bỏ chọn bị ẩn (kể cả đã tích)', () => {
+    assert.equal(hiddenByCategory({ task_code: 'VENUE_TASTING', order_id: null, category_id: venue }, active), true);
+  });
+  it('chọn lại hạng mục thì hiện lại', () => {
+    assert.equal(hiddenByCategory({ task_code: 'VENUE_TASTING', order_id: null, category_id: venue }, new Set([...active, venue])), false);
+  });
+  it('việc chung, việc khách tự thêm, việc gắn đơn luôn hiện', () => {
+    assert.equal(hiddenByCategory({ task_code: 'GEN_BUDGET', order_id: null, category_id: null }, active), false);
+    assert.equal(hiddenByCategory({ task_code: null, order_id: null, category_id: venue }, active), false);
+    assert.equal(hiddenByCategory({ task_code: 'PKG:x:y', order_id: 'o1', category_id: venue }, active), false);
+  });
+});
+
+describe('việc khung khách đã xóa: mã DEL:<mã>', () => {
+  it('đánh dấu, nhận ra và lấy lại mã gốc', () => {
+    assert.equal(removedCode('SELF_CARS'), 'DEL:SELF_CARS');
+    assert.equal(isRemovedCode('DEL:SELF_CARS'), true);
+    assert.equal(isRemovedCode('SELF_CARS'), false);
+    assert.equal(isRemovedCode(null), false);
+    assert.equal(baseCode('DEL:SELF_CARS'), 'SELF_CARS');
+    assert.equal(baseCode('SELF_CARS'), 'SELF_CARS');
   });
 });

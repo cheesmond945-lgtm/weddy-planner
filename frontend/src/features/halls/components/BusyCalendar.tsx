@@ -1,15 +1,14 @@
 import { CalendarPlus } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { CalendarMonth, dayHeading, type CalendarEvent } from '@/features/calendar/components/CalendarMonth'
 import { gridRange, monthOf } from '@/features/calendar/monthGrid'
 import { HUES } from '@/features/calendar/orderColors'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
+import { OrderPopup } from '@/features/vendorOrders/components/OrderPopup'
 import { formatDate, toISODate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
-import { paths } from '@/routes/paths'
 import type { BusyDay, BusySource } from '@/types/hall'
 import { useRemoveBusy, useVendorBusy } from '../hooks'
 import { BusyDialog } from './BusyDialog'
@@ -37,6 +36,8 @@ export function BusyCalendar() {
   const [adding, setAdding] = useState<{ date: string; packageId: string | null } | null>(null)
   const [removing, setRemoving] = useState<(Manual & { hallName: string }) | null>(null)
   const remove = useRemoveBusy()
+  // Bấm "Xem đơn" thì mở chi tiết đơn ngay tại đây (không chuyển sang trang Quản lý đơn hàng)
+  const [orderId, setOrderId] = useState<string | null>(null)
   const { from, to } = useMemo(() => gridRange(month), [month])
   const q = useVendorBusy(from, to)
   const dayRef = useRef<HTMLElement>(null)
@@ -143,7 +144,7 @@ export function BusyCalendar() {
                 Mỗi sảnh một màu. Ô bận ghi nguồn: <b className="font-semibold text-ink">Đơn</b> (đơn đã cọc hoặc hoàn thành, tự động) hoặc{' '}
                 <b className="font-semibold text-ink">Thủ công</b> (bạn đánh dấu, gỡ được). Đơn chờ cọc chưa làm sảnh bận.
               </p>
-              <p className="font-medium text-ink">Bấm vào một ngày để xem từng sảnh: gỡ ngày bận thủ công (nút "Gỡ bận") hoặc đánh dấu bận.</p>
+              <p className="font-medium text-ink">Bấm vào một ngày để xem từng sảnh: gỡ ngày bận thủ công (nút "Gỡ bận"). Muốn đánh dấu bận, dùng nút "Đánh dấu bận" ở trên.</p>
             </div>
           }
         />
@@ -169,11 +170,6 @@ export function BusyCalendar() {
                   {sources.length === 0 && (
                     <span className="flex flex-wrap items-center gap-2 text-[13.5px]">
                       <span className="font-medium text-sage">Trống</span>
-                      {selected >= now && (
-                        <Button variant="outline" size="sm" className="h-7 border-line-strong px-2.5 text-[12.5px]" onClick={() => setAdding({ date: selected, packageId: h.id })}>
-                          Đánh dấu bận
-                        </Button>
-                      )}
                     </span>
                   )}
                   {sources.map(({ source: s }) =>
@@ -183,9 +179,9 @@ export function BusyCalendar() {
                         <span className="min-w-0 [overflow-wrap:anywhere]">
                           {s.orderCode} · {s.customerName}
                         </span>
-                        <Link to={`${paths.vendor.orders}?order=${s.orderId}`} className="text-[12.5px] font-semibold text-gold-700 underline underline-offset-2">
+                        <button type="button" onClick={() => setOrderId(s.orderId)} className="text-[12.5px] font-semibold text-gold-700 underline underline-offset-2">
                           Xem đơn
-                        </Link>
+                        </button>
                         <span className="basis-full text-[12px] text-muted-foreground">Bận theo đơn: hủy hoặc đổi ngày, đổi sảnh của đơn thì sảnh trống lại.</span>
                       </span>
                     ) : (
@@ -207,6 +203,7 @@ export function BusyCalendar() {
         </ul>
       </section>
 
+      {orderId && <OrderPopup orderId={orderId} onClose={() => setOrderId(null)} />}
       {adding && <BusyDialog halls={halls} initial={adding} onClose={() => setAdding(null)} />}
       <ConfirmDialog
         open={!!removing}

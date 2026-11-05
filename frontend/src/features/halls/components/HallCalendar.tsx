@@ -24,23 +24,35 @@ interface HallCalendarProps {
  * Bận = sảnh đã có tiệc đặt cọc hoặc nhà cung cấp báo bận; không hiện khách hay đơn nào. Giúp khách chọn ngày hoặc đổi sảnh trước khi nhắn.
  * Mặc định thu gọn (chỉ tiêu đề và nhãn ngày cưới); bấm thì lịch trượt mở ra, lúc đó mới tải lịch tháng.
  */
+/** Sảnh so với ngày cưới của khách: đã đặt / bận / trống, và nhãn ngắn (null khi chưa có ngày cưới hoặc đang tải). */
+function useWeddingHall(packageId: string, weddingDate: string | null | undefined, mine: readonly string[]) {
+  const wedding = upcoming(weddingDate, toISODate(today()))
+  const w = useHallDates(wedding ? packageId : null, wedding ?? '', wedding ?? '')
+  const weddingMine = !!wedding && mine.includes(wedding)
+  const weddingBusy = !!wedding && !weddingMine && !!w.data?.dates.includes(wedding)
+  const summary: { tone: BadgeTone; text: string } | null =
+    !wedding || (!weddingMine && w.isPending) ? null : weddingMine ? { tone: 'done', text: 'Bạn đã đặt' } : weddingBusy ? { tone: 'warn', text: 'Bận ngày cưới' } : { tone: 'done', text: 'Trống ngày cưới' }
+  return { wedding, w, weddingMine, weddingBusy, summary }
+}
+
+/** Nhãn ngày cưới trên card gói (sảnh) ở trang chi tiết trung tâm tiệc cưới, cùng nguồn với Lịch của sảnh. */
+export function HallDayBadge({ packageId, weddingDate, mine = [] }: HallCalendarProps) {
+  const { summary } = useWeddingHall(packageId, weddingDate, mine)
+  return summary ? <Badge tone={summary.tone}>{summary.text}</Badge> : <span />
+}
+
 export function HallCalendar({ packageId, weddingDate, mine = [] }: HallCalendarProps) {
   const now = toISODate(today())
-  const wedding = upcoming(weddingDate, now)
   const [open, setOpen] = useState(false)
   const panelId = useId()
+  // Nhãn ở tiêu đề (thấy cả khi thu gọn): ngày cưới so với lịch của sảnh
+  const { wedding, w, weddingMine, weddingBusy, summary } = useWeddingHall(packageId, weddingDate, mine)
   const [month, setMonth] = useState(monthOf(wedding ?? now))
   const { from, to } = useMemo(() => gridRange(month), [month])
   const days = useMemo(() => monthGrid(month), [month])
   const q = useHallDates(open ? packageId : null, from, to)
-  const w = useHallDates(wedding ? packageId : null, wedding ?? '', wedding ?? '')
   const busy = useMemo(() => new Set(q.data?.dates ?? []), [q.data])
   const own = useMemo(() => new Set(mine), [mine])
-  const weddingMine = !!wedding && own.has(wedding)
-  const weddingBusy = !!wedding && !weddingMine && !!w.data?.dates.includes(wedding)
-  // Nhãn ở tiêu đề (thấy cả khi thu gọn): ngày cưới so với lịch của sảnh
-  const summary: { tone: BadgeTone; text: string } | null =
-    !wedding || (!weddingMine && w.isPending) ? null : weddingMine ? { tone: 'done', text: 'Bạn đã đặt' } : weddingBusy ? { tone: 'warn', text: 'Bận ngày cưới' } : { tone: 'done', text: 'Trống ngày cưới' }
 
   return (
     <section aria-label="Lịch của sảnh" className="mt-5 rounded-xl border border-line bg-bg">
@@ -91,7 +103,7 @@ export function HallCalendar({ packageId, weddingDate, mine = [] }: HallCalendar
                       : `Sảnh này còn trống vào ngày cưới của bạn (${formatDate(wedding)}).`}
               </p>
             ) : (
-              <p className="text-[13px] text-muted-foreground">Thiết lập ngày cưới ở Lập timeline để so sánh nhanh với lịch của sảnh.</p>
+              <p className="text-[13px] text-muted-foreground">Thiết lập ngày cưới ở Kế hoạch của tôi để so sánh nhanh với lịch của sảnh.</p>
             )}
 
             <header className="mt-3 mb-2 flex items-center justify-between gap-2">

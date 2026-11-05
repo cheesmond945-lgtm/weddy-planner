@@ -110,7 +110,7 @@ const dmyOf = (s: string) => s.split('-').reverse().join('/');
 /** Câu cảnh báo cho khách trong hộp xem trước đổi ngày cưới. */
 export function customerDateWarning(o: OrderForDateChange, issue: { kind: DateChangeKind; blocksDeposit: boolean }, newWedding: string): string {
   const base = `Đơn ${o.orderCode} của ${o.vendorName} thực hiện ngày ${dmyOf(o.eventDate)}`;
-  if (issue.kind === 'DIFFERENT') return `${base}, khác ngày cưới mới. Nhắn NCC để cập nhật đơn.`;
+  if (issue.kind === 'DIFFERENT') return `${base}, khác ngày cưới mới. Nhắn NCC để chỉnh sửa đơn.`;
   if (issue.blocksDeposit) return `${base}, sau ngày cưới mới (${dmyOf(newWedding)}) nên bạn chưa đặt cọc được cho tới khi nhà cung cấp đổi ngày. Bạn bấm "Yêu cầu chỉnh sửa" và chọn "Đổi ngày thực hiện".`;
   return `${base}, sau ngày cưới mới (${dmyOf(newWedding)}). Nhắn NCC để cập nhật ngày thực hiện của đơn.`;
 }

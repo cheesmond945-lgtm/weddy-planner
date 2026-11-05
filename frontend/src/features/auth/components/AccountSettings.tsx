@@ -15,15 +15,27 @@ import { controlClass, FormSection } from '@/features/vendors/components/FormPar
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 import { useUpdateProfile } from '../hooks'
+import { isVnPhone, PHONE_MESSAGE } from '@/lib/phone'
 
 const card = 'rounded-md border border-line bg-surface px-7 pt-[26px] pb-6 shadow-portal max-sm:px-4 max-sm:pt-5 max-sm:pb-4'
 type Errors = { currentPassword?: string; newPassword?: string; confirmPassword?: string; form?: string }
 
 /**
- * Tài khoản của tôi (NCC, Admin): sửa họ tên, tên đăng nhập; đổi email (hộp riêng, mật khẩu + OTP); đổi mật khẩu.
+ * Tài khoản của tôi (cặp đôi, NCC, Admin): sửa họ tên, tên đăng nhập; đổi email (hộp riêng, mật khẩu + OTP); đổi mật khẩu.
  * Đổi mật khẩu: nhập mật khẩu hiện tại, mật khẩu mới theo quy tắc (hiện đạt / chưa đạt khi gõ), nhập lại; có popup xác nhận.
  */
-export function AccountSettings({ nameLabel, infoNote, passwordNote }: { nameLabel: string; infoNote: string; passwordNote: string }) {
+export function AccountSettings({
+  nameLabel,
+  infoNote,
+  passwordNote,
+  editablePhone = false,
+}: {
+  nameLabel: string
+  infoNote: string
+  passwordNote: string
+  /** Cặp đôi tự sửa số điện thoại (NCC, Admin: chỉ xem) */
+  editablePhone?: boolean
+}) {
   const { user } = useAuth()
   const me = useQuery({ queryKey: ['auth', 'me', user?.id], queryFn: authApi.me, enabled: !!user, staleTime: 0 })
   const info = me.data ?? user
@@ -36,11 +48,11 @@ export function AccountSettings({ nameLabel, infoNote, passwordNote }: { nameLab
   const owner = { username: info?.username, email: info?.email, phone: info?.phone }
 
   // Họ tên, tên đăng nhập: chưa sửa thì lấy theo dữ liệu mới nhất từ máy chủ
-  const saved = { name: info?.name ?? '', username: info?.username ?? '' }
+  const saved = { name: info?.name ?? '', username: info?.username ?? '', phone: info?.phone ?? '' }
   const [edited, setEdited] = useState<typeof saved | null>(null)
   const draft = edited ?? saved
-  const [infoErrors, setInfoErrors] = useState<{ name?: string; username?: string }>({})
-  const infoDirty = draft.name.trim() !== saved.name || draft.username.trim() !== saved.username
+  const [infoErrors, setInfoErrors] = useState<{ name?: string; username?: string; phone?: string }>({})
+  const infoDirty = draft.name.trim() !== saved.name || draft.username.trim() !== saved.username || (editablePhone && draft.phone.trim() !== saved.phone)
   const qc = useQueryClient()
   const update = useUpdateProfile()
 
@@ -48,10 +60,11 @@ export function AccountSettings({ nameLabel, infoNote, passwordNote }: { nameLab
     const found: typeof infoErrors = {}
     if (!draft.name.trim()) found.name = `Nhập ${nameLabel.toLowerCase()}.`
     if (!draft.username.trim()) found.username = 'Nhập tên đăng nhập.'
+    if (editablePhone && draft.phone.trim() && !isVnPhone(draft.phone)) found.phone = PHONE_MESSAGE
     setInfoErrors(found)
     if (Object.keys(found).length) return
     update.mutate(
-      { name: draft.name.trim(), username: draft.username.trim() },
+      { name: draft.name.trim(), username: draft.username.trim(), ...(editablePhone && { phone: draft.phone.trim() || null }) },
       {
         onSuccess: (u) => {
           qc.setQueryData(['auth', 'me', user?.id], u)
@@ -133,7 +146,22 @@ export function AccountSettings({ nameLabel, infoNote, passwordNote }: { nameLab
               error={infoErrors.username}
             />
             <FormField label="Email đăng nhập" className={readOnly} disabled value={info?.email || '—'} />
-            <FormField label="Số điện thoại" className={readOnly} disabled value={info?.phone || '—'} />
+            {editablePhone ? (
+              <FormField
+                label="Số điện thoại"
+                className={controlClass}
+                type="tel"
+                autoComplete="tel"
+                inputMode="numeric"
+                maxLength={10}
+                disabled={update.isPending}
+                value={draft.phone}
+                onChange={(e) => (setEdited({ ...draft, phone: e.target.value }), setInfoErrors((x) => ({ ...x, phone: undefined })))}
+                error={infoErrors.phone}
+              />
+            ) : (
+              <FormField label="Số điện thoại" className={readOnly} disabled value={info?.phone || '—'} />
+            )}
           </div>
           <div className="mt-4 flex flex-wrap justify-end gap-2.5">
             <Button type="button" variant="outline" className="h-10" onClick={() => setChangingEmail(true)}>

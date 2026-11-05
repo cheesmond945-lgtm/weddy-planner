@@ -29,8 +29,8 @@ interface NotificationBellProps<T extends BellNotification> {
   data: { unread: number; items: T[] } | undefined
   /** Icon theo loại thông báo; loại không có thì dùng chuông */
   icons: Record<string, LucideIcon>
-  /** Trang xử lý mà thông báo dẫn tới */
-  targetOf: (n: T) => string
+  /** Trang xử lý mà thông báo dẫn tới; null = thông báo chỉ để đọc (bấm chỉ đánh dấu đã đọc, không chuyển trang) */
+  targetOf: (n: T) => string | null
   onRead: (id: string) => void
   onReadAll: () => void
   readAllPending?: boolean
@@ -59,8 +59,10 @@ export function NotificationBell<T extends BellNotification>({ data, icons, targ
 
   function go(n: T) {
     if (!n.isRead) onRead(n.id)
+    const target = targetOf(n)
+    if (!target) return
     setOpen(false)
-    navigate(targetOf(n))
+    navigate(target)
   }
 
   return (
@@ -102,12 +104,13 @@ export function NotificationBell<T extends BellNotification>({ data, icons, targ
             <ul className="max-h-[420px] overflow-y-auto">
               {data.items.map((n) => {
                 const Icon = icons[n.type] ?? Bell
+                const clickable = targetOf(n) !== null
                 return (
                   <li key={n.id} className="border-b border-line last:border-b-0">
                     <button
                       type="button"
                       onClick={() => go(n)}
-                      className={cn('flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none', !n.isRead && 'bg-gold-soft/40')}
+                      className={cn('flex w-full items-start gap-3 px-4 py-3 text-left focus-visible:outline-none', clickable ? 'cursor-pointer transition-colors hover:bg-surface-2 focus-visible:bg-surface-2' : 'cursor-default', !n.isRead && 'bg-gold-soft/40')}
                     >
                       <span className="mt-0.5 grid size-9 flex-none place-items-center rounded-full bg-surface-2 text-gold-ink">
                         <Icon className="size-4" />

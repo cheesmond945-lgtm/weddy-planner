@@ -164,7 +164,7 @@ function TaskForm({ task, onClose, onSave }: Omit<TaskDialogProps, 'open'>) {
         />
       </Field>
 
-      <DialogFooter className="mt-1">
+      <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
           Hủy
         </Button>

@@ -1,4 +1,4 @@
-# API: commissions (hoa hồng NCC trả WebPlan)
+# API: commissions (hoa hồng NCC trả Forever)
 
 > **Bản nháp** (FE đã làm theo bằng dữ liệu giả, `frontend/src/mocks/vendorCommissions.ts`; cách tính ở `frontend/src/features/commissions/calc.ts`).
 > Quy ước chung: [README.md](README.md). Khoản thu: xem [orders.md](orders.md) phần Nhà cung cấp (`OrderPayment`).
@@ -6,7 +6,7 @@
 
 > **Triển khai thật (khớp CSDL):** bảng kê theo tháng hoàn thành đơn, tỷ lệ lấy từ `service_categories.commission_rate`, hạn ngày 25 tháng sau, chỉ có `Unpaid`/`Paid`. **Tính dồn:** bảng kê đã `Paid` thì đã khép lại; đơn hoàn thành sau đó (kể cả ghi nhận thu với ngày thuộc kỳ đã trả) được tính vào bảng kê tháng sau (`lines[].originPeriod` = tháng hoàn thành thực tế). **Thanh toán qua VietQR + SePay:** `POST /vendors/me/commissions/:id/pay` (bảng kê đã chốt, chưa trả, có hoa hồng) trả mã QR, số tiền (`total_amount`) và nội dung chuyển khoản `EVHH` + 8 ký tự hex đầu của id bảng kê; `POST /vendors/me/commissions/:id/check` hỏi SePay đã nhận đúng nội dung và số tiền chưa (mỗi giao dịch chỉ dùng một lần) rồi ghi `Paid`, `transaction_code` = id giao dịch SePay, `paid_date` = giờ giao dịch. Chi tiết: [payments.md](payments.md). Admin vẫn ghi nhận thủ công được qua `POST /admin/commissions/:id/record-payment`. NCC cố tình không thanh toán: admin khóa tài khoản theo điều khoản NCC (không tự động). **Nhắc hạn:** hệ thống tự gửi thông báo `CommissionDueSoon` cho NCC khi bảng kê chưa thanh toán còn tối đa 3 ngày tới hạn (mỗi bảng kê một lần). NCC không gửi minh chứng qua hệ thống (`POST .../payments` trả 409 `COMMISSION_NOT_PAYABLE`). **Tự hoàn thành đơn:** đơn đã cọc mà NCC chưa xác nhận thu đủ thì hệ thống nhắc NCC (`OrderAutoCompleteSoon`) 5 ngày sau ngày sự kiện và tự hoàn thành 7 ngày sau ngày sự kiện (`AUTO_COMPLETE_DAYS`, cưới ngày 20 thì ngày 27): coi như đã thu đủ, tính hoa hồng vào kỳ của tháng tự hoàn thành (kỳ đã thanh toán thì dồn kỳ sau), báo NCC và cặp đôi. Job chạy mỗi giờ (`orders/order-auto-complete.service.ts`). `lines[].completedDate` = ngày hoàn thành (giờ VN).
 
-Phạm vi: NCC xem bảng kê hoa hồng theo kỳ tháng, chi tiết đơn / khoản thu tính hoa hồng, gửi minh chứng đã chuyển tiền cho WebPlan.
+Phạm vi: NCC xem bảng kê hoa hồng theo kỳ tháng, chi tiết đơn / khoản thu tính hoa hồng, gửi minh chứng đã chuyển tiền cho Forever.
 Chưa có: Admin xác nhận / từ chối minh chứng, cấu hình tỷ lệ (làm khi tới phần Admin, bổ sung vào đây).
 
 ## Cách tính (theo quyết định của nhóm)
@@ -96,7 +96,7 @@ Minh chứng (`CommissionPaymentStatus`): `PENDING` (Chờ xác nhận), `CONFIR
       "reviewNote": null
     }
   ],
-  "transfer": { "accountName": "WEBPLAN", "bankName": "…", "accountNumber": "…", "content": "DS092026 — Công ty TNHH Mây Palace" }
+  "transfer": { "accountName": "FOREVER", "bankName": "…", "accountNumber": "…", "content": "DS092026 — Công ty TNHH Mây Palace" }
 }
 ```
 
@@ -104,7 +104,7 @@ Minh chứng (`CommissionPaymentStatus`): `PENDING` (Chờ xác nhận), `CONFIR
 |---|---|
 | `lines[].kind` | `ORDER`: đơn hoàn thành của kỳ; `SUPPLEMENT`: khoản thu sau chốt của đơn kỳ `originPeriod` |
 | `lines[].payments` | Các khoản thu làm căn cứ (đợt, thời điểm, hình thức thanh toán, số tiền) |
-| `transfer` | Tài khoản nhận của WebPlan (BE cấu hình); `content` là nội dung chuyển khoản để đối chiếu |
+| `transfer` | Tài khoản nhận của Forever (BE cấu hình); `content` là nội dung chuyển khoản để đối chiếu |
 | `payments` | Các lần NCC gửi minh chứng, mới nhất trước |
 
 ---
@@ -161,7 +161,7 @@ Mock không lưu bảng kê: mỗi lần gọi tính lại từ khoản thu củ
 - Prototype ghi cứng số liệu 3 kỳ, không có tỷ lệ; ở đây tính từ khoản thu thật theo các quy tắc trên.
 - Thêm cột "Đã thu (căn cứ)", chi tiết từng đơn / khoản thu, dòng bổ sung, trạng thái "Đang tạm tính", "Chưa thanh toán", nhãn "Quá hạn".
 - Gửi minh chứng thêm ghi chú đối chiếu; lịch sử các lần gửi kèm trạng thái và ghi chú của Admin.
-- Tài khoản WebPlan trong mock giữ như prototype ("WEBPLAN DEMO", không dùng chuyển tiền).
+- Tài khoản Forever trong mock giữ như prototype ("FOREVER DEMO", không dùng chuyển tiền).
 
 ## Cần chốt
 

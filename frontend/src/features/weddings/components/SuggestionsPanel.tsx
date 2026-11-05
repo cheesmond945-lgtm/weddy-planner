@@ -1,11 +1,8 @@
 import { MapPin, TriangleAlert } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ServiceCard } from '@/features/catalog/components/ServiceCard'
-import { FavoriteButton } from '@/features/favorites/components/FavoriteButton'
-import { AddToPlanButton } from '@/features/weddings/planActions'
 import { formatMoney } from '@/lib/format'
 import { paths } from '@/routes/paths'
 import type { ServiceSummary } from '@/types/catalog'
@@ -90,31 +87,7 @@ export function SuggestionsPanel({ categorySlug, categoryName, onExpand, cardAct
   )
 }
 
-/**
- * Popup "Gợi ý cho bạn" (nút "Gợi ý {dịch vụ}" ở Timeline): cùng 3 nhà cung cấp, cùng dòng căn cứ với trang Dịch vụ, ngay tại chỗ.
- * "Xem thêm" sang Dịch vụ cưới ở dạng đầy đủ (ai=all: mọi dịch vụ của hạng mục, 3 gợi ý ghim đầu danh sách).
- */
-export function SuggestionsDialog({ categorySlug, categoryName, open, onOpenChange }: { categorySlug: string; categoryName: string; open: boolean; onOpenChange: (open: boolean) => void }) {
-  const navigate = useNavigate()
-  const cardActions: CardActions = (s) => ({ imageAction: <FavoriteButton service={s} />, extraActions: <AddToPlanButton service={s} variant="icon" /> })
-  const expand = () => {
-    onOpenChange(false)
-    navigate(`${paths.services}?category=${categorySlug}&ai=all`)
-    window.scrollTo(0, 0)
-  }
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1040px] sm:p-8">
-        <DialogHeader className="mb-0">
-          <DialogTitle>Gợi ý cho bạn</DialogTitle>
-        </DialogHeader>
-        <SuggestionsBody categorySlug={categorySlug} categoryName={categoryName} onExpand={expand} cardActions={cardActions} alwaysMore />
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** Dòng căn cứ, tối đa 3 thẻ dịch vụ kèm lý do, nút xem thêm (dùng chung cho trang Dịch vụ và popup ở Timeline) */
+/** Dòng căn cứ, tối đa 3 thẻ dịch vụ kèm lý do, nút xem thêm (trang Dịch vụ) */
 function SuggestionsBody({
   categorySlug,
   categoryName,

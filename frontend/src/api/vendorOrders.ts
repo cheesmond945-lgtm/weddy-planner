@@ -1,17 +1,18 @@
 import type { Paginated } from '@/types/api'
-import type { AddTaskResult, BoardTask, CalendarItem, CancelReason, Order, NewOrderTaskInput, OrderContent, OrderDaySlot, OrderListQuery, OrderProgress, OrderStatus, OrderTasks, RestResult, TaskItemResult, TaskOwner, TaskStatus } from '@/types/vendorOrder'
+import type { AddTaskResult, BoardTask, CalendarItem, CancelReason, Order, NewOrderTaskInput, OrderContent, OrderCounts, OrderListQuery, OrderProgress, OrderTasks, RestResult, TaskItemResult, TaskOwner, TaskStatus } from '@/types/vendorOrder'
 import { http, requestRaw } from './client'
 
 /** Đơn dịch vụ phía NCC. Hợp đồng: docs/api/orders.md (phần Nhà cung cấp). */
 export const vendorOrdersApi = {
   /** Danh sách đơn có lọc, phân trang (trang Quản lý đơn hàng). Gồm cả bản nháp. */
   list: async (query: OrderListQuery): Promise<Paginated<Order>> => {
-    const res = await requestRaw<Order[]>('/vendors/me/orders', { query: { ...query } })
+    const { needsAction, restPending, ...rest } = query
+    const res = await requestRaw<Order[]>('/vendors/me/orders', { query: { ...rest, needsAction: needsAction ? '1' : undefined, restPending: restPending ? '1' : undefined } })
     return { data: res.data, meta: res.meta! }
   },
 
-  /** Số đơn theo từng trạng thái (không theo bộ lọc). */
-  counts: (): Promise<Record<OrderStatus, number>> =>
+  /** Số đơn theo từng trạng thái (không theo bộ lọc) và số liệu 4 thẻ thống kê. */
+  counts: (): Promise<OrderCounts> =>
     http.get('/vendors/me/orders/counts'),
 
   /** Đơn của một hội thoại (gồm cả bản nháp), để vẽ thẻ đơn trong chat. */
@@ -49,13 +50,6 @@ export const vendorOrdersApi = {
   unconfirmTaskDate: (orderId: string, taskId: string): Promise<TaskItemResult> =>
     http.delete(`/vendors/me/orders/${orderId}/tasks/${taskId}/schedule`),
 
-  /** Giờ có mặt ngày cưới của đơn (docs/LICH_TRINH_NGAY_CUOI.md) */
-  daySlot: (orderId: string): Promise<OrderDaySlot> => http.get(`/vendors/me/orders/${orderId}/day-slot`),
-  /** Chốt giờ có mặt: start, end giờ VN "YYYY-MM-DDTHH:mm" (có thể từ tối hôm trước); khách được báo */
-  confirmDaySlot: (orderId: string, body: { start: string; end: string }): Promise<OrderDaySlot> => http.put(`/vendors/me/orders/${orderId}/day-slot`, body),
-  /** Bỏ chốt giờ có mặt: về giờ dự kiến */
-  clearDaySlot: (orderId: string): Promise<OrderDaySlot> => http.delete(`/vendors/me/orders/${orderId}/day-slot`),
-
   /** Lịch làm việc trong khoảng [from, to] (YYYY-MM-DD, tối đa 100 ngày): ngày thực hiện của đơn và việc chi tiết của đơn đã cọc. */
   calendar: async (from: string, to: string): Promise<CalendarItem[]> => {
     const res = await http.get<{ items: CalendarItem[] }>('/vendors/me/orders/calendar', { query: { from, to } })
@@ -77,16 +71,16 @@ export const vendorOrdersApi = {
     http.post('/vendors/me/orders', body),
 
   /** Lưu bản nháp của đơn Draft. */
-  saveDraft: (orderId: string, content: OrderContent): Promise<Order> =>
-    http.put(`/vendors/me/orders/${orderId}/draft`, { content }),
+  saveDraft: (orderId: string, content: OrderContent, expectedVersion?: string): Promise<Order> =>
+    http.put(`/vendors/me/orders/${orderId}/draft`, { content, expectedVersion }),
 
-  /** Gửi đơn Draft lần đầu, hoặc "Cập nhật đơn" đơn Pending / NeedRevision (đặt lại hạn cọc 1 ngày). */
-  send: (orderId: string, content: OrderContent): Promise<Order> =>
-    http.post(`/vendors/me/orders/${orderId}/send`, { content }),
+  /** Gửi đơn Draft lần đầu, hoặc "Chỉnh sửa đơn" đơn Pending / NeedRevision (đặt lại hạn cọc 1 ngày). */
+  send: (orderId: string, content: OrderContent, expectedVersion?: string): Promise<Order> =>
+    http.post(`/vendors/me/orders/${orderId}/send`, { content, expectedVersion }),
 
   /** Sửa đơn đã cọc: hạng mục, ngày, ghi chú. Khóa tỷ lệ cọc và tiền cọc. */
-  edit: (orderId: string, content: OrderContent, changeNote: string): Promise<Order> =>
-    http.patch(`/vendors/me/orders/${orderId}`, { content, changeNote }),
+  edit: (orderId: string, content: OrderContent, changeNote: string, expectedVersion?: string): Promise<Order> =>
+    http.patch(`/vendors/me/orders/${orderId}`, { content, changeNote, expectedVersion }),
 
   /** NCC hủy đơn đã cọc, chỉ khi hôm nay còn trước ngày sự kiện. reason: CUSTOMER_REQUEST (khách mất cọc) hoặc VENDOR_UNABLE (NCC hoàn cọc ngoài hệ thống). */
   cancel: (orderId: string, body: { reason: CancelReason; note?: string }): Promise<Order> =>

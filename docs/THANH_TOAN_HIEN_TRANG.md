@@ -1,5 +1,8 @@
 # Hiện trạng luồng thanh toán của đơn hàng
 
+> **Tài liệu cũ, có thể không còn đúng.** Viết ở một thời điểm trước các thay đổi ngày 04/11/2026 (hạn đợt 2, VietQR thay VNPay, tên Forever, trang Quản lý đơn hàng). Xem tài liệu hiện hành: `LUONG_CHAT_DON_HANG.md` (phần Cập nhật đầu file), `api/orders.md`, `api/THE_DON_HANG.md`.
+
+
 Khảo sát ngày 01/11/2026 trên nhánh `Chanh`. Chỉ đọc code và `schema.prisma`; không chạy lệnh nào đụng CSDL, không đọc giá trị `.env`. Bỏ qua hoa hồng và màn "Tài chính & đối soát".
 
 Đường dẫn gọn: `BE` = `backend/src/modules`, `FE` = `frontend/src/features`.
@@ -202,6 +205,6 @@ Quy ước: việc timeline `PAY:<orderId>` ở `Done` = NCC đã nhận đủ t
 ### Cập nhật giao diện (cột Thanh toán, chat)
 
 - **Bảng đơn NCC:** cột "Thanh toán" (thay "Đặt cọc") hai dòng nhỏ: Đợt 1 (✓ xanh / ○ xám, "CK dd/mm" hoặc "Chưa cọc") và Đợt 2 ("Tiền mặt" và trạng thái: ✓ "Đã nhận dd/mm" xanh; ○ "Chưa nhận" vàng khi Deposited; ! "Chưa nhận" cam khi Completed; "—" khi chưa cọc / hết hạn / hủy). Chữ "Chưa nhận" bấm được để mở hộp xác nhận. Không còn thanh tiến độ.
-- **Nút trên dòng:** giữ một nút chính tùy trạng thái (Hoàn tất, Cập nhật đơn, Tạo lại đơn, Sửa theo yêu cầu), dạng viền, cỡ nhỏ, chữ tự xuống dòng; **không** có nút "Đã nhận tiền mặt" trên dòng. Menu "⋯" có mọi thao tác, gồm "Ghi nhận đã nhận tiền mặt" / "Bỏ ghi nhận tiền mặt".
+- **Nút trên dòng:** giữ một nút chính tùy trạng thái (Hoàn tất, Chỉnh sửa đơn, Tạo lại đơn, Sửa theo yêu cầu), dạng viền, cỡ nhỏ, chữ tự xuống dòng; **không** có nút "Đã nhận tiền mặt" trên dòng. Menu "⋯" có mọi thao tác, gồm "Ghi nhận đã nhận tiền mặt" / "Bỏ ghi nhận tiền mặt".
 - **Chat:** hóa đơn cuối (NCC xuất) nằm bên phải ở chat NCC và bên trái kèm tên NCC ở chat khách; giấy xác nhận cọc và tin hệ thống nằm giữa ("Forever xác nhận"). Người gửi suy theo loại tin nên tin cũ lưu sai sender vẫn đúng (`frontend/src/features/chat/messageSender.ts`).
 

@@ -37,6 +37,15 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
   const sentOrders = orders.filter((o) => o.status !== 'Draft')
   const drafts = orders.filter((o) => o.status === 'Draft')
   const latestOrder = [...sentOrders].sort((a, b) => b.createdDate.localeCompare(a.createdDate))[0]
+  // Một khách một đơn còn hiệu lực: đang có đơn nháp / chờ cọc / cần sửa / đã cọc thì nút Tạo đơn mở đúng đơn đó (backend cũng chặn tạo thêm)
+  const openOrder = orders.find((o) => ['Draft', 'Pending', 'NeedRevision', 'Deposited'].includes(o.status))
+  const formAction: { mode: OrderFormMode; label: string; hint?: string } = !openOrder
+    ? { mode: { kind: 'new' }, label: 'Tạo đơn' }
+    : openOrder.status === 'Draft'
+      ? { mode: { kind: 'draft', order: openOrder }, label: 'Mở bản nháp', hint: `Đơn ${openOrder.orderCode} đang là bản nháp` }
+      : openOrder.status === 'Deposited'
+        ? { mode: { kind: 'edit', order: openOrder }, label: 'Chỉnh sửa đơn', hint: `Đơn ${openOrder.orderCode} đã được đặt cọc` }
+        : { mode: { kind: 'resend', order: openOrder }, label: 'Chỉnh sửa đơn', hint: `Đơn ${openOrder.orderCode} đang chờ khách thanh toán cọc` }
   // Thẻ mới nhất của từng đơn: gửi lại thì các thẻ cũ thu gọn
   const latestCard = useMemo(() => {
     const map = new Map<string, string>()
@@ -98,9 +107,9 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
             <Link to={orderPageHref(latestOrder.id)}>Xem đơn ›</Link>
           </Button>
         )}
-        <Button aria-label="Tạo đơn" className="rounded-pill whitespace-nowrap max-sm:size-[42px] max-sm:p-0" onClick={() => onOpenForm({ kind: 'new' })}>
-          <Plus />
-          <span className="max-sm:hidden">Tạo đơn</span>
+        <Button aria-label={formAction.label} title={formAction.hint ? `${formAction.hint}. Chỉnh sửa đơn này thay vì tạo đơn mới.` : undefined} className="rounded-pill whitespace-nowrap max-sm:size-[42px] max-sm:p-0" onClick={() => onOpenForm(formAction.mode)}>
+          {openOrder ? <FilePen /> : <Plus />}
+          <span className="max-sm:hidden">{formAction.label}</span>
         </Button>
       </header>
 

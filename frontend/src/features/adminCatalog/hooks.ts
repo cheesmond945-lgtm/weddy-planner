@@ -27,6 +27,21 @@ export function useReviewPackage() {
   })
 }
 
+/** Admin ẩn gói (kèm lý do) hoặc khôi phục gói đang ẩn. */
+export function useTogglePackageHidden() {
+  const qc = useQueryClient()
+  const refresh = useRefreshAdminSummary()
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }): Promise<AdminPackage> => (reason === undefined ? adminApi.unhidePackage(id) : adminApi.hidePackage(id, reason)),
+    onSuccess: (p, { reason }) => {
+      void qc.invalidateQueries({ queryKey: keys.all })
+      void qc.invalidateQueries({ queryKey: ['admin', 'package', p.id] })
+      refresh()
+      toast(reason === undefined ? `Đã khôi phục gói ${p.name}.` : `Đã ẩn gói ${p.name}.`)
+    },
+  })
+}
+
 /** Chi tiết một gói (luôn tải mới khi mở). */
 export function useAdminPackage(id: string) {
   const enabled = useAuth().user?.role === 'ADMIN'

@@ -359,11 +359,11 @@ Lỗi: 404 PACKAGE_NOT_FOUND, 409 CONFLICT (không ở `PUBLISHED`)
 ### POST /vendors/me/packages/:id/republish
 Role: VENDOR
 
-`HIDDEN` → `PUBLISHED`.
+`HIDDEN` → `PUBLISHED`. Gói do Admin ẩn thì NCC không tự khôi phục được.
 
-Response 200: `{ "data": VendorPackage }`
+Response 200: `{ "data": VendorPackage }`. `VendorPackage` có thêm `hiddenBy` (`VENDOR` | `ADMIN` | null) và `hiddenReason` (lý do Admin ẩn).
 
-Lỗi: 404 PACKAGE_NOT_FOUND, 409 CONFLICT (không ở `HIDDEN`)
+Lỗi: 404 PACKAGE_NOT_FOUND, 409 CONFLICT (không ở `HIDDEN`), 409 PACKAGE_HIDDEN_BY_ADMIN
 
 ## Mã lỗi riêng (phía NCC)
 

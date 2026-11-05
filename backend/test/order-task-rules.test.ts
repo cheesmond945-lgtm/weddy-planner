@@ -98,6 +98,14 @@ describe('chốt / đổi ngày', () => {
     assert.equal(scheduleDateIssue('2027-07-19', ctx)?.code, 'DUE_DATE_OUT_OF_RANGE');
   });
 
+  it('việc phải xong trước ngày thực hiện (beforeEvent): không trùng hoặc sau E, vẫn tính từ hôm nay', () => {
+    const before = { ...ctx, beforeEvent: true };
+    for (const d of ['2026-12-10', '2027-03-19']) assert.equal(scheduleDateIssue(d, before), null, d);
+    for (const d of ['2027-03-20', '2027-03-21', '2026-12-09']) assert.equal(scheduleDateIssue(d, before)?.code, 'DUE_DATE_OUT_OF_RANGE', d);
+    // việc khác (không beforeEvent) vẫn chọn được đúng ngày thực hiện
+    assert.equal(scheduleDateIssue('2027-03-20', ctx), null);
+  });
+
   it('sai định dạng: 400', () => {
     for (const d of ['', '20/03/2027', '2027-13-45', null, undefined, 5]) assert.equal(scheduleDateIssue(d, ctx)?.status, 400, String(d));
   });
@@ -119,6 +127,13 @@ describe('chốt / đổi ngày', () => {
 describe("'Waiting' được tính là chưa xong (không chỉ 'Todo')", () => {
   const today = '2027-03-10';
   const t = (status: string, due: string, owner: TaskOwner = 'VENDOR') => ({ due, done: status === 'Done', owner, title: 'x', status });
+
+  it('orderProgress: việc thanh toán đợt 2 (restPayment) quá hạn KHÔNG tính trễ, vẫn là việc mở', () => {
+    const p = orderProgress([{ due: '2027-03-05', done: false, owner: 'CUSTOMER', status: 'Waiting', restPayment: true }], '2027-03-20');
+    assert.equal(p.open, 1);
+    assert.equal(p.overdueCustomer, 0);
+    assert.equal(p.overdueVendor, 0);
+  });
 
   it('orderProgress: việc Waiting là việc mở; quá hạn Waiting tính phía khách, quá hạn Todo tính phía NCC', () => {
     const p = orderProgress([t('Done', '2027-03-01'), t('Todo', '2027-03-05'), t('Waiting', '2027-03-05', 'CUSTOMER'), t('Waiting', '2027-03-20', 'CUSTOMER'), t('Todo', '2027-03-11')], today);

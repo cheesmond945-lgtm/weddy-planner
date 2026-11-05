@@ -124,7 +124,7 @@ export function usePlanActions() {
       ),
 
     /**
-     * openChat trong prototype: chưa có trong kế hoạch thì thêm vào, chuyển sang Đang trao đổi, mở khung chat bên phải.
+     * Mở khung chat bên phải với NCC (không thêm NCC vào kế hoạch; NCC đã có trong kế hoạch thì chuyển sang Đang trao đổi).
      * Chưa đăng nhập: đăng nhập xong quay lại trang với ?chat=<id> để tự mở lại khung chat (ChatPanelResume).
      * VITE_CHAT_MODE=zalo: mở Zalo của NCC thay vì chat trong Forever (xem features/chat/chatPanel.ts).
      */
@@ -135,16 +135,18 @@ export function usePlanActions() {
       }
       return requireCouple(
         async () => {
-          // Xem kế hoạch trước khi mở chat (mở chat sẽ tự thêm vào kế hoạch): đã thêm gói của NCC này thì soạn sẵn câu hỏi giá chốt
+          // NCC đã có trong kế hoạch với một gói thì soạn sẵn câu hỏi giá chốt (mở chat không thêm NCC vào kế hoạch)
           const before = await weddingsApi
             .getPlan()
             .then((p) => p.items.find((i) => i.service.id === service.id) ?? null)
             .catch(() => null)
           const packageName = before?.packageName || null
-          await withReplace(service, (replace) => chatApi.start(service.id, replace), (conv, replaced) => {
-            if (replaced) toast('Đã thay dịch vụ trong kế hoạch')
-            // Hạng mục đã có NCC khác chờ cọc / đã chốt: vẫn nhắn tin tư vấn được, NCC này không vào kế hoạch
-            else if (!conv.planStatus) toast(`Hạng mục này đã có nhà cung cấp chờ cọc hoặc đã chốt nên ${service.name} không được thêm vào kế hoạch. Bạn vẫn nhắn tin tư vấn bình thường.`)
+          // Chỉ mở chat, kế hoạch giữ nguyên (thêm NCC vào kế hoạch bằng nút Thêm vào kế hoạch)
+          const conv = await chatApi.start(service.id, false).catch((e: Error) => {
+            toast(e.message)
+            return null
+          })
+          if (conv) {
             void refresh()
             chatPanel.open({
               conversation: conv,
@@ -152,7 +154,7 @@ export function usePlanActions() {
               packageName,
               workingHours: service.workingHours,
             })
-          })
+          }
         },
         { [CHAT_PARAM]: service.id },
       )

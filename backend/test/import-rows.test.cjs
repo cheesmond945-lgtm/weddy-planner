@@ -35,26 +35,6 @@ test('chỉ cho chọn tháng/ngày/năm khi có số thứ hai > 12 và không 
   assert.equal(m.canBeMonthFirst(['2027-03-15']), false);
 });
 
-test('khách: báo trùng trong file và với danh sách có sẵn, có phản hồi thì tính là đã mời', () => {
-  const existing = new Set([m.guestKey('Trần Bình', 'Bride')]);
-  const r = m.normalizeGuests(
-    [
-      { name: 'Nguyễn An', side: 'Nhà trai', group: 'bạn bè', partySize: '2', invited: '', rsvp: 'Sẽ đến' },
-      { name: 'nguyen an', side: 'trai' },
-      { name: 'Tran Binh', side: 'Nhà gái' },
-      { name: 'Ai đó', side: 'hàng xóm' },
-      { name: 'Chú Tư', side: 'CR', group: 'Hội đồng hương', partySize: '0' },
-    ],
-    existing,
-  );
-  assert.deepEqual(r[0].value, { fullName: 'Nguyễn An', side: 'Groom', group: 'Bạn bè', partySize: 2, isInvited: true, rsvp: 'Attending' });
-  assert.equal(r[0].warnings.length, 1);
-  assert.match(r[1].errors[0], /Trùng/);
-  assert.match(r[2].errors[0], /Đã có/);
-  assert.match(r[3].errors[0], /Không hiểu bên/);
-  assert.match(r[4].errors.join(' '), /Số người/);
-});
-
 test('công việc: hạn phải từ hôm nay đến trước ngày cưới', () => {
   const opts = { dateOrder: 'DMY', today: '2026-10-29', weddingDate: '2027-05-01' };
   const r = m.normalizeTasks(

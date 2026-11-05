@@ -3,7 +3,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { notify, postMessage } from '../chat/chat-messages';
 import { publish } from '../realtime/realtime.bus';
 import { applyRestReceived, closableDetailTasksWhere, type RestDb } from './rest-payment';
-import { HOUR, addDaysYmd, endOfDayVn, money, todayVn, ymdOf } from './order-rules';
+import { AUTO_COMPLETE_DAYS, HOUR, addDaysYmd, autoCompleteCutoff, completedChatText, endOfDayVn, money, todayVn, ymdOf } from './order-rules';
 
 /*
  * Chuyển trạng thái đơn do thời gian hoặc do NCC (hết hạn cọc, hoàn thành). Mọi bước đều idempotent: chỉ xử lý dòng thật sự
@@ -18,17 +18,35 @@ async function conversationOf(prisma: PrismaService, coupleId: string, vendorUse
   return c?.id ?? null;
 }
 
-/** Báo khách NCC đã xác nhận nhận đủ tiền mặt phần còn lại và làm các phiên đang mở tải lại. Lỗi thông báo không làm hỏng việc đã ghi. */
-export async function notifyRestReceived(prisma: PrismaService, o: { orderId: string; taskId?: string; orderCode: string | null; coupleUserId: string; vendorUserId: string; vendorName: string; amount: number }) {
+type RestNotice = { orderId: string; taskId?: string; orderCode: string | null; coupleUserId: string; vendorUserId: string; vendorName: string; amount: number };
+
+/** Tin hệ thống vào khung chat của đơn (nếu cặp NCC - khách đã có hội thoại). Lỗi không làm hỏng việc đã ghi. */
+async function postOrderNotice(prisma: PrismaService, o: RestNotice, content: string) {
+  const conversationId = await conversationOf(prisma, o.coupleUserId, o.vendorUserId);
+  if (conversationId) await postMessage(prisma, { conversationId, senderId: null, orderId: o.orderId, isRead: true, content });
+}
+
+/**
+ * Báo khách NCC đã xác nhận nhận đủ tiền mặt phần còn lại (chuông + tin hệ thống trong chat) và làm các phiên đang mở tải lại.
+ * Lỗi thông báo không làm hỏng việc đã ghi.
+ */
+export async function notifyRestReceived(prisma: PrismaService, o: RestNotice) {
   publish({ users: [o.coupleUserId, o.vendorUserId], event: 'task', data: { orderId: o.orderId, taskId: o.taskId } });
+  await postOrderNotice(prisma, o, `${o.vendorName || 'Nhà cung cấp'} đã xác nhận nhận đủ ${money(o.amount)} (đợt 2) cho đơn ${o.orderCode ?? ''}. Đơn đã thanh toán đủ.`).catch(() => undefined);
   await notify(prisma, {
     userId: o.coupleUserId,
     type: 'RestPaymentReceived',
-    title: 'Nhà cung cấp đã nhận tiền mặt',
-    content: `${o.vendorName || 'Nhà cung cấp'} đã xác nhận nhận đủ ${money(o.amount)} tiền mặt cho đơn ${o.orderCode ?? ''}.`,
+    title: 'Nhà cung cấp đã nhận đủ tiền',
+    content: `${o.vendorName || 'Nhà cung cấp'} đã xác nhận nhận đủ ${money(o.amount)} cho đơn ${o.orderCode ?? ''}.`,
     referenceType: 'Order',
     referenceId: o.orderId,
   }).catch(() => undefined);
+}
+
+/** NCC bỏ ghi nhận tiền mặt đợt 2: tin hệ thống trong chat cho cả hai bên và làm các phiên đang mở tải lại. */
+export async function notifyRestCleared(prisma: PrismaService, o: RestNotice) {
+  publish({ users: [o.coupleUserId, o.vendorUserId], event: 'task', data: { orderId: o.orderId, taskId: o.taskId } });
+  await postOrderNotice(prisma, o, `${o.vendorName || 'Nhà cung cấp'} đã bỏ ghi nhận khoản đã nhận ${money(o.amount)} (đợt 2) của đơn ${o.orderCode ?? ''}. Đợt 2 trở về trạng thái chưa nhận.`).catch(() => undefined);
 }
 
 /** Đơn Pending quá hạn cọc thành Expired (NeedRevision không hết hạn vì đang chờ NCC). */
@@ -104,20 +122,23 @@ export async function completeOrder(prisma: PrismaService, orderId: string, comp
   if (restRecorded) await notifyRestReceived(prisma, { orderId: o.id, orderCode: o.order_code, coupleUserId: o.weddings!.user_id!, vendorUserId: o.vendor_profiles!.user_id!, vendorName: o.vendor_profiles?.business_name ?? '', amount: Number(o.total_amount) - Number(o.deposit_amount) });
 
   const conversationId = await conversationOf(prisma, o.weddings!.user_id!, o.vendor_profiles!.user_id!);
-  if (conversationId) await postMessage(prisma, { conversationId, senderId: null, orderId: o.id, isRead: true, content: `Đơn ${o.order_code} đã hoàn thành.` });
+  if (conversationId) await postMessage(prisma, { conversationId, senderId: null, orderId: o.id, isRead: true, content: completedChatText(o.order_code, by) });
   const base = { type: 'OrderCompleted', title: 'Đơn dịch vụ đã hoàn thành', content: `Đơn ${o.order_code} đã hoàn thành.`, referenceType: 'Order', referenceId: o.id };
   await notify(prisma, { ...base, userId: o.weddings!.user_id! }).catch(() => undefined);
   if (by === 'SYSTEM') await notify(prisma, { ...base, content: `Đơn ${o.order_code} đã tự hoàn thành, hoa hồng của đơn đã được tính.`, userId: o.vendor_profiles!.user_id! }).catch(() => undefined);
   return true;
 }
 
-/** Đơn Deposited đã qua EventDate + 7 ngày tự hoàn thành; CompletedDate = cuối ngày đó (giờ VN) để hoa hồng vào đúng tháng. */
+/**
+ * Đơn Deposited có EventDate < hôm nay − 7 (đã quá ngày thực hiện hơn 7 ngày) tự hoàn thành; CompletedDate = cuối ngày EventDate + 7 (giờ VN)
+ * để hoa hồng vào đúng tháng. Không kiểm tra đã ghi nhận đợt 2 hay chưa.
+ */
 export async function autoComplete(prisma: PrismaService, scope: Prisma.ordersWhereInput = {}) {
-  const cutoff = new Date(`${addDaysYmd(todayVn(), -7)}T00:00:00Z`);
+  const cutoff = autoCompleteCutoff(todayVn());
   const rows = await prisma.orders.findMany({ where: { status: 'Deposited', event_date: { lt: cutoff }, ...scope }, select: { id: true, event_date: true } });
   let n = 0;
   for (const o of rows) {
-    const completedAt = endOfDayVn(addDaysYmd(ymdOf(o.event_date!), 7));
+    const completedAt = endOfDayVn(addDaysYmd(ymdOf(o.event_date!), AUTO_COMPLETE_DAYS));
     if (await completeOrder(prisma, o.id, completedAt, 'SYSTEM')) n++;
   }
   return n;

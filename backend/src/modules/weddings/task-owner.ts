@@ -54,6 +54,34 @@ export const LEGACY_OWNER: Readonly<Record<string, TaskOwner>> = {
 };
 
 /**
+ * Việc chi tiết CŨ có mốc TRƯỚC ngày thực hiện (mốc của mẫu cũ là số âm, theo dữ liệu các đơn đã cọc): ngày chốt / đổi phải trước ngày thực hiện.
+ * Việc đúng ngày (…_EVENT), sau ngày (…_PAY, PHOTO_FILES, ATTIRE_RETURN) không nằm ở đây.
+ */
+export const LEGACY_BEFORE_EVENT: ReadonlySet<string> = new Set([
+  'VENUE_HALL_CONFIRM',
+  'VENUE_TASTING',
+  'VENUE_MENU_FINAL',
+  'VENUE_EVENT_FINAL',
+  'PHOTO_CONCEPT',
+  'PHOTO_ALBUM_SHOOT',
+  'PHOTO_PICK_EDIT',
+  'PHOTO_REVIEW',
+  'PHOTO_DELIVERY_PREP',
+  'DECOR_BRIEF',
+  'DECOR_REVIEW_MOCKUP',
+  'DECOR_FINAL',
+  'ATTIRE_MEASURE',
+  'ATTIRE_ALBUM_PICKUP',
+  'ATTIRE_FIT_FIRST',
+  'ATTIRE_FIT_LAST',
+  'ATTIRE_RECEIVE',
+  'MAKEUP_TRIAL',
+  'MAKEUP_FINAL',
+  'FLOWER_PICK_STYLE',
+  'FLOWER_FINAL',
+]);
+
+/**
  * Chủ của một việc theo mã:
  * - 'PKG:<id>': owner NCC khai trong package_tasks (tra trong `pkgOwners`: package_tasks.id -> owner, nạp theo lô, gồm cả việc đã xóa mềm); thiếu thì hai bên;
  * - 'ORD:<C|V|B>:...': việc riêng NCC thêm cho đơn, chủ đọc từ chính mã;
@@ -142,6 +170,8 @@ export interface ProgressTask {
   title?: string;
   /** Todo / Waiting / Done. Có thì phía NCC = chưa Waiting; thiếu (dữ liệu cũ) thì suy theo owner */
   status?: string | null;
+  /** Việc thanh toán đợt 2 (PAY:): hạn chót là ngày thực hiện, quá hạn thì khách và NCC tự thỏa thuận nên KHÔNG tính trễ */
+  restPayment?: boolean;
 }
 
 export interface OrderProgress {
@@ -169,7 +199,7 @@ export function orderProgress(tasks: readonly ProgressTask[], today: string): Or
       continue;
     }
     p.open++;
-    const late = t.due < today;
+    const late = !t.restPayment && t.due < today;
     const vendorSide = t.status ? t.status !== 'Waiting' : t.owner !== 'CUSTOMER';
     if (vendorSide && (!p.next || t.due < p.next.due)) p.next = { due: t.due, title: t.title ?? '' };
     if (late && vendorSide) p.overdueVendor++;

@@ -1,5 +1,4 @@
 import { HttpException, Injectable } from '@nestjs/common';
-import { AiQuotaService } from '../../integrations/ai/ai-quota.service';
 import { GeminiService } from '../../integrations/ai/gemini.service';
 import { PACKAGE_STYLES, pickStyle } from '../../integrations/ai/writing-styles';
 import { Prisma } from '../../generated/prisma/client';
@@ -10,8 +9,8 @@ import { GUESTS_PER_TABLE, categorySlug, priceUnitOf } from '../catalog/services
 import { fileNameOfPath, mimeOfPath } from './vendor-files';
 import { dbFeatures, unitOf } from '../../prisma/db-features';
 import { parseTasks, syncPackageTasks, toTaskDto } from './package-tasks';
+import { applyGiftTasks, giftDescription, giftTasks, hasGift } from './venue-gift';
 import { hasChanges, livePhotos, liveSnapshot, openUpdate, UPDATE_STATUS_OUT, type PackageSnapshot } from './package-update';
-import { VENUE_SLUG, defaultOf, hm, minutesOfTime, parseDayPlan, timeOfMinutes, type DayPlanInput } from '../weddings/wedding-day';
 
 export interface SavePackageBody {
   name?: string | null;
@@ -42,7 +41,7 @@ type PackageRow = NonNullable<Awaited<ReturnType<VendorPackagesService['loadOwne
 
 @Injectable()
 export class VendorPackagesService {
-  constructor(private readonly prisma: PrismaService, private readonly storage: StorageService, private readonly gemini: GeminiService, private readonly quota: AiQuotaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly storage: StorageService, private readonly gemini: GeminiService) {}
 
   private async vendorOf(userId: string) {
     const v = await this.prisma.vendor_profiles.findUnique({
@@ -62,6 +61,10 @@ export class VendorPackagesService {
   };
 
   /** Gói thuộc NCC đang đăng nhập; không thấy hoặc của NCC khác đều là 404. */
+  private isVenue(vendor: { service_categories: { name: string } }) {
+    return categorySlug(vendor.service_categories.name) === 'nha-hang';
+  }
+
   async loadOwned(userId: string, id: string) {
     const vendor = await this.vendorOf(userId);
     const ok = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -90,6 +93,9 @@ export class VendorPackagesService {
       price: live.price,
       category: { id: category.id, slug: categorySlug(category.name), name: category.name },
       status: STATUS_OUT[p.status ?? ''] ?? 'DRAFT',
+      /** Gói đang ẩn: ai ẩn ('VENDOR' | 'ADMIN') và lý do Admin ẩn; Admin ẩn thì NCC không tự khôi phục được */
+      hiddenBy: p.status === 'Hidden' ? (p.hidden_by === 'Admin' ? 'ADMIN' : 'VENDOR') : null,
+      hiddenReason: p.status === 'Hidden' && p.hidden_by === 'Admin' ? p.hidden_reason : null,
       /** Lý do Admin yêu cầu chỉnh sửa: gói chưa đăng bị trả về, hoặc bản cập nhật của gói đã đăng bị trả về */
       reviewNote: p.status === 'NeedRevision' ? (p.package_verifications[0]?.admin_note ?? null) : upd?.status === 'NeedRevision' ? upd.admin_note : null,
       tags: live.tags,
@@ -118,14 +124,6 @@ export class VendorPackagesService {
       updatedAt: upd?.data.savedAt ?? p.updated_date?.toISOString() ?? '',
       /** Số việc NCC đã khai cho gói (chưa xóa) */
       taskCount,
-      /** Thời gian trong ngày cưới (docs/LICH_TRINH_NGAY_CUOI.md): null là chưa khai, dùng mặc định theo lĩnh vực (defaults) */
-      dayPlan: {
-        leadMinutes: p.dayof_lead_minutes,
-        durationMinutes: p.dayof_duration_minutes,
-        setupOpenTime: p.setup_open_time ? hm(minutesOfTime(p.setup_open_time)!) : null,
-        isVenue: categorySlug(category.name) === VENUE_SLUG,
-        defaults: { leadMinutes: defaultOf(categorySlug(category.name)).lead, durationMinutes: defaultOf(categorySlug(category.name)).duration },
-      },
     };
   }
 
@@ -160,28 +158,15 @@ export class VendorPackagesService {
    * đơn đã cọc không bị ảnh hưởng (chưa có chỗ nào đọc package_tasks để sinh việc).
    */
   async saveTasks(userId: string, id: string, body: { tasks?: unknown }) {
-    const { pkg } = await this.loadOwned(userId, id);
-    const { tasks, errors } = parseTasks(body?.tasks);
+    const { vendor, pkg } = await this.loadOwned(userId, id);
+    const parsed = parseTasks(body?.tasks);
+    const { errors } = parsed;
     if (errors.length) return fail('VALIDATION_ERROR', `Công việc chưa hợp lệ${errors[0].index >= 0 ? ` (dòng ${errors[0].index + 1})` : ''}: ${errors[0].message}`, 400, errors);
+    // Trung tâm tiệc cưới: việc tặng bánh cưới, tháp ly theo sức chứa của gói (venue-gift.ts)
+    const tasks = this.isVenue(vendor) ? giftTasks(parsed.tasks, hasGift(pkg.capacity)) : parsed.tasks;
     const { foreign } = await this.prisma.$transaction((tx) => syncPackageTasks(tx as never, pkg.id, tasks));
     if (foreign.length) return fail('VALIDATION_ERROR', `Công việc không thuộc gói này (dòng ${foreign[0] + 1}).`, 400, foreign.map((index) => ({ index, field: 'id', message: 'Công việc không thuộc gói này.' })));
     return this.listTasks(userId, id);
-  }
-
-  /**
-   * Thời gian trong ngày cưới của gói: có mặt trước giờ chính, làm trong bao lâu; gói sảnh thêm giờ cho đơn vị khác vào setup.
-   * Như việc của gói: không qua Admin duyệt, sửa được ở mọi trạng thái, không đổi updated_date (form gói dùng để phát hiện sửa chồng).
-   */
-  async saveDayPlan(userId: string, id: string, body: DayPlanInput) {
-    const { vendor, pkg } = await this.loadOwned(userId, id);
-    const parsed = parseDayPlan(body ?? {}, categorySlug(vendor.service_categories.name) === VENUE_SLUG);
-    if ('errors' in parsed) return fail('VALIDATION_ERROR', 'Thời gian trong ngày cưới chưa hợp lệ.', 400, parsed.errors);
-    const { lead, duration, setupOpen } = parsed.value;
-    await this.prisma.service_packages.update({
-      where: { id: pkg.id },
-      data: { dayof_lead_minutes: lead, dayof_duration_minutes: duration, setup_open_time: setupOpen === null ? null : timeOfMinutes(setupOpen) },
-    });
-    return this.get(userId, id);
   }
 
   /** Kiểm tra và chuẩn hóa dữ liệu lưu nháp. */
@@ -236,12 +221,16 @@ export class VendorPackagesService {
       return fail('VENDOR_NOT_VERIFIED', 'Hồ sơ nhà cung cấp chưa được duyệt nên chưa thêm được gói dịch vụ.', 409);
     }
     const d = this.parse(body, categorySlug(vendor.service_categories.name) === 'nha-hang', vendor.id, new Set());
+    const venue = this.isVenue(vendor);
+    // Trung tâm tiệc cưới: câu tặng bánh cưới, tháp ly trong mô tả và việc tặng theo sức chứa (venue-gift.ts)
+    if (venue) d.description = giftDescription(d.description, hasGift(d.capacity));
     const created = await this.prisma.$transaction(async (tx) => {
       const p = await tx.service_packages.create({
         data: { vendor_id: vendor.id, name: d.name, description: d.description, price: d.price, capacity: d.capacity, ...(dbFeatures.budgetTiers && { unit: d.unit }), min_tables: d.minTables, status: 'Draft' },
       });
       if (d.tags.length) await tx.package_tags.createMany({ data: d.tags.map((tag) => ({ package_id: p.id, tag })) });
       if (d.photos.length) await tx.package_albums.createMany({ data: this.albumRows(p.id, d.photos, d.cover) });
+      if (venue) await applyGiftTasks(tx, p.id, d.capacity);
       return p.id;
     });
     return this.get(userId, created);
@@ -253,18 +242,27 @@ export class VendorPackagesService {
    */
   async suggestDescription(userId: string, body: { style?: string; name?: string | null; tags?: string[]; price?: number | null; capacity?: number | null }) {
     const vendor = await this.vendorOf(userId);
-    this.quota.assertAvailable(userId);
     const style = pickStyle(PACKAGE_STYLES, body.style);
     const name = body.name?.trim() ?? '';
     const field = vendor.service_categories.name.toLowerCase();
     const tags = (body.tags ?? []).map((t) => String(t).trim()).filter(Boolean).slice(0, 5);
     const price = Number(body.price);
     const capacity = Number(body.capacity);
-    if (!name || !(tags.length || price > 0 || capacity > 0)) {
-      return fail('AI_NOT_ENOUGH_INFO', 'Hãy nhập tên gói và ít nhất một trong: giá, sức chứa, phong cách (tags) rồi mới tạo với AI, để AI có thông tin thật mà viết.', 400);
-    }
     const perTable = priceUnitOf(categorySlug(vendor.service_categories.name)) === 'TABLE';
+    if (!name || !(tags.length || price > 0 || (perTable && capacity > 0))) {
+      return fail(
+        'AI_NOT_ENOUGH_INFO',
+        perTable
+          ? 'AI chưa có đủ dữ liệu để viết. Bạn điền tên gói, rồi thêm giá mỗi bàn, sức chứa hoặc vài phong cách (tags) nhé.'
+          : 'AI chưa có đủ dữ liệu để viết. Bạn điền tên gói, rồi thêm giá hoặc vài phong cách (tags) nhé.',
+        400,
+      );
+    }
     const money = price > 0 ? `${price.toLocaleString('vi-VN')}đ${perTable ? '/bàn (mỗi bàn 10 khách)' : ''}` : null;
+    // Trung tâm tiệc cưới: câu tặng bánh cưới, tháp ly do hệ thống tự chèn theo sức chứa (venue-gift.ts), AI không tự viết về bánh, tháp ly
+    const venue = this.isVenue(vendor);
+    const gift = venue && hasGift(capacity);
+    const withGift = (text: string) => (venue ? giftDescription(text, gift) : text);
 
     const system =
       'Bạn là biên tập viên nội dung cho nền tảng đặt dịch vụ cưới Forever. Viết phần mô tả một gói dịch vụ bằng tiếng Việt, một đoạn văn liền mạch dài khoảng 50 đến 90 từ. ' +
@@ -272,7 +270,8 @@ export class VendorPackagesService {
       'BẮT BUỘC nêu cụ thể tên gói và mọi thông tin có trong dữ liệu (phong cách, sức chứa, giá). Mỗi câu phải mang ít nhất một thông tin cụ thể từ dữ liệu; không viết câu chung chung có thể áp cho gói nào cũng được. ' +
       'Giá trong dữ liệu là giá khởi điểm, không phải giá cố định: khi nhắc tới giá PHẢI viết "giá chỉ từ ..." hoặc "chỉ từ ...", tuyệt đối không viết như giá cố định (không dùng "với mức giá ...", "chi phí ...", "chỉ với ..."). ' +
       'Không mở đầu bằng lời chào. Không nhắc tên nhà cung cấp hay thương hiệu. TUYỆT ĐỐI không bịa hạng mục, quà tặng, ưu đãi, cam kết hay con số không có trong dữ liệu. ' +
-      'Không dùng markdown, tiêu đề, gạch đầu dòng, emoji hay dấu ngoặc kép. Chỉ trả về đoạn văn.';
+      'Không dùng markdown, tiêu đề, gạch đầu dòng, emoji hay dấu ngoặc kép. Chỉ trả về đoạn văn.' +
+      (venue ? ' Không nhắc tới bánh cưới, tháp ly hay quà tặng kèm: hệ thống tự thêm câu ưu đãi đó khi gói có ưu đãi.' : '');
     const prompt = [
       `Tên gói: ${name}`,
       `Lĩnh vực: ${field}`,
@@ -284,7 +283,8 @@ export class VendorPackagesService {
       .join('\n');
 
     const ai = await this.gemini.write(system, prompt);
-    if (ai) return { description: ai, aiUsed: true, ...this.quota.consume(userId) };
+    // AI vẫn lỡ nhắc bánh cưới / tháp ly thì bỏ bản AI, dùng đoạn mẫu (tránh ghi tặng cho gói không có ưu đãi, hoặc lặp câu tặng)
+    if (ai && !(venue && /bánh cưới|tháp ly/i.test(ai))) return { description: withGift(ai), aiUsed: true };
 
     const parts = [
       `${name} là gói ${field} dành cho tiệc cưới, được thiết kế gọn gàng và dễ tùy chỉnh theo nhu cầu của cặp đôi.`,
@@ -293,7 +293,7 @@ export class VendorPackagesService {
       price > 0 ? `Giá từ ${price.toLocaleString('vi-VN')}đ, có thể điều chỉnh theo yêu cầu cụ thể.` : null,
       'Liên hệ để được tư vấn chi tiết và nhận báo giá phù hợp.',
     ];
-    return { description: parts.filter(Boolean).join(' '), aiUsed: false, ...this.quota.status(userId) };
+    return { description: withGift(parts.filter(Boolean).join(' ')), aiUsed: false };
   }
 
   /**
@@ -308,6 +308,8 @@ export class VendorPackagesService {
     if (pkg.status === 'Hidden') return fail('PACKAGE_NOT_EDITABLE', 'Gói đang ẩn. Khôi phục gói trước khi cập nhật.', 409);
     if (!EDITABLE.includes(pkg.status ?? '')) return fail('PACKAGE_NOT_EDITABLE', 'Gói đang chờ duyệt, không thể chỉnh sửa.', 409);
     const d = this.parse(body, categorySlug(vendor.service_categories.name) === 'nha-hang', vendor.id, new Set(livePhotos(pkg)));
+    const venue = this.isVenue(vendor);
+    if (venue) d.description = giftDescription(d.description, hasGift(d.capacity));
     const dropped = livePhotos(pkg).filter((u) => !d.photos.includes(u) && u.startsWith(`vendors/${vendor.id}/`));
 
     await this.prisma.$transaction([
@@ -320,6 +322,7 @@ export class VendorPackagesService {
       this.prisma.package_albums.deleteMany({ where: { package_id: id } }),
       this.prisma.package_albums.createMany({ data: this.albumRows(id, d.photos, d.cover) }),
     ]);
+    if (venue) await this.prisma.$transaction((tx) => applyGiftTasks(tx, id, d.capacity));
     await this.storage.remove(ALBUM_BUCKET, dropped);
     return this.get(userId, id);
   }
@@ -330,6 +333,8 @@ export class VendorPackagesService {
     if (upd?.status === 'Pending') return fail('PACKAGE_NOT_EDITABLE', 'Bản cập nhật đang chờ duyệt, không thể chỉnh sửa.', 409);
     const live = new Set(livePhotos(pkg));
     const d = this.parse(body, categorySlug(vendor.service_categories.name) === 'nha-hang', vendor.id, new Set([...live, ...(upd?.data.photos ?? [])]));
+    // Bản cập nhật chờ duyệt: mô tả theo sức chứa mới; việc tặng đổi khi Admin duyệt (admin-reviews.service.ts)
+    if (this.isVenue(vendor)) d.description = giftDescription(d.description, hasGift(d.capacity));
     const snapshot: PackageSnapshot = {
       name: d.name,
       description: d.description,
@@ -449,7 +454,13 @@ export class VendorPackagesService {
     const { pkg } = await this.loadOwned(userId, id);
     if (pkg.status !== from) return fail('CONFLICT', message, 409);
     if (openUpdate(pkg)?.status === 'Pending') return fail('CONFLICT', 'Gói đang chờ duyệt bản cập nhật, không thể ẩn lúc này.', 409);
-    await this.prisma.service_packages.update({ where: { id }, data: { status: to } });
+    if (from === 'Hidden' && pkg.hidden_by === 'Admin') {
+      return fail('PACKAGE_HIDDEN_BY_ADMIN', 'Gói do Admin ẩn nên bạn không tự khôi phục được. Vui lòng liên hệ Forever.', 409);
+    }
+    await this.prisma.service_packages.update({
+      where: { id },
+      data: { status: to, hidden_by: to === 'Hidden' ? 'Vendor' : null, hidden_reason: null, updated_date: new Date() },
+    });
     return this.get(userId, id);
   }
 

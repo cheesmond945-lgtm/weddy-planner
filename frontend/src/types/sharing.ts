@@ -1,6 +1,6 @@
 /* Hợp đồng: docs/api/sharing.md */
 import type { CategoryRef, ServiceSummary } from './catalog'
-import type { Budget, GuestList, Overview, PlanItemStatus, PlanTab, TimelineItem } from './wedding'
+import type { Budget, Overview, PlanItemStatus, PlanTab, TimelineItem } from './wedding'
 
 export interface ShareLink {
   enabled: boolean
@@ -26,7 +26,6 @@ export type PublicTabData = {
   timeline: { items: TimelineItem[] }
   services: PublicServices
   budget: Omit<Budget, 'version'>
-  guests: GuestList
 }
 
 export type { CategoryRef }

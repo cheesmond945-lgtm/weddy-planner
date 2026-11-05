@@ -7,10 +7,6 @@
 export const IMPORT_MAX_ROWS = 500;
 
 export type DateOrder = 'DMY' | 'MDY';
-export type Side = 'Bride' | 'Groom';
-export type Rsvp = 'Pending' | 'Attending' | 'Declined';
-
-export const GUEST_GROUPS = ['Gia đình', 'Họ hàng', 'Bạn bè', 'Đồng nghiệp', 'Khác'];
 
 /** Bỏ dấu tiếng Việt, viết thường, gộp khoảng trắng: "  Nhà  Gái " -> "nha gai". */
 export const fold = (s: string) =>
@@ -90,102 +86,12 @@ export function canBeMonthFirst(values: unknown[]): boolean {
   return secondOver12;
 }
 
-/** Bên: "Nhà gái", "Gái", "Cô dâu", "CD", "Bride" -> Bride; "Nhà trai", "Trai", "Chú rể", "CR", "Groom" -> Groom. */
-export function parseSide(v: unknown): Side | null {
-  const s = fold(str(v));
-  if (['nha gai', 'gai', 'co dau', 'cd', 'bride', 'ben gai', 'ben co dau'].includes(s)) return 'Bride';
-  if (['nha trai', 'trai', 'chu re', 'cr', 'groom', 'ben trai', 'ben chu re'].includes(s)) return 'Groom';
-  return null;
-}
-
-/** Nhóm: khớp một nhóm có sẵn (bỏ dấu), nếu không thì giữ chữ người dùng nhập (tối đa 30 ký tự). Trống là "Khác". */
-export function parseGroup(v: unknown): string | null {
-  const s = str(v).replace(/\s+/g, ' ');
-  if (!s) return 'Khác';
-  const known = GUEST_GROUPS.find((g) => fold(g) === fold(s));
-  if (known) return known;
-  return s.length <= 30 ? s : null;
-}
-
-/** Có/không: "x", "có", "rồi", "đã mời", "yes", "true", "1" là có; trống, "không", "chưa", "no", "0" là không. */
-export function parseBool(v: unknown): boolean | null {
-  if (typeof v === 'boolean') return v;
-  const s = fold(str(v));
-  if (['x', 'co', 'roi', 'da moi', 'yes', 'y', 'true', '1', 'v', '✓'].includes(s)) return true;
-  if (['', 'khong', 'chua', 'chua moi', 'no', 'n', 'false', '0'].includes(s)) return false;
-  return null;
-}
-
-/** Phản hồi: "Sẽ đến", "Đến", "Có" -> Attending; "Từ chối", "Không đến" -> Declined; trống, "Chưa phản hồi" -> Pending. */
-export function parseRsvp(v: unknown): Rsvp | null {
-  const s = fold(str(v));
-  if (['', 'chua phan hoi', 'chua', 'pending', 'cho'].includes(s)) return 'Pending';
-  if (['se den', 'den', 'co', 'co den', 'tham du', 'attending', 'yes'].includes(s)) return 'Attending';
-  if (['tu choi', 'khong den', 'khong', 'vang', 'declined', 'no'].includes(s)) return 'Declined';
-  return null;
-}
-
-/** Số người: số nguyên 1-50, trống là 1. */
-export function parsePartySize(v: unknown): number | null {
-  const s = str(v);
-  if (!s) return 1;
-  const n = Number(s);
-  return Number.isInteger(n) && n >= 1 && n <= 50 ? n : null;
-}
-
 export interface RowResult<T> {
   /** Số thứ tự dòng trong file (bắt đầu từ 1, không tính dòng tiêu đề) */
   row: number;
   value: T | null;
   errors: string[];
   warnings: string[];
-}
-
-export interface GuestRow {
-  fullName: string;
-  side: Side;
-  group: string;
-  partySize: number;
-  isInvited: boolean;
-  rsvp: Rsvp;
-}
-
-/** Khóa so trùng khách: tên bỏ dấu + bên. */
-export const guestKey = (name: string, side: Side) => `${fold(name)}|${side}`;
-
-/** Kiểm tra từng dòng khách. `existing`: khóa của khách đã có (bỏ qua khi thay toàn bộ). Trùng trong file cũng báo lỗi. */
-export function normalizeGuests(rows: Record<string, unknown>[], existing: Set<string>): RowResult<GuestRow>[] {
-  const seen = new Set<string>();
-  return rows.map((r, i) => {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const fullName = str(r.name).replace(/\s+/g, ' ');
-    if (!fullName) errors.push('Thiếu tên khách.');
-    else if (fullName.length > 100) errors.push('Tên khách tối đa 100 ký tự.');
-    const side = parseSide(r.side);
-    if (!side) errors.push(str(r.side) ? `Không hiểu bên "${str(r.side)}" (dùng Nhà trai hoặc Nhà gái).` : 'Thiếu bên (Nhà trai hoặc Nhà gái).');
-    const group = parseGroup(r.group);
-    if (group === null) errors.push('Nhóm tối đa 30 ký tự.');
-    const partySize = parsePartySize(r.partySize);
-    if (partySize === null) errors.push('Số người là số nguyên từ 1 đến 50.');
-    let isInvited = parseBool(r.invited);
-    if (isInvited === null) errors.push(`Không hiểu cột Đã mời "${str(r.invited)}".`);
-    let rsvp = parseRsvp(r.rsvp);
-    if (rsvp === null) errors.push(`Không hiểu phản hồi "${str(r.rsvp)}".`);
-    // Có phản hồi thì coi như đã mời
-    if (rsvp && rsvp !== 'Pending' && isInvited === false) {
-      isInvited = true;
-      warnings.push('Có phản hồi nên tính là đã mời.');
-    }
-    if (fullName && side) {
-      const key = guestKey(fullName, side);
-      if (seen.has(key)) errors.push('Trùng với một dòng phía trên.');
-      else if (existing.has(key)) errors.push('Đã có trong danh sách khách.');
-      seen.add(key);
-    }
-    const ok = !errors.length;
-    return { row: i + 1, errors, warnings, value: ok ? { fullName, side: side!, group: group!, partySize: partySize!, isInvited: isInvited!, rsvp: rsvp! } : null };
-  });
 }
 
 export interface TaskRow {

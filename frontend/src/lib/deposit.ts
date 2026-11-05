@@ -18,3 +18,10 @@ export function depositOf(total: number, percent: number): number {
 
 /** Tổng đơn quá nhỏ để đặt cọc: tiền cọc (đã làm tròn, tối thiểu) không nhỏ hơn tổng đơn. */
 export const isDepositTooLarge = (total: number, percent: number) => total > 0 && percent > 0 && percent < 100 && depositOf(total, percent) >= total
+
+/** Lỗi tỷ lệ cọc (số nguyên từ 10 đến 99); đúng thì undefined. Ô trống hoặc chữ (giá trị 0 / NaN) cũng là lỗi. */
+export function depositPercentError(percent: number): string | undefined {
+  if (!Number.isFinite(percent) || percent === 0) return `Nhập tỷ lệ cọc từ ${DEPOSIT_PERCENT_MIN} đến 99 (%).`
+  if (!Number.isInteger(percent) || percent < DEPOSIT_PERCENT_MIN || percent >= 100) return `Tỷ lệ cọc là số nguyên từ ${DEPOSIT_PERCENT_MIN} đến 99 (%).`
+  return undefined
+}

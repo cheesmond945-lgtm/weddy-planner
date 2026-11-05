@@ -150,6 +150,14 @@ Role: ADMIN. Chỉ Admin ẩn / hiện lại hồ sơ, NCC không có nút nào.
 - `unhide`: `Hidden` về `Approved`, gói hiển thị lại như cũ. Báo NCC (`VendorUnhidden`). Lỗi 409 `VENDOR_NOT_HIDDEN`.
 - Khi hồ sơ `Hidden`: NCC vẫn đăng nhập, xử lý đơn đã cọc, hoa hồng; không sửa hồ sơ (409 `VENDOR_PROFILE_HIDDEN`), không ẩn / khôi phục gói (409 `VENDOR_HIDDEN`), không gửi đơn mới; khách không đặt cọc được đơn chưa cọc (409 `VENDOR_HIDDEN`). Cần ràng buộc DB `vendor_profiles_status_check` có `'Hidden'` (xem `backend/prisma/manual/2026-10-vendor-profile-hidden.sql`).
 
+### POST /admin/packages/:id/hide và /unhide
+Role: ADMIN.
+
+- `hide` body `{ "reason": string }` (bắt buộc, tối đa 1000 ký tự): gói `PUBLISHED` sang `HIDDEN`, lưu `hidden_by = 'Admin'` và `hidden_reason`. Báo NCC kèm lý do (`PackageHidden`). Lỗi 400 `VALIDATION_ERROR` (thiếu lý do), 409 `PACKAGE_NOT_HIDEABLE` (gói không ở `PUBLISHED`).
+- `unhide`: `HIDDEN` về `PUBLISHED`, xóa `hidden_by` / `hidden_reason`. Khôi phục được cả gói NCC tự ẩn. Báo NCC (`PackageUnhidden`). Lỗi 409 `PACKAGE_NOT_HIDDEN`.
+- Response 200: `{ "data": AdminPackage }`, có thêm `hiddenBy` (`ADMIN` | `VENDOR` | null) và `hiddenReason`.
+- Gói do Admin ẩn thì NCC gọi `POST /vendors/me/packages/:id/republish` bị 409 `PACKAGE_HIDDEN_BY_ADMIN`; chỉ Admin khôi phục.
+
 ## Cần chốt
 
 1. Xóa người dùng đã có dữ liệu (đơn, hội thoại): cho xóa cứng, hay chỉ cho khóa? FE đang cho xóa, BE trả `USER_HAS_DATA` nếu không xóa được.

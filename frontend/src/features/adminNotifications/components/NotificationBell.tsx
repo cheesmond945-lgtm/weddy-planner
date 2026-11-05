@@ -6,8 +6,8 @@ import { useAdminNotifications, useReadAllNotifications, useReadNotification } f
 
 const ICON: Record<string, LucideIcon> = { NewConsultationRequest: Inbox, VendorSubmitted: ClipboardCheck, VendorUpdated: ClipboardCheck, PackageSubmitted: Package, CommissionReceived: Wallet, CommissionOverdue: Wallet, CommissionLockable: Lock }
 
-/** Trang và bộ lọc mà thông báo dẫn tới, để Admin xử lý ngay. */
-function targetOf(n: AdminNotification) {
+/** Trang và bộ lọc mà thông báo dẫn tới, để Admin xử lý ngay; loại khác chỉ để đọc. */
+function targetOf(n: AdminNotification): string | null {
   switch (n.type) {
     case 'NewConsultationRequest':
       // Chuyển đúng bộ lọc theo trạng thái hiện tại của yêu cầu (đã liên hệ hay chưa, kết quả đánh giá, lĩnh vực) và làm nổi bật yêu cầu đó
@@ -26,7 +26,7 @@ function targetOf(n: AdminNotification) {
     case 'CommissionLockable':
       return paths.admin.users
     default:
-      return paths.admin.dashboard
+      return null
   }
 }
 

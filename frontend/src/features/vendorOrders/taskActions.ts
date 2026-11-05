@@ -232,12 +232,12 @@ export function useRestAction() {
         const res = received ? await vendorOrdersApi.recordRestPayment(orderId) : await vendorOrdersApi.clearRestPayment(orderId)
         patchOrderRest(qc, uid, orderId, () => res.restPayment)
         refreshProgressLater(qc, uid)
-        toast(received ? `Đã ghi nhận nhận đủ tiền mặt cho đơn ${code}.` : `Đã bỏ ghi nhận tiền mặt của đơn ${code}.`)
+        toast(received ? `Đã ghi nhận nhận đủ tiền cho đơn ${code}.` : `Đã bỏ ghi nhận đã nhận tiền của đơn ${code}.`)
         return true
       } catch (e) {
         if (restBefore) patchOrderRest(qc, uid, orderId, () => restBefore)
         if (payId && prevPay) patchTaskEverywhere(qc, uid, orderId, payId, prevPay)
-        toast(errorText(e, 'Không cập nhật được tiền mặt.'))
+        toast(errorText(e, 'Không cập nhật được việc nhận tiền.'))
         return false
       } finally {
         setPending(key, false)

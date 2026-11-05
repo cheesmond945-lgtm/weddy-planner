@@ -10,7 +10,7 @@ export interface HueOrder {
   id: string
   /** Mã đơn DH<yyMM><4 số>: tăng theo thời điểm tạo (id là UUID ngẫu nhiên nên không dùng để sắp được) */
   orderCode: string
-  /** Đơn đang theo dõi (chờ cọc, chờ chỉnh sửa, đã cọc): được chia màu trước đơn đã xong / đã hủy */
+  /** Đơn đang theo dõi (đã cọc, còn việc): được chia màu trước đơn đã xong / đã hủy */
   active?: boolean
 }
 

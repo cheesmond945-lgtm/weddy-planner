@@ -54,6 +54,24 @@ const PREFIX_LEN = ORD_PREFIX.length;
 export const pkgTaskIdOf = (code: string | null | undefined) => (code?.startsWith(PKG_PREFIX) ? code.slice(PKG_PREFIX.length).split(':')[0] : null);
 export const isOrderTaskCode = (code: string | null | undefined) => !!code && (code.startsWith(PKG_PREFIX) || code.startsWith(PAY_PREFIX));
 
+/**
+ * Việc mẫu (khung) khách đã xóa: giữ dòng, đổi task_code thành 'DEL:<mã>' (CSDL chỉ cho task_type Frame / Detail) để lưu lại
+ * thông tin đám cưới không sinh lại việc đó; timeline, nhắc việc, đổi ngày cưới đều bỏ qua dòng này. Việc khách tự thêm thì xóa hẳn.
+ */
+export const REMOVED_PREFIX = 'DEL:';
+export const removedCode = (code: string) => `${REMOVED_PREFIX}${code}`.slice(0, 50);
+export const isRemovedCode = (code: string | null | undefined) => !!code?.startsWith(REMOVED_PREFIX);
+/** Mã mẫu gốc của dòng (bỏ tiền tố DEL:), để kiểm "đã có việc này" khi sinh khung. */
+export const baseCode = (code: string) => (isRemovedCode(code) ? code.slice(REMOVED_PREFIX.length) : code);
+
+/**
+ * Việc sinh từ mẫu của một hạng mục khách đã bỏ khỏi "Dịch vụ muốn sử dụng": ẩn khỏi timeline và nhắc việc, KHÔNG xóa,
+ * để chọn lại hạng mục thì việc (cả việc đã tích) hiện lại như cũ. Việc gắn đơn và việc khách tự thêm luôn hiện.
+ * `active`: hạng mục đang chọn (và hạng mục còn đơn hiệu lực).
+ */
+export const hiddenByCategory = (t: { task_code: string | null; order_id: string | null; category_id: string | null }, active: ReadonlySet<string>) =>
+  t.task_code !== null && !t.order_id && !!t.category_id && !active.has(t.category_id);
+
 /** Việc khung: Tự làm của "Chung" và Tự làm / Chọn NCC / Mốc chốt của các hạng mục đã chọn, hạn tính từ ngày cưới. */
 export function frameRows(templates: readonly TimelineTemplate[], input: { weddingId: string; wedding: string; today: string; services: readonly ServiceRef[] }): TaskRow[] {
   const plan = planFrame(templates, { wedding: input.wedding, today: input.today, services: input.services.map((s) => s.key) });
@@ -101,7 +119,7 @@ const PKG_DISPLAY_ORDER = 100;
 
 /**
  * Việc chi tiết của một đơn vừa đặt cọc: mỗi việc trong gói (mọi gói của đơn gộp lại, đúng thứ tự đưa vào) cộng một việc thanh toán phần còn lại.
- * Hạn tính bằng planPackageTasks từ D, E, I; thanh toán = max(E + 7, hạn lớn nhất của việc gói). Bỏ qua mã đã có (chạy lại không sinh trùng).
+ * Hạn tính bằng planPackageTasks từ D, E, I; thanh toán = đúng ngày thực hiện E (hạn chót khách phải trả, trả sớm lúc nào cũng được). Bỏ qua mã đã có (chạy lại không sinh trùng).
  * `vendorProcessMissing`: đơn không có việc nào của gói (không gắn gói, hoặc gói chưa khai việc): chỉ sinh việc thanh toán.
  */
 export function orderTaskRows(input: {
@@ -130,11 +148,10 @@ export function orderTaskRows(input: {
     task_code: pkgCode(t.id, input.orderId),
     display_order: PKG_DISPLAY_ORDER + i,
   }));
-  const last = plan.tasks.reduce((m, p) => (p.date > m ? p.date : m), '');
   rows.push({
     ...base,
     title: `Thanh toán phần còn lại cho ${input.vendorName.trim() || 'nhà cung cấp'}`,
-    scheduled_date: asDate(payDate(input.ctx.event, last)),
+    scheduled_date: asDate(payDate(input.ctx.event)),
     status: 'Waiting',
     task_code: payCode(input.orderId),
     display_order: PAY_DISPLAY_ORDER,
@@ -142,10 +159,12 @@ export function orderTaskRows(input: {
   return { rows: rows.filter((r) => !have.has(r.task_code)), vendorProcessMissing: input.tasks.length === 0 };
 }
 
-/** Hạn thanh toán phần còn lại: sau ngày thực hiện 7 ngày, và không sớm hơn việc cuối của gói. */
-export function payDate(event: string, lastPackageDate: string): string {
-  const e7 = new Date(Date.parse(`${event}T00:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
-  return lastPackageDate > e7 ? lastPackageDate : e7;
+/**
+ * Hạn thanh toán phần còn lại = đúng ngày thực hiện: hạn chót khách phải trả cho NCC (trả sớm lúc nào cũng được).
+ * Quá hạn thì khách và NCC tự thỏa thuận, hệ thống không quản lý trả muộn.
+ */
+export function payDate(event: string): string {
+  return event;
 }
 
 export interface OrderTaskState {
@@ -177,18 +196,15 @@ export function replanOrderTasks(input: { ctx: { today: string; event: string; d
   const locked = (t: OrderTaskState) => t.status === 'Done' || t.confirmed;
 
   const updates: { id: string; date: string }[] = [];
-  const final: string[] = [];
   const needsRecheck: string[] = [];
   for (const p of pkg) {
     const date = locked(p.t) ? p.t.date : planned.get(p.pid)!;
-    final.push(date);
     if (!locked(p.t) && date !== p.t.date) updates.push({ id: p.t.id, date });
     if (p.t.confirmed && p.offsetDays < 0 && p.t.date > input.ctx.event) needsRecheck.push(p.t.id);
   }
-  const last = final.reduce((m, d) => (d > m ? d : m), '');
   for (const t of input.tasks) {
     if (!t.code.startsWith(PAY_PREFIX) || locked(t)) continue;
-    const date = payDate(input.ctx.event, last);
+    const date = payDate(input.ctx.event);
     if (date !== t.date) updates.push({ id: t.id, date });
   }
   return { updates, needsRecheck };

@@ -1,4 +1,4 @@
-import { AlertTriangle, Info, Lock, LockOpen, PiggyBank, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, Info, LoaderCircle, Lock, LockOpen, PiggyBank, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import { MoneyInput } from '@/components/MoneyInput'
 import { Button } from '@/components/ui/button'
@@ -168,6 +168,7 @@ export function BudgetSplitPanel({
   const clamped = many ? clampToMax(st!.items, markers) : null
   // Quỹ dư: mọi dịch vụ đúng gói đắt nhất, phần còn lại ở Dự phòng
   const filled = roomy && clamped ? setReserve(clamped, 0, markers).items : null
+  const openingCustom = settings.isPending && settings.variables?.budgetPreset === 'CUSTOM'
 
   return (
     <section ref={panelRef} className="mb-5 flex flex-col gap-4 rounded-lg border border-line bg-surface px-[22px] py-5">
@@ -189,14 +190,16 @@ export function BudgetSplitPanel({
           )}
         </div>
         <div className={cn('flex flex-col items-end gap-1.5', surplus && 'hidden')}>
+          {/* Vào Tùy chỉnh mất vài giây (backend tính lại cả bảng): nút quay vòng và đổi chữ để khách biết đang xử lý */}
           <Button
-            variant={custom ? 'default' : 'outline'}
+            variant={custom || openingCustom ? 'default' : 'outline'}
             size="sm"
             disabled={settings.isPending || custom}
-            onClick={() => settings.mutate({ budgetPreset: 'CUSTOM' })}
+            aria-busy={openingCustom}
+            onClick={() => settings.mutate({ budgetPreset: 'CUSTOM' }, { onSuccess: () => toast('Đã chuyển sang Tùy chỉnh. Kéo hoặc nhập % cho từng dịch vụ bên dưới.') })}
           >
-            <SlidersHorizontal />
-            {custom ? 'Đang Tùy chỉnh' : 'Tùy chỉnh'}
+            {openingCustom ? <LoaderCircle className="animate-spin" /> : <SlidersHorizontal />}
+            {custom ? 'Đang Tùy chỉnh' : openingCustom ? 'Đang mở Tùy chỉnh…' : 'Tùy chỉnh'}
           </Button>
           {custom ? (
             <>
@@ -204,7 +207,7 @@ export function BudgetSplitPanel({
               <SaveStatus status={split.status} unsaved={split.unsaved} />
             </>
           ) : (
-            settings.isPending && <span className="text-[12px] text-muted-foreground">Đang đổi mức chia…</span>
+            settings.isPending && !openingCustom && <span className="text-[12px] text-muted-foreground">Đang đổi mức chia…</span>
           )}
         </div>
       </div>

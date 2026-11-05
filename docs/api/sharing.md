@@ -23,7 +23,7 @@ Response 200: `ShareLink`.
 ### PUT /weddings/me/share-link
 Body `{ "enabled"?: boolean, "tabs"?: PlanTab[] }` (ít nhất 1 tab; mặc định Tổng quan, Timeline, Dịch vụ). Tab nào cũng tắt được, kể cả Tổng quan. Chưa có link thì tạo (mặc định bật). Response 200: `ShareLink`. Lỗi: 400 `VALIDATION_ERROR`.
 
-`PlanTab`: `overview`, `timeline`, `services`, `budget`, `guests`.
+`PlanTab`: `overview`, `timeline`, `services`, `budget` (tab `guests` đã bỏ 04/11/2026).
 
 ### POST /weddings/me/share-link/regenerate
 Tạo mã mới, giữ trạng thái bật/tắt và tab. Link cũ trả 404 ngay. Response 201: `ShareLink`.
@@ -51,7 +51,6 @@ Giới hạn 60 lần/phút (`GET :token`) và 120 lần/phút (`GET :token/:tab
 | `timeline` | `{ items }` như `GET /weddings/me/timeline`, **bỏ ghi chú** (`note: null`) |
 | `services` | `{ categorySlugs, items: [{ id, service, status, packageName, price }] }`; không có đơn, gói đổi được. `price` là `null` khi tab Ngân sách không được chia sẻ |
 | `budget` | Như `GET /weddings/me/budget`, không có `version` |
-| `guests` | Như `GET /weddings/me/guests` |
 
 Không bao giờ trả: tin nhắn, đơn hàng, thanh toán, email, ghi chú việc.
 

@@ -1,9 +1,8 @@
-import { Brush, Camera, Flower2, Landmark, Shirt, Sparkles, UtensilsCrossed, type LucideIcon, type LucideProps } from 'lucide-react'
+import { Brush, Camera, Flower2, Landmark, Shirt, Sparkles, type LucideIcon, type LucideProps } from 'lucide-react'
 
 // Mỗi danh mục một icon riêng, nét mảnh đồng bộ
 const ICON_BY_SLUG: Record<string, LucideIcon> = {
   'nha-hang': Landmark,
-  'co-cuoi': UtensilsCrossed,
   decor: Sparkles,
   'hoa-cuoi': Flower2,
   'trang-phuc': Shirt,
@@ -15,7 +14,6 @@ const ICON_BY_SLUG: Record<string, LucideIcon> = {
 // Màu theo danh mục (c trong CATS của prototype), trỏ tới token --c1…--c6
 const COLOR_BY_SLUG: Record<string, string> = {
   'nha-hang': 'var(--c1)',
-  'co-cuoi': 'var(--c1)',
   decor: 'var(--c2)',
   'hoa-cuoi': 'var(--c2)',
   'trang-phuc': 'var(--c3)',

@@ -22,6 +22,9 @@ export function useAfterAuth() {
       return
     }
 
+    // Trang định vào thuộc khu NCC/Admin (vd của tài khoản trước) thì bỏ, cặp đôi về trang của mình
+    if (redirectTo && /^\/(vendor|admin)(\/|$)/.test(redirectTo)) redirectTo = null
+
     // Đang ở trang /login, /register, /forgot-password riêng thì phải rời trang để thấy giao diện cặp đôi
     const onAuthPage = [paths.login, paths.register, paths.forgotPassword].includes(window.location.pathname as never)
     if (redirectTo) navigate(redirectTo)

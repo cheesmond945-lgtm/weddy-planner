@@ -6,15 +6,13 @@ import { notify } from '../chat/chat-messages';
 import { publish } from '../realtime/realtime.bus';
 import { CALENDAR_MAX_DAYS, calendarItems } from '../weddings/calendar-items';
 import { MAX_TASKS_PER_PACKAGE, MIN_OFFSET } from '../vendors/package-tasks';
-import { loadPackageMeta, ownersFrom, packagesOfOrder, type PackageTaskMeta } from '../weddings/package-task-meta';
+import { isBeforeEvent, loadPackageMeta, ownersFrom, packagesOfOrder, type PackageTaskMeta } from '../weddings/package-task-meta';
 import { dmyOf, orderProgress, ownerOf } from '../weddings/task-owner';
 import { initialStatus, isCustomOrderTaskCode, ordCode, ordCodeWithOwner, PKG_PREFIX, pkgTaskIdOf, taskTitle } from '../weddings/timeline-rows';
-import { hm, instantOf, localOf, minutesFrom, plannedOf, slotRangeIssue } from '../weddings/wedding-day';
-import { loadWeddingDay, slotDto, venueDto } from '../weddings/wedding-day-store';
 import { DelayedNotices } from './delayed-notice';
 import { OrderJobsService } from './order-jobs.service';
-import { notifyRestReceived } from './order-lifecycle';
-import { applyRestReceived, isRestPayCode, recordsRestPayment, type RestDb } from './rest-payment';
+import { notifyRestCleared, notifyRestReceived } from './order-lifecycle';
+import { applyRestReceived, clearRestGate, isRestPayCode, recordsRestPayment, type RestDb } from './rest-payment';
 import { checkVendorTaskEdit, dateStatusOf, editOrderTaskIssue, isYmd, parseNewOrderTask, parseOrderTaskPatch, parseStatusBody, removeOrderTaskIssue, scheduleDateIssue, type RuleError } from './order-task-rules';
 import { UUID, fail, todayVn, ymdOf } from './order-rules';
 
@@ -71,8 +69,7 @@ export class OrderTasksService {
     const owner = ownerOf(t.task_code, ownersFrom(ctx.meta));
     const due = t.scheduled_date ? ymdOf(t.scheduled_date) : '';
     const done = t.status === 'Done';
-    const pid = pkgTaskIdOf(t.task_code);
-    const before = pid ? (ctx.meta.get(pid)?.offsetDays ?? 0) < 0 : false;
+    const before = isBeforeEvent(t.task_code, ctx.meta);
     return {
       id: t.id,
       title: t.title ?? '',
@@ -84,11 +81,13 @@ export class OrderTasksService {
       /** NCC đổi được trạng thái việc này (mọi việc chi tiết của đơn mình) */
       canTick: true,
       isPackageTask: !!t.task_code?.startsWith(PKG_PREFIX),
+      /** Việc của gói có mốc trước ngày thực hiện: ngày chốt / đổi phải trước ngày thực hiện */
+      beforeEvent: before,
       /** Việc riêng NCC thêm cho đúng đơn này ('ORD:'), không thuộc gói */
       isCustomOrderTask: isCustomOrderTaskCode(t.task_code),
       /** Việc "Thanh toán phần còn lại" (PAY:): Done = NCC đã nhận đủ tiền mặt (ghi nhận đợt 2) */
       isRestPayment: isRestPayCode(t.task_code),
-      overdue: !done && !!due && due < ctx.today,
+      overdue: !done && !!due && due < ctx.today && !isRestPayCode(t.task_code),
       ...dateStatusOf(t.task_confirmations?.confirmed_date, t.task_confirmations?.confirmed_at, { due, event: ctx.event, isPackageBefore: before }),
     };
   }
@@ -118,11 +117,11 @@ export class OrderTasksService {
       select: { order_id: true, task_code: true, title: true, scheduled_date: true, status: true },
     });
     const owners = ownersFrom(await loadPackageMeta(this.prisma, rows.map((t) => t.task_code)));
-    const by = new Map<string, { due: string; done: boolean; owner: ReturnType<typeof ownerOf>; title: string; status: string | null }[]>();
+    const by = new Map<string, { due: string; done: boolean; owner: ReturnType<typeof ownerOf>; title: string; status: string | null; restPayment: boolean }[]>();
     for (const r of rows) {
       if (!r.order_id || !r.scheduled_date) continue;
       const list = by.get(r.order_id) ?? [];
-      list.push({ due: ymdOf(r.scheduled_date), done: r.status === 'Done', owner: ownerOf(r.task_code, owners), title: r.title ?? '', status: r.status });
+      list.push({ due: ymdOf(r.scheduled_date), done: r.status === 'Done', owner: ownerOf(r.task_code, owners), title: r.title ?? '', status: r.status, restPayment: isRestPayCode(r.task_code) });
       by.set(r.order_id, list);
     }
     return Object.fromEntries([...by].map(([id, tasks]) => [id, orderProgress(tasks, today)]));
@@ -155,7 +154,7 @@ export class OrderTasksService {
   }
 
   /**
-   * Lịch làm việc của NCC trong khoảng [from, to] (tối đa CALENDAR_MAX_DAYS ngày): ngày thực hiện của các đơn đang chờ cọc / đã cọc / hoàn thành
+   * Lịch làm việc của NCC trong khoảng [from, to] (tối đa CALENDAR_MAX_DAYS ngày): ngày thực hiện của các đơn đã cọc / hoàn thành
    * và việc chi tiết của đơn đã cọc. Gom thành danh sách theo ngày ở weddings/calendar-items.ts.
    */
   async calendar(userId: string, from: unknown, to: unknown) {
@@ -174,14 +173,16 @@ export class OrderTasksService {
         select: { id: true, task_code: true, title: true, scheduled_date: true, status: true, task_confirmations: { select: { task_id: true } }, orders: { select: orderSel } },
       }),
     ]);
-    const owners = ownersFrom(await loadPackageMeta(this.prisma, tasks.map((t) => t.task_code)));
+    const meta = await loadPackageMeta(this.prisma, tasks.map((t) => t.task_code));
+    const owners = ownersFrom(meta);
+    const beforeOf = (code: string | null) => isBeforeEvent(code, meta);
     const asOrder = (o: (typeof orders)[number]) => ({ id: o.id, code: o.order_code ?? '', status: o.status ?? '', eventDate: o.event_date ? ymdOf(o.event_date) : '', customerName: o.customer_name ?? '' });
     return {
       items: calendarItems({
         orders: orders.map(asOrder),
         tasks: tasks
           .filter((t) => t.orders && t.scheduled_date)
-          .map((t) => ({ id: t.id, code: t.task_code, title: t.title ?? '', due: ymdOf(t.scheduled_date!), done: t.status === 'Done', status: t.status, confirmed: !!t.task_confirmations, owner: ownerOf(t.task_code, owners), order: asOrder(t.orders!) })),
+          .map((t) => ({ id: t.id, code: t.task_code, title: t.title ?? '', due: ymdOf(t.scheduled_date!), done: t.status === 'Done', status: t.status, confirmed: !!t.task_confirmations, owner: ownerOf(t.task_code, owners), beforeEvent: beforeOf(t.task_code), order: asOrder(t.orders!) })),
         from,
         to,
         today: todayVn(),
@@ -364,6 +365,14 @@ export class OrderTasksService {
     const coupleId = order.weddings?.user_id ?? null;
     let row: TaskRow = task;
 
+    // Kéo việc thanh toán đợt 2 ra khỏi Done = bỏ ghi nhận tiền mặt: cùng luật với nút "Bỏ ghi nhận" (đã có hóa đơn cuối thì 409)
+    const unrecording = isRestPayCode(task.task_code) && task.status === 'Done' && next !== 'Done';
+    if (unrecording) {
+      const final = await this.prisma.invoices.findFirst({ where: { order_id: order.id, type: 'FinalInvoice' }, select: { invoice_code: true } });
+      const blocked = clearRestGate(final?.invoice_code ?? null);
+      if (blocked) return throwRule(blocked);
+    }
+
     if (recordsRestPayment(task.task_code, next) && order.event_date) {
       const changed = await applyRestReceived(this.prisma as unknown as RestDb, { id: order.id, wedding_id: order.wedding_id, category_id: order.vendor_profiles?.category_id ?? null, event_date: order.event_date, vendorName }, now);
       row = { ...task, status: 'Done', completed_date: task.status === 'Done' ? task.completed_date : now };
@@ -382,6 +391,10 @@ export class OrderTasksService {
       this.later('thông báo đổi trạng thái', async () => {
         this.publishTask(userId, order, task.id);
         if (!coupleId) return;
+        if (unrecording) {
+          await notifyRestCleared(this.prisma, { orderId: order.id, taskId: task.id, orderCode: order.order_code, coupleUserId: coupleId, vendorUserId: userId, vendorName, amount: Number(order.total_amount) - Number(order.deposit_amount) });
+          return;
+        }
         // Chuyển sang "chờ khách": báo khách; cùng việc chỉ báo một lần mỗi 24 giờ (chống spam khi kéo thả qua lại)
         if (next === 'Waiting' && was !== 'Waiting') {
           const recent = await this.prisma.notifications.count({ where: { user_id: coupleId, type: 'TaskWaiting', reference_type: 'TimelineTask', reference_id: task.id, created_date: { gte: new Date(Date.now() - 24 * 3600_000) } } });
@@ -407,7 +420,8 @@ export class OrderTasksService {
   async confirmSchedule(userId: string, orderId: string, taskId: string, date?: unknown, opts: { undo?: boolean; confirmed?: boolean } = {}) {
     const { order, vendorName, task, ctx } = await this.editableTask(userId, orderId, taskId);
     const target = date === undefined || date === null ? (task.scheduled_date ? ymdOf(task.scheduled_date) : '') : date;
-    const issue = opts.undo ? (isYmd(target) ? null : scheduleDateIssue(target, { today: ctx.today, event: ctx.event })) : scheduleDateIssue(target, { today: ctx.today, event: ctx.event });
+    const beforeEvent = isBeforeEvent(task.task_code, ctx.meta);
+    const issue = opts.undo ? (isYmd(target) ? null : scheduleDateIssue(target, { today: ctx.today, event: ctx.event, beforeEvent })) : scheduleDateIssue(target, { today: ctx.today, event: ctx.event, beforeEvent });
     if (issue) return throwRule(issue);
 
     const day = new Date(`${target as string}T00:00:00Z`);
@@ -444,81 +458,4 @@ export class OrderTasksService {
     this.later('realtime bỏ chốt', async () => void this.publishTask(userId, order, task.id));
     return { item: this.rowOf({ ...task, task_confirmations: null }, ctx) };
   }
-
-  // ---------- Giờ có mặt ngày cưới (docs/LICH_TRINH_NGAY_CUOI.md) ----------
-
-  /**
-   * Lịch trình ngày cưới nhìn từ một đơn: chỉ đơn Đã cọc / Hoàn thành làm ĐÚNG ngày cưới (applicable = false kèm lý do nếu không).
-   * Trả khung của đơn (đã chốt hoặc dự kiến), khung dự kiến theo gói (để điền sẵn khi chốt), giờ sảnh mở, và khung của các NCC khác
-   * (chỉ lĩnh vực và giờ, không lộ tên NCC khác).
-   */
-  private async daySlotOf(order: { id: string; status: string | null; event_date: Date | null; wedding_id: string | null }) {
-    if (order.status !== 'Deposited' && order.status !== 'Completed') return { applicable: false as const, reason: 'NOT_ACTIVE', message: 'Giờ có mặt ngày cưới có sau khi khách đặt cọc.' };
-    const day = order.wedding_id ? await loadWeddingDay(this.prisma, order.wedding_id) : null;
-    if (!day) return { applicable: false as const, reason: 'NO_WEDDING_DATE', message: 'Khách chưa có ngày cưới.' };
-    const event = order.event_date ? ymdOf(order.event_date) : '';
-    if (event !== day.date) {
-      return { applicable: false as const, reason: 'NOT_WEDDING_DAY', message: `Đơn thực hiện ngày ${dmyOf(event)}, không phải ngày cưới ${dmyOf(day.date)}, nên không nằm trong lịch trình ngày cưới.` };
-    }
-    const slot = day.plan.slots.find((s) => s.orderId === order.id)!;
-    const input = day.orders.find((o) => o.orderId === order.id)!;
-    const planned = day.plan.mainTime === null ? null : plannedOf(input, day.plan.mainTime);
-    return {
-      applicable: true as const,
-      date: day.date,
-      mainTime: day.plan.mainTime === null ? null : hm(day.plan.mainTime),
-      slot: slotDto(day.date, slot),
-      planned: planned && { start: localOf(day.date, planned.start), end: localOf(day.date, planned.end), source: planned.source },
-      venue: venueDto(day.plan),
-      others: day.plan.slots
-        .filter((s) => s.orderId !== order.id)
-        .map((s) => ({ categoryName: s.categoryName, isVenue: s.isVenue, start: s.start === null ? null : localOf(day.date, s.start), end: s.end === null ? null : localOf(day.date, s.end), confirmed: s.source === 'CONFIRMED' })),
-      canEdit: order.status === 'Deposited',
-    };
-  }
-
-  async daySlot(userId: string, orderId: string) {
-    const { order } = await this.ownedOrder(userId, orderId);
-    return this.daySlotOf(order);
-  }
-
-  /** Đơn đang thực hiện, làm đúng ngày cưới: trả ngày cưới (409 nếu không). */
-  private async editableDay(userId: string, orderId: string) {
-    const { vendor, order } = await this.ownedOrder(userId, orderId);
-    if (order.status !== 'Deposited') return fail('ORDER_NOT_ACTIVE', 'Chỉ chốt giờ cho đơn đang thực hiện (đã cọc).', 409);
-    const info = await this.daySlotOf(order);
-    if (!info.applicable) return fail('NOT_WEDDING_DAY', info.message, 409);
-    return { vendor, order, date: info.date };
-  }
-
-  /** NCC chốt giờ có mặt / xong việc ({ start, end } giờ VN "YYYY-MM-DDTHH:mm", từ hôm trước đến hết ngày cưới). Khách được báo. */
-  async confirmDaySlot(userId: string, orderId: string, body: { start?: unknown; end?: unknown }) {
-    const { vendor, order, date } = await this.editableDay(userId, orderId);
-    const start = minutesFrom(date, body.start);
-    const end = minutesFrom(date, body.end);
-    const issue = slotRangeIssue(start, end);
-    if (issue) return fail('VALIDATION_ERROR', issue, 400);
-    await this.prisma.orders.update({ where: { id: order.id }, data: { dayof_start_at: instantOf(date, start!), dayof_end_at: instantOf(date, end!), dayof_confirmed_at: new Date() } });
-    const coupleId = this.publishTask(userId, order, order.id);
-    if (coupleId) {
-      await notify(this.prisma, {
-        userId: coupleId,
-        type: 'DaySlotConfirmed',
-        title: 'Nhà cung cấp đã xác nhận giờ có mặt',
-        content: `${vendor.business_name ?? 'Nhà cung cấp'} có mặt ${hm(start!)}${start! < 0 ? ' (tối hôm trước)' : ''} đến ${hm(end!)} ngày cưới ${dmyOf(date)} (đơn ${order.order_code ?? ''}).`,
-        referenceType: 'Order',
-        referenceId: order.id,
-      }).catch(() => undefined);
-    }
-    return this.daySlotOf(order);
-  }
-
-  /** Bỏ chốt giờ có mặt: về giờ dự kiến theo giờ chính và gói. */
-  async clearDaySlot(userId: string, orderId: string) {
-    const { order } = await this.editableDay(userId, orderId);
-    await this.prisma.orders.update({ where: { id: order.id }, data: { dayof_start_at: null, dayof_end_at: null, dayof_confirmed_at: null } });
-    this.publishTask(userId, order, order.id);
-    return this.daySlotOf(order);
-  }
 }
-

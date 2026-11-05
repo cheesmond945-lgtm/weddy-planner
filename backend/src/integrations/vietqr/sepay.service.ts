@@ -74,13 +74,15 @@ export class SepayService {
   }
 
   /**
-   * Tìm giao dịch tiền vào có nội dung chứa `content` và số tiền đúng bằng `amount` mà chưa dùng cho khoản nào.
+   * Tìm giao dịch tiền vào có nội dung chứa `content` (hoặc một trong các nội dung nếu truyền mảng) và số tiền đúng bằng `amount`
+   * mà chưa dùng cho khoản nào.
    * Trả null nếu chưa thấy.
    */
-  async findPayment(content: string, amount: number): Promise<SepayTxn | null> {
-    const need = matchKey(content);
+  async findPayment(content: string | readonly string[], amount: number): Promise<SepayTxn | null> {
+    const needs = (Array.isArray(content) ? content : [content]).map(matchKey);
     for (const t of await this.recent()) {
-      if (Math.round(t.amount) !== Math.round(amount) || !normalizeContent(t.content).includes(need)) continue;
+      const text = normalizeContent(t.content);
+      if (Math.round(t.amount) !== Math.round(amount) || !needs.some((need) => text.includes(need))) continue;
       if (await this.isUsed(t.id)) continue;
       return t;
     }

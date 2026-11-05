@@ -1,9 +1,7 @@
-import { Bell, Handshake, LogOut, MessageCircle, UserRound } from 'lucide-react'
+import { Bell, Handshake, LogOut, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router'
 import { PartnerRegistrationDialog } from '@/features/partnerRegistration/components/PartnerRegistrationDialog'
 import { cn } from '@/lib/utils'
-import { paths } from '@/routes/paths'
 import type { SessionUser } from '@/types/auth'
 
 /** Nút "Đăng ký hợp tác": mở form đăng ký tư vấn cho nhà cung cấp muốn làm đối tác (yêu cầu hiện ở trang Yêu cầu hợp tác của Admin). */
@@ -52,18 +50,15 @@ function initials(name: string) {
   return (first + last).toUpperCase()
 }
 
-/** Avatar chữ cái đầu kèm chấm xanh đang hoạt động; bấm mở menu Thông tin cá nhân / Tin nhắn / Đăng xuất. */
+/** Avatar chữ cái đầu kèm chấm xanh đang hoạt động; bấm mở menu Thông tin cá nhân / Đăng xuất. */
 export function UserMenu({
   user,
   onProfile,
   onLogout,
-  unreadMessages,
 }: {
   user: SessionUser
   onProfile?: () => void
   onLogout: () => void
-  /** Số tin NCC chưa đọc; truyền vào (kể cả 0) thì hiện mục Tin nhắn, chỉ dùng cho cặp đôi */
-  unreadMessages?: number
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -118,23 +113,6 @@ export function UserMenu({
               <UserRound />
               Thông tin cá nhân
             </button>
-          )}
-          {unreadMessages !== undefined && (
-            <Link
-              to={paths.chat}
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              className={cn(item, 'text-ink hover:bg-accent-soft hover:text-gold')}
-              aria-label={unreadMessages ? `Tin nhắn, ${unreadMessages} chưa đọc` : 'Tin nhắn'}
-            >
-              <MessageCircle />
-              Tin nhắn
-              {unreadMessages > 0 && (
-                <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-pill bg-notify px-1.5 text-[11px] leading-none font-bold text-white">
-                  {unreadMessages > 99 ? '99+' : unreadMessages}
-                </span>
-              )}
-            </Link>
           )}
           <button
             type="button"

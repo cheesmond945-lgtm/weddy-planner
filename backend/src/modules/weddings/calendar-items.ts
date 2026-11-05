@@ -27,6 +27,8 @@ export interface CalendarTask {
   status?: string | null;
   /** NCC đã chốt ngày (có dòng task_confirmations) */
   confirmed?: boolean;
+  /** Việc của gói có mốc trước ngày thực hiện */
+  beforeEvent?: boolean;
   /** Chủ việc đã tra theo package_tasks (việc 'PKG:<id>'); thiếu thì suy từ mã */
   owner?: TaskOwner;
   /** Đơn đang giữ việc */
@@ -37,9 +39,10 @@ export type CalendarItem =
   /** Ngày thực hiện của một đơn (chờ cọc, chờ chỉnh sửa, đã cọc, hoàn thành) */
   | { kind: 'ORDER'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; status: string; isDone: boolean }
   /** Việc chi tiết của đơn đã cọc */
-  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isRestPayment: boolean; isPackageTask: boolean; isCustomOrderTask: boolean; isDone: boolean; status: 'Todo' | 'Waiting' | 'Done'; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean };
+  | { kind: 'TASK'; id: string; orderId: string; orderCode: string; customerName: string; title: string; date: string; eventDate: string; isRestPayment: boolean; isPackageTask: boolean; beforeEvent: boolean; isCustomOrderTask: boolean; isDone: boolean; status: 'Todo' | 'Waiting' | 'Done'; dateStatus: 'PLANNED' | 'CONFIRMED'; owner: TaskOwner; canTick: boolean; overdue: boolean };
 
-const ORDER_STATUSES = ['Pending', 'NeedRevision', 'Deposited', 'Completed'];
+// Chỉ đơn đã cọc (đang làm) và đã hoàn thành: đơn chờ cọc, chờ chỉnh sửa, hủy, hết hạn chưa chắc NCC làm nên không vào lịch
+const ORDER_STATUSES = ['Deposited', 'Completed'];
 
 const ORDER_TITLE: Record<string, (code: string) => string> = {
   Pending: (c) => `Đơn ${c} (chờ cọc)`,
@@ -77,6 +80,7 @@ export function calendarItems(input: { orders: readonly CalendarOrder[]; tasks: 
       eventDate: t.order.eventDate,
       isRestPayment: !!t.code?.startsWith('PAY:'),
       isPackageTask: !!t.code?.startsWith('PKG:'),
+      beforeEvent: !!t.beforeEvent,
       isCustomOrderTask: isCustomOrderTaskCode(t.code),
       isDone: t.done,
       status: t.done ? 'Done' : t.status === 'Waiting' ? 'Waiting' : 'Todo',
@@ -84,7 +88,7 @@ export function calendarItems(input: { orders: readonly CalendarOrder[]; tasks: 
       owner,
       /** NCC đổi được trạng thái mọi việc chi tiết của đơn mình */
       canTick: true,
-      overdue: !t.done && t.due < today,
+      overdue: !t.done && t.due < today && !t.code?.startsWith('PAY:'),
     });
   }
 

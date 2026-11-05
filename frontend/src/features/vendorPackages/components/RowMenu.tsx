@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
-export type RowMenuItem = { label: string; icon: LucideIcon; onClick: () => void; danger?: boolean; /** Có thì mục bị mờ, lý do hiện ở tooltip */ disabled?: string } | 'separator'
+export type RowMenuItem = { label: string; icon: LucideIcon; onClick: () => void; danger?: boolean; /** Có thì mục bị mờ, lý do hiện thành chữ dưới tên mục */ disabled?: string } | 'separator'
 
 const WIDTH = 210
 
@@ -103,7 +103,11 @@ export function RowMenu({ label, items, compact }: { label: string; items: RowMe
                   )}
                 >
                   <it.icon />
-                  {it.label}
+                  <span className="min-w-0">
+                    {it.label}
+                    {/* Lý do khóa hiện sẵn thành chữ (điện thoại không có tooltip) */}
+                    {it.disabled && <span className="mt-0.5 block text-[11.5px] leading-snug whitespace-normal text-muted-foreground">{it.disabled}</span>}
+                  </span>
                 </button>
               ),
             )}

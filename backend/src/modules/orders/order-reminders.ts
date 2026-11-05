@@ -2,8 +2,10 @@ import type { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
 import { loadPackageMeta, ownersFrom } from '../weddings/package-task-meta';
+import { hiddenByCategory, isRemovedCode } from '../weddings/timeline-rows';
 import { DUE_SOON_DAYS, OVERDUE_MAX_DAYS, UNCONFIRMED_DAYS, dmyOf, ownerOf, reminderStage, remindersFor, taskDigest } from '../weddings/task-owner';
 import { addDaysYmd, startOfDayVn, todayVn, ymdOf } from './order-rules';
+import { isRestPayCode } from './rest-payment';
 
 /*
  * Nhắc hạn việc chi tiết của đơn đã cọc (docs/TIMELINE.md mục 8.2). Idempotent: mỗi (người nhận, việc, loại nhắc, hạn) chỉ một thông báo,
@@ -50,6 +52,8 @@ export async function remindTaskDeadlines(prisma: PrismaService, scope: Prisma.o
     const due = ymdOf(t.scheduled_date);
     const stage = reminderStage(due, today);
     if (!stage) continue;
+    // Đợt 2 (PAY:): sắp đến hạn thì nhắc, quá hạn thì không (khách và NCC tự thỏa thuận trả muộn)
+    if (stage === 'OVERDUE' && isRestPayCode(t.task_code)) continue;
     const reminders = remindersFor({ title: t.title ?? '', orderCode: o.order_code ?? '', vendorName: o.vendor_profiles?.business_name ?? '', due, owner: ownerOf(t.task_code, owners), status: t.status === 'Waiting' ? 'Waiting' : 'Todo' }, stage);
     for (const r of reminders) {
       const userId = r.to === 'COUPLE' ? o.weddings?.user_id : o.vendor_profiles?.user_id;
@@ -126,7 +130,21 @@ export async function remindFrameTasks(prisma: PrismaService, coupleId?: string,
       scheduled_date: { gte: from, lte: to },
       weddings: { is: coupleId ? { user_id: coupleId } : {} },
     },
-    select: { title: true, scheduled_date: true, wedding_id: true, weddings: { select: { user_id: true } } },
+    select: {
+      title: true,
+      scheduled_date: true,
+      wedding_id: true,
+      task_code: true,
+      order_id: true,
+      category_id: true,
+      weddings: {
+        select: {
+          user_id: true,
+          wedding_categories: { select: { category_id: true } },
+          orders: { where: { status: { notIn: ['Cancelled', 'Draft'] } }, select: { vendor_profiles: { select: { category_id: true } } } },
+        },
+      },
+    },
     orderBy: [{ scheduled_date: 'asc' }, { id: 'asc' }],
     skip,
     take,
@@ -135,6 +153,12 @@ export async function remindFrameTasks(prisma: PrismaService, coupleId?: string,
   for (const r of rows) {
     const userId = r.weddings?.user_id;
     if (!userId || !r.scheduled_date || !r.wedding_id) continue;
+    // Việc khách đã xóa, việc của hạng mục khách đã bỏ chọn (đang ẩn trên timeline): không nhắc (như TimelineService.get)
+    const active = new Set([
+      ...(r.weddings?.wedding_categories.map((c) => c.category_id) ?? []),
+      ...(r.weddings?.orders.flatMap((o) => (o.vendor_profiles?.category_id ? [o.vendor_profiles.category_id] : [])) ?? []),
+    ]);
+    if (isRemovedCode(r.task_code) || hiddenByCategory(r, active)) continue;
     const entry = byUser.get(userId) ?? { weddingId: r.wedding_id, tasks: [] };
     entry.tasks.push({ title: r.title ?? '', due: ymdOf(r.scheduled_date) });
     byUser.set(userId, entry);

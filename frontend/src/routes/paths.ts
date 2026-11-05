@@ -5,20 +5,21 @@ export const paths = {
   // Phía cặp đôi (theo prototype)
   services: '/',
   serviceDetail: (id: string | number) => `/services/${id}`,
-  /** Trang Timeline (cách xem theo thời gian / dịch vụ / lịch) */
-  timeline: '/timeline',
+  /** Timeline: tab trong Kế hoạch của tôi (cạnh Tổng quan); link cũ /timeline chuyển về đây */
+  timeline: '/plan/timeline',
   favorites: '/favorites',
   compare: '/favorites/compare',
   /** Kế hoạch của tôi: vào /plan thì chuyển sang subtab Tổng quan */
   plan: '/plan',
   planTab: {
     overview: '/plan/tong-quan',
+    timeline: '/plan/timeline',
     services: '/plan/dich-vu',
     budget: '/plan/ngan-sach',
-    guests: '/plan/khach-moi',
   },
-  deal: (id: string | number) => `/plan/deal/${id}`,
   chat: '/chat',
+  /** Tài khoản của tôi (cặp đôi) */
+  account: '/account',
   /** Xem kế hoạch qua link công khai */
   publicPlanTab: (token: string, tab: string) => `/xem/${token}/${tab}`,
 
@@ -36,6 +37,7 @@ export const paths = {
     packageNew: '/vendor/catalog/new',
     package: (id: string) => `/vendor/catalog/${id}`,
     orders: '/vendor/orders',
+    order: (id: string) => `/vendor/orders/${encodeURIComponent(id)}`,
     calendar: '/vendor/calendar',
     chat: '/vendor/chat',
     commissions: '/vendor/commissions',
@@ -57,8 +59,6 @@ export const paths = {
     users: '/admin/users',
     account: '/admin/account',
   },
-
-  forbidden: '/403',
 } as const
 
 /** Trang đầu tiên của từng role sau khi đăng nhập. */

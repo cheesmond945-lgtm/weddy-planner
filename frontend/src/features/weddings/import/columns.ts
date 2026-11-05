@@ -13,14 +13,6 @@ export interface ImportField {
 }
 
 export const IMPORT_FIELDS: Record<ImportType, ImportField[]> = {
-  guests: [
-    { key: 'name', label: 'Tên khách', required: true, synonyms: ['ten khach', 'ten', 'ho ten', 'ho va ten', 'khach', 'khach moi', 'name', 'full name'] },
-    { key: 'side', label: 'Bên', required: true, synonyms: ['ben', 'nha', 'phia', 'side', 'nha trai/nha gai'] },
-    { key: 'group', label: 'Nhóm', synonyms: ['nhom', 'quan he', 'moi quan he', 'group'] },
-    { key: 'partySize', label: 'Số người', synonyms: ['so nguoi', 'so luong', 'sl', 'so khach', 'di cung', 'nguoi', 'party size'] },
-    { key: 'invited', label: 'Đã mời', synonyms: ['da moi', 'moi', 'gui thiep', 'da gui thiep', 'invited'] },
-    { key: 'rsvp', label: 'Phản hồi', synonyms: ['phan hoi', 'tham du', 'xac nhan', 'tra loi', 'rsvp'] },
-  ],
   tasks: [
     { key: 'title', label: 'Việc', required: true, synonyms: ['viec', 'ten viec', 'cong viec', 'noi dung', 'task', 'title'] },
     { key: 'dueDate', label: 'Hạn', required: true, synonyms: ['han', 'han chot', 'ngay', 'deadline', 'han hoan thanh', 'due date', 'due'] },

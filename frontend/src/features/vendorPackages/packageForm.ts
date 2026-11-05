@@ -55,8 +55,9 @@ export function toRequest(v: PackageFormValues, venue: boolean): SavePackageRequ
     price: v.price,
     tags: v.tags,
     capacity: venue && v.capacity.trim() ? Number(v.capacity) : null,
-    unit: venue ? v.unit : 'PACKAGE',
-    minTables: venue && v.unit === 'TABLE' && v.minTables.trim() ? Number(v.minTables) : null,
+    // Trung tâm tiệc cưới luôn tính theo bàn, hạng mục khác luôn trọn gói (form không cho chọn)
+    unit: venue ? 'TABLE' : 'PACKAGE',
+    minTables: venue && v.minTables.trim() ? Number(v.minTables) : null,
     photos: v.photos,
     // Ảnh đầu tiên là ảnh đại diện của gói
     coverPublicId: v.photos[0]?.publicId ?? null,
@@ -90,7 +91,7 @@ export function validatePackage(v: PackageFormValues, opts: { mode: 'draft' | 's
       errors.minTables = `Sảnh ${v.capacity} khách chứa tối đa ${Math.floor(Number(v.capacity) / GUESTS_PER_TABLE)} bàn.`
     }
   }
-  if (opts.venue && v.unit === 'TABLE' && v.minTables.trim() && !(Number.isInteger(Number(v.minTables)) && Number(v.minTables) >= 1 && Number(v.minTables) <= 500)) {
+  if (opts.venue && v.minTables.trim() && !(Number.isInteger(Number(v.minTables)) && Number(v.minTables) >= 1 && Number(v.minTables) <= 500)) {
     errors.minTables = 'Số bàn tối thiểu là số nguyên từ 1 đến 500.'
   }
   if (opts.mode === 'draft') return errors

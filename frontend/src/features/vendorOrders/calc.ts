@@ -3,6 +3,8 @@ import { formatDate } from '@/lib/date'
 import { paths } from '@/routes/paths'
 import type { Order, OrderContent, OrderItemInput, OrderRevision, OrderUnit } from '@/types/vendorOrder'
 import { CANCEL_REASON, CHANGE_LABEL } from './constants'
+import { dayAfter } from './dayAfter'
+import { isPaidInFull } from './restPayment'
 
 /** Hạng mục đang nhập trong form: có thêm `key` để React theo dõi dòng. */
 export interface FormItem extends OrderItemInput {
@@ -43,7 +45,7 @@ export function valuesOfOrder(o: Order): OrderFormValues {
     eventDate: o.eventDate,
     note: o.note,
     depositPercent: o.depositPercent,
-    items: withKeys(o.items.map(({ itemName, unit, quantity, unitPrice, packageId }) => ({ itemName, unit, quantity, unitPrice, packageId: packageId ?? null }))),
+    items: withKeys(o.items.map(({ id, itemName, unit, quantity, unitPrice, packageId }) => ({ id, itemName, unit, quantity, unitPrice, packageId: packageId ?? null }))),
     packageId: o.package?.id ?? null,
   }
 }
@@ -54,6 +56,8 @@ export function valuesOfOrder(o: Order): OrderFormValues {
  */
 export function valuesFromOrder(o: Order): OrderFormValues {
   const v = valuesOfOrder(o)
+  // Đơn mới: dòng mới hoàn toàn, không mang id dòng của đơn cũ
+  v.items = v.items.map(({ id: _id, ...rest }) => rest)
   const today = todayVN()
   const wedding = o.weddingDate && o.weddingDate > today ? o.weddingDate : ''
   const ok = v.eventDate >= today && (!o.weddingDate || v.eventDate <= o.weddingDate)
@@ -68,7 +72,7 @@ export function toContent(v: OrderFormValues): OrderContent {
     eventDate: v.eventDate,
     note: v.note?.trim() || null,
     depositPercent: v.depositPercent,
-    items: filledItems(v.items).map(({ itemName, unit, quantity, unitPrice, packageId }) => ({ itemName: itemName.trim(), unit, quantity, unitPrice, packageId: packageId ?? null })),
+    items: filledItems(v.items).map(({ id, itemName, unit, quantity, unitPrice, packageId }) => ({ ...(id && { id }), itemName: itemName.trim(), unit, quantity, unitPrice, packageId: packageId ?? null })),
     packageId: v.packageId ?? null,
   }
 }
@@ -76,8 +80,8 @@ export function toContent(v: OrderFormValues): OrderContent {
 /** Hai giá trị form có cùng nội dung không (bỏ khoảng trắng thừa, dòng trống). */
 export const sameValues = (a: OrderFormValues, b: OrderFormValues) => JSON.stringify(toContent(a)) === JSON.stringify(toContent(b))
 
-/** Trang Quản lý đơn hàng, mở sẵn đơn. */
-export const orderPageHref = (orderId: string) => `${paths.vendor.orders}?order=${encodeURIComponent(orderId)}`
+/** Trang chi tiết một đơn của NCC. */
+export const orderPageHref = (orderId: string) => paths.vendor.order(orderId)
 
 const VN_FORMAT = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 
@@ -142,6 +146,9 @@ export const canCancel = (o: Pick<Order, 'status' | 'eventDate'>) => o.status ==
 /** Đã qua ngày diễn ra sự kiện (giờ Việt Nam): được đánh dấu hoàn thành. */
 export const eventPassed = (o: Pick<Order, 'eventDate'>) => todayVN() > o.eventDate
 
+/** Dòng chữ hiện sẵn khi nút Hoàn tất bị khóa vì chưa qua ngày thực hiện. */
+export const completeFromText = (o: Pick<Order, 'eventDate'>) => `Hoàn tất được từ ${formatDate(dayAfter(o.eventDate))}`
+
 /** Dòng gợi ý việc cần làm cho NCC (docs/api/THE_DON_HANG.md mục 4). */
 export function orderHint(o: Order): { text: string; tone: 'info' | 'warn' | 'ok' } {
   const req = openRevision(o)
@@ -157,7 +164,9 @@ export function orderHint(o: Order): { text: string; tone: 'info' | 'warn' | 'ok
     case 'Deposited':
       if (req) return { text: `Khách yêu cầu chỉnh sửa (tiền cọc giữ nguyên): ${[changesLabel(req), req.requestNote].filter(Boolean).join(' · ')}`, tone: 'warn' }
       return {
-        text: eventPassed(o) ? 'Đã qua ngày thực hiện. Bấm Hoàn tất khi đã xong dịch vụ.' : `Đã nhận cọc. Thực hiện ngày ${formatDate(o.eventDate)}.`,
+        text: eventPassed(o)
+          ? 'Đã qua ngày thực hiện. Bấm Hoàn tất khi đã xong dịch vụ.'
+          : `${isPaidInFull(o) ? 'Đã thanh toán đủ.' : 'Đã nhận cọc.'} Thực hiện ngày ${formatDate(o.eventDate)}. ${completeFromText(o)}.`,
         tone: eventPassed(o) ? 'warn' : 'ok',
       }
     case 'Completed':

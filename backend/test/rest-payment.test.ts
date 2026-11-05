@@ -30,10 +30,6 @@ function fakeDb(rows: Row[]) {
         const w = (args as { where: { order_id: string; task_code: string } }).where;
         return rows.find((r) => r.order_id === w.order_id && r.task_code === w.task_code) ?? null;
       },
-      async findMany(args) {
-        const w = (args as { where: { order_id: string } }).where;
-        return rows.filter((r) => r.order_id === w.order_id).map((r) => ({ scheduled_date: r.scheduled_date }));
-      },
       async create({ data }) {
         created.push(data);
         rows.push({ id: `new${created.length}`, order_id: data.order_id as string, task_code: data.task_code as string, status: data.status as string, completed_date: data.completed_date as Date, scheduled_date: data.scheduled_date as Date });
@@ -95,7 +91,7 @@ describe('ghi nhận / bỏ ghi nhận', () => {
     assert.equal(rows[0].completed_date, first);
   });
 
-  it('thiếu việc PAY (đơn cũ): tự tạo giống lúc cọc, đã Done, hạn = max(E+7, hạn lớn nhất)', async () => {
+  it('thiếu việc PAY (đơn cũ): tự tạo giống lúc cọc, đã Done, hạn = đúng ngày thực hiện', async () => {
     const other: Row = { id: 'x', order_id: ORDER, task_code: 'ATTIRE_FIT_FIRST', status: 'Todo', completed_date: null, scheduled_date: new Date('2027-01-20T00:00:00Z') };
     const { db, rows, created } = fakeDb([other]);
     assert.equal(await applyRestReceived(db, order(), NOW), true);
@@ -107,11 +103,11 @@ describe('ghi nhận / bỏ ghi nhận', () => {
     assert.equal(c.order_id, ORDER);
     assert.equal(c.task_type, 'Detail');
     assert.equal(c.title, 'Thanh toán phần còn lại cho White Rose Bridal');
-    assert.equal((c.scheduled_date as Date).toISOString().slice(0, 10), '2027-01-20'); // việc cuối 20/01 > E+7 = 13/01
-    // không có việc nào khác: hạn = E + 7
+    assert.equal((c.scheduled_date as Date).toISOString().slice(0, 10), '2027-01-06'); // việc cuối 20/01 không đẩy hạn: hạn = ngày thực hiện
+    // không có việc nào khác: hạn vẫn là ngày thực hiện
     const bare = fakeDb([]);
     await applyRestReceived(bare.db, order(), NOW);
-    assert.equal((bare.created[0].scheduled_date as Date).toISOString().slice(0, 10), '2027-01-13');
+    assert.equal((bare.created[0].scheduled_date as Date).toISOString().slice(0, 10), '2027-01-06');
   });
 
   it('đơn không có đám cưới thì không tạo được việc', async () => {

@@ -1,3 +1,4 @@
+import { normalizePhone, PHONE_MESSAGE, VN_PHONE_RE } from '../../common/phone.ts';
 import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -25,7 +26,7 @@ const fail = (code: string, message: string, status: number, details?: unknown):
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
 };
 
-const PHONE_RE = /^0\d{9}$/;
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const OTP_TTL_MS = 5 * 60_000;
 const RESEND_AFTER_MS = 60_000;
@@ -149,12 +150,12 @@ export class AuthService {
   async register(body: { name?: string; phone?: string; email?: string; password?: string }) {
     this.sweep();
     const name = body.name?.trim() ?? '';
-    const phone = body.phone?.trim() || null;
+    const phone = normalizePhone(body.phone) || null;
     const email = body.email?.trim().toLowerCase() ?? '';
     const password = body.password ?? '';
     const errors: Record<string, string> = {};
     if (!name) errors.name = 'Vui lòng nhập họ và tên.';
-    if (phone && !PHONE_RE.test(phone)) errors.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.';
+    if (phone && !VN_PHONE_RE.test(phone)) errors.phone = PHONE_MESSAGE;
     if (!EMAIL_RE.test(email)) errors.email = 'Email chưa hợp lệ.';
     if (password.length < 6) errors.password = 'Mật khẩu cần tối thiểu 6 ký tự.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Thông tin đăng ký chưa hợp lệ.', 400, errors);
@@ -265,8 +266,8 @@ export class AuthService {
       data.username = username;
     }
     if (body.phone !== undefined) {
-      const phone = body.phone?.trim() || null;
-      if (phone && !PHONE_RE.test(phone)) errors.phone = 'Số điện thoại cần 10 số, bắt đầu bằng 0.';
+      const phone = normalizePhone(body.phone) || null;
+      if (phone && !VN_PHONE_RE.test(phone)) errors.phone = PHONE_MESSAGE;
       else if (phone && (await this.prisma.users.findFirst({ where: { phone_number: phone, id: { not: userId } } }))) errors.phone = 'Số điện thoại đã được sử dụng.';
       data.phone_number = phone;
     }

@@ -24,7 +24,7 @@ export function AuthDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[470px] rounded-[20px] px-6 py-8 sm:px-10">
+      <DialogContent bare className="max-w-[470px] px-6 py-8 sm:px-10">
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">
           {mode === 'login' ? 'Đăng nhập bằng email' : 'Đăng ký tài khoản cặp đôi'}

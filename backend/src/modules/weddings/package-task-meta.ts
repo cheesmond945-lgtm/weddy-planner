@@ -1,5 +1,5 @@
 import type { PrismaService } from '../../prisma/prisma.service';
-import type { TaskOwner } from './task-owner.ts';
+import { LEGACY_BEFORE_EVENT, type TaskOwner } from './task-owner.ts';
 import { pkgTaskIdOf } from './timeline-rows.ts';
 
 /** Gói của đơn: sảnh của đơn (orders.package_id, chỉ Trung tâm tiệc cưới) hợp với gói của từng dòng hạng mục (order_items.package_id); bỏ null, bỏ trùng. */
@@ -23,6 +23,16 @@ export async function loadPackageMeta(prisma: Pick<PrismaService, 'package_tasks
   if (!ids.length) return new Map();
   const rows = await prisma.package_tasks.findMany({ where: { id: { in: ids } }, select: { id: true, owner: true, offset_days: true } });
   return new Map(rows.map((r) => [r.id, { owner: r.owner as TaskOwner, offsetDays: r.offset_days }]));
+}
+
+/**
+ * Việc phải xong TRƯỚC ngày thực hiện (không chọn trùng hoặc sau ngày thực hiện): việc của gói có mốc âm, hoặc việc chi tiết cũ có mốc trước ngày thực hiện.
+ * Việc riêng NCC thêm cho đơn (ORD:), thanh toán (PAY:) và việc đúng ngày / sau ngày thì không.
+ */
+export function isBeforeEvent(code: string | null | undefined, meta: ReadonlyMap<string, PackageTaskMeta>): boolean {
+  const pid = pkgTaskIdOf(code);
+  if (pid) return (meta.get(pid)?.offsetDays ?? 0) < 0;
+  return !!code && LEGACY_BEFORE_EVENT.has(code);
 }
 
 /** Chỉ phần owner của loadPackageMeta, để truyền cho ownerOf(code, owners). */

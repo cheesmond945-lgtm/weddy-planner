@@ -19,6 +19,9 @@ export interface VendorPackage extends ServicePackage {
   status: PackageStatus
   /** Lý do Admin yêu cầu chỉnh sửa (gói NEEDS_REVISION, hoặc bản cập nhật NEEDS_REVISION của gói đã đăng) */
   reviewNote: string | null
+  /** Gói HIDDEN: ai ẩn. Admin ẩn thì NCC không tự khôi phục được, hiddenReason là lý do Admin nhập */
+  hiddenBy?: 'ADMIN' | 'VENDOR' | null
+  hiddenReason?: string | null
   /**
    * Bản cập nhật của gói đã đăng (hoặc đang ẩn). Các trường của gói vẫn là bản khách đang thấy;
    * bản này chỉ thay vào khi Admin duyệt. null: không có bản cập nhật.
@@ -38,25 +41,7 @@ export interface VendorPackage extends ServicePackage {
   updatedAt: string
   /** Số công việc NCC đã khai cho gói (chưa xóa). API NCC luôn trả; bản Admin dựng lại gói thì không có */
   taskCount?: number
-  /** Thời gian trong ngày cưới (docs/LICH_TRINH_NGAY_CUOI.md). API NCC luôn trả; bản Admin dựng lại gói thì không có */
-  dayPlan?: PackageDayPlan
 }
-
-/** Thời gian NCC cần trong ngày cưới, khai theo gói (không qua Admin duyệt). null là chưa khai, dùng mặc định theo lĩnh vực. */
-export interface PackageDayPlan {
-  /** Có mặt trước giờ chính của khách bao nhiêu phút */
-  leadMinutes: number | null
-  /** Làm trong bao nhiêu phút kể từ lúc có mặt */
-  durationMinutes: number | null
-  /** Chỉ gói sảnh: giờ sớm nhất đơn vị khác được vào setup "HH:mm" */
-  setupOpenTime: string | null
-  /** Gói của Nhà hàng / Trung tâm tiệc cưới (có ô giờ cho vào setup) */
-  isVenue: boolean
-  /** Mặc định theo lĩnh vực khi chưa khai */
-  defaults: { leadMinutes: number; durationMinutes: number }
-}
-
-export type SavePackageDayPlanRequest = Pick<PackageDayPlan, 'leadMinutes' | 'durationMinutes' | 'setupOpenTime'>
 
 /** Ai làm một công việc của gói. */
 export type PackageTaskOwner = 'CUSTOMER' | 'VENDOR' | 'BOTH'

@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
-import { ServiceCardAvailability } from '@/features/availability/components/AvailabilityParts'
-import { VENUE_SLUG } from '@/features/availability/status'
 import { formatMoney } from '@/lib/format'
 import { useReveal } from '@/lib/useReveal'
 import { paths } from '@/routes/paths'
@@ -76,8 +74,6 @@ export function ServiceCard({ service, index = 0, imageAction, extraActions, bad
             </span>
             <span className="text-[13px] text-ink-2">{isTablePriced(service) ? ' / bàn · đã gồm sảnh' : ' / gói'}</span>
           </p>
-          {/* Trung tâm tiệc cưới: trạng thái từng gói theo ngày cưới của khách */}
-          {service.category.slug === VENUE_SLUG && <ServiceCardAvailability serviceId={service.id} />}
           {details}
           <div className="mt-auto flex gap-2 pt-3">
             <Link
