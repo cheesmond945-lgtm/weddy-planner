@@ -562,7 +562,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                 )}
               </div>
             )}
-            <OrderItemsEditor items={values.items} packages={venue ? [] : linkable} lookup={lookup} hall={hallPkg} lockPackages={locked} depositedPackageIds={locked ? packageIdsOf(mode.order.package?.id ?? null, mode.order.items) : undefined} errors={errors} onChange={(next) => set({ items: next })} />
+            <OrderItemsEditor items={values.items} packages={venue ? [] : linkable} lookup={lookup} hall={hallPkg} venue={venue} lockPackages={locked} depositedPackageIds={locked ? packageIdsOf(mode.order.package?.id ?? null, mode.order.items) : undefined} errors={errors} onChange={(next) => set({ items: next })} />
           </Section>
 
           <Section title="Đặt cọc và thanh toán" hint="Chỉ khoản cọc đi qua hệ thống (VietQR). Phần còn lại khách trả trực tiếp cho bạn.">

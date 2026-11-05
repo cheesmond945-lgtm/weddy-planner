@@ -4,9 +4,9 @@ import { Input } from '@/components/ui/input'
 import { controlClass } from '@/features/vendors/components/FormParts'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { ORDER_UNITS, type OrderUnit } from '@/types/vendorOrder'
+import type { OrderUnit } from '@/types/vendorOrder'
 import { itemAmount, newItem, totalOf, type FormItem } from '../calc'
-import { packageNote, suggestPackage, type LinkPackage } from '../orderLines'
+import { packageNote, type LinkPackage } from '../orderLines'
 import type { OrderErrors } from '../validation'
 
 interface OrderItemsEditorProps {
@@ -23,31 +23,36 @@ interface OrderItemsEditorProps {
   lockPackages: boolean
   /** Sửa sau cọc: gói của đơn lúc cọc (việc đã tạo); gói vừa đổi sang thì chữ nhỏ ghi "sẽ đổi khi lưu" */
   depositedPackageIds?: readonly string[]
+  /** Trung tâm tiệc cưới: đơn vị cố định là Bàn; lĩnh vực khác cố định là Gói (không cho chọn đơn vị) */
+  venue: boolean
 }
 
 const cell = cn(controlClass, 'h-[38px]')
 const err = (m?: string) => m && <span className="mt-0.5 block text-xs leading-snug text-destructive">{m}</span>
 
 /**
- * Báo giá chi tiết: hạng mục, đơn vị (Gói hoặc Bàn), số lượng, đơn giá, thành tiền (OrderItems).
+ * Báo giá chi tiết: hạng mục, đơn vị (cố định theo lĩnh vực: Bàn với Trung tâm tiệc cưới, Gói với lĩnh vực khác), số lượng, đơn giá, thành tiền.
  * Liên kết việc chi tiết chỉ dựa vào gói của dòng (không dựa vào tên dòng): sửa tên thoải mái.
  * - Lĩnh vực không có sảnh: dropdown gói dưới mỗi dòng ("Gói tùy chỉnh" cho dòng tự nhập); dòng gắn gói khoá đơn vị theo gói.
  * - Trung tâm tiệc cưới: chỉ ô Sảnh (ngoài bảng); dòng sảnh tự tạo, còn lại là dòng tự nhập.
  */
-export function OrderItemsEditor({ items, onChange, errors, packages, lookup, hall, lockPackages, depositedPackageIds }: OrderItemsEditorProps) {
-  const update = (key: string, patch: Partial<FormItem>) => onChange(items.map((i) => (i.key === key ? { ...i, ...patch } : i)))
+export function OrderItemsEditor({ items, onChange, errors, packages, lookup, hall, lockPackages, depositedPackageIds, venue }: OrderItemsEditorProps) {
+  // Đơn vị theo lĩnh vực: Trung tâm tiệc cưới tính theo Bàn, lĩnh vực khác trọn Gói. Dòng tự nhập (không gắn gói) luôn dùng đơn vị này
+  const unitOfCategory: OrderUnit = venue ? 'Bàn' : 'Gói'
+  const update = (key: string, patch: Partial<FormItem>) =>
+    onChange(items.map((i) => (i.key === key ? { ...i, ...patch, ...(!(patch.packageId ?? i.packageId) && { unit: unitOfCategory }) } : i)))
   const remove = (key: string) => {
     const rest = items.filter((i) => i.key !== key)
-    onChange(rest.length ? rest : [newItem()])
+    onChange(rest.length ? rest : [newItem(unitOfCategory)])
   }
 
   /**
-   * Chọn gói cho một dòng: gắn gói, đơn giá và đơn vị luôn nhảy theo gói (NCC điều chỉnh giá thì nhập lại sau); tên nhảy theo nếu còn trống
-   * hoặc đang là tên một gói (tên tự đặt thì giữ). Bỏ gói thì giữ nguyên nội dung.
+   * Chọn gói cho một dòng: gắn gói, đơn giá (khóa, không sửa tay) và đơn vị nhảy theo gói; tên nhảy theo nếu còn trống
+   * hoặc đang là tên một gói (tên tự đặt thì giữ). Chọn "Gói tùy chỉnh": bỏ gói, xóa trống tên và đơn giá để NCC tự nhập.
    */
   function pickPackage(it: FormItem, id: string) {
     const p = packages.find((x) => x.id === id)
-    if (!p) return update(it.key, { packageId: null })
+    if (!p) return update(it.key, { packageId: null, itemName: '', unitPrice: 0, quantity: 1 })
     const autoName = it.itemName.trim() === '' || lookup.some((x) => x.name === it.itemName)
     update(it.key, {
       packageId: p.id,
@@ -78,9 +83,6 @@ export function OrderItemsEditor({ items, onChange, errors, packages, lookup, ha
         const pkg = lookup.find((p) => p.id === it.packageId)
         const switched = lockPackages && !!it.packageId && !!depositedPackageIds && !depositedPackageIds.includes(it.packageId)
         const note = switched ? `Đổi sang ${isHall ? 'sảnh' : 'gói'} ${pkg?.name ?? ''} · công việc đổi theo khi lưu (trùng tên giữ tiến độ)` : packageNote(it, pkg, isHall ? 'hall' : 'package', lockPackages)
-        const suggestion = !isHall ? suggestPackage(it, packages) : null
-        // Dòng gắn gói (không phải sảnh) khoá đơn vị theo gói; dòng tự nhập cho chọn đơn vị
-        const unitFixed = isHall || (linked && packages.length > 0)
         return (
           <div
             key={it.key}
@@ -116,38 +118,12 @@ export function OrderItemsEditor({ items, onChange, errors, packages, lookup, ha
               )}
               {note && <span className="mt-1 block text-xs text-muted-foreground">{note}</span>}
               {linked && pkg?.taskCount === 0 && <span className="mt-0.5 block text-xs text-warn">{isHall ? 'Sảnh' : 'Gói'} này chưa có công việc nào</span>}
-              {suggestion && (
-                <span className="mt-1 block text-xs text-gold-ink">
-                  Có phải bạn muốn gắn gói “{suggestion.name}”?{' '}
-                  <button type="button" className="font-semibold underline underline-offset-2" onClick={() => pickPackage(it, suggestion.id)}>
-                    Gắn gói
-                  </button>
-                </span>
-              )}
             </div>
             <div className="min-w-0 max-md:[grid-area:unit]">
-              {unitFixed ? (
-                <span className="block pt-2 text-[13.5px]" aria-label={`Đơn vị tính ${i + 1}`}>
-                  {it.unit}
-                </span>
-              ) : (
-                <select
-                  className={cell}
-                  aria-label={`Đơn vị tính ${i + 1}`}
-                  value={it.unit}
-                  // Gói: số lượng mặc định 1; Bàn: số lượng tùy chỉnh
-                  onChange={(e) => {
-                    const unit = e.target.value as OrderUnit
-                    update(it.key, { unit, ...(unit === 'Gói' && { quantity: 1 }) })
-                  }}
-                >
-                  {ORDER_UNITS.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                </select>
-              )}
+              {/* Không chọn đơn vị: dòng gắn gói / sảnh theo gói, dòng tự nhập theo lĩnh vực (Bàn hoặc Gói) */}
+              <span className="block pt-2 text-[13.5px]" aria-label={`Đơn vị tính ${i + 1}`}>
+                {linked ? it.unit : unitOfCategory}
+              </span>
             </div>
             <div className="min-w-0 max-md:[grid-area:qty]">
               <Input
@@ -171,14 +147,22 @@ export function OrderItemsEditor({ items, onChange, errors, packages, lookup, ha
               {isHall && hall?.minTables && !errors[`item:${i}:quantity`] ? <span className="mt-0.5 block text-xs text-muted-foreground">Tối thiểu {hall.minTables} bàn</span> : null}
             </div>
             <div className="min-w-0 max-md:[grid-area:price]">
-              <MoneyInput
-                className={cn(cell, 'text-right tabular-nums')}
-                aria-label={`Đơn giá ${i + 1}`}
-                placeholder="Đơn giá"
-                aria-invalid={errors[`item:${i}:unitPrice`] ? true : undefined}
-                value={it.unitPrice}
-                onChange={(unitPrice) => update(it.key, { unitPrice })}
-              />
+              {/* Dòng gắn gói / sảnh: đơn giá theo giá gói, không sửa tay (muốn chỉnh giá thì chọn "Gói tùy chỉnh") */}
+              {linked && pkg ? (
+                <span className="block pt-2 text-right text-[13.5px] tabular-nums" aria-label={`Đơn giá ${i + 1}`}>
+                  {formatMoney(it.unitPrice)}
+                  <span className="block text-[11.5px] text-muted-foreground">Theo giá {isHall ? 'sảnh' : 'gói'}</span>
+                </span>
+              ) : (
+                <MoneyInput
+                  className={cn(cell, 'text-right tabular-nums')}
+                  aria-label={`Đơn giá ${i + 1}`}
+                  placeholder="Đơn giá"
+                  aria-invalid={errors[`item:${i}:unitPrice`] ? true : undefined}
+                  value={it.unitPrice}
+                  onChange={(unitPrice) => update(it.key, { unitPrice })}
+                />
+              )}
               {err(errors[`item:${i}:unitPrice`])}
             </div>
             <span className="pt-2.5 text-right font-semibold whitespace-nowrap tabular-nums max-md:[grid-area:amt] max-md:self-center max-md:pt-0">{formatMoney(itemAmount(it))}</span>
@@ -204,7 +188,7 @@ export function OrderItemsEditor({ items, onChange, errors, packages, lookup, ha
         </p>
       )}
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={() => onChange([...items, newItem()])} className="inline-flex items-center gap-1.5 py-1.5 text-[13px] font-medium text-gold-ink hover:underline">
+        <button type="button" onClick={() => onChange([...items, newItem(unitOfCategory)])} className="inline-flex items-center gap-1.5 py-1.5 text-[13px] font-medium text-gold-ink hover:underline">
           <Plus className="size-4" />
           Thêm hạng mục
         </button>

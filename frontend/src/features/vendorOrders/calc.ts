@@ -1,5 +1,6 @@
 import { now, todayVN } from '@/lib/clock'
 import { formatDate } from '@/lib/date'
+import { DEPOSIT_PERCENT_MIN } from '@/lib/deposit'
 import { paths } from '@/routes/paths'
 import type { Order, OrderContent, OrderItemInput, OrderRevision, OrderUnit } from '@/types/vendorOrder'
 import { CANCEL_REASON, CHANGE_LABEL } from './constants'
@@ -32,9 +33,9 @@ export const totalOf = (items: OrderItemInput[]) => items.reduce((s, i) => s + i
 
 const withKeys = (items: OrderItemInput[]): FormItem[] => (items.length ? items.map((i) => ({ ...i, key: newItemKey() })) : [newItem()])
 
-/** Đơn mới: điền sẵn tên, số điện thoại và ngày thực hiện = ngày cưới của khách (NCC đổi được, nhưng không được sau ngày cưới). */
+/** Đơn mới: điền sẵn tên, số điện thoại và ngày thực hiện = ngày cưới của khách (NCC đổi được, nhưng không được sau ngày cưới); tỷ lệ cọc mặc định = mức tối thiểu (10%). */
 export function emptyValues(customer: { name: string; phone: string; weddingDate?: string | null }): OrderFormValues {
-  return { customerName: customer.name, customerPhone: customer.phone, eventDate: customer.weddingDate ?? '', note: null, depositPercent: 30, items: [newItem()], packageId: null }
+  return { customerName: customer.name, customerPhone: customer.phone, eventDate: customer.weddingDate ?? '', note: null, depositPercent: DEPOSIT_PERCENT_MIN, items: [newItem()], packageId: null }
 }
 
 /** Nội dung hiện tại của đơn (để sửa). */

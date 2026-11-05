@@ -108,7 +108,13 @@ export default function VendorPackagePage() {
             )}
           >
             {t.label}
-            {t.count !== undefined && <span className="rounded-pill bg-surface-2 px-2 text-xs tabular-nums">{t.count}</span>}
+            {/* Gói chưa có công việc nào: nhãn vàng nhắc thêm việc (khách cọc gói này sẽ không có việc nào trên timeline) */}
+            {t.count !== undefined &&
+              (t.count === 0 && !tasks.loading ? (
+                <span className="rounded-pill bg-gold-soft px-2 text-xs font-medium text-gold-ink">Chưa có</span>
+              ) : (
+                <span className="rounded-pill bg-surface-2 px-2 text-xs tabular-nums">{t.count}</span>
+              ))}
           </button>
         ))}
       </div>

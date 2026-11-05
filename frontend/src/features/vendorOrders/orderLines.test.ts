@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { applyHall, hallFieldState, hallLine, hallLineIndex, hallTablesError, needsNoPackageConfirm, packageNote, suggestPackage, type LinkPackage } from './orderLines.ts'
+import { applyHall, hallFieldState, hallLine, hallLineIndex, hallTablesError, needsNoPackageConfirm, packageNote, type LinkPackage } from './orderLines.ts'
 
 const hall = (id: string, name: string, price: number, minTables: number | null = null, taskCount = 7): LinkPackage => ({ id, name, price, unit: 'Bàn', taskCount, minTables })
 const pkg = (id: string, name: string, price = 5_000_000, taskCount = 4): LinkPackage => ({ id, name, price, unit: 'Gói', taskCount })
@@ -78,20 +78,6 @@ describe('packageNote và đổi tên dòng gắn gói', () => {
     const l = { ...hallLine(vang, undefined, 'a'), itemName: 'Tên khác hẳn' }
     assert.equal(l.packageId, 'h1')
     assert.equal(packageNote(l, vang, 'hall')?.includes('Gắn sảnh'), true)
-  })
-})
-
-describe('suggestPackage: gợi ý gắn gói khi tên trùng hoặc gần trùng', () => {
-  const list = [pkg('p1', 'Gói Cô dâu'), pkg('p2', 'Makeup Dự tiệc')]
-  it('trùng tên (bỏ dấu, hoa thường) hoặc chứa nhau thì gợi ý', () => {
-    assert.equal(suggestPackage(line('a', 'goi co dau'), list)?.id, 'p1')
-    assert.equal(suggestPackage(line('a', 'Gói Cô dâu cao cấp'), list)?.id, 'p1')
-    assert.equal(suggestPackage(line('a', 'Dự tiệc'), list)?.id, 'p2')
-  })
-  it('đã gắn gói, tên quá ngắn hoặc không liên quan thì không gợi ý', () => {
-    assert.equal(suggestPackage(line('a', 'Gói Cô dâu', { packageId: 'p1' }), list), null)
-    assert.equal(suggestPackage(line('a', 'Ab'), list), null)
-    assert.equal(suggestPackage(line('a', 'Phí đi lại'), list), null)
   })
 })
 

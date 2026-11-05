@@ -64,34 +64,6 @@ export function packageNote(item: OrderItemInput, pkg: LinkPackage | undefined, 
   return `Gắn ${what} ${name} · ${n} công việc ${done ? 'đã tạo khi khách cọc' : 'sẽ tạo khi khách cọc'}`
 }
 
-const fold = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/đ/gi, 'd')
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-/**
- * Dòng chưa gắn gói mà tên trùng hoặc gần trùng tên một gói đang đăng thì gợi ý gắn gói đó.
- * Gần trùng: sau khi bỏ dấu và viết thường, một tên chứa tên kia (từ 4 ký tự trở lên). Trả gói đầu tiên khớp, hoặc null.
- */
-export function suggestPackage(item: OrderItemInput, packages: readonly LinkPackage[]): LinkPackage | null {
-  if (item.packageId) return null
-  const name = fold(item.itemName)
-  if (name.length < 4) return null
-  const exact = packages.find((p) => fold(p.name) === name)
-  if (exact) return exact
-  return (
-    packages.find((p) => {
-      const pn = fold(p.name)
-      return pn.length >= 4 && (pn.includes(name) || name.includes(pn))
-    }) ?? null
-  )
-}
-
 /** Đơn của lĩnh vực không có sảnh mà không dòng nào gắn gói: hỏi lại trước khi gửi (việc chi tiết chỉ sinh từ gói). */
 export const needsNoPackageConfirm = (items: readonly OrderItemInput[], venue: boolean) => !venue && !items.some((i) => i.packageId)
 
