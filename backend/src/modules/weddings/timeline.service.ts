@@ -76,7 +76,9 @@ export class TimelineService {
       ...w.wedding_categories.map((c) => c.category_id),
       ...orders.filter((o) => o.status !== 'Cancelled' && o.status !== 'Draft').flatMap((o) => (o.vendor_profiles?.category_id ? [o.vendor_profiles.category_id] : [])),
     ]);
-    const tasks = allTasks.filter((t) => !isRemovedCode(t.task_code) && !hiddenByCategory(t, active));
+    // Đơn đã hủy / hết hạn: mọi việc của đơn (kể cả việc đã xong được giữ lại lúc hủy) không hiện trên timeline và lịch
+    const inactiveOrders = new Set(orders.filter((o) => o.status === 'Cancelled' || o.status === 'Expired').map((o) => o.id));
+    const tasks = allTasks.filter((t) => !isRemovedCode(t.task_code) && !hiddenByCategory(t, active) && !(t.order_id && inactiveOrders.has(t.order_id)));
     const catById = new Map(cats.map((c) => [c.id, { id: c.id, slug: categorySlug(c.name), name: c.name ?? '' }]));
     const keyOfCat = (id: string | null) => {
       const name = cats.find((c) => c.id === id)?.name;

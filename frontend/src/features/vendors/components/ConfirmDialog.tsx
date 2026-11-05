@@ -21,15 +21,26 @@ export function ConfirmDialog({ open, onOpenChange, title, children, confirmLabe
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[460px]">
-        <DialogHeader className="flex items-center gap-3">
-          {icon && (
-            <div className={cn('grid size-10 shrink-0 place-items-center rounded-full [&_svg]:size-5', danger ? 'bg-warn-soft text-warn' : 'bg-gold-soft text-gold-ink')}>{icon}</div>
-          )}
-          <DialogTitle>{title}</DialogTitle>
+        <DialogHeader>
+          {/* Có icon: tiêu đề nằm trên dải nền màu tràn mép popup (bù p-6 của DialogContent và pr-10 của DialogHeader) */}
+          <div
+            className={cn(
+              'flex items-center gap-3',
+              icon && '-mt-6 -mr-16 mb-4 -ml-6 py-4 pr-16 pl-6',
+              icon && (danger ? 'bg-warn-soft' : 'bg-gold-soft'),
+            )}
+          >
+            {icon && (
+              <div className={cn('grid size-11 shrink-0 place-items-center rounded-full bg-surface [&_svg]:size-5', danger ? 'text-warn' : 'text-gold')}>
+                {icon}
+              </div>
+            )}
+            <DialogTitle>{title}</DialogTitle>
+          </div>
+          <DialogDescription asChild>
+            <div className="text-sm leading-relaxed text-ink [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-5">{children}</div>
+          </DialogDescription>
         </DialogHeader>
-        <DialogDescription asChild>
-          <div className="text-sm leading-relaxed text-ink [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-5">{children}</div>
-        </DialogDescription>
         <DialogFooter>
           <Button variant="outline" className="min-w-24" onClick={() => onOpenChange(false)}>
             {cancelLabel}

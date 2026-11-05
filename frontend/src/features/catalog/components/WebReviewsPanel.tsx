@@ -1,5 +1,8 @@
 import { useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useMyOrders } from '@/features/orders/hooks'
+import { ReviewDialog } from '@/features/reviews/components/ReviewDialog'
+import { useOrderReviews } from '@/features/reviews/hooks'
 import { formatDate, formatRelativeTime } from '@/lib/date'
 import type { ServiceReview } from '@/types/review'
 import { useReviewSummary, useServiceReviews } from '../hooks'
@@ -12,8 +15,44 @@ const CLAMP = 240
 export function WebReviewsPanel({ serviceId }: { serviceId: string }) {
   return (
     <DetailCard title="Đánh giá từ khách đã đặt dịch vụ">
+      <ReviewInvite serviceId={serviceId} />
       <WebReviewsContent serviceId={serviceId} />
     </DetailCard>
+  )
+}
+
+/**
+ * Khách đang đăng nhập có đơn Hoàn thành với nhà cung cấp này mà chưa đánh giá: ô mời nêu cảm nhận (mở form đánh giá của đơn đó).
+ * Không phải khách / không có đơn hoàn thành thì không hiện gì.
+ */
+function ReviewInvite({ serviceId }: { serviceId: string }) {
+  const orders = useMyOrders()
+  const done = (orders.data ?? []).filter((o) => o.status === 'Completed' && o.serviceId === serviceId)
+  return (
+    <>
+      {done.map((o) => (
+        <InviteForOrder key={o.id} orderId={o.id} orderCode={o.orderCode} vendorName={o.vendorName} />
+      ))}
+    </>
+  )
+}
+
+function InviteForOrder({ orderId, orderCode, vendorName }: { orderId: string; orderCode: string; vendorName?: string }) {
+  const q = useOrderReviews(orderId)
+  const [open, setOpen] = useState(false)
+  const items = q.data ?? []
+  const pkgOnly = items.some((i) => i.isPackage)
+  if (!items.some((i) => i.canReview && (i.isPackage || !pkgOnly))) return null
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-gold-500 bg-gold-100 px-4 py-3 text-sm text-gold-800">
+      <span className="min-w-0 flex-1">
+        <b className="font-semibold">Bạn đã dùng dịch vụ này</b> (đơn {orderCode}). Chia sẻ cảm nhận để giúp các cặp đôi khác nhé!
+      </span>
+      <Button size="sm" onClick={() => setOpen(true)}>
+        Đánh giá dịch vụ
+      </Button>
+      {open && <ReviewDialog orderId={orderId} vendorName={vendorName} onClose={() => setOpen(false)} />}
+    </div>
   )
 }
 
@@ -131,6 +170,21 @@ function ReviewItem({ review }: { review: ServiceReview }) {
           >
             {expanded ? 'Thu gọn' : 'Xem thêm'}
           </button>
+        )}
+        {review.tags?.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {review.tags.map((t) => (
+              <span key={t} className="rounded-pill bg-gold-100 px-2.5 py-0.5 text-[12px] text-gold-800">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+        {review.vendorReply && (
+          <div className="mt-3 rounded-md border-l-2 border-gold bg-surface-2 px-3 py-2 text-[13.5px]">
+            <b className="font-semibold">Phản hồi từ nhà cung cấp</b>
+            <p className="mt-0.5 leading-[1.6] whitespace-pre-line [overflow-wrap:anywhere]">{review.vendorReply.content}</p>
+          </div>
         )}
       </div>
     </li>

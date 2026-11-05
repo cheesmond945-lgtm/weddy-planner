@@ -35,7 +35,7 @@ export const UPCOMING_DAYS = 30;
 const day = (s: string) => new Date(`${s}T00:00:00Z`);
 
 /**
- * Điều kiện đếm của 4 thẻ. `today` và `in30` là "YYYY-MM-DD" giờ VN, `soon` là thời điểm hết hạn cọc coi là sắp hết (hiện tại + 24 giờ).
+ * Điều kiện đếm của 4 thẻ. `today` và `in30` là "YYYY-MM-DD" giờ VN, `soon` là thời điểm hết hạn cọc coi là sắp hết (hiện tại + DEPOSIT_SOON_HOURS).
  * - pending: Chờ cọc; expiringSoon: trong đó hạn cọc trước `soon`.
  * - upcoming: Đã cọc, ngày thực hiện từ hôm nay tới hôm nay + 30 ngày.
  * - dueToComplete: Đã cọc, ngày thực hiện đã qua (NCC được bấm Hoàn tất); dueRestPending: trong đó chưa nhận tiền mặt.

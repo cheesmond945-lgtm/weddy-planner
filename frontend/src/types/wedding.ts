@@ -51,7 +51,7 @@ export const PLAN_TABS: PlanTab[] = ['overview', 'timeline', 'services', 'budget
 // ---- Timeline (4.2, 4.4) ----
 
 export type TimelineItemKind =
-  /** Việc chung: mặc định hoặc do cặp đôi thêm */
+  /** Việc ngoài dịch vụ: mặc định hoặc do cặp đôi thêm */
   | 'TASK'
   /** Việc khung "Chọn NCC" (lọc, hỏi giá, đi xem, thử để đánh giá): có nút "Gợi ý {dịch vụ}" */
   | 'CHOOSE'
@@ -161,7 +161,7 @@ export interface Overview {
     total: number
     overdue: number
     upcoming: { id: string; title: string; dueDate: string; daysLeft: number; category: CategoryRef | null }[]
-    /** slug null là "Việc chung" */
+    /** slug null là "Việc ngoài dịch vụ" */
     byCategory: { slug: string | null; name: string; done: number; total: number }[]
   } | null
   /** null khi không được xem tab Ngân sách */

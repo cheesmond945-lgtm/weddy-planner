@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { ordersApi } from '@/api/orders'
 import { VietqrPanel } from '@/components/VietqrPanel'
 import { Button } from '@/components/ui/button'
@@ -10,9 +10,6 @@ import { useRefreshPlanning } from '@/features/weddings/hooks'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import type { Order } from '@/types/vendorOrder'
-
-/** Đơn tiệc (tính theo bàn): có sảnh, hoặc có dòng đơn vị bàn/mâm */
-export const isTableOrder = (o: Order) => !!o.package || o.items.some((i) => /bàn|mâm/i.test(i.unit ?? ''))
 
 const openChange = (o: Order) => o.guestChanges?.find((g) => g.status === 'AwaitingVendor' || g.status === 'AwaitingDeposit') ?? null
 
@@ -32,18 +29,16 @@ function useOrderWrite<T>(fn: (v: T) => Promise<Order>, done: string) {
 }
 
 /**
- * Yêu cầu sau cọc của khách trên thẻ đơn (docs/api/orders.md): đổi số khách (đơn tiệc, trước ngày tổ chức 7 ngày, NCC xác nhận,
- * tăng giá trị thì nộp cọc bổ sung 10% phần tăng) và yêu cầu hủy đơn (tiền cọc không hoàn, NCC xác nhận).
+ * Yêu cầu sau cọc của khách trên thẻ đơn (docs/api/orders.md): yêu cầu hủy đơn (tiền cọc không hoàn, NCC xác nhận). Đổi số khách đi qua
+ * "Yêu cầu chỉnh sửa" (ô Đổi số khách); yêu cầu đổi số khách cũ còn mở vẫn hiện trạng thái và nút nộp cọc bổ sung.
  */
 export function CoupleOrderRequests({ order: o }: { order: Order }) {
-  const [changing, setChanging] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [paying, setPaying] = useState(false)
   const withdraw = useOrderWrite(() => ordersApi.withdrawCancel(o.id), 'Đã rút yêu cầu hủy đơn')
   if (o.status !== 'Deposited') return null
 
   const change = openChange(o)
-  const canChange = isTableOrder(o) && !change && !o.cancelRequest
   return (
     <>
       {change && (
@@ -76,95 +71,15 @@ export function CoupleOrderRequests({ order: o }: { order: Order }) {
         </div>
       )}
       <div className="mt-2 flex flex-wrap gap-2">
-        {canChange && (
-          <Button size="sm" variant="outline" onClick={() => setChanging(true)}>
-            Đổi số khách
-          </Button>
-        )}
         {!o.cancelRequest && (
           <Button size="sm" variant="outline" className="border-warn/60 text-warn hover:bg-warn-soft hover:text-warn" onClick={() => setCancelling(true)}>
             Yêu cầu hủy đơn
           </Button>
         )}
       </div>
-      {changing && <GuestChangeDialog order={o} onClose={() => setChanging(false)} />}
       {cancelling && <CancelRequestDialog order={o} onClose={() => setCancelling(false)} />}
       {paying && change && <ExtraDepositDialog order={o} onClose={() => setPaying(false)} />}
     </>
-  )
-}
-
-/** Nhập số khách mới, xem trước số bàn / giá trị mới / cọc bổ sung (backend tính), gửi cho NCC xác nhận */
-function GuestChangeDialog({ order: o, onClose }: { order: Order; onClose: () => void }) {
-  const [text, setText] = useState(o.guestCount ? String(o.guestCount) : '')
-  const [debounced, setDebounced] = useState(text)
-  const [note, setNote] = useState('')
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(text), 400)
-    return () => clearTimeout(t)
-  }, [text])
-  const guests = Number(debounced)
-  const quote = useQuery({
-    queryKey: ['guest-change-quote', o.id, guests],
-    queryFn: () => ordersApi.quoteGuestChange(o.id, guests),
-    enabled: Number.isInteger(guests) && guests > 0,
-    retry: false,
-  })
-  const send = useOrderWrite((v: { guestCount: number; note?: string }) => ordersApi.requestGuestChange(o.id, v), 'Đã gửi yêu cầu đổi số khách cho nhà cung cấp')
-  const q = quote.data
-
-  function submit(e: FormEvent) {
-    e.preventDefault()
-    if (!q) return
-    send.mutate({ guestCount: guests, note: note.trim() || undefined }, { onSuccess: onClose })
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[460px]">
-        <DialogHeader>
-          <DialogTitle>Đổi số khách · Đơn {o.orderCode}</DialogTitle>
-          <DialogDescription>
-            Giá trị mới = đơn giá lúc đặt × max(số bàn mới, số bàn tối thiểu của sảnh). Tăng giá trị thì nộp cọc bổ sung 10% phần tăng; giảm khách không hoàn cọc. Nhà cung cấp cần xác nhận.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={submit} className="flex flex-col gap-3">
-          <label className="text-[13px] font-medium">
-            Số khách mới{o.guestCount ? ` (hiện ${o.guestCount} khách)` : ''}
-            <Input type="number" min={1} inputMode="numeric" value={text} onChange={(e) => setText(e.target.value)} className="mt-1.5" autoFocus />
-          </label>
-          {quote.isError && <p className="text-[13px] text-warn">{(quote.error as Error).message}</p>}
-          {q && (
-            <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-md bg-surface-2 px-3 py-2.5 text-[13px]">
-              <dt className="text-muted-foreground">Số bàn tính tiền</dt>
-              <dd className="text-right">
-                {q.oldTables} → {q.chargedTables} bàn{q.chargedTables > q.newTables ? ' (tối thiểu của sảnh)' : ''}
-              </dd>
-              <dt className="text-muted-foreground">Giá trị đơn</dt>
-              <dd className="text-right">
-                {formatMoney(q.oldAmount)} → <b>{formatMoney(q.newAmount)}</b>
-              </dd>
-              <dt className="text-muted-foreground">Cọc bổ sung</dt>
-              <dd className="text-right">{q.extraDeposit ? formatMoney(q.extraDeposit) : '0đ (không hoàn cọc)'}</dd>
-              <dt className="text-muted-foreground">Hạn gửi yêu cầu</dt>
-              <dd className="text-right">{formatDate(q.deadline)}</dd>
-            </dl>
-          )}
-          <label className="text-[13px] font-medium">
-            Ghi chú cho nhà cung cấp <span className="font-normal text-muted-foreground">(không bắt buộc)</span>
-            <Input value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} className="mt-1.5" />
-          </label>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Hủy
-            </Button>
-            <Button type="submit" disabled={!q || send.isPending || debounced !== text}>
-              {send.isPending ? 'Đang gửi…' : 'Gửi yêu cầu'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }
 

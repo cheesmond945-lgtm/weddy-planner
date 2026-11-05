@@ -1,12 +1,23 @@
 import { ChevronLeft, FilePen, Phone, Plus, Send } from 'lucide-react'
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { useStickToBottom } from '@/lib/useStickToBottom'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { formatDay, formatStamp, orderPageHref } from '@/features/vendorOrders/calc'
 import type { OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
 import { useConversationOrders } from '@/features/vendorOrders/hooks'
-import type { VendorConversation } from '@/types/vendorConversation'
+import { vendorConversationsApi } from '@/api/vendorConversations'
+import { ComposerTools } from '@/features/chat/components/ChatAttachments'
+import { ReplyBar, type NameOf } from '@/features/chat/components/MessageExtras'
+import { groupAlbums } from '@/features/chat/albums'
+import { useMessageReaction } from '@/features/chat/useMessageReaction'
+import { useRecallMessage } from '@/features/chat/useRecallMessage'
+import { useSendAttachment } from '@/features/chat/useSendAttachment'
+import { vendorKeys } from '@/features/vendorOrders/keys'
+import { cn } from '@/lib/utils'
+import { useAuth } from '@/store/auth'
+import type { VendorConversation, VendorMessage } from '@/types/vendorConversation'
 import type { InvoiceType, Order } from '@/types/vendorOrder'
 import { useMarkRead, useSendVendorMessage, useVendorMessages } from '../hooks'
 import { PersonAvatar } from '../preview'
@@ -33,6 +44,18 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
   const markRead = useMarkRead()
   const [text, setText] = useState('')
   const historyRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  // Trả lời một tin cụ thể và thả cảm xúc (như Messenger); đổi hội thoại thì bỏ tin đang trả lời
+  const [replying, setReplying] = useState<VendorMessage | null>(null)
+  useEffect(() => setReplying(null), [c.id])
+  const { user } = useAuth()
+  const react = useMessageReaction(vendorKeys.messages(user?.id, c.id), (messageId, emoji) => vendorConversationsApi.react(c.id, messageId, emoji))
+  const nameOf: NameOf = (s) => (s === 'VENDOR' ? 'chính mình' : s === 'COUPLE' ? c.customer.name : 'Forever')
+  const recall = useRecallMessage(vendorKeys.messages(user?.id, c.id), (messageId) => vendorConversationsApi.recall(c.id, messageId))
+  // Ảnh gửi liền nhau gộp thành album
+  const albums = useMemo(() => groupAlbums(messages ?? []), [messages])
+  // Gửi ảnh / tệp / ghi âm
+  const attach = useSendAttachment(vendorKeys.messages(user?.id, c.id), vendorKeys.conversations(user?.id), (input) => vendorConversationsApi.sendAttachment(c.id, input))
 
   const sentOrders = orders.filter((o) => o.status !== 'Draft')
   const drafts = orders.filter((o) => o.status === 'Draft')
@@ -59,21 +82,33 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
     if (c.unreadCount > 0) read(c.id)
   }, [c.id, c.unreadCount, read])
 
-  // Cuộn xuống tin cuối; đơn vừa gửi thì cuộn tới thẻ mới nhất của đơn đó
+  // Cuộn xuống tin cuối (giữ ở cuối khi nội dung tải muộn); đơn vừa gửi thì cuộn tới thẻ mới nhất của đơn đó
   const count = messages?.length ?? 0
+  useStickToBottom(historyRef, `${c.id}:${count}`)
   useLayoutEffect(() => {
     const el = historyRef.current
-    if (!el) return
-    const cards = highlightOrderId ? el.querySelectorAll<HTMLElement>(`[data-order="${highlightOrderId}"]`) : []
+    if (!el || !highlightOrderId) return
+    const cards = el.querySelectorAll<HTMLElement>(`[data-order="${highlightOrderId}"]`)
     const target = cards[cards.length - 1]
     if (target) el.scrollTo({ top: Math.max(0, target.offsetTop - el.clientHeight / 2 + target.offsetHeight / 2), behavior: 'smooth' })
-    else el.scrollTop = el.scrollHeight
   }, [c.id, count, highlightOrderId])
 
   function submit() {
     const t = text.trim()
     if (!t) return
-    send.mutate(t, { onSuccess: () => setText('') })
+    send.mutate(
+      { text: t, replyToId: replying?.id },
+      {
+        onSuccess: () => {
+          setText('')
+          setReplying(null)
+        },
+      },
+    )
+  }
+  function startReply(m: VendorMessage) {
+    setReplying(m)
+    inputRef.current?.focus()
   }
 
   return (
@@ -131,6 +166,8 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
       <div ref={historyRef} className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-surface px-7 py-6 max-[900px]:p-4">
         {isPending && <div aria-busy="true" aria-label="Đang tải tin nhắn" className="m-auto h-24 w-2/3 animate-pulse rounded-lg bg-muted" />}
         {messages?.map((m, i) => {
+          // Ảnh sau trong album đã nằm trong album của tin đầu
+          if (albums.hidden.has(m.id)) return null
           const newDay = i === 0 || dayOf(messages[i - 1].sentDate) !== dayOf(m.sentDate)
           return (
             <Fragment key={m.id}>
@@ -147,6 +184,11 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
                 onOpenForm={onOpenForm}
                 onViewOrder={onViewOrder}
                 onViewInvoice={onViewInvoice}
+                nameOf={nameOf}
+                onReply={startReply}
+                onReact={(messageId, emoji) => react.mutate({ messageId, emoji })}
+                onRecall={(messageId) => recall.mutate(messageId)}
+                album={albums.byFirst.get(m.id)}
               />
             </Fragment>
           )
@@ -154,23 +196,36 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
         {messages && !messages.length && <EmptyState className="m-auto border-0 bg-transparent" title="Chưa có tin nhắn" description="Bắt đầu trò chuyện với khách." />}
       </div>
 
+      {replying && (
+        <div className="border-t border-line-soft bg-surface px-6 pt-2.5 max-[900px]:px-3">
+          <ReplyBar reply={replying} nameOf={nameOf} onCancel={() => setReplying(null)} />
+        </div>
+      )}
       <form
-        className="flex items-center gap-2.5 border-t border-line-soft bg-surface px-6 pt-3.5 pb-[18px] max-[900px]:px-3 max-[900px]:pb-3"
+        className={cn('flex items-center gap-2.5 bg-surface px-6 pt-3.5 pb-[18px] max-[900px]:px-3 max-[900px]:pb-3', !replying && 'border-t border-line-soft')}
         onSubmit={(e) => {
           e.preventDefault()
           submit()
         }}
       >
-        <input
-          aria-label="Nhập tin nhắn"
-          placeholder="Nhập tin nhắn..."
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="min-w-0 flex-1 rounded-pill border-0 bg-bg px-[18px] py-[15px] text-[15px] text-ink outline-none focus:outline-1 focus:outline-primary"
-        />
-        <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending} className="size-12 rounded-full">
-          <Send className="size-[19px]" />
-        </Button>
+        <ComposerTools
+          className="min-w-0 flex-1"
+          sending={attach.isPending}
+          onFiles={(files) => void attach.sendFiles(files, replying?.id).then(() => setReplying(null))}
+          onVoice={(clip) => void attach.send({ file: clip.blob, name: clip.name, durationSec: clip.durationSec, replyToId: replying?.id }).then(() => setReplying(null), () => undefined)}
+        >
+          <input
+            ref={inputRef}
+            aria-label="Nhập tin nhắn"
+            placeholder="Nhập tin nhắn..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="min-w-0 flex-1 rounded-pill border-0 bg-bg px-[18px] py-[15px] text-[15px] text-ink outline-none focus:outline-1 focus:outline-primary"
+          />
+          <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending} className="ml-1 size-12 rounded-full">
+            <Send className="size-[19px]" />
+          </Button>
+        </ComposerTools>
       </form>
     </div>
   )

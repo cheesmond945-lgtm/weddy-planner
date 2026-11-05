@@ -23,7 +23,7 @@ Khảo sát ngày 01/11/2026 trên nhánh `Chanh`. Chỉ đọc code và `schema
 | `total_amount` Decimal(18,2) | Tổng giá trị đơn |
 | `deposit_percent` Decimal(5,2) | Tỷ lệ cọc (%) |
 | `deposit_amount` Decimal(18,2) | **Tiền cọc** (đợt 1) |
-| `deposit_due_date` timestamptz | Hạn cọc (gửi đơn + 24 giờ) |
+| `deposit_due_date` timestamptz | Hạn cọc (gửi đơn + 12 giờ) |
 | `status` varchar(20) | `Draft, Pending, NeedRevision, Deposited, Completed, Expired, Cancelled` |
 | `completed_date`, `cancelled_date`, `cancel_reason` | Ngày hoàn thành, hủy; lý do `CUSTOMER_REQUEST` / `VENDOR_UNABLE` |
 
@@ -55,7 +55,7 @@ Không có cột "số tiền còn lại", "đã thu", "phương thức thanh to
 
 Biến môi trường tồn tại (không in giá trị): `PAYMENT_DEMO_MODE`, `VIETQR_BANK_BIN`, `VIETQR_ACCOUNT_NO`, `VIETQR_ACCOUNT_NAME`, `SEPAY_TOKEN`, `SEPAY_API_BASE` (`integrations/vietqr/*.ts`).
 
-1. **Gửi đơn** (`applySend`, `BE/orders/orders.service.ts:610`): đơn sang `Pending`, `deposit_amount` tính từ `total × %`, `deposit_due_date` = +24 giờ, tạo sẵn `payments` `Unpaid` nếu chưa có.
+1. **Gửi đơn** (`applySend`, `BE/orders/orders.service.ts:610`): đơn sang `Pending`, `deposit_amount` tính từ `total × %`, `deposit_due_date` = +12 giờ, tạo sẵn `payments` `Unpaid` nếu chưa có.
 2. **Tạo cọc** `POST /payments` → `createDeposit` (`:315`): chặn nếu đơn không Pending / hết hạn / ngày sau ngày cưới / hạng mục đã có đơn Deposited / sảnh bận; upsert `payments` Unpaid (`:356`); trả mã QR (`img.vietqr.io`) và nội dung chuyển khoản `depositContent(order_code)`.
 3. **Xác nhận**, ba đường vào cùng một hàm `markDepositPaid` (`:409`):
    - `POST /payments/check` → `checkDeposit` (`:384`): hỏi SePay `findPayment(nội dung, số tiền)` (`integrations/vietqr/sepay.service.ts:80`), bỏ qua giao dịch đã dùng cho `payments` hoặc bảng kê.

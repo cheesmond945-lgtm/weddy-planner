@@ -159,7 +159,7 @@ function OrderTaskForm({ orderId, eventDate, hasPackage, task, onClose }: Omit<O
         </label>
       )}
 
-      <DialogFooter>
+      <DialogFooter className="mt-1">
         <Button type="button" variant="outline" onClick={onClose}>
           Hủy
         </Button>

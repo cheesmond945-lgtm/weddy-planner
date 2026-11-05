@@ -1,6 +1,8 @@
 import { Receipt } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { AttachmentContent, ImageAlbum } from '@/features/chat/components/ChatAttachments'
+import { imagesOf, MessageShell, type NameOf } from '@/features/chat/components/MessageExtras'
 import { effectiveSender } from '@/features/chat/messageSender'
 import { formatStamp } from '@/features/vendorOrders/calc'
 import { OrderCard } from '@/features/vendorOrders/components/OrderCard'
@@ -19,6 +21,13 @@ interface MessageItemProps {
   onOpenForm: (mode: OrderFormMode) => void
   onViewOrder: (order: Order) => void
   onViewInvoice: (order: Order, type: InvoiceType) => void
+  /** Tin chữ: trả lời / thả cảm xúc (như Messenger) */
+  nameOf: NameOf
+  onReply: (m: VendorMessage) => void
+  onReact: (messageId: string, emoji: string | null) => void
+  onRecall: (messageId: string) => void
+  /** Tin đầu của album ảnh: mọi tin ảnh của album (albums.ts) */
+  album?: VendorMessage[]
 }
 
 const Time = ({ at }: { at: string }) => <time className="mt-1 text-[11px] text-muted-foreground">{formatStamp(at)}</time>
@@ -34,7 +43,7 @@ function Bubble({ mine, wide, at, children }: { mine: boolean; wide?: boolean; a
 }
 
 /** Một tin trong khung chat, theo Messages.Type (Text, Order, DepositReceipt, FinalInvoice) và tin hệ thống (SenderId rỗng). */
-export function MessageItem({ message: m, order, isLatestCard, highlight, onOpenForm, onViewOrder, onViewInvoice }: MessageItemProps) {
+export function MessageItem({ message: m, order, isLatestCard, highlight, onOpenForm, onViewOrder, onViewInvoice, nameOf, onReply, onReact, onRecall, album }: MessageItemProps) {
   switch (m.type) {
     case 'Order': {
       if (!order) break
@@ -106,9 +115,27 @@ export function MessageItem({ message: m, order, isLatestCard, highlight, onOpen
   const mine = m.sender === 'VENDOR'
   return (
     <Bubble mine={mine} at={m.sentDate}>
-      <div className={cn('rounded-[20px] px-[15px] py-[11px] text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]', mine ? 'rounded-br-[5px] bg-primary text-primary-foreground' : 'rounded-bl-[5px] bg-bg text-ink')}>
-        {m.content}
-      </div>
+      <MessageShell
+        message={m}
+        mine={mine}
+        nameOf={nameOf}
+        width="max-w-full"
+        onReply={(x) => onReply(x as VendorMessage)}
+        onReact={onReact}
+        // Thu hồi album là thu hồi mọi ảnh của album
+        onRecall={() => (album ?? [m]).forEach((x) => onRecall(x.id))}
+        images={imagesOf(album ?? [m])}
+      >
+        {album ? (
+          <ImageAlbum images={album.flatMap((x) => (x.attachment ? [x.attachment] : []))} />
+        ) : m.attachment ? (
+          <AttachmentContent attachment={m.attachment} mine={mine} />
+        ) : (
+          <div className={cn('rounded-[20px] px-[15px] py-[11px] text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]', mine ? 'rounded-br-[5px] bg-primary text-primary-foreground' : 'rounded-bl-[5px] bg-bg text-ink')}>
+            {m.content}
+          </div>
+        )}
+      </MessageShell>
     </Bubble>
   )
 }

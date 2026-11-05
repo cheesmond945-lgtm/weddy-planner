@@ -1,4 +1,4 @@
-import { Ban, CalendarDays, Check, Clock, Heart, Hourglass, Lock, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { Ban, CalendarDays, Check, Clock, Hourglass, Lock, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { CategoryIcon, categoryColor } from '@/features/catalog/categoryIcons'
@@ -28,16 +28,17 @@ export const dm = (s: string) => {
   return `${d.getDate()}/${d.getMonth() + 1}`
 }
 
-/** Nhãn dịch vụ của việc (icon + tên, màu theo danh mục) để lướt timeline vẫn biết việc thuộc dịch vụ nào; việc không gắn dịch vụ là "Việc chung". */
+/** Nhãn dịch vụ của việc (icon + tên, màu theo danh mục) để lướt timeline vẫn biết việc thuộc dịch vụ nào; việc không gắn dịch vụ (tự thêm, hệ thống sinh) không có nhãn. */
 function ServiceTag({ item }: { item: TimelineItem }) {
   const slug = item.category?.slug
+  if (!slug) return null
   return (
     <span
-      style={{ '--cc': slug ? categoryColor(slug) : 'var(--muted-foreground)' } as CSSProperties}
+      style={{ '--cc': categoryColor(slug) } as CSSProperties}
       className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-[color-mix(in_srgb,var(--cc)_14%,transparent)] px-2 py-0.5 text-[12px] leading-none font-semibold text-(--cc)"
     >
-      {slug ? <CategoryIcon slug={slug} size={13} strokeWidth={2} /> : <Heart className="size-[13px]" strokeWidth={2} aria-hidden />}
-      {item.category?.name ?? 'Việc chung'}
+      <CategoryIcon slug={slug} size={13} strokeWidth={2} />
+      {item.category!.name}
     </span>
   )
 }

@@ -2,6 +2,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ExternalLink, FileText, Loader2, RotateCw, SendHorizontal, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useStickToBottom } from '@/lib/useStickToBottom'
 import { Link } from 'react-router'
 import { chatApi } from '@/api/chat'
 import { planningKeys } from '@/features/weddings/hooks'
@@ -13,6 +14,12 @@ import type { Message } from '@/types/chat'
 import { coupleWording } from '../wording'
 import { chatPanel, isWithinHours, useChatPanel, type ChatPanelState } from '../chatPanel'
 import { useMarkReadOnView, useMessages } from '../hooks'
+import { groupAlbums } from '../albums'
+import { useMessageReaction } from '../useMessageReaction'
+import { useRecallMessage } from '../useRecallMessage'
+import { useSendAttachment } from '../useSendAttachment'
+import { AttachmentContent, ComposerTools, ImageAlbum } from './ChatAttachments'
+import { imagesOf, MessageShell, ReplyBar, type NameOf } from './MessageExtras'
 
 /** Ô nhập tự giãn tối đa 4 dòng (cao mỗi dòng 22px + đệm trên dưới 20px). */
 const LINE = 22
@@ -23,6 +30,8 @@ interface PendingMessage {
   id: string
   text: string
   status: 'sending' | 'failed'
+  /** Tin được trả lời (gửi lại vẫn giữ) */
+  replyToId?: string
 }
 
 /**
@@ -67,6 +76,20 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const online = isWithinHours(workingHours)
+  // Trả lời một tin cụ thể và thả cảm xúc (như Messenger)
+  const [replying, setReplying] = useState<Message | null>(null)
+  useEffect(() => setReplying(null), [conversation.id])
+  const react = useMessageReaction(messagesKey, (messageId, emoji) => chatApi.react(conversation.id, messageId, emoji))
+  const nameOf: NameOf = (s) => (s === 'COUPLE' ? 'chính mình' : s === 'VENDOR' ? service.name : 'Forever')
+  // Gửi ảnh / tệp / ghi âm
+  const attach = useSendAttachment(messagesKey, planningKeys.conversations(uid), (input) => chatApi.sendAttachment(conversation.id, input))
+  const recall = useRecallMessage(messagesKey, (messageId) => chatApi.recall(conversation.id, messageId))
+  // Ảnh gửi liền nhau gộp thành album
+  const albums = groupAlbums(messages)
+  const startReply = (m: Message) => {
+    setReplying(m)
+    inputRef.current?.focus()
+  }
 
   // Tin soạn sẵn chỉ dành cho lần nhắn đầu: tải xong tin cũ mà khách chưa nhắn lần nào thì mới điền, con trỏ đặt cuối câu
   const draftDone = useRef(false)
@@ -81,11 +104,8 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
     })
   }, [isPending, messages, panel.draft])
 
-  // Có tin mới (kể cả tin đang gửi) thì cuộn xuống cuối
-  useEffect(() => {
-    const el = listRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [messages.length, pending.length])
+  // Mở hội thoại hoặc có tin mới (kể cả tin đang gửi) thì cuộn xuống cuối, giữ ở cuối khi nội dung tải muộn
+  useStickToBottom(listRef, `${conversation.id}:${isPending}:${messages.length}:${pending.length}`)
 
   // Ô nhập giãn theo nội dung, tối đa 4 dòng rồi cuộn trong ô
   useEffect(() => {
@@ -98,7 +118,7 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
   async function deliver(item: PendingMessage) {
     setPending((list) => list.map((p) => (p.id === item.id ? { ...p, status: 'sending' } : p)))
     try {
-      const msg = await chatApi.send(conversation.id, item.text)
+      const msg = await chatApi.send(conversation.id, item.text, item.replyToId)
       setPending((list) => list.filter((p) => p.id !== item.id))
       qc.setQueryData<Message[]>(messagesKey, (list = []) => (list.some((m) => m.id === msg.id) ? list : [...list, msg]))
       void qc.invalidateQueries({ queryKey: planningKeys.conversations(uid) })
@@ -113,9 +133,15 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
     e?.preventDefault()
     const t = text.trim()
     if (!t) return
-    const item: PendingMessage = { id: `tmp-${Date.now()}`, text: t, status: 'sending' }
+    const item: PendingMessage = {
+      id: `tmp-${Date.now()}`,
+      text: t,
+      status: 'sending',
+      replyToId: replying?.id,
+    }
     setPending((list) => [...list, item])
     setText('')
+    setReplying(null)
     void deliver(item)
   }
 
@@ -168,7 +194,22 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
             <Loader2 className="size-6 animate-spin" />
           </div>
         ) : (
-          messages.map((m) => <Bubble key={m.id} message={m} conversationId={conversation.id} vendorName={service.name} />)
+          // Ảnh sau trong album đã nằm trong album của tin đầu
+          messages
+            .filter((m) => !albums.hidden.has(m.id))
+            .map((m) => (
+              <Bubble
+                key={m.id}
+                message={m}
+                conversationId={conversation.id}
+                vendorName={service.name}
+                nameOf={nameOf}
+                onReply={startReply}
+                onReact={(messageId, emoji) => react.mutate({ messageId, emoji })}
+                onRecall={(messageId) => recall.mutate(messageId)}
+                album={albums.byFirst.get(m.id)}
+              />
+            ))
         )}
         {pending.map((p) => (
           <div key={p.id} className="flex flex-col items-end">
@@ -205,27 +246,51 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
             </button>
           ))}
         </div>
+        {replying && (
+          <div className="mb-2">
+            <ReplyBar reply={replying} nameOf={nameOf} onCancel={() => setReplying(null)} />
+          </div>
+        )}
         <form onSubmit={submit} className="flex items-end gap-2">
-          <textarea
-            ref={inputRef}
-            rows={1}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Hỏi NCC về giá, lịch trống, thực đơn..."
-            aria-label={`Tin nhắn gửi ${service.name}`}
-            style={{ lineHeight: `${LINE}px` }}
-            className="min-w-0 flex-1 resize-none rounded-[20px] border border-line bg-bg px-4 py-2.5 text-[15px] text-ink placeholder:text-ink-3 focus:border-gold-700 focus:outline-none"
-          />
-          <button
-            type="submit"
-            aria-label="Gửi tin nhắn"
-            title="Gửi (Enter)"
-            disabled={!text.trim()}
-            className="grid size-10 shrink-0 place-items-center rounded-full bg-gold-700 text-white transition-colors hover:bg-gold-800 disabled:opacity-50"
+          <ComposerTools
+            className="min-w-0 flex-1 items-end"
+            sending={attach.isPending}
+            onFiles={(files) => void attach.sendFiles(files, replying?.id).then(() => setReplying(null))}
+            onVoice={(clip) =>
+              void attach
+                .send({
+                  file: clip.blob,
+                  name: clip.name,
+                  durationSec: clip.durationSec,
+                  replyToId: replying?.id,
+                })
+                .then(
+                  () => setReplying(null),
+                  () => undefined,
+                )
+            }
           >
-            <SendHorizontal className="size-[18px]" strokeWidth={1.75} />
-          </button>
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="Hỏi NCC về giá, lịch trống, thực đơn..."
+              aria-label={`Tin nhắn gửi ${service.name}`}
+              style={{ lineHeight: `${LINE}px` }}
+              className="min-w-0 flex-1 resize-none rounded-[20px] border border-line bg-bg px-4 py-2.5 text-[15px] text-ink placeholder:text-ink-3 focus:border-gold-700 focus:outline-none"
+            />
+            <button
+              type="submit"
+              aria-label="Gửi tin nhắn"
+              title="Gửi (Enter)"
+              disabled={!text.trim()}
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-gold-700 text-white transition-colors hover:bg-gold-800 disabled:opacity-50"
+            >
+              <SendHorizontal className="size-[18px]" strokeWidth={1.75} />
+            </button>
+          </ComposerTools>
         </form>
         <p className="mt-1.5 text-xs text-ink-3 max-[900px]:hidden">Enter để gửi, Shift + Enter để xuống dòng</p>
       </div>
@@ -233,9 +298,29 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
   )
 }
 
-const bubble = 'max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-[1.5] whitespace-pre-wrap [overflow-wrap:anywhere]'
+const bubbleText = 'rounded-2xl px-3.5 py-2.5 text-sm leading-[1.5] whitespace-pre-wrap [overflow-wrap:anywhere]'
+const bubble = `max-w-[82%] ${bubbleText}`
 
-function Bubble({ message: m, conversationId, vendorName }: { message: Message; conversationId: string; vendorName: string }) {
+function Bubble({
+  message: m,
+  conversationId,
+  vendorName,
+  nameOf,
+  onReply,
+  onReact,
+  onRecall,
+  album,
+}: {
+  message: Message
+  conversationId: string
+  vendorName: string
+  nameOf: NameOf
+  onReply: (m: Message) => void
+  onReact: (messageId: string, emoji: string | null) => void
+  onRecall: (messageId: string) => void
+  /** Tin đầu của album ảnh: mọi tin ảnh của album (albums.ts) */
+  album?: Message[]
+}) {
   const time = <span className="mt-1 text-xs text-ink-3">{formatMessageTime(m.sentDate)}</span>
   if (m.sender === 'SYSTEM') {
     return <div className="self-center rounded-pill bg-sage-soft px-3 py-1 text-center text-xs text-sage">{coupleWording(m.content, vendorName)}</div>
@@ -262,7 +347,25 @@ function Bubble({ message: m, conversationId, vendorName }: { message: Message; 
   const mine = m.sender === 'COUPLE'
   return (
     <div className={cn('flex flex-col', mine ? 'items-end' : 'items-start')}>
-      <div className={cn(bubble, mine ? 'rounded-br-md bg-gold-700 text-white' : 'rounded-bl-md bg-gold-100 text-ink')}>{m.content}</div>
+      <MessageShell
+        message={m}
+        mine={mine}
+        nameOf={nameOf}
+        width="max-w-[88%]"
+        onReply={(x) => onReply(x as Message)}
+        onReact={onReact}
+        // Thu hồi album là thu hồi mọi ảnh của album
+        onRecall={() => (album ?? [m]).forEach((x) => onRecall(x.id))}
+        images={imagesOf(album ?? [m])}
+      >
+        {album ? (
+          <ImageAlbum images={album.flatMap((x) => (x.attachment ? [x.attachment] : []))} />
+        ) : m.attachment ? (
+          <AttachmentContent attachment={m.attachment} mine={mine} />
+        ) : (
+          <div className={cn(bubbleText, mine ? 'rounded-br-md bg-gold-700 text-white' : 'rounded-bl-md bg-gold-100 text-ink')}>{m.content}</div>
+        )}
+      </MessageShell>
       {time}
     </div>
   )

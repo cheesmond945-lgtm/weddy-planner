@@ -126,7 +126,7 @@ export class ImportExportService {
       [...TASK_HEADER, 'Hạng mục', 'Trạng thái'],
       items
         .filter((t) => t.kind !== 'LOCKED')
-        .map((t) => [t.title, t.dueDate ?? '', t.note ?? '', t.category?.name ?? 'Việc chung', t.isDone ? 'Đã xong' : 'Chưa xong']),
+        .map((t) => [t.title, t.dueDate ?? '', t.note ?? '', t.category?.name ?? 'Việc ngoài dịch vụ', t.isDone ? 'Đã xong' : 'Chưa xong']),
     );
   }
 

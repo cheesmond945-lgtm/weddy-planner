@@ -7,7 +7,7 @@ import { remindFrameTasks, remindTaskDeadlines } from './order-reminders';
 /** Hai lần quét cùng một phạm vi cách nhau tối thiểu từng này giây (FE hỏi lại mỗi 2,5 đến 5 giây). */
 const MIN_GAP_MS = 15_000;
 const GLOBAL_EVERY_MS = 3_600_000;
-/** Đơn quá hạn cọc 24 giờ phải tự hủy (Expired) gần như ngay: quét riêng việc hết hạn mỗi phút (một câu SELECT nhẹ). */
+/** Đơn quá hạn cọc (12 giờ) phải tự hủy (Expired) gần như ngay: quét riêng việc hết hạn mỗi phút (một câu SELECT nhẹ). */
 const EXPIRE_EVERY_MS = 60_000;
 /** Nhắc hạn việc chỉ quét lại sau từng này giây cho cùng một phạm vi (việc hạn theo ngày, không cần dày). */
 const REMIND_GAP_MS = 600_000;

@@ -3,11 +3,17 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export const ALBUM_BUCKET = 'package-albums'; // công khai: ảnh gói dịch vụ
 export const DOC_BUCKET = 'vendor-documents'; // riêng tư: giấy tờ NCC
+export const CHAT_BUCKET = 'chat-files'; // riêng tư: ảnh / tệp / ghi âm gửi trong chat
+
+/** Link ký của tệp chat sống 1 giờ; dùng lại cùng link trong 50 phút để tải lại danh sách tin không làm ảnh tải lại */
+const CHAT_URL_TTL_SEC = 3600;
+const CHAT_URL_REUSE_MS = 50 * 60_000;
 
 @Injectable()
 export class StorageService {
   private readonly supabase: SupabaseClient;
   private readonly baseUrl: string;
+  private readonly chatUrls = new Map<string, { url: string; until: number }>();
 
   constructor() {
     const url = process.env.SUPABASE_URL;
@@ -50,6 +56,27 @@ export class StorageService {
     const { error } = await this.supabase.storage.from(bucket).upload(path, file, { contentType, upsert: false });
     if (error) throw new Error(error.message);
     return path;
+  }
+
+  /** Link ký tạm cho các tệp chat (path → url); tệp ký lỗi thì không có trong Map. */
+  async signedChatUrls(paths: string[]): Promise<Map<string, string>> {
+    const now = Date.now();
+    const out = new Map<string, string>();
+    const missing: string[] = [];
+    for (const p of new Set(paths)) {
+      const hit = this.chatUrls.get(p);
+      if (hit && hit.until > now) out.set(p, hit.url);
+      else missing.push(p);
+    }
+    if (missing.length) {
+      const { data } = await this.supabase.storage.from(CHAT_BUCKET).createSignedUrls(missing, CHAT_URL_TTL_SEC);
+      for (const row of data ?? []) {
+        if (!row.path || !row.signedUrl) continue;
+        out.set(row.path, row.signedUrl);
+        this.chatUrls.set(row.path, { url: row.signedUrl, until: now + CHAT_URL_REUSE_MS });
+      }
+    }
+    return out;
   }
 
   /** Xóa file (không báo lỗi nếu file không tồn tại). */

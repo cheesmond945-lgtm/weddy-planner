@@ -23,23 +23,24 @@ interface ConfirmLayoutProps extends ConfirmProps {
 function ConfirmLayout({ item, onClose, onConfirm, title, icon: Icon, question, hint, confirmLabel }: ConfirmLayoutProps) {
   return (
     <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-[460px]">
-        <DialogHeader className="flex items-center gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gold-soft text-gold-ink" aria-hidden>
-            <Icon className="size-5" />
-          </span>
-          <DialogTitle>{title}</DialogTitle>
+      <DialogContent className="max-w-[460px] rounded-[28px] px-8 pt-9 pb-8 text-center">
+        <DialogHeader className="items-center px-10">
+          <DialogTitle className="text-center text-[30px] font-medium">{title}</DialogTitle>
+          <span aria-hidden className="mx-auto mt-3 block h-1 w-12 rounded-pill bg-gold-100" />
         </DialogHeader>
-        <DialogDescription className="text-sm leading-relaxed">
+        <span className="mx-auto mt-6 mb-4 grid size-[72px] place-items-center rounded-full bg-gold-100 text-gold-700" aria-hidden>
+          <Icon className="size-10" strokeWidth={2.2} />
+        </span>
+        <DialogDescription className="text-center text-base">
           {question}
           <b className="mt-1.5 block font-semibold text-ink">“{item?.title}”?</b>
           {hint && <span className="mt-2 block text-[13px]">{hint}</span>}
         </DialogDescription>
-        <DialogFooter>
-          <Button type="button" variant="outline" className="min-w-24" onClick={onClose}>
+        <DialogFooter className="mt-8 grid grid-cols-2 gap-3">
+          <Button type="button" variant="outline" className="h-12 rounded-[16px] font-bold uppercase tracking-[0.08em]" onClick={onClose}>
             Đóng
           </Button>
-          <Button type="button" className="min-w-24" autoFocus onClick={() => item && onConfirm(item)}>
+          <Button type="button" className="h-12 rounded-[16px] font-bold uppercase tracking-[0.08em]" autoFocus onClick={() => item && onConfirm(item)}>
             {confirmLabel}
           </Button>
         </DialogFooter>

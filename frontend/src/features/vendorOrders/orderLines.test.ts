@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { applyHall, hallFieldState, hallLine, hallLineEdited, hallLineIndex, hallTablesError, needsNoPackageConfirm, packageNote, suggestPackage, type LinkPackage } from './orderLines.ts'
+import { applyHall, hallFieldState, hallLine, hallLineIndex, hallTablesError, needsNoPackageConfirm, packageNote, suggestPackage, type LinkPackage } from './orderLines.ts'
 
 const hall = (id: string, name: string, price: number, minTables: number | null = null, taskCount = 7): LinkPackage => ({ id, name, price, unit: 'Bàn', taskCount, minTables })
 const pkg = (id: string, name: string, price = 5_000_000, taskCount = 4): LinkPackage => ({ id, name, price, unit: 'Gói', taskCount })
@@ -39,13 +39,20 @@ describe('applyHall: tự tạo / cập nhật dòng sảnh', () => {
   })
 })
 
-describe('hallLineEdited: hỏi trước khi ghi đè', () => {
-  it('chưa sửa thì không hỏi; sửa giá hoặc số bàn thì hỏi', () => {
-    const l = hallLine(vang, undefined, 'a')
-    assert.equal(hallLineEdited(l, vang), false)
-    assert.equal(hallLineEdited({ ...l, unitPrice: 1 }, vang), true)
-    assert.equal(hallLineEdited({ ...l, quantity: 30 }, vang), true)
+describe('applyHall: dòng sảnh luôn nhảy theo gói', () => {
+  it('đổi sảnh ghi đè số bàn và đơn giá đã sửa bằng mặc định của sảnh mới', () => {
+    const out = applyHall([{ ...hallLine(bac, undefined, 'a'), quantity: 30, unitPrice: 1 }], vang, 'h2', 'new')
+    assert.deepEqual([out[0].itemName, out[0].quantity, out[0].unitPrice, out[0].packageId], ['Sảnh Vàng Cánh Bướm', 20, 4_000_000, 'h1'])
   })
+  it('đơn lệch sảnh (dòng gắn sảnh khác với ô Sảnh): thay đúng dòng đó, không chèn thêm', () => {
+    const items = [{ ...line('a', 'rxnyfg', { unitPrice: 5_500_000, quantity: 21 }), packageId: 'h2' }]
+    const out = applyHall(items, vang, 'h1', 'new', { hallIds: ['h1', 'h2'] })
+    assert.equal(out.length, 1)
+    assert.deepEqual([out[0].itemName, out[0].quantity, out[0].unitPrice, out[0].packageId, out[0].key], ['Sảnh Vàng Cánh Bướm', 20, 4_000_000, 'h1', 'a'])
+  })
+})
+
+describe('hallLineIndex', () => {
   it('hallLineIndex tìm dòng theo sảnh', () => {
     assert.equal(hallLineIndex([line('a', 'x'), hallLine(vang, undefined, 'b')], 'h1'), 1)
     assert.equal(hallLineIndex([line('a', 'x')], null), -1)

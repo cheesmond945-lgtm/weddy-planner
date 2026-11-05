@@ -114,7 +114,7 @@ export interface Order {
   depositPercent: number
   /** Tiền cọc, backend tính, làm tròn đến 100.000đ */
   depositAmount: number
-  /** Hạn cọc (ISO), 1 ngày sau lúc gửi đơn; null khi Draft */
+  /** Hạn cọc (ISO), 12 giờ sau lúc gửi đơn; null khi Draft */
   depositDueDate: string | null
   /** Ghi chú gửi khách */
   note: string | null
@@ -192,7 +192,7 @@ export interface OrderContent {
 
 /** Số liệu 4 thẻ đầu trang Quản lý đơn hàng, backend tính trên toàn bộ đơn của NCC (GET /vendors/me/orders/counts → tiles). */
 export interface OrderTilesData {
-  /** Đơn Chờ cọc, và trong đó số đơn hạn cọc còn dưới 24 giờ */
+  /** Đơn Chờ cọc, và trong đó số đơn hạn cọc còn dưới 6 giờ */
   pending: number
   expiringSoon: number
   /** Chờ chỉnh sửa + Đã cọc có yêu cầu chỉnh sửa của khách đang chờ */

@@ -44,6 +44,8 @@ export class OrderTasksService {
   private readonly logger = new Logger(OrderTasksService.name);
   /** Thông báo "đã hẹn ngày" gửi trễ để NCC kịp Hoàn tác (delayed-notice.ts) */
   private readonly scheduleNotices = new DelayedNotices();
+  /** Ngày của việc trước loạt đổi đang chờ báo (đổi liên tiếp trong lúc chờ thì thông báo vẫn ghi "từ" ngày ban đầu) */
+  private readonly scheduleFrom = new Map<string, string>();
 
   constructor(private readonly prisma: PrismaService, private readonly jobs: OrderJobsService) {}
 
@@ -330,6 +332,7 @@ export class OrderTasksService {
     if (blocked) return throwRule(blocked);
     await this.prisma.timeline_tasks.delete({ where: { id: task.id } });
     this.scheduleNotices.cancel(task.id); // việc đã bỏ thì không còn gì để báo "đã hẹn ngày"
+    this.scheduleFrom.delete(task.id);
     const coupleId = order.weddings?.user_id ?? null;
     this.later('thông báo bỏ việc', async () => {
       this.publishTask(userId, order, task.id);
@@ -441,12 +444,19 @@ export class OrderTasksService {
     this.later('realtime chốt lịch', async () => void this.publishTask(userId, order, task.id));
     // Hoàn tác khi thông báo còn chờ: hủy, khách không biết gì về lần đổi nhầm. Ngược lại hẹn gửi trễ (đổi tiếp trong lúc chờ thì chỉ gửi bản cuối).
     const cancelled = opts.undo === true && this.scheduleNotices.cancel(task.id);
+    if (cancelled) this.scheduleFrom.delete(task.id);
     if (!cancelled && coupleId) {
-      this.scheduleNotices.schedule(
-        task.id,
-        () => notify(this.prisma, { userId: coupleId, type: 'TaskScheduled', title: 'Nhà cung cấp đã hẹn ngày', content: `${vendorName} đã hẹn ngày cho việc "${task.title ?? ''}": ${dmyOf(target as string)}.`, referenceType: 'TimelineTask', referenceId: task.id }),
-        (e) => this.logger.warn(`thông báo hẹn ngày lỗi: ${e instanceof Error ? e.message : String(e)}`),
-      );
+      const from = this.scheduleFrom.get(task.id) ?? (task.scheduled_date ? ymdOf(task.scheduled_date) : '');
+      this.scheduleFrom.set(task.id, from);
+      const to = target as string;
+      // Ngày khác ngày ban đầu: báo "đổi ngày" (chỉ để đọc, FE không dẫn trang); cùng ngày: báo "đã hẹn ngày" như cũ
+      const send = () => {
+        this.scheduleFrom.delete(task.id);
+        return from && from !== to
+          ? notify(this.prisma, { userId: coupleId, type: 'TaskDateChanged', title: 'Nhà cung cấp đổi ngày việc', content: `${vendorName} đã đổi ngày việc "${task.title ?? ''}" từ ${dmyOf(from)} sang ${dmyOf(to)} (đơn ${order.order_code ?? ''}).`, referenceType: 'TimelineTask', referenceId: task.id })
+          : notify(this.prisma, { userId: coupleId, type: 'TaskScheduled', title: 'Nhà cung cấp đã hẹn ngày', content: `${vendorName} đã hẹn ngày cho việc "${task.title ?? ''}": ${dmyOf(to)}.`, referenceType: 'TimelineTask', referenceId: task.id });
+      };
+      this.scheduleNotices.schedule(task.id, send, (e) => this.logger.warn(`thông báo hẹn ngày lỗi: ${e instanceof Error ? e.message : String(e)}`));
     }
     return { item: this.rowOf({ ...task, scheduled_date: day, task_confirmations: keepUnconfirmed ? null : { confirmed_date: day, confirmed_at: now } }, ctx) };
   }

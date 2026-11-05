@@ -1,5 +1,6 @@
 import { CalendarPlus } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
+import { ColorFilter } from '@/components/ColorFilter'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { CalendarMonth, dayHeading, type CalendarEvent } from '@/features/calendar/components/CalendarMonth'
@@ -86,7 +87,8 @@ export function BusyCalendar() {
     return n >= shownHalls.length ? DAY_FULL : DAY_PART
   }
   const busyCount = new Set(ofDay.map((i) => i.packageId)).size
-  const chip = (on: boolean) => cn('inline-flex items-center gap-1.5 rounded-pill border px-3 py-1 text-[13px] font-medium transition-colors', on ? 'border-ink bg-ink text-bg' : 'border-line bg-surface hover:border-ink')
+  // Ngày đã qua: đơn ngày đó là tiệc đã tổ chức (lịch sử), không còn là "bận" giữ sảnh
+  const past = selected < now
 
   if (q.isError) return <EmptyState title="Chưa tải được lịch bận" description={q.error.message} action={<Button onClick={() => q.refetch()}>Thử lại</Button>} />
   if (q.data && !halls.length) {
@@ -96,16 +98,15 @@ export function BusyCalendar() {
   return (
     <>
       <div className="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="Lọc theo sảnh">
-        <button type="button" aria-pressed={!hall} className={chip(!hall)} onClick={() => setHall(null)}>
-          Tất cả sảnh
-        </button>
-        {halls.map((h) => (
-          <button key={h.id} type="button" aria-pressed={hall === h.id} className={chip(hall === h.id)} onClick={() => setHall(hall === h.id ? null : h.id)}>
-            <i aria-hidden className="size-2.5 rounded-full" style={dot(hueOf.get(h.id))} />
-            {h.name}
-            {h.hidden && <span className={cn('text-[11.5px]', hall === h.id ? 'opacity-80' : 'text-muted-foreground')}>(ẩn)</span>}
-          </button>
-        ))}
+        {/* Một nút lọc gọn thay cho cả hàng tên sảnh: bấm ra danh sách sảnh kèm màu trên lịch */}
+        <ColorFilter
+          ariaLabel="Lọc theo sảnh"
+          allLabel="Tất cả sảnh"
+          unit="sảnh"
+          value={hall ? [hall] : []}
+          onChange={(v) => setHall(v[0] ?? null)}
+          options={halls.map((h) => ({ value: h.id, label: h.name, color: dot(hueOf.get(h.id)).backgroundColor, sub: h.hidden ? '(ẩn)' : undefined }))}
+        />
         <Button size="sm" className="ml-auto rounded-pill" onClick={() => setAdding({ date: selected >= now ? selected : now, packageId: hall })} disabled={!halls.length}>
           <CalendarPlus />
           Đánh dấu bận
@@ -154,7 +155,7 @@ export function BusyCalendar() {
         <h3 className="mb-3 flex flex-wrap items-baseline gap-2 font-serif text-xl leading-tight">
           {dayHeading(selected)}
           <span className="font-sans text-[13px] font-medium text-muted-foreground">
-            {busyCount ? `${busyCount}/${shownHalls.length} sảnh bận` : 'Mọi sảnh còn trống'}
+            {past ? (busyCount ? `${busyCount}/${shownHalls.length} sảnh đã có tiệc` : 'Không có tiệc') : busyCount ? `${busyCount}/${shownHalls.length} sảnh bận` : 'Mọi sảnh còn trống'}
           </span>
         </h3>
         <ul className="grid gap-2">
@@ -169,20 +170,24 @@ export function BusyCalendar() {
                 <div className="grid min-w-0 flex-1 gap-1.5">
                   {sources.length === 0 && (
                     <span className="flex flex-wrap items-center gap-2 text-[13.5px]">
-                      <span className="font-medium text-sage">Trống</span>
+                      <span className={cn('font-medium', past ? 'text-muted-foreground' : 'text-sage')}>{past ? 'Không có tiệc' : 'Trống'}</span>
                     </span>
                   )}
                   {sources.map(({ source: s }) =>
                     s.kind === 'ORDER' ? (
                       <span key={s.orderId} className="flex flex-wrap items-center gap-2 text-[13.5px]">
-                        <span className="rounded-pill bg-gold-soft px-2 py-px text-[11.5px] font-bold text-gold-ink">Đơn</span>
+                        {past ? (
+                          <span className="rounded-pill bg-sage-soft px-2 py-px text-[11.5px] font-bold text-sage">Đã tổ chức</span>
+                        ) : (
+                          <span className="rounded-pill bg-gold-soft px-2 py-px text-[11.5px] font-bold text-gold-ink">Đơn</span>
+                        )}
                         <span className="min-w-0 [overflow-wrap:anywhere]">
                           {s.orderCode} · {s.customerName}
                         </span>
                         <button type="button" onClick={() => setOrderId(s.orderId)} className="text-[12.5px] font-semibold text-gold-700 underline underline-offset-2">
                           Xem đơn
                         </button>
-                        <span className="basis-full text-[12px] text-muted-foreground">Bận theo đơn: hủy hoặc đổi ngày, đổi sảnh của đơn thì sảnh trống lại.</span>
+                        {!past && <span className="basis-full text-[12px] text-muted-foreground">Bận theo đơn: hủy hoặc đổi ngày, đổi sảnh của đơn thì sảnh trống lại.</span>}
                       </span>
                     ) : (
                       <span key={s.busyId} className="flex flex-wrap items-center gap-2 text-[13.5px]">

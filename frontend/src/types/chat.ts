@@ -8,7 +8,17 @@ import type { PlanItemStatus } from './wedding'
 /** SYSTEM: Messages.SenderId rỗng (tin hệ thống). */
 export type MessageSender = 'COUPLE' | 'VENDOR' | 'SYSTEM'
 /** Messages.Type */
-export type MessageType = 'Text' | 'Order' | 'DepositReceipt' | 'FinalInvoice'
+export type MessageType = 'Text' | 'Order' | 'DepositReceipt' | 'FinalInvoice' | 'Image' | 'File' | 'Audio'
+
+/** Tệp của tin Image / File / Audio. `url` là link xem tạm (ký 1 giờ), null khi không ký được */
+export interface MessageAttachment {
+  url: string | null
+  name: string
+  mime: string
+  size: number
+  /** Ghi âm: độ dài (giây) */
+  duration: number | null
+}
 
 export interface Message {
   id: string
@@ -23,6 +33,30 @@ export interface Message {
   sentDate: string
   /** Chỉ BE thật trả, với tin có orderId: mã và trạng thái đơn, để vẽ ô đơn gọn khi chưa đọc được đơn đầy đủ */
   order?: { orderCode: string; status: OrderStatus } | null
+  /** Tin được trả lời (đoạn trích) */
+  replyTo?: MessageReplyRef | null
+  /** Cảm xúc đã gộp theo emoji */
+  reactions?: MessageReaction[]
+  /** Tin NCC do hệ thống trả lời tự động */
+  isAuto?: boolean
+  /** Tin Image / File / Audio */
+  attachment?: MessageAttachment | null
+  /** Người gửi đã thu hồi tin (không còn nội dung / tệp / cảm xúc) */
+  recalled?: boolean
+}
+
+/** Đoạn trích của tin được trả lời */
+export interface MessageReplyRef {
+  id: string
+  sender: MessageSender
+  content: string
+}
+
+/** Một emoji đã thả vào tin: số người thả, người xem có thả không */
+export interface MessageReaction {
+  emoji: string
+  count: number
+  mine: boolean
 }
 
 export interface Conversation {

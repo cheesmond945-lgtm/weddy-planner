@@ -19,8 +19,10 @@ interface OrderItemsEditorProps {
   lookup: LinkPackage[]
   /** Trung tâm tiệc cưới: sảnh đã chọn. Dòng gắn sảnh này khoá tên, đơn vị, gói; không xoá được */
   hall: LinkPackage | null
-  /** Sửa đơn sau khi khách cọc: khoá chọn gói trên mọi dòng (việc chi tiết đã tạo theo gói lúc cọc) */
+  /** Sửa đơn sau khi khách cọc: vẫn đổi được gói (việc chi tiết đổi theo khi lưu: trùng tên giữ tiến độ, gói cũ bỏ, gói mới thêm); chỉ đổi chữ nhỏ dưới dòng */
   lockPackages: boolean
+  /** Sửa sau cọc: gói của đơn lúc cọc (việc đã tạo); gói vừa đổi sang thì chữ nhỏ ghi "sẽ đổi khi lưu" */
+  depositedPackageIds?: readonly string[]
 }
 
 const cell = cn(controlClass, 'h-[38px]')
@@ -29,25 +31,29 @@ const err = (m?: string) => m && <span className="mt-0.5 block text-xs leading-s
 /**
  * Báo giá chi tiết: hạng mục, đơn vị (Gói hoặc Bàn), số lượng, đơn giá, thành tiền (OrderItems).
  * Liên kết việc chi tiết chỉ dựa vào gói của dòng (không dựa vào tên dòng): sửa tên thoải mái.
- * - Lĩnh vực không có sảnh: dropdown gói dưới mỗi dòng ("Không gắn gói" cho dòng tự nhập); dòng gắn gói khoá đơn vị theo gói.
+ * - Lĩnh vực không có sảnh: dropdown gói dưới mỗi dòng ("Gói tùy chỉnh" cho dòng tự nhập); dòng gắn gói khoá đơn vị theo gói.
  * - Trung tâm tiệc cưới: chỉ ô Sảnh (ngoài bảng); dòng sảnh tự tạo, còn lại là dòng tự nhập.
  */
-export function OrderItemsEditor({ items, onChange, errors, packages, lookup, hall, lockPackages }: OrderItemsEditorProps) {
+export function OrderItemsEditor({ items, onChange, errors, packages, lookup, hall, lockPackages, depositedPackageIds }: OrderItemsEditorProps) {
   const update = (key: string, patch: Partial<FormItem>) => onChange(items.map((i) => (i.key === key ? { ...i, ...patch } : i)))
   const remove = (key: string) => {
     const rest = items.filter((i) => i.key !== key)
     onChange(rest.length ? rest : [newItem()])
   }
 
-  /** Chọn gói cho một dòng: gắn gói, tự điền tên (nếu còn trống), đơn giá (nếu chưa nhập) và đơn vị theo gói. Bỏ gói thì giữ nguyên nội dung. */
+  /**
+   * Chọn gói cho một dòng: gắn gói, đơn giá và đơn vị luôn nhảy theo gói (NCC điều chỉnh giá thì nhập lại sau); tên nhảy theo nếu còn trống
+   * hoặc đang là tên một gói (tên tự đặt thì giữ). Bỏ gói thì giữ nguyên nội dung.
+   */
   function pickPackage(it: FormItem, id: string) {
     const p = packages.find((x) => x.id === id)
     if (!p) return update(it.key, { packageId: null })
+    const autoName = it.itemName.trim() === '' || lookup.some((x) => x.name === it.itemName)
     update(it.key, {
       packageId: p.id,
       unit: p.unit,
-      ...(it.itemName.trim() === '' && { itemName: p.name }),
-      ...(!(it.unitPrice > 0) && { unitPrice: p.price }),
+      unitPrice: p.price,
+      ...(autoName && { itemName: p.name }),
       ...(p.unit === 'Gói' && { quantity: 1 }),
     })
   }
@@ -70,8 +76,9 @@ export function OrderItemsEditor({ items, onChange, errors, packages, lookup, ha
         const isHall = !!hall && it.packageId === hall.id
         const linked = !!it.packageId
         const pkg = lookup.find((p) => p.id === it.packageId)
-        const note = packageNote(it, pkg, isHall ? 'hall' : 'package', lockPackages)
-        const suggestion = !isHall && !lockPackages ? suggestPackage(it, packages) : null
+        const switched = lockPackages && !!it.packageId && !!depositedPackageIds && !depositedPackageIds.includes(it.packageId)
+        const note = switched ? `Đổi sang ${isHall ? 'sảnh' : 'gói'} ${pkg?.name ?? ''} · công việc đổi theo khi lưu (trùng tên giữ tiến độ)` : packageNote(it, pkg, isHall ? 'hall' : 'package', lockPackages)
+        const suggestion = !isHall ? suggestPackage(it, packages) : null
         // Dòng gắn gói (không phải sảnh) khoá đơn vị theo gói; dòng tự nhập cho chọn đơn vị
         const unitFixed = isHall || (linked && packages.length > 0)
         return (
@@ -95,10 +102,10 @@ export function OrderItemsEditor({ items, onChange, errors, packages, lookup, ha
                 onChange={(e) => update(it.key, { itemName: e.target.value })}
               />
               {err(errors[`item:${i}:itemName`])}
-              {/* Lĩnh vực không có sảnh: một dropdown gói duy nhất cho mỗi dòng (khoá sau khi khách cọc) */}
-              {!isHall && packages.length > 0 && !lockPackages && (
+              {/* Lĩnh vực không có sảnh: một dropdown gói duy nhất cho mỗi dòng (đổi được cả sau khi khách cọc) */}
+              {!isHall && packages.length > 0 && (
                 <select className={cn(cell, 'mt-1 h-8 text-[12.5px]')} aria-label={`Gói dịch vụ ${i + 1}`} value={it.packageId ?? ''} onChange={(e) => pickPackage(it, e.target.value)}>
-                  <option value="">Không gắn gói</option>
+                  <option value="">Gói tùy chỉnh</option>
                   {it.packageId && !packages.some((p) => p.id === it.packageId) && <option value={it.packageId}>Gói đã gắn (đang ẩn)</option>}
                   {packages.map((p) => (
                     <option key={p.id} value={p.id}>

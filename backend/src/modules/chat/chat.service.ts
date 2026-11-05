@@ -1,10 +1,15 @@
 import { HttpException, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { CHAT_BUCKET, StorageService } from '../../integrations/storage/storage.service';
+import { decodeFileName, safeBaseName } from '../vendors/vendor-files';
+import { attachmentLabel, extOfMime, kindOfMime, MAX_ATTACHMENT_BYTES, normalizeMime, parseDuration } from './chat-attachments';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
 import { WeddingsService } from '../weddings/weddings.service';
 import { publish } from '../realtime/realtime.bus';
-import { markNewMessageRead, notifyNewMessage, postMessage } from './chat-messages';
-import { ChatRole, isUuid, todayVn, toLastMessage, toMessage } from './chat.mappers';
+import { ChatAutoReplyService } from './chat-auto-reply.service';
+import { markNewMessageRead, messageInclude, postMessage } from './chat-messages';
+import { ChatRole, isUuid, REACTIONS, todayVn, toLastMessage, toMessage } from './chat.mappers';
 
 const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);
@@ -17,7 +22,7 @@ export interface ChatUser {
   role: ChatRole;
 }
 
-const lastMessageInclude = { messages: { orderBy: [{ sent_date: 'desc' as const }, { id: 'desc' as const }], take: 1, include: { orders: { select: { order_code: true, status: true } } } } };
+const lastMessageInclude = { messages: { orderBy: [{ sent_date: 'desc' as const }, { id: 'desc' as const }], take: 1, include: messageInclude } };
 
 /**
  * Hội thoại và tin nhắn cho cả cặp đôi và NCC (docs/api/chat.md). Mọi thao tác nhận ChatUser lấy từ JWT:
@@ -29,6 +34,8 @@ export class ChatService {
     private readonly prisma: PrismaService,
     private readonly services: ServicesService,
     private readonly weddings: WeddingsService,
+    private readonly autoReply: ChatAutoReplyService,
+    private readonly storage: StorageService,
   ) {}
 
   private async owned(user: ChatUser, id: string) {
@@ -58,20 +65,108 @@ export class ChatService {
     const rows = await this.prisma.messages.findMany({
       where: { conversation_id: id, ...(afterDate && !Number.isNaN(afterDate.getTime()) ? { sent_date: { gt: afterDate } } : {}) },
       orderBy: [{ sent_date: 'asc' }, { id: 'asc' }],
-      include: { orders: { select: { order_code: true, status: true } } },
+      include: messageInclude,
     });
-    return rows.map((m) => toMessage(m, conv.couple_id));
+    const urls = await this.storage.signedChatUrls(rows.flatMap((m) => (m.attachment_path ? [m.attachment_path] : [])));
+    return rows.map((m) => toMessage(m, conv.couple_id, user.sub, urls));
   }
 
-  async send(user: ChatUser, id: string, text: string) {
+  /** Kiểm tin được trả lời thuộc đúng hội thoại; trả id hoặc null khi không trả lời tin nào. */
+  private async replyTarget(conversationId: string, replyToId: unknown) {
+    if (replyToId === undefined || replyToId === null || replyToId === '') return null;
+    const ok = typeof replyToId === 'string' && isUuid(replyToId) && (await this.prisma.messages.count({ where: { id: replyToId, conversation_id: conversationId } }));
+    return ok ? (replyToId as string) : fail('MESSAGE_NOT_FOUND', 'Không tìm thấy tin nhắn được trả lời.', 404);
+  }
+
+  /**
+   * Gửi ảnh / tệp / ghi âm (như Messenger): tệp lưu ở bucket riêng tư chat-files theo hội thoại, tin Image | File | Audio. Kiểu tệp theo danh
+   * sách cho phép (chat-attachments.ts), tối đa 25MB. `durationSec`: độ dài ghi âm. Không kích hoạt chào tự động (chỉ xét tin chữ).
+   */
+  async sendAttachment(user: ChatUser, id: string, file: Express.Multer.File | undefined, body: { replyToId?: unknown; durationSec?: unknown }) {
+    const conv = await this.owned(user, id);
+    if (!file?.buffer?.length) return fail('VALIDATION_ERROR', 'Chọn tệp để gửi.', 400);
+    if (file.size > MAX_ATTACHMENT_BYTES) return fail('FILE_TOO_LARGE', 'Tệp tối đa 25MB.', 413);
+    const name = decodeFileName(file.originalname || 'tep');
+    const mime = normalizeMime(file.mimetype, name);
+    if (!mime) return fail('UNSUPPORTED_FILE', 'Chỉ gửi được ảnh, ghi âm, video, PDF, Word, Excel, PowerPoint, TXT hoặc ZIP.', 415);
+    const replyTo = await this.replyTarget(id, body?.replyToId);
+    const kind = kindOfMime(mime);
+    const path = `${id}/${randomUUID()}_${safeBaseName(name)}.${extOfMime(mime, name)}`;
+    await this.storage.upload(CHAT_BUCKET, path, file.buffer, mime);
+    const content = attachmentLabel(kind, name);
+    const m = await postMessage(this.prisma, {
+      conversationId: id,
+      senderId: user.sub,
+      type: kind,
+      content,
+      replyToId: replyTo,
+      attachment: { path, name, mime, size: file.size, duration: kind === 'Audio' ? parseDuration(body?.durationSec) : null },
+    }).catch(async (e: unknown) => {
+      // Ghi tin lỗi thì xóa tệp vừa upload, không để tệp mồ côi trên Storage
+      await this.storage.remove(CHAT_BUCKET, [path]);
+      throw e;
+    });
+    // Tin nhắn không vào chuông thông báo: người nhận thấy số tin chưa đọc ở mục Tin nhắn (realtime đã báo trong postMessage)
+    return toMessage(m, conv.couple_id, user.sub, await this.storage.signedChatUrls([path]));
+  }
+
+  /** Gửi tin; `replyToId` (tùy chọn) là tin được trả lời, phải cùng hội thoại. Khách gửi thì xét trả lời tự động (chạy sau response). */
+  async send(user: ChatUser, id: string, text: string, replyToId?: unknown) {
     const conv = await this.owned(user, id);
     const content = (text ?? '').trim();
     if (!content) return fail('VALIDATION_ERROR', 'Nhập nội dung tin nhắn.', 400);
     if (content.length > MAX_TEXT) return fail('VALIDATION_ERROR', `Tin nhắn tối đa ${MAX_TEXT} ký tự.`, 400);
-    const m = await postMessage(this.prisma, { conversationId: id, senderId: user.sub, content });
-    const toCouple = user.role === 'Vendor';
-    await notifyNewMessage(this.prisma, { userId: (toCouple ? conv.couple_id : conv.vendor_id)!, conversationId: id, from: await this.displayName(user), content });
-    return toMessage(m, conv.couple_id);
+    const replyTo = await this.replyTarget(id, replyToId);
+    const m = await postMessage(this.prisma, { conversationId: id, senderId: user.sub, content, replyToId: replyTo });
+    // Tin nhắn không vào chuông thông báo: người nhận thấy số tin chưa đọc ở mục Tin nhắn (realtime đã báo trong postMessage)
+    if (user.role === 'Couple') this.autoReply.schedule(conv, m.id);
+    return toMessage(m, conv.couple_id, user.sub);
+  }
+
+  /**
+   * Thu hồi tin với mọi người (như Messenger): chỉ người gửi, chỉ tin chữ / ảnh / tệp / ghi âm. Xóa tệp trên Storage và cảm xúc, giữ dòng tin
+   * (recalled_date) để hai bên thấy "đã thu hồi một tin nhắn". Báo realtime để bên kia thấy ngay.
+   */
+  async recall(user: ChatUser, id: string, messageId: string) {
+    const conv = await this.owned(user, id);
+    const m = isUuid(messageId) ? await this.prisma.messages.findFirst({ where: { id: messageId, conversation_id: id } }) : null;
+    if (!m) return fail('MESSAGE_NOT_FOUND', 'Không tìm thấy tin nhắn.', 404);
+    if (m.sender_id !== user.sub) return fail('FORBIDDEN', 'Chỉ thu hồi được tin của chính bạn.', 403);
+    if (!['Text', 'Image', 'File', 'Audio'].includes(m.type ?? '')) return fail('MESSAGE_NOT_RECALLABLE', 'Không thu hồi được tin đơn hàng hoặc hóa đơn.', 409);
+    if (!m.recalled_date) {
+      if (m.attachment_path) await this.storage.remove(CHAT_BUCKET, [m.attachment_path]);
+      await this.prisma.$transaction([
+        this.prisma.message_reactions.deleteMany({ where: { message_id: m.id } }),
+        this.prisma.messages.update({
+          where: { id: m.id },
+          data: { recalled_date: new Date(), attachment_path: null, attachment_name: null, attachment_mime: null, attachment_size: null, attachment_duration: null },
+        }),
+      ]);
+      publish({ users: [conv.couple_id!, conv.vendor_id!], event: 'message', data: { conversationId: id, orderId: null, type: 'Recall' } });
+    }
+    const row = await this.prisma.messages.findUniqueOrThrow({ where: { id: m.id }, include: messageInclude });
+    return toMessage(row, conv.couple_id, user.sub);
+  }
+
+  /** Thả (hoặc thay) cảm xúc vào một tin của hội thoại; `emoji` rỗng là gỡ cảm xúc của mình. Báo realtime để bên kia thấy ngay. */
+  async react(user: ChatUser, id: string, messageId: string, emoji: unknown) {
+    const conv = await this.owned(user, id);
+    const exists = isUuid(messageId) && (await this.prisma.messages.count({ where: { id: messageId, conversation_id: id } }));
+    if (!exists) return fail('MESSAGE_NOT_FOUND', 'Không tìm thấy tin nhắn.', 404);
+    if (await this.prisma.messages.count({ where: { id: messageId, recalled_date: { not: null } } })) return fail('MESSAGE_RECALLED', 'Tin nhắn đã được thu hồi.', 409);
+    if (emoji === null || emoji === undefined || emoji === '') {
+      await this.prisma.message_reactions.deleteMany({ where: { message_id: messageId, user_id: user.sub } });
+    } else {
+      if (typeof emoji !== 'string' || !(REACTIONS as readonly string[]).includes(emoji)) return fail('VALIDATION_ERROR', 'Cảm xúc không hợp lệ.', 400);
+      await this.prisma.message_reactions.upsert({
+        where: { message_id_user_id: { message_id: messageId, user_id: user.sub } },
+        create: { message_id: messageId, user_id: user.sub, emoji },
+        update: { emoji, created_date: new Date() },
+      });
+    }
+    publish({ users: [conv.couple_id!, conv.vendor_id!], event: 'message', data: { conversationId: id, orderId: null, type: 'Reaction' } });
+    const row = await this.prisma.messages.findUniqueOrThrow({ where: { id: messageId }, include: messageInclude });
+    return toMessage(row, conv.couple_id, user.sub, await this.storage.signedChatUrls(row.attachment_path ? [row.attachment_path] : []));
   }
 
   /** Tổng số tin của bên kia mà người xem chưa đọc, ở mọi hội thoại (huy hiệu menu Tin nhắn). Bỏ qua tin hệ thống và tin của chính mình. */
@@ -90,16 +185,6 @@ export class ChatService {
     // Báo cả hai bên: các tab khác của người đọc giảm số chưa đọc, bên kia biết tin đã được xem
     if (r.count) publish({ users: [conv.couple_id!, conv.vendor_id!], event: 'read', data: { conversationId: id } });
     return null;
-  }
-
-  /** Tên hiện trong thông báo: cặp đôi là họ tên, NCC là tên doanh nghiệp. */
-  private async displayName(user: ChatUser) {
-    if (user.role === 'Vendor') {
-      const v = await this.prisma.vendor_profiles.findUnique({ where: { user_id: user.sub }, select: { business_name: true } });
-      return v?.business_name ?? 'nhà cung cấp';
-    }
-    const u = await this.prisma.users.findUnique({ where: { id: user.sub }, select: { full_name: true } });
-    return u?.full_name ?? 'khách hàng';
   }
 
   // ================= Cặp đôi =================
@@ -163,6 +248,8 @@ export class ChatService {
         senderId: vendor.user_id,
         content: `Chào bạn! Mình là ${vendor.business_name}. Bạn cần tư vấn gói nào cho ${(vendor.service_categories?.name ?? 'dịch vụ').toLowerCase()}?`,
         isRead: true,
+        // Câu chào do hệ thống tự gửi: không tính là NCC đang trực (chat-auto-reply.service.ts)
+        isAuto: true,
       });
     }
     return (await this.coupleConversations(userId, conv.id))[0];

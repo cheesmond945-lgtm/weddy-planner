@@ -29,7 +29,7 @@ export function SuggestionsDialog() {
 
   return (
     <Dialog open={!!slug} onOpenChange={(o) => !o && closeSuggestions()}>
-      <DialogContent className="max-w-[960px]">
+      <DialogContent className="max-h-[90vh] max-w-[960px] overflow-y-auto rounded-[28px] px-8 pt-8 pb-7 max-[640px]:px-4">
         {slug && <Body slug={slug} name={name} />}
       </DialogContent>
     </Dialog>

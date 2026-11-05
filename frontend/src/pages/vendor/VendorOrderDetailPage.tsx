@@ -9,6 +9,7 @@ import { OrderActions } from '@/features/vendorOrders/components/OrderActions'
 import { OrderStatusBadge, PaidInFullBadge } from '@/features/vendorOrders/components/OrderBadges'
 import { OrderDetailSections } from '@/features/vendorOrders/components/OrderDetailDialog'
 import { OrderFormDialog, type OrderFormMode } from '@/features/vendorOrders/components/OrderFormDialog'
+import { VendorOrderReviews } from '@/features/reviews/components/VendorOrderReviews'
 import { useOrder } from '@/features/vendorOrders/hooks'
 import { useNow } from '@/lib/clock'
 import { cn } from '@/lib/utils'
@@ -74,6 +75,9 @@ export default function VendorOrderDetailPage() {
       <section className="rounded-[22px] border border-line bg-surface p-6 shadow-panel max-sm:p-4">
         <OrderDetailSections order={order} vendorView onViewInvoice={(_, type) => setInvoiceType(type)} />
       </section>
+
+      {/* Đơn hoàn thành: đánh giá của khách và ô phản hồi (một lần) */}
+      <VendorOrderReviews orderId={order.id} completed={order.status === 'Completed'} />
 
       {invoiceType && <InvoiceDialog order={order} type={invoiceType} onClose={() => setInvoiceType(null)} />}
       {form && (

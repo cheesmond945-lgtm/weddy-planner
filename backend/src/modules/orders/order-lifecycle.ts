@@ -124,7 +124,13 @@ export async function completeOrder(prisma: PrismaService, orderId: string, comp
   const conversationId = await conversationOf(prisma, o.weddings!.user_id!, o.vendor_profiles!.user_id!);
   if (conversationId) await postMessage(prisma, { conversationId, senderId: null, orderId: o.id, isRead: true, content: completedChatText(o.order_code, by) });
   const base = { type: 'OrderCompleted', title: 'Đơn dịch vụ đã hoàn thành', content: `Đơn ${o.order_code} đã hoàn thành.`, referenceType: 'Order', referenceId: o.id };
-  await notify(prisma, { ...base, userId: o.weddings!.user_id! }).catch(() => undefined);
+  // Khách: MỘT thông báo duy nhất, vừa báo hoàn thành vừa mời nêu cảm nhận (bấm mở form đánh giá); không nhắc lại
+  await notify(prisma, {
+    ...base,
+    type: 'ReviewInvite',
+    content: `Đơn ${o.order_code} đã hoàn thành. Chia sẻ cảm nhận của bạn về ${o.vendor_profiles?.business_name ?? 'nhà cung cấp'} nhé!`,
+    userId: o.weddings!.user_id!,
+  }).catch(() => undefined);
   if (by === 'SYSTEM') await notify(prisma, { ...base, content: `Đơn ${o.order_code} đã tự hoàn thành, hoa hồng của đơn đã được tính.`, userId: o.vendor_profiles!.user_id! }).catch(() => undefined);
   return true;
 }

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/Badge'
+import { ColorFilter } from '@/components/ColorFilter'
 import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
 import { SegmentedTabs } from '@/components/SegmentedTabs'
@@ -42,8 +43,6 @@ const store = (key: string, v: string) => {
 
 // Số đơn mỗi lần lấy: 100 là trang lớn nhất API cho phép (README mục 6)
 const ALL_ORDERS = { page: 1, pageSize: 100 }
-// Hàng nút lọc theo khách ở Lịch tháng hiện tối đa từng này nút, còn lại gom vào "+N khách"
-const CHIP_LIMIT = 8
 
 const toneOf = (i: CalendarItem): CalendarTone => (i.kind === 'ORDER' ? 'event' : i.isDone ? 'done' : i.overdue ? 'overdue' : 'todo')
 
@@ -100,8 +99,6 @@ export default function VendorCalendarPage() {
   const listRef = useRef<HTMLElement>(null)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
   const [mineOnly, setMineOnly] = useState(false)
-  // Nhiều khách: hàng nút lọc chỉ hiện CHIP_LIMIT nút đầu (và nút đang chọn), còn lại gom vào "+N khách"
-  const [allChips, setAllChips] = useState(false)
   const { from, to } = useMemo(() => gridRange(month), [month])
   const cal = useVendorCalendar(from, to)
   const { data: ordersPage } = useOrders(ALL_ORDERS)
@@ -118,13 +115,6 @@ export default function VendorCalendarPage() {
     setViewState(v)
     store(VIEW_KEY, v)
   }
-  const toggle = (id: string) =>
-    setPicked((cur) => {
-      const next = new Set(cur)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
 
   const items = useMemo(
     () => (cal.data ?? []).filter((i) => (picked.size === 0 || picked.has(i.orderId)) && !(mineOnly && i.kind === 'TASK' && i.owner === 'CUSTOMER')),
@@ -151,8 +141,6 @@ export default function VendorCalendarPage() {
     for (const i of ofDay) map.set(i.orderId, [...(map.get(i.orderId) ?? []), i])
     return [...map.entries()]
   }, [ofDay])
-  const visibleChips = allChips ? active : active.filter((o, i) => i < CHIP_LIMIT || picked.has(o.id))
-  const hiddenChips = active.length - visibleChips.length
   const lateCount = items.filter((i) => i.kind === 'TASK' && i.overdue).length
   const soonCount = items.filter((i) => i.kind === 'TASK' && !i.isDone && !i.overdue && i.status !== 'Waiting' && daysBetween(today(), parseDate(i.date)) <= 2).length
   const totalLate = Object.values(progress ?? {}).reduce((n, p) => n + p.overdueVendor, 0)
@@ -182,28 +170,26 @@ export default function VendorCalendarPage() {
         <>
           {/* Chú giải bấm được: màu của từng khách / đơn, bấm để chỉ xem khách đó */}
           <div className="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="Lọc theo khách hoặc đơn">
-            {visibleChips.map((o) => {
-              const on = picked.has(o.id)
-              const late = progress?.[o.id]?.overdueVendor ?? 0
-              return (
-                <button key={o.id} type="button" aria-pressed={on} onClick={() => toggle(o.id)} className={chip(on)} title={`${o.customerName} · ${o.orderCode} · thực hiện ${formatDate(o.eventDate)}`}>
-                  <i aria-hidden className="size-2.5 rounded-full" style={{ backgroundColor: `hsl(${hueFor(o.id)} 60% 48%)` }} />
-                  {shortCouple(o.customerName)}
-                  <span className={cn('text-[11.5px]', on ? 'opacity-80' : 'text-muted-foreground')}>{o.orderCode.slice(-4)}</span>
-                  {late > 0 && <span className="rounded-pill bg-warn px-1.5 text-[11px] font-bold text-white">{late}</span>}
-                </button>
-              )
-            })}
-            {(hiddenChips > 0 || allChips) && active.length > CHIP_LIMIT && (
-              <button type="button" aria-expanded={allChips} className={chip(false)} onClick={() => setAllChips((v) => !v)}>
-                {allChips ? 'Ẩn bớt' : `+${hiddenChips} khách`}
-              </button>
-            )}
-            {picked.size > 0 && (
-              <Button variant="ghost" size="sm" className="rounded-pill" onClick={() => setPicked(new Set())}>
-                Bỏ lọc
-              </Button>
-            )}
+            {/* Một nút lọc gọn thay cho cả hàng tên khách: bấm ra danh sách khách / đơn kèm màu trên lịch, chọn được nhiều */}
+            <ColorFilter
+              ariaLabel="Lọc theo khách hoặc đơn"
+              allLabel="Tất cả khách"
+              unit="khách"
+              multiple
+              value={[...picked]}
+              onChange={(v) => setPicked(new Set(v))}
+              options={active.map((o) => {
+                const late = progress?.[o.id]?.overdueVendor ?? 0
+                return {
+                  value: o.id,
+                  label: shortCouple(o.customerName),
+                  color: `hsl(${hueFor(o.id)} 60% 48%)`,
+                  sub: o.orderCode.slice(-4),
+                  title: `${o.customerName} · ${o.orderCode} · thực hiện ${formatDate(o.eventDate)}`,
+                  badge: late > 0 ? <span className="rounded-pill bg-warn px-1.5 text-[11px] font-bold text-white">{late} trễ</span> : undefined,
+                }
+              })}
+            />
             <span className="ml-auto flex items-center gap-2">
               <button type="button" aria-pressed={!mineOnly} className={chip(!mineOnly)} onClick={() => setMineOnly(false)}>
                 Tất cả việc

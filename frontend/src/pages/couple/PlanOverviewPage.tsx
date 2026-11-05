@@ -114,7 +114,7 @@ function UpcomingCard({ tasks }: { tasks: NonNullable<Overview['tasks']> }) {
               <li key={t.id} className="flex items-start gap-3 border-t border-line py-2.5 text-sm first:border-t-0 first:pt-0">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{t.title}</div>
-                  <div className="text-[12.5px] text-muted-foreground">{t.category?.name ?? 'Việc chung'}</div>
+                  {t.category && <div className="text-[12.5px] text-muted-foreground">{t.category.name}</div>}
                 </div>
                 <span className={cn('rounded-pill px-2 py-0.5 text-[12px] whitespace-nowrap', due.cls)}>{due.text}</span>
               </li>

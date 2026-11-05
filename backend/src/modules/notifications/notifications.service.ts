@@ -13,9 +13,11 @@ export class NotificationsService {
     // Nhắc hạn việc (sắp đến hạn, quá hạn) được tạo khi tài khoản tải thông báo, nên chuông luôn thấy thông báo mới nhất
     await this.jobs.sweepUser(userId);
     const limit = Math.min(50, Math.max(1, Math.trunc(Number(limitInput)) || 20));
+    // Tin nhắn không hiện ở chuông (số tin chưa đọc nằm ở mục Tin nhắn): bỏ cả thông báo NewMessage cũ còn trong bảng
+    const mine = { user_id: userId, type: { not: 'NewMessage' } };
     const [rows, unread] = await Promise.all([
-      this.prisma.notifications.findMany({ where: { user_id: userId }, orderBy: [{ created_date: 'desc' }, { id: 'asc' }], take: limit }),
-      this.prisma.notifications.count({ where: { user_id: userId, is_read: false } }),
+      this.prisma.notifications.findMany({ where: mine, orderBy: [{ created_date: 'desc' }, { id: 'asc' }], take: limit }),
+      this.prisma.notifications.count({ where: { ...mine, is_read: false } }),
     ]);
     return {
       unread,

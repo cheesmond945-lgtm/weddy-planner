@@ -1,13 +1,14 @@
 /*
  * Hội thoại và tin nhắn phía NCC, đúng theo docs/database.md (Conversations, Messages) và hợp đồng
- * docs/api/chat.md (phần NCC). Messages.Type chỉ có Text, Order, DepositReceipt, FinalInvoice.
+ * docs/api/chat.md (phần NCC). Messages.Type: Text, Order, DepositReceipt, FinalInvoice, Image, File, Audio (tệp đính kèm).
  *
  * Kiểu chat phía cặp đôi ở types/chat.ts giữ nguyên.
  */
+import type { MessageAttachment, MessageReaction, MessageReplyRef } from './chat'
 import type { OrderStatus, RevisionChangeType } from './vendorOrder'
 
 /** Messages.Type */
-export const MESSAGE_TYPES = ['Text', 'Order', 'DepositReceipt', 'FinalInvoice'] as const
+export const MESSAGE_TYPES = ['Text', 'Order', 'DepositReceipt', 'FinalInvoice', 'Image', 'File', 'Audio'] as const
 export type MessageType = (typeof MESSAGE_TYPES)[number]
 
 /** SYSTEM: Messages.SenderId rỗng (tin hệ thống). */
@@ -25,6 +26,16 @@ export interface VendorMessage {
   sentDate: string
   /** Chỉ BE thật trả, với tin có orderId: mã và trạng thái đơn, để vẽ ô đơn gọn khi chưa đọc được đơn đầy đủ */
   order?: { orderCode: string; status: OrderStatus } | null
+  /** Tin được trả lời (đoạn trích) */
+  replyTo?: MessageReplyRef | null
+  /** Cảm xúc đã gộp theo emoji */
+  reactions?: MessageReaction[]
+  /** Tin NCC do hệ thống trả lời tự động */
+  isAuto?: boolean
+  /** Tin Image / File / Audio */
+  attachment?: MessageAttachment | null
+  /** Người gửi đã thu hồi tin (không còn nội dung / tệp / cảm xúc) */
+  recalled?: boolean
 }
 
 export interface VendorConversation {

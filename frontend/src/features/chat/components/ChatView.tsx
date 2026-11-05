@@ -1,6 +1,7 @@
 import { Filter, Receipt, Search, Send } from 'lucide-react'
 import { effectiveSender } from '../messageSender'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useStickToBottom } from '@/lib/useStickToBottom'
 import { Link } from 'react-router'
 import { Badge, type BadgeTone } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
@@ -15,8 +16,17 @@ import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import type { Conversation, Message } from '@/types/chat'
 import type { Order, OrderStatus } from '@/types/order'
+import { chatApi } from '@/api/chat'
+import { planningKeys } from '@/features/weddings/hooks'
+import { useAuth } from '@/store/auth'
 import { useMarkReadOnView, useMessages, useSendMessage } from '../hooks'
+import { groupAlbums } from '../albums'
+import { useMessageReaction } from '../useMessageReaction'
+import { useRecallMessage } from '../useRecallMessage'
+import { useSendAttachment } from '../useSendAttachment'
 import { coupleWording } from '../wording'
+import { AttachmentContent, ComposerTools, ImageAlbum } from './ChatAttachments'
+import { imagesOf, MessageShell, ReplyBar, type NameOf } from './MessageExtras'
 
 interface ChatViewProps {
   conversations: Conversation[]
@@ -179,21 +189,41 @@ function Thread({ conversation }: { conversation: Conversation }) {
   const [revising, setRevising] = useState<Order | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Trả lời một tin cụ thể và thả cảm xúc (như Messenger); đổi hội thoại thì bỏ tin đang trả lời
+  const [replying, setReplying] = useState<Message | null>(null)
+  useEffect(() => setReplying(null), [conversation.id])
+  const { user } = useAuth()
+  const react = useMessageReaction(planningKeys.messages(user?.id, conversation.id), (messageId, emoji) => chatApi.react(conversation.id, messageId, emoji))
+  const nameOf: NameOf = (s) => (s === 'COUPLE' ? 'chính mình' : s === 'VENDOR' ? conversation.service.name : 'Forever')
+  const recall = useRecallMessage(planningKeys.messages(user?.id, conversation.id), (messageId) => chatApi.recall(conversation.id, messageId))
+  // Ảnh gửi liền nhau gộp thành album
+  const albums = groupAlbums(messages)
+  // Gửi ảnh / tệp / ghi âm
+  const attach = useSendAttachment(planningKeys.messages(user?.id, conversation.id), planningKeys.conversations(user?.id), (input) => chatApi.sendAttachment(conversation.id, input))
+  const startReply = (m: Message) => {
+    setReplying(m)
+    inputRef.current?.focus()
+  }
   // Thẻ mới nhất của từng đơn: gửi lại thì các thẻ cũ thu gọn
   const latestCard = new Map<string, string>()
   for (const m of messages) if (m.type === 'Order' && m.orderId) latestCard.set(m.orderId, m.id)
 
-  // Có tin mới thì cuộn xuống cuối
-  useEffect(() => {
-    const el = listRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [messages.length])
+  // Mở hội thoại hoặc có tin mới thì cuộn xuống cuối, giữ ở cuối khi nội dung tải muộn
+  useStickToBottom(listRef, `${conversation.id}:${messages.length}`)
 
   function submit(e: FormEvent) {
     e.preventDefault()
     const t = text.trim()
     if (!t) return
-    send.mutate(t, { onSuccess: () => setText('') })
+    send.mutate(
+      { text: t, replyToId: replying?.id },
+      {
+        onSuccess: () => {
+          setText('')
+          setReplying(null)
+        },
+      },
+    )
   }
 
   return (
@@ -215,30 +245,50 @@ function Thread({ conversation }: { conversation: Conversation }) {
       </header>
 
       <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto bg-surface px-7 py-6 max-[900px]:p-4 max-[640px]:h-[360px] max-[640px]:flex-none">
-        {messages.map((m) => (
-          <MessageItem
-            key={m.id}
-            message={m}
-            conversation={conversation}
-            isLatestCard={!m.orderId || latestCard.get(m.orderId) === m.id}
-            onRevise={setRevising}
-            onMessageVendor={() => inputRef.current?.focus()}
-          />
-        ))}
+        {/* Ảnh sau trong album đã nằm trong album của tin đầu */}
+        {messages
+          .filter((m) => !albums.hidden.has(m.id))
+          .map((m) => (
+            <MessageItem
+              key={m.id}
+              message={m}
+              conversation={conversation}
+              isLatestCard={!m.orderId || latestCard.get(m.orderId) === m.id}
+              onRevise={setRevising}
+              onMessageVendor={() => inputRef.current?.focus()}
+              nameOf={nameOf}
+              onReply={startReply}
+              onReact={(messageId, emoji) => react.mutate({ messageId, emoji })}
+              onRecall={(messageId) => recall.mutate(messageId)}
+              album={albums.byFirst.get(m.id)}
+            />
+          ))}
       </div>
 
-      <form onSubmit={submit} className="flex items-center gap-2.5 border-t border-line-soft bg-surface px-6 pt-3.5 pb-[18px]">
-        <input
-          ref={inputRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Nhập tin nhắn..."
-          aria-label="Tin nhắn"
-          className="min-w-0 flex-1 rounded-pill border-0 bg-bg px-[18px] py-[15px] text-[15px] text-ink outline-none focus:outline-1 focus:outline-primary"
-        />
-        <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending} className="size-12 rounded-full">
-          <Send className="size-[19px]" />
-        </Button>
+      {replying && (
+        <div className="border-t border-line-soft bg-surface px-6 pt-2.5">
+          <ReplyBar reply={replying} nameOf={nameOf} onCancel={() => setReplying(null)} />
+        </div>
+      )}
+      <form onSubmit={submit} className={cn('flex items-center gap-2.5 bg-surface px-6 pt-3.5 pb-[18px]', !replying && 'border-t border-line-soft')}>
+        <ComposerTools
+          className="min-w-0 flex-1"
+          sending={attach.isPending}
+          onFiles={(files) => void attach.sendFiles(files, replying?.id).then(() => setReplying(null))}
+          onVoice={(clip) => void attach.send({ file: clip.blob, name: clip.name, durationSec: clip.durationSec, replyToId: replying?.id }).then(() => setReplying(null), () => undefined)}
+        >
+          <input
+            ref={inputRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Nhập tin nhắn..."
+            aria-label="Tin nhắn"
+            className="min-w-0 flex-1 rounded-pill border-0 bg-bg px-[18px] py-[15px] text-[15px] text-ink outline-none focus:outline-1 focus:outline-primary"
+          />
+          <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending} className="ml-1 size-12 rounded-full">
+            <Send className="size-[19px]" />
+          </Button>
+        </ComposerTools>
       </form>
 
       <ReviseOrderDialog order={revising} onClose={() => setRevising(null)} />
@@ -252,12 +302,23 @@ function MessageItem({
   isLatestCard,
   onRevise,
   onMessageVendor,
+  nameOf,
+  onReply,
+  onReact,
+  onRecall,
+  album,
 }: {
   message: Message
   conversation: Conversation
   isLatestCard: boolean
   onRevise: (o: Order) => void
   onMessageVendor: () => void
+  nameOf: NameOf
+  onReply: (m: Message) => void
+  onReact: (messageId: string, emoji: string | null) => void
+  onRecall: (messageId: string) => void
+  /** Tin đầu của album ảnh: mọi tin ảnh của album (albums.ts) */
+  album?: Message[]
 }) {
   const categorySlug = conversation.service.category.slug
   if (message.type === 'Order' && message.orderId) {
@@ -266,7 +327,10 @@ function MessageItem({
   if ((message.type === 'DepositReceipt' || message.type === 'FinalInvoice') && message.orderId) {
     return <ReceiptCard message={message} vendorName={conversation.service.name} />
   }
-  const base = 'max-w-[78%] rounded-[20px] px-[15px] py-[11px] text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere] max-[640px]:max-w-[94%]'
+  const width = 'max-w-[78%] max-[640px]:max-w-[94%]'
+  const base = cn(width, 'rounded-[20px] px-[15px] py-[11px] text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere]')
+  // Tin chữ của hai bên: bề ngang giới hạn ở hàng tin (MessageShell), khung tin chiếm hết hàng
+  const text = 'rounded-[20px] px-[15px] py-[11px] text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere]'
   const time = <time className="mt-1 px-1 text-[11px] text-muted-foreground">{formatStamp(message.sentDate)}</time>
   if (message.sender === 'SYSTEM')
     return (
@@ -275,16 +339,28 @@ function MessageItem({
         {time}
       </div>
     )
-  if (message.sender === 'COUPLE')
-    return (
-      <div className="flex flex-col items-end">
-        <div className={cn(base, 'rounded-br-[5px] bg-primary text-primary-foreground')}>{message.content}</div>
-        {time}
-      </div>
-    )
+  const mine = message.sender === 'COUPLE'
   return (
-    <div className="flex flex-col items-start">
-      <div className={cn(base, 'rounded-bl-[5px] bg-bg text-nav')}>{message.content}</div>
+    <div className={cn('flex flex-col', mine ? 'items-end' : 'items-start')}>
+      <MessageShell
+        message={message}
+        mine={mine}
+        nameOf={nameOf}
+        width={width}
+        onReply={(m) => onReply(m as Message)}
+        onReact={onReact}
+        // Thu hồi album là thu hồi mọi ảnh của album
+        onRecall={() => (album ?? [message]).forEach((x) => onRecall(x.id))}
+        images={imagesOf(album ?? [message])}
+      >
+        {album ? (
+          <ImageAlbum images={album.flatMap((x) => (x.attachment ? [x.attachment] : []))} />
+        ) : message.attachment ? (
+          <AttachmentContent attachment={message.attachment} mine={mine} />
+        ) : (
+          <div className={cn(text, mine ? 'rounded-br-[5px] bg-primary text-primary-foreground' : 'rounded-bl-[5px] bg-bg text-nav')}>{message.content}</div>
+        )}
+      </MessageShell>
       {time}
     </div>
   )

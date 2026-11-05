@@ -43,3 +43,21 @@ export class CoupleReviewsController {
     return this.reviews.update(req.user.sub, itemId, body);
   }
 }
+
+/** Nhà cung cấp: đọc đánh giá của khách theo đơn và phản hồi một lần (docs/api/reviews.md). */
+@UseGuards(JwtAuthGuard)
+@Roles('Vendor')
+@Controller('vendors/me')
+export class VendorOwnReviewsController {
+  constructor(private readonly reviews: ReviewsService) {}
+
+  @Get('orders/:orderId/reviews')
+  itemsOfOrder(@Req() req: any, @Param('orderId') orderId: string) {
+    return this.reviews.itemsOfVendorOrder(req.user.sub, orderId);
+  }
+
+  @Put('reviews/:reviewId/reply')
+  reply(@Req() req: any, @Param('reviewId') reviewId: string, @Body() body: { content?: unknown }) {
+    return this.reviews.reply(req.user.sub, reviewId, body ?? {});
+  }
+}

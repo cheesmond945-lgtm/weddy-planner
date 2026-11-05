@@ -356,7 +356,7 @@
 
   DepositPercent   Tỷ lệ cọc (%), nhà cung cấp nhập, khóa sau khi khách cọc
 
-  DepositAmount    Số tiền cọc, bằng TotalAmount × DepositPercent / 100, làm tròn đến 100.000đ, hệ thống tự tính, cố định sau khi khách cọc
+  DepositAmount    Số tiền cọc, bằng TotalAmount × DepositPercent / 100, làm tròn đến 1.000đ, hệ thống tự tính, cố định sau khi khách cọc
 
   DepositDueDate   Hạn nộp cọc, 1 ngày kể từ lúc gửi đơn hoặc gửi lại
 
@@ -400,7 +400,7 @@
 
   RevisionType       Sửa trước khi cọc hay sau khi cọc
 
-  RequestedChanges   Nội dung khách muốn đổi ("Đổi số lượng", "Đổi ngày thực hiện"\...)
+  RequestedChanges   Nội dung khách muốn đổi ("Đổi số bàn", "Đổi ngày thực hiện"\...)
 
   RequestNote        Lời nhắn của khách
 
@@ -2170,7 +2170,7 @@ Ràng buộc bảng: UNIQUE (CoupleId, VendorId); CHECK (CoupleId \<\> VendorId)
 
   DepositPercent    NUMERIC(5,2)    CHECK \> 0 và \< 100. Nhà cung cấp nhập, khóa sau khi khách cọc
 
-  DepositAmount     NUMERIC(18,2)   CHECK ≤ TotalAmount. Dẫn xuất: TotalAmount × DepositPercent / 100, làm tròn đến 100.000đ; cố định sau khi khách cọc
+  DepositAmount     NUMERIC(18,2)   CHECK ≤ TotalAmount. Dẫn xuất: TotalAmount × DepositPercent / 100, làm tròn đến 1.000đ; cố định sau khi khách cọc
 
   DepositDueDate?   TIMESTAMPTZ     Hạn nộp cọc = lúc gửi (hoặc gửi lại) + 1 ngày
 
@@ -2645,7 +2645,7 @@ Tính tiền (backend tính, không tin dữ liệu từ giao diện):
 
 -   OrderItems.Amount = Quantity × UnitPrice; Orders.TotalAmount = SUM(Amount).
 
--   Orders.DepositAmount = TotalAmount × DepositPercent / 100, làm tròn đến 100.000đ (theo ghi chú trên form tạo đơn).
+-   Orders.DepositAmount = TotalAmount × DepositPercent / 100, làm tròn đến 1.000đ (theo ghi chú trên form tạo đơn).
 
 -   Nhà cung cấp chỉ nhập: hạng mục, DepositPercent, EventDate, Note. Các số tiền khác chỉ hiển thị.
 
@@ -2851,7 +2851,7 @@ Dữ liệu mẫu ví dụ minh họa cho mẫu timeline (chưa phải danh sác
 
 4.  Tỷ lệ hoa hồng 7 loại là tạm chấp nhận (đặc biệt \"Trung tâm tiệc cưới\" 5%).
 
-5.  Quy tắc làm tròn tiền cọc đến 100.000đ: chưa nói rõ làm tròn lên, xuống hay gần nhất.
+5.  Quy tắc làm tròn tiền cọc đến 1.000đ: chưa nói rõ làm tròn lên, xuống hay gần nhất.
 
 6.  Ép đổi mật khẩu lần đầu: chưa có cột (ví dụ MustChangePassword); người dùng chưa quyết định thêm. Hiện mật khẩu do hệ thống sinh ngẫu nhiên và gửi qua email, người dùng tự đổi. Đăng nhập bằng email hay bằng tên đăng nhập cũng chưa chốt (cả hai cột đều UNIQUE nên hỗ trợ được cả hai).
 

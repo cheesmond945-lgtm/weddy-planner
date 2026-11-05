@@ -116,18 +116,29 @@ model invoices {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model messages {
-  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversation_id String?        @db.Uuid
-  sender_id       String?        @db.Uuid
-  order_id        String?        @db.Uuid
-  content         String?
-  type            String?        @default("Text") @db.VarChar(20)
-  is_read         Boolean?       @default(false)
-  read_date       DateTime?      @db.Timestamptz(6)
-  sent_date       DateTime?      @default(now()) @db.Timestamptz(6)
-  conversations   conversations? @relation(fields: [conversation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  orders          orders?        @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users           users?         @relation(fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id     String?             @db.Uuid
+  sender_id           String?             @db.Uuid
+  order_id            String?             @db.Uuid
+  content             String?
+  type                String?             @default("Text") @db.VarChar(20)
+  is_read             Boolean?            @default(false)
+  read_date           DateTime?           @db.Timestamptz(6)
+  sent_date           DateTime?           @default(now()) @db.Timestamptz(6)
+  reply_to_id         String?             @db.Uuid
+  is_auto             Boolean?            @default(false)
+  attachment_path     String?             @db.VarChar(500)
+  attachment_name     String?             @db.VarChar(255)
+  attachment_mime     String?             @db.VarChar(100)
+  attachment_size     Int?
+  attachment_duration Int?
+  recalled_date       DateTime?           @db.Timestamptz(6)
+  message_reactions   message_reactions[]
+  conversations       conversations?      @relation(fields: [conversation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orders              orders?             @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  messages            messages?           @relation("messagesTomessages", fields: [reply_to_id], references: [id], onUpdate: NoAction)
+  other_messages      messages[]          @relation("messagesTomessages")
+  users               users?              @relation(fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([conversation_id, sent_date], map: "ix_messages_conv")
 }
@@ -203,44 +214,44 @@ model order_revisions {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model orders {
-  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  vendor_id        String?           @db.Uuid
-  wedding_id       String?           @db.Uuid
-  order_code       String?           @unique @db.VarChar(30)
-  customer_name    String?           @db.VarChar(150)
-  customer_phone   String?           @db.VarChar(20)
-  event_date       DateTime?         @db.Date
-  total_amount     Decimal?          @default(0) @db.Decimal(18, 2)
-  deposit_percent  Decimal?          @db.Decimal(5, 2)
-  deposit_amount   Decimal?          @default(0) @db.Decimal(18, 2)
-  deposit_due_date DateTime?         @db.Timestamptz(6)
-  status           String?           @default("Draft") @db.VarChar(20)
-  note             String?
-  completed_date   DateTime?         @db.Timestamptz(6)
-  cancelled_date   DateTime?         @db.Timestamptz(6)
-  cancel_reason    String?           @db.VarChar(20)
+  id                    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendor_id             String?            @db.Uuid
+  wedding_id            String?            @db.Uuid
+  order_code            String?            @unique @db.VarChar(30)
+  customer_name         String?            @db.VarChar(150)
+  customer_phone        String?            @db.VarChar(20)
+  event_date            DateTime?          @db.Date
+  total_amount          Decimal?           @default(0) @db.Decimal(18, 2)
+  deposit_percent       Decimal?           @db.Decimal(5, 2)
+  deposit_amount        Decimal?           @default(0) @db.Decimal(18, 2)
+  deposit_due_date      DateTime?          @db.Timestamptz(6)
+  status                String?            @default("Draft") @db.VarChar(20)
+  note                  String?
+  completed_date        DateTime?          @db.Timestamptz(6)
+  cancelled_date        DateTime?          @db.Timestamptz(6)
+  created_date          DateTime?          @default(now()) @db.Timestamptz(6)
+  cancel_reason         String?            @db.VarChar(20)
+  /// Gói / sảnh của đơn (Trung tâm tổ chức sự kiện): sảnh bận vào event_date khi đơn Deposited hoặc Completed (prisma/sql/2026-10-31-package-busy-dates.sql)
+  package_id            String?            @db.Uuid
+  /// Ngày cưới: giờ NCC có mặt / xong việc đã chốt với khách; dayof_confirmed_at NULL là chưa chốt (prisma/sql/2026-11-02-wedding-day-schedule.sql)
+  dayof_start_at        DateTime?          @db.Timestamptz(6)
+  dayof_end_at          DateTime?          @db.Timestamptz(6)
+  dayof_confirmed_at    DateTime?          @db.Timestamptz(6)
   /// Số khách của đơn tiệc; khách yêu cầu hủy đơn đã cọc (backend/prisma/manual/2026-11-02-02-order-adjustments.sql)
   guest_count           Int?
-  cancel_requested_date DateTime?     @db.Timestamptz(6)
+  cancel_requested_date DateTime?          @db.Timestamptz(6)
   cancel_request_note   String?
-  created_date     DateTime?         @default(now()) @db.Timestamptz(6)
-  /// Gói / sảnh của đơn (Trung tâm tổ chức sự kiện): sảnh bận vào event_date khi đơn Deposited hoặc Completed (prisma/sql/2026-10-31-package-busy-dates.sql)
-  package_id       String?           @db.Uuid
-  /// Ngày cưới: giờ NCC có mặt / xong việc đã chốt với khách; dayof_confirmed_at NULL là chưa chốt (prisma/sql/2026-11-02-wedding-day-schedule.sql)
-  dayof_start_at     DateTime?         @db.Timestamptz(6)
-  dayof_end_at       DateTime?         @db.Timestamptz(6)
-  dayof_confirmed_at DateTime?         @db.Timestamptz(6)
-  commissions      commissions?
-  invoices         invoices[]
-  messages         messages[]
-  order_items      order_items[]
-  order_revisions  order_revisions[]
-  order_adjustments order_adjustments[]
-  service_packages service_packages? @relation(fields: [package_id], references: [id], onUpdate: NoAction)
-  vendor_profiles  vendor_profiles?  @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  weddings         weddings?         @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  payments         payments?
-  timeline_tasks   timeline_tasks[]
+  commissions           commissions?
+  invoices              invoices[]
+  messages              messages[]
+  order_adjustments     order_adjustments[]
+  order_items           order_items[]
+  order_revisions       order_revisions[]
+  service_packages      service_packages?  @relation(fields: [package_id], references: [id], onUpdate: NoAction)
+  vendor_profiles       vendor_profiles?   @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  weddings              weddings?          @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payments              payments?
+  timeline_tasks        timeline_tasks[]
 
   @@unique([package_id, event_date], map: "ux_orders_package_busy", where: raw("((package_id IS NOT NULL) AND ((status)::text = ANY ((ARRAY['Deposited'::character varying, 'Completed'::character varying])::text[])))"))
   @@index([vendor_id, status], map: "ix_orders_vendor_status")
@@ -359,27 +370,27 @@ model service_packages {
   updated_date           DateTime?               @default(now()) @db.Timestamptz(6)
   /// Số mâm tối thiểu để được kèm sảnh (Trung tâm tiệc cưới; giá gói là giá mỗi mâm 10 khách, đã gồm sảnh)
   min_tables             Int?
-  /// "mâm" hoặc "gói" (backend/prisma/manual/2026-10-30-01-budget-tiers.sql)
-  unit                   String                  @default("gói") @db.VarChar(10)
+  /// Ai ẩn gói khi status = Hidden: Vendor (NCC tự ẩn, tự khôi phục được) hoặc Admin (chỉ Admin khôi phục)
+  hidden_by              String?                 @db.VarChar(10)
+  /// Lý do Admin ẩn gói (NCC tự ẩn thì để trống)
+  hidden_reason          String?
   /// Ngày cưới: có mặt trước giờ chính bao nhiêu phút, làm trong bao nhiêu phút; NULL dùng mặc định theo lĩnh vực (prisma/sql/2026-11-02-wedding-day-schedule.sql)
   dayof_lead_minutes     Int?
   dayof_duration_minutes Int?
   /// Sảnh: giờ sớm nhất đơn vị khác được vào setup trong ngày cưới (giờ VN)
   setup_open_time        DateTime?               @db.Time(6)
-  /// Ai ẩn gói khi status = Hidden: Vendor (NCC tự ẩn, tự khôi phục được) hoặc Admin (chỉ Admin khôi phục)
-  hidden_by              String?                 @db.VarChar(10)
-  /// Lý do Admin ẩn gói (NCC tự ẩn thì để trống)
-  hidden_reason          String?
+  /// "mâm" hoặc "gói" (backend/prisma/manual/2026-10-30-01-budget-tiers.sql)
+  unit                   String                  @default("gói") @db.VarChar(10)
   order_items            order_items[]
   orders                 orders[]
   package_albums         package_albums[]
+  package_availability   package_availability[]
   package_busy_dates     package_busy_dates[]
-  package_tasks          package_tasks[]
+  package_resources      package_resources?
   package_tags           package_tags[]
+  package_tasks          package_tasks[]
   package_verifications  package_verifications[]
   plan_vendors           plan_vendors[]
-  package_availability   package_availability[]
-  package_resources      package_resources?
   vendor_profiles        vendor_profiles?        @relation(fields: [vendor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([vendor_id, status], map: "ix_packages_vendor_status")
@@ -439,10 +450,10 @@ model timeline_tasks {
   display_order      Int?                @default(0)
   created_date       DateTime?           @default(now()) @db.Timestamptz(6)
   note               String?             @db.VarChar(200)
+  task_confirmations task_confirmations?
   service_categories service_categories? @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   orders             orders?             @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   weddings           weddings?           @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  task_confirmations task_confirmations?
 
   @@unique([wedding_id, task_code])
   @@index([order_id], map: "ix_timeline_order")
@@ -453,23 +464,25 @@ model timeline_tasks {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model users {
-  id                                           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  username                                     String?            @db.VarChar(50)
-  email                                        String             @unique @db.VarChar(255)
-  full_name                                    String?            @db.VarChar(150)
-  password_hash                                String?            @db.VarChar(255)
-  phone_number                                 String?            @db.VarChar(20)
-  role                                         String?            @db.VarChar(20)
-  status                                       String?            @default("Active") @db.VarChar(20)
-  created_date                                 DateTime?          @default(now()) @db.Timestamptz(6)
-  last_login_at                                DateTime?          @db.Timestamptz(6)
-  conversations_conversations_couple_idTousers conversations[]    @relation("conversations_couple_idTousers")
-  conversations_conversations_vendor_idTousers conversations[]    @relation("conversations_vendor_idTousers")
+  id                                           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username                                     String?             @db.VarChar(50)
+  email                                        String              @unique @db.VarChar(255)
+  full_name                                    String?             @db.VarChar(150)
+  password_hash                                String?             @db.VarChar(255)
+  phone_number                                 String?             @db.VarChar(20)
+  role                                         String?             @db.VarChar(20)
+  status                                       String?             @default("Active") @db.VarChar(20)
+  created_date                                 DateTime?           @default(now()) @db.Timestamptz(6)
+  last_login_at                                DateTime?           @db.Timestamptz(6)
+  conversations_conversations_couple_idTousers conversations[]     @relation("conversations_couple_idTousers")
+  conversations_conversations_vendor_idTousers conversations[]     @relation("conversations_vendor_idTousers")
   favorite_vendors                             favorite_vendors[]
+  message_reactions                            message_reactions[]
   messages                                     messages[]
   notifications                                notifications[]
   search_histories                             search_histories[]
   vendor_profiles                              vendor_profiles?
+  wedding_members                              wedding_members?
   weddings                                     weddings?
 }
 
@@ -558,11 +571,13 @@ model weddings {
   budget                   Decimal?                   @db.Decimal(18, 2)
   guest_count              Int?
   city                     String?                    @db.VarChar(100)
-  /// Phường/xã nơi tổ chức (Hà Nội, có tiền tố "Phường …"/"Xã …"), NULL là chưa chọn (backend/prisma/manual/2026-11-01-01-wedding-ward.sql)
-  ward                     String?                    @db.VarChar(50)
   style                    String?                    @db.VarChar(100)
   created_date             DateTime?                  @default(now()) @db.Timestamptz(6)
   updated_date             DateTime?                  @default(now()) @db.Timestamptz(6)
+  /// Giờ chính của ngày cưới (đón khách / làm lễ), giờ VN (prisma/sql/2026-11-02-wedding-day-schedule.sql)
+  main_time                DateTime?                  @db.Time(6)
+  /// Phường/xã nơi tổ chức (Hà Nội, có tiền tố "Phường …"/"Xã …"), NULL là chưa chọn (backend/prisma/manual/2026-11-01-01-wedding-ward.sql)
+  ward                     String?                    @db.VarChar(50)
   /// AUTO, SAVING, BALANCED, PREMIUM (backend/prisma/manual/2026-10-30-01-budget-tiers.sql)
   spending_tier            String                     @default("AUTO") @db.VarChar(20)
   table_count_override     Int?
@@ -573,15 +588,14 @@ model weddings {
   /// Tự lo tiệc ngoài nền tảng
   own_venue                Boolean                    @default(false)
   own_venue_cost           Decimal?                   @db.Decimal(18, 2)
-  /// Giờ chính của ngày cưới (đón khách / làm lễ), giờ VN (prisma/sql/2026-11-02-wedding-day-schedule.sql)
-  main_time                DateTime?                  @db.Time(6)
   orders                   orders[]
   plan_vendors             plan_vendors[]
   timeline_tasks           timeline_tasks[]
   wedding_categories       wedding_categories[]
-  wedding_extra_costs      wedding_extra_costs[]
-  wedding_share_links      wedding_share_links?
   wedding_category_budgets wedding_category_budgets[]
+  wedding_extra_costs      wedding_extra_costs[]
+  wedding_members          wedding_members[]
+  wedding_share_links      wedding_share_links?
   users                    users?                     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
@@ -624,13 +638,16 @@ model wedding_share_links {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model reviews {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  order_item_id String      @unique @db.Uuid
-  rating        Int         @db.SmallInt
-  content       String
-  created_date  DateTime?   @default(now()) @db.Timestamptz(6)
-  updated_date  DateTime?   @default(now()) @db.Timestamptz(6)
-  order_items   order_items @relation(fields: [order_item_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_item_id     String      @unique @db.Uuid
+  rating            Int         @db.SmallInt
+  content           String
+  created_date      DateTime?   @default(now()) @db.Timestamptz(6)
+  updated_date      DateTime?   @default(now()) @db.Timestamptz(6)
+  tags              String[]
+  vendor_reply      String?
+  vendor_reply_date DateTime?   @db.Timestamptz(6)
+  order_items       order_items @relation(fields: [order_item_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 /// Việc chi tiết do NCC khai theo gói; offset_days so với ngày thực hiện E của đơn (prisma/sql/2026-11-01-package-tasks.sql, đã chạy).
@@ -653,7 +670,7 @@ model package_tasks {
   updated_date     DateTime         @default(now()) @db.Timestamptz(6)
   service_packages service_packages @relation(fields: [package_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@index([package_id, sort_order], map: "idx_package_tasks_package")
+  @@index([package_id, sort_order], map: "idx_package_tasks_package", where: raw("(deleted_at IS NULL)"))
 }
 
 /// Ngày chốt của một việc timeline (prisma/sql/2026-11-01-package-tasks.sql, đã chạy).
@@ -689,4 +706,35 @@ model order_adjustments {
   orders           orders    @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([order_id, created_date(sort: Desc)], map: "ix_order_adjustments_order")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model message_reactions {
+  message_id   String    @db.Uuid
+  user_id      String    @db.Uuid
+  emoji        String?   @db.VarChar(16)
+  created_date DateTime? @default(now()) @db.Timestamptz(6)
+  messages     messages  @relation(fields: [message_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([message_id, user_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model wedding_members {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wedding_id   String   @db.Uuid
+  user_id      String   @unique(map: "uq_wedding_members_user") @db.Uuid
+  role         String   @db.VarChar(20)
+  relation     String?  @db.VarChar(20)
+  display_name String?  @db.VarChar(40)
+  tabs         String[]
+  joined_date  DateTime @default(now()) @db.Timestamptz(6)
+  users        users    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  weddings     weddings @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([wedding_id, user_id], map: "uq_wedding_members_wedding_user")
 }

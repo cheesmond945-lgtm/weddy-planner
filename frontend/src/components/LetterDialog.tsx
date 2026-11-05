@@ -20,7 +20,6 @@ type Props = { title: string; description: string; children: ReactNode } & Omit<
 export function LetterDialogContent({ title, description, children, className, ...props }: Props) {
   return (
     <DialogContent
-      bare
       showCloseButton={false}
       className={cn('max-w-[800px] overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none', className)}
       {...props}

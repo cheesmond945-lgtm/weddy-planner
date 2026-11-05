@@ -2,8 +2,8 @@ import type { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { notify } from '../chat/chat-messages';
 import { syncOrderPackageTasks as syncOrderPackageTasksOf, type SyncDb } from './order-package-sync';
-import { loadPackageMeta } from './package-task-meta';
-import { baseCode, cancelPlan, frameRows, isOrderTaskCode, isRemovedCode, replanOrderTasks, type ServiceRef } from './timeline-rows';
+import { loadPackageMeta, packagesOfOrder } from './package-task-meta';
+import { baseCode, cancelPlan, frameRows, isOrderTaskCode, isRemovedCode, packageSwitchPlan, PKG_PREFIX, pkgTaskIdOf, replanOrderTasks, type PackageTaskRef, type ServiceRef } from './timeline-rows';
 import { replanOnWeddingDateChange } from './timeline-schedule';
 import { customerDateWarning, dateChangeIssue, vendorDateNotice } from './timeline-rules';
 import { serviceKeyOf, TIMELINE_TEMPLATES, templateOf, type ServiceKey } from './timeline-templates';
@@ -176,4 +176,53 @@ export async function notifyVendorsOfWeddingDate(prisma: PrismaService, weddingI
       referenceId: o.id,
     }).catch(() => undefined);
   }
+}
+
+export type PackageSwitch = ReturnType<typeof packageSwitchPlan>;
+
+/**
+ * Đổi gói của đơn đã cọc (NCC sửa đơn sau cọc): tính việc chi tiết giữ tiến độ / thêm / bỏ khi gói của đơn đổi sang `newPackageIds`
+ * (packageSwitchPlan). Chỉ đọc, chưa ghi gì: dùng để xem trước trước khi lưu và để áp dụng sau khi lưu đơn. `eventDate`: ngày thực hiện
+ * mới (nếu đổi cùng lúc) để tính hạn việc mới. Trả null khi gói của đơn không đổi hoặc đơn chưa có đám cưới / ngày thực hiện.
+ */
+export async function planOrderPackageSwitch(prisma: PrismaService, orderId: string, newPackageIds: readonly string[], eventDate?: string): Promise<PackageSwitch | null> {
+  const order = await prisma.orders.findUnique({
+    where: { id: orderId },
+    select: { id: true, wedding_id: true, event_date: true, package_id: true, order_items: { select: { package_id: true } }, vendor_profiles: { select: { category_id: true } }, payments: { select: { paid_date: true } } },
+  });
+  if (!order?.wedding_id || !order.event_date) return null;
+  const oldIds = packagesOfOrder(order);
+  const removed = oldIds.filter((id) => !newPackageIds.includes(id));
+  const addedPkgs = newPackageIds.filter((id) => !oldIds.includes(id));
+  if (!removed.length && !addedPkgs.length) return null;
+
+  const rows = await prisma.timeline_tasks.findMany({ where: { order_id: orderId, task_code: { startsWith: PKG_PREFIX } }, select: { id: true, task_code: true, title: true } });
+  const refIds = rows.flatMap((r) => (pkgTaskIdOf(r.task_code) ? [pkgTaskIdOf(r.task_code)!] : []));
+  const [refs, found] = await Promise.all([
+    prisma.package_tasks.findMany({ where: { id: { in: refIds } }, select: { id: true, package_id: true, title: true } }),
+    prisma.package_tasks.findMany({ where: { package_id: { in: addedPkgs }, deleted_at: null }, orderBy: [{ sort_order: 'asc' }, { id: 'asc' }] }),
+  ]);
+  const added: PackageTaskRef[] = addedPkgs.flatMap((pid) =>
+    found.filter((t) => t.package_id === pid).map((t) => ({ id: t.id, title: t.title ?? '', note: t.note, owner: (t.owner ?? 'BOTH') as PackageTaskRef['owner'], offsetDays: t.offset_days ?? 0 })),
+  );
+  const today = vnYmd(new Date());
+  return packageSwitchPlan({
+    weddingId: order.wedding_id,
+    orderId,
+    categoryId: order.vendor_profiles?.category_id ?? null,
+    ctx: { today, event: eventDate ?? ymdOf(order.event_date), deposit: order.payments?.paid_date ? vnYmd(order.payments.paid_date) : today },
+    rows: rows.map((r) => ({ id: r.id, code: r.task_code!, title: r.title })),
+    rowTasks: new Map(refs.flatMap((r) => (r.package_id ? [[r.id, { packageId: r.package_id, title: r.title ?? '' }] as const] : []))),
+    removedPackageIds: new Set(removed),
+    added,
+  });
+}
+
+/** Áp dụng kế hoạch đổi gói (planOrderPackageSwitch) trong một transaction: bỏ việc gói cũ, chuyển việc trùng tên, thêm việc gói mới. */
+export async function applyOrderPackageSwitch(prisma: PrismaService, plan: PackageSwitch) {
+  await prisma.$transaction([
+    ...(plan.deleteIds.length ? [prisma.timeline_tasks.deleteMany({ where: { id: { in: plan.deleteIds } } })] : []),
+    ...plan.relink.map((r) => prisma.timeline_tasks.update({ where: { id: r.id }, data: { task_code: r.task_code, title: r.title, display_order: r.display_order } })),
+    ...(plan.create.length ? [prisma.timeline_tasks.createMany({ data: plan.create, skipDuplicates: true })] : []),
+  ]);
 }

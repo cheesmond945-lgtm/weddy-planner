@@ -43,12 +43,12 @@ export class OverviewService {
     const groups = new Map<string, { slug: string | null; name: string; done: number; total: number }>();
     for (const t of open) {
       const key = t.category?.slug ?? '';
-      const g = groups.get(key) ?? { slug: t.category?.slug ?? null, name: t.category?.name ?? 'Việc chung', done: 0, total: 0 };
+      const g = groups.get(key) ?? { slug: t.category?.slug ?? null, name: t.category?.name ?? 'Việc ngoài dịch vụ', done: 0, total: 0 };
       g.total++;
       if (t.isDone) g.done++;
       groups.set(key, g);
     }
-    // "Việc chung" xếp cuối
+    // "Việc ngoài dịch vụ" xếp cuối
     const byCategory = [...groups.values()].sort((a, b) => Number(a.slug === null) - Number(b.slug === null));
 
     return {

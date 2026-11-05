@@ -10,7 +10,8 @@ import { Paginated } from '../../common/utils/pagination';
 import { notify, postMessage } from '../chat/chat-messages';
 import { hallBusyMessage } from '../halls/hall-busy';
 import { findHallConflict, lockHallDay, usesHalls } from '../halls/hall-store';
-import { onOrderCancelled, onOrderDeposited, onOrderEventDateChanged } from '../weddings/timeline-hooks';
+import { applyOrderPackageSwitch, onOrderCancelled, onOrderDeposited, onOrderEventDateChanged, planOrderPackageSwitch } from '../weddings/timeline-hooks';
+import { packagesOfOrder } from '../weddings/package-task-meta';
 import { OrderJobsService } from './order-jobs.service';
 import { completeOrder, notifyRestCleared, notifyRestReceived } from './order-lifecycle';
 import { runAfter } from '../../common/after-response';
@@ -28,6 +29,8 @@ import {
   CancelReason,
   ChangeType,
   ContentInput,
+  DEPOSIT_HOLD_HOURS,
+  DEPOSIT_SOON_HOURS,
   HOUR,
   ORDER_STATUSES,
   ParsedContent,
@@ -42,6 +45,7 @@ import {
   fail,
   money,
   carryItemPackages,
+  packageChangeLock,
   assertOrderFresh,
   hallTablesIssue,
   orderVersionOf,
@@ -277,7 +281,7 @@ export class OrdersService {
 
   /**
    * Khách yêu cầu chỉnh sửa. Bốn ô chọn là tùy chọn, nội dung chi tiết bắt buộc. Ghi OrderRevisions (Requested) kèm OrderRevisionChanges và CHỈ MỘT tin hệ thống.
-   * - Trước cọc (Pending): Pending -> NeedRevision, BeforeDeposit. NCC "Chỉnh sửa đơn" thì hạn cọc đặt lại 24 giờ.
+   * - Trước cọc (Pending): Pending -> NeedRevision, BeforeDeposit. NCC "Chỉnh sửa đơn" thì hạn cọc đặt lại DEPOSIT_HOLD_HOURS (12 giờ).
    * - Sau cọc (Deposited, còn trước ngày thực hiện, chưa có yêu cầu đang chờ): đơn VẪN Deposited, AfterDeposit.
    *   NCC "Chỉnh sửa" để áp dụng (tỷ lệ và tiền cọc giữ nguyên) hoặc từ chối.
    */
@@ -293,6 +297,11 @@ export class OrdersService {
       return fail('ORDER_NOT_REVISABLE', o.status === 'NeedRevision' ? 'Đơn đang chờ nhà cung cấp chỉnh sửa.' : 'Chỉ yêu cầu chỉnh sửa được đơn đang chờ đặt cọc hoặc đã đặt cọc.', 409);
     }
     if (afterDeposit && todayVn() >= ymd(o.event_date)) return fail('ORDER_NOT_REVISABLE', 'Đã đến ngày thực hiện, không gửi yêu cầu chỉnh sửa được nữa. Bạn nhắn nhà cung cấp trong chat nhé.', 409);
+    // Đổi gói sau cọc: NCC đã chuẩn bị nhiều (từ 50% việc của gói) hoặc sắp tới ngày thực hiện thì không cho khách yêu cầu nữa
+    if (afterDeposit && changes.includes('Item')) {
+      const lock = await this.packageChangeLockOf(o);
+      if (lock) return fail('PACKAGE_CHANGE_LOCKED', `${lock} Bạn nhắn nhà cung cấp trong chat nếu thật sự cần.`, 409);
+    }
 
     await this.prisma.$transaction(async (tx) => {
       if (afterDeposit) {
@@ -564,7 +573,7 @@ export class OrdersService {
 
     // 4 thẻ thống kê: tính trên TOÀN BỘ đơn của NCC (không bị giới hạn bởi trang hay bộ lọc)
     const today = todayVn();
-    const w = tileWheres({ today, in30: addDaysYmd(today, UPCOMING_DAYS), soon: new Date(Date.now() + 24 * HOUR) });
+    const w = tileWheres({ today, in30: addDaysYmd(today, UPCOMING_DAYS), soon: new Date(Date.now() + DEPOSIT_SOON_HOURS * HOUR) });
     const own = { vendor_id: v.id };
     const [pending, expiringSoon, needsAction, upcoming, upcomingSum, dueToComplete, dueRestPending] = await Promise.all([
       this.prisma.orders.count({ where: { ...own, ...w.pending } }),
@@ -642,7 +651,7 @@ export class OrdersService {
     return this.dtoOf(id);
   }
 
-  /** Gửi đơn Draft lần đầu, hoặc "Chỉnh sửa đơn" khi Pending / NeedRevision (hạn cọc đặt lại 24 giờ, thẻ mới trong chat). */
+  /** Gửi đơn Draft lần đầu, hoặc "Chỉnh sửa đơn" khi Pending / NeedRevision (hạn cọc đặt lại 12 giờ, thẻ mới trong chat). */
   async send(userId: string, id: string, body: { content?: ContentInput; expectedVersion?: string }) {
     const { vendor, order } = await this.ownedByVendor(userId, id);
     assertOrderFresh(body.expectedVersion, orderVersionOf(order));
@@ -663,11 +672,11 @@ export class OrdersService {
     return this.dtoOf(id);
   }
 
-  /** Lưu nội dung, chuyển Pending, đặt hạn cọc = bây giờ + 24 giờ, tạo Payments Unpaid, ghi OrderRevisions, gửi thẻ đơn mới. */
+  /** Lưu nội dung, chuyển Pending, đặt hạn cọc = bây giờ + DEPOSIT_HOLD_HOURS (12 giờ), tạo Payments Unpaid, ghi OrderRevisions, gửi thẻ đơn mới. */
   private async applySend(userId: string, order: OrderRow, p: ParsedContent, hallName?: string) {
     const id = order.id;
     const deposit = depositOf(p.total, p.depositPercent);
-    const dueDate = new Date(Date.now() + 24 * HOUR);
+    const dueDate = new Date(Date.now() + DEPOSIT_HOLD_HOURS * HOUR);
     const oldTotal = Number(order.total_amount);
 
     await this.prisma.$transaction(async (tx) => {
@@ -728,8 +737,11 @@ export class OrdersService {
     // Đổi sảnh hoặc ngày thì sảnh mới phải trống ngày đó; giữ nguyên thì không kiểm lại (đơn cũ chưa có sảnh: phải chọn)
     const hall = await this.checkHall(vendor, p, { strict: true, exceptOrderId: id, keep: { packageId: order.package_id, eventDate: current.eventDate } });
     p.packageId = hall?.id ?? null;
-    // Việc chi tiết đã sinh theo gói lúc cọc: sửa sau cọc không đổi gói của dòng. Khớp theo id dòng (không theo tên); dòng sảnh đổi theo sảnh mới
+    // Gói của dòng theo NCC gửi (đổi gói sau cọc được, việc chi tiết đổi theo bên dưới); dòng sảnh đổi theo sảnh mới; gói phải thuộc NCC
     p.items = carryItemPackages(p.items, current.items, { from: order.package_id ?? null, to: p.packageId });
+    await this.checkItemPackages(vendor.id, p);
+    // Đổi gói: tính trước việc giữ tiến độ (trùng tên) / thêm / bỏ, áp dụng sau khi lưu đơn
+    const pkgSwitch = await planOrderPackageSwitch(this.prisma, id, this.packageIdsOf(p), p.eventDate);
     // Số bàn tối thiểu của sảnh: chỉ kiểm khi đổi sảnh hoặc số lượng dòng sảnh bị thay đổi (đơn cũ không đổi dòng sảnh thì bỏ qua)
     this.checkHallTables(hall, p, { hallId: order.package_id ?? null, items: current.items });
     const deposit = Number(order.deposit_amount);
@@ -767,8 +779,11 @@ export class OrdersService {
       });
     });
 
+    // Đổi gói: bỏ việc gói cũ, chuyển việc trùng tên (giữ tiến độ), thêm việc gói mới
+    if (pkgSwitch) await this.timelineHook('đổi gói', order.order_code, () => applyOrderPackageSwitch(this.prisma, pkgSwitch));
     // Đổi ngày thực hiện: việc chi tiết neo theo ngày đó trên timeline của khách phải tính lại
     if (changes.includes('EventDate')) await this.timelineHook('đổi ngày thực hiện', order.order_code, () => onOrderEventDateChanged(this.prisma, id));
+    const switchNote = pkgSwitch ? ` (Đổi gói: giữ tiến độ ${pkgSwitch.kept.length} việc, thêm ${pkgSwitch.addedTitles.length} việc, bỏ ${pkgSwitch.removedTitles.length} việc.)` : '';
 
     const conversationId = await this.conversationOf(order);
     if (conversationId) {
@@ -778,11 +793,47 @@ export class OrdersService {
       userId: order.weddings!.user_id!,
       type: 'OrderSent',
       title: 'Nhà cung cấp đã chỉnh sửa đơn',
-      content: `Đơn ${order.order_code} đã được chỉnh sửa: ${changeNote}`,
+      content: `Đơn ${order.order_code} đã được chỉnh sửa: ${changeNote}${switchNote}`,
       referenceType: 'Order',
       referenceId: id,
     }).catch(() => undefined);
     return this.dtoOf(id);
+  }
+
+  /** Lý do khách không yêu cầu đổi gói được nữa (packageChangeLock), theo tiến độ việc của gói và ngày thực hiện; null nếu còn đổi được. */
+  private async packageChangeLockOf(o: { id: string; status: string | null; event_date: Date | null }) {
+    if (o.status !== 'Deposited') return null;
+    const [total, done] = await Promise.all([
+      this.prisma.timeline_tasks.count({ where: { order_id: o.id, task_code: { startsWith: 'PKG:' } } }),
+      this.prisma.timeline_tasks.count({ where: { order_id: o.id, task_code: { startsWith: 'PKG:' }, status: 'Done' } }),
+    ]);
+    return packageChangeLock({ deposited: true, today: todayVn(), eventDate: ymd(o.event_date), done, total });
+  }
+
+  /** Khách: đơn đã cọc còn yêu cầu đổi gói (Đổi hạng mục) được không: { lock } là lý do khóa, null nếu còn đổi được. */
+  async packageChangeLockForCouple(userId: string, id: string) {
+    const o = await this.ownedByCouple(userId, id);
+    return { lock: await this.packageChangeLockOf(o) };
+  }
+
+  /** Gói của nội dung đơn (sảnh + gói của các dòng), cùng thứ tự với packagesOfOrder. */
+  private packageIdsOf(p: ParsedContent) {
+    return packagesOfOrder({ package_id: p.packageId, order_items: p.items.map((i) => ({ package_id: i.packageId })) });
+  }
+
+  /**
+   * Xem trước đổi gói khi NCC sửa đơn đã cọc (chưa ghi gì): việc giữ tiến độ (trùng tên), thêm, bỏ. null khi gói không đổi.
+   * `packageIds`: gói của đơn sau khi sửa (sảnh + gói các dòng); `eventDate`: ngày thực hiện sau khi sửa (nếu đổi).
+   */
+  async previewPackageSwitch(userId: string, id: string, body: { packageIds?: unknown; eventDate?: unknown }) {
+    const { vendor, order } = await this.ownedByVendor(userId, id);
+    if (order.status !== 'Deposited') return null;
+    const ids = Array.isArray(body?.packageIds) ? [...new Set(body.packageIds.filter((x): x is string => typeof x === 'string' && UUID.test(x)))] : [];
+    const own = await this.prisma.service_packages.count({ where: { id: { in: ids }, vendor_id: vendor.id } });
+    if (own !== ids.length) return fail('VALIDATION_ERROR', 'Gói không thuộc nhà cung cấp này.', 400);
+    const eventDate = typeof body?.eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.eventDate) ? body.eventDate : undefined;
+    const plan = await planOrderPackageSwitch(this.prisma, id, ids, eventDate);
+    return plan ? { kept: plan.kept, added: plan.addedTitles, removed: plan.removedTitles } : null;
   }
 
   /**
