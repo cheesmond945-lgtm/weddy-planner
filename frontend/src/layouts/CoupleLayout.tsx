@@ -15,6 +15,7 @@ import { usePlan } from '@/features/weddings/hooks'
 import { ChatPanelResume, ReplacePlanDialog, usePlanActions } from '@/features/weddings/planActions'
 import { cn } from '@/lib/utils'
 import { CoupleNotificationBell } from '@/features/coupleNotifications/components/CoupleNotificationBell'
+import { ReviewFromLink } from '@/features/reviews/components/ReviewFromLink'
 import { CoupleFooter } from './CoupleFooter'
 import { PartnerButton, UserMenu } from './HeaderActions'
 import { paths } from '@/routes/paths'
@@ -290,6 +291,7 @@ export function CoupleLayout() {
       <SuggestionsDialog />
       <ReplacePlanDialog />
       <ChatPanel />
+      <ReviewFromLink />
       <ChatPanelResume />
       <ScrollRestoration />
     </div>

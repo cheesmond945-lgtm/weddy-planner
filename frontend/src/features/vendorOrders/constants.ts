@@ -15,7 +15,7 @@ export const ORDER_STATUS: Record<OrderStatus, { label: string; tone: BadgeTone 
 /** Nhãn nội dung khách muốn đổi (OrderRevisionChanges.ChangeType). */
 export const CHANGE_LABEL: Record<RevisionChangeType, string> = {
   Item: 'Đổi hạng mục',
-  Quantity: 'Đổi số lượng',
+  Quantity: 'Đổi số bàn',
   EventDate: 'Đổi ngày thực hiện',
   Other: 'Khác',
 }

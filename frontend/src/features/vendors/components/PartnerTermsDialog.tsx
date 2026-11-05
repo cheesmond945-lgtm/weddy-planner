@@ -15,9 +15,9 @@ export function PartnerTermsDialog({ open, onOpenChange, vars }: { open: boolean
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent bare className="gold-palette flex max-h-[min(88dvh,820px)] max-w-[760px] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="gold-palette flex max-h-[min(88dvh,820px)] max-w-[760px] flex-col gap-0 overflow-hidden p-0">
         {/* Đầu hộp thoại: dải vàng, biểu tượng, tiêu đề, phiên bản */}
-        <div className="border-b border-line bg-gold-soft px-6 pt-6 pb-5 pr-16">
+        <div className="border-b border-line bg-gold-soft px-7 pt-6 pb-5 pr-16">
           <div className="flex items-start gap-3.5">
             <span className="grid size-12 shrink-0 place-items-center rounded-full bg-(image:--gold-grad) text-gold-on shadow-[0_8px_20px_-10px_rgba(169,130,58,0.8)]">
               <Handshake className="size-5" strokeWidth={1.8} />
@@ -35,7 +35,7 @@ export function PartnerTermsDialog({ open, onOpenChange, vars }: { open: boolean
         </div>
 
         {/* Nội dung cuộn */}
-        <div className="grid gap-5 overflow-y-auto px-6 py-6 text-sm leading-relaxed">
+        <div className="grid gap-5 overflow-y-auto px-7 py-6 text-sm leading-relaxed">
           <p className="rounded-lg border border-gold/30 bg-gold-soft/60 px-4 py-3 text-[13.5px] text-ink">{t(TERMS_INTRO)}</p>
 
           {TERMS_ARTICLES.map((a) => {
@@ -70,7 +70,7 @@ export function PartnerTermsDialog({ open, onOpenChange, vars }: { open: boolean
           })}
         </div>
 
-        <DialogFooter className="mt-0 border-t border-line bg-surface px-6 py-4">
+        <DialogFooter className="mt-0 border-t border-line bg-surface px-7 py-4">
           <Button className="h-10 min-w-28" onClick={() => onOpenChange(false)}>
             Đã hiểu
           </Button>

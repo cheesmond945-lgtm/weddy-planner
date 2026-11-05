@@ -74,7 +74,7 @@ export const vendorOrdersApi = {
   saveDraft: (orderId: string, content: OrderContent, expectedVersion?: string): Promise<Order> =>
     http.put(`/vendors/me/orders/${orderId}/draft`, { content, expectedVersion }),
 
-  /** Gửi đơn Draft lần đầu, hoặc "Chỉnh sửa đơn" đơn Pending / NeedRevision (đặt lại hạn cọc 1 ngày). */
+  /** Gửi đơn Draft lần đầu, hoặc "Chỉnh sửa đơn" đơn Pending / NeedRevision (đặt lại hạn cọc 12 giờ). */
   send: (orderId: string, content: OrderContent, expectedVersion?: string): Promise<Order> =>
     http.post(`/vendors/me/orders/${orderId}/send`, { content, expectedVersion }),
 
@@ -110,4 +110,15 @@ export const vendorOrdersApi = {
   /** Xuất hóa đơn (mỗi đơn một lần). */
   issueFinalInvoice: (orderId: string): Promise<Order> =>
     http.post(`/vendors/me/orders/${orderId}/final-invoice`),
+
+  /** Xem trước đổi gói khi sửa đơn đã cọc: việc giữ tiến độ (trùng tên) / thêm / bỏ; null khi gói không đổi */
+  packageSwitchPreview: (orderId: string, packageIds: string[], eventDate?: string): Promise<PackageSwitchPreview | null> =>
+    http.post(`/vendors/me/orders/${orderId}/package-switch-preview`, { packageIds, eventDate }),
+}
+
+/** Việc chi tiết khi đổi gói của đơn đã cọc: tên việc giữ tiến độ, thêm mới, bỏ */
+export interface PackageSwitchPreview {
+  kept: string[]
+  added: string[]
+  removed: string[]
 }

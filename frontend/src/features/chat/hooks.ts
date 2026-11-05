@@ -42,7 +42,7 @@ export function useSendMessage(conversationId: string) {
   const qc = useQueryClient()
   const key = planningKeys.messages(uid, conversationId)
   return useMutation({
-    mutationFn: (text: string) => chatApi.send(conversationId, text),
+    mutationFn: ({ text, replyToId }: { text: string; replyToId?: string | null }) => chatApi.send(conversationId, text, replyToId),
     onSuccess: (msg) => {
       qc.setQueryData<Message[]>(key, (list = []) => [...list, msg])
       void qc.invalidateQueries({ queryKey: planningKeys.conversations(uid) })

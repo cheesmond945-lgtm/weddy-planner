@@ -61,7 +61,7 @@ export function useSendVendorMessage(conversationId: string) {
   const uid = useVendorId()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (text: string) => vendorConversationsApi.send(conversationId, text),
+    mutationFn: ({ text, replyToId }: { text: string; replyToId?: string | null }) => vendorConversationsApi.send(conversationId, text, replyToId),
     onSuccess: (msg) => {
       qc.setQueryData<VendorMessage[]>(vendorKeys.messages(uid, conversationId), (list = []) => [...list, msg])
       void qc.invalidateQueries({ queryKey: vendorKeys.conversations(uid) })
@@ -82,6 +82,6 @@ export function useWeddingReminder(conversationId: string) {
   return {
     reminded,
     isPending: send.isPending,
-    remind: () => send.mutate(WEDDING_REMINDER, { onSuccess: () => toast('Đã nhắc khách điền thông tin đám cưới.') }),
+    remind: () => send.mutate({ text: WEDDING_REMINDER }, { onSuccess: () => toast('Đã nhắc khách điền thông tin đám cưới.') }),
   }
 }

@@ -1,4 +1,4 @@
-import { Clock } from 'lucide-react'
+import { Clock, Star } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
@@ -10,6 +10,8 @@ import { chatPanel } from '@/features/chat/chatPanel'
 import { planningKeys } from '@/features/weddings/hooks'
 import { canRequestRevision, formatDayTime } from '@/features/vendorOrders/calc'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
+import { ReviewDialog } from '@/features/reviews/components/ReviewDialog'
+import { useOrderReviews } from '@/features/reviews/hooks'
 import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
 import { PaidInFullBadge } from '@/features/vendorOrders/components/OrderBadges'
 import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
@@ -99,8 +101,10 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   const ended = o.status === 'Expired' || o.status === 'Cancelled'
   const chip = o.status === 'Pending' && o.depositDueDate ? depositChip(o.depositDueDate, Date.now()) : null
   const paidDate = o.payment?.status === 'Paid' ? o.payment.paidDate : null
+  // Khách chỉ thấy số tiền cọc, không thấy tỷ lệ: tổng đổi sau khi gửi đơn thì tỷ lệ không còn khớp số tiền cọc, dễ gây thắc mắc
   const last = o.revisions[0]
-  const updated = last && last.status === 'Applied' && last.newTotalAmount !== null && last.newTotalAmount !== last.oldTotalAmount ? last : null
+  // "Đã cập nhật: tổng cũ → mới" chỉ với chỉnh sửa sau cọc; đơn chưa cọc mà NCC sửa giá thì thẻ chỉ hiện giá mới
+  const updated = last && last.status === 'Applied' && last.revisionType === 'AfterDeposit' && last.newTotalAmount !== null && last.newTotalAmount !== last.oldTotalAmount ? last : null
   const finalInvoice = o.invoices.some((i) => i.type === 'FinalInvoice')
   const rest = o.restPayment
   const restAmount = rest?.amount ?? o.totalAmount - o.depositAmount
@@ -108,7 +112,6 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   const waiting = openRevision(o)
   const slug = categorySlug ?? o.category?.slug
   const summary = itemsSummaryParts(o.items)
-  const pct = `${Math.round(o.depositPercent * 100) / 100}%`
   const awaitingDeposit = o.status === 'Pending' || o.status === 'NeedRevision'
 
   const shell = cn(
@@ -181,7 +184,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
         {money('Ngày thực hiện', formatDate(o.eventDate))}
         {money('Tổng giá trị', formatMoney(o.totalAmount), { strong: true })}
         {updated && <div className="pb-1 text-right text-xs text-gold-ink">Đã cập nhật: {formatMoney(updated.oldTotalAmount)} → {formatMoney(updated.newTotalAmount as number)}</div>}
-        {money(paidDate ? `Đã cọc · ${formatDayTime(paidDate)}` : `Cọc ${pct}`, formatMoney(o.depositAmount), { accent: awaitingDeposit })}
+        {money(paidDate ? `Đã cọc · ${formatDayTime(paidDate)}` : 'Tiền cọc', formatMoney(o.depositAmount), { accent: awaitingDeposit })}
         {money('Còn lại', formatMoney(restAmount), {
           note: restKnown && o.status !== 'NeedRevision' ? <span className={REST_TONE_CLASS[restLabel(o, 'COUPLE').tone]}>{restLabel(o, 'COUPLE').text}</span> : undefined,
         })}
@@ -227,6 +230,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
               Yêu cầu chỉnh sửa
             </Button>
           )}
+          {o.status === 'Completed' && <ReviewButton order={o} />}
           {finalInvoice && (
             <Button variant="outline" size="sm" onClick={() => setInvoice('FinalInvoice')}>
               Xem hóa đơn
@@ -257,5 +261,32 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
       </div>
       {dialogs}
     </article>
+  )
+}
+
+/**
+ * Đơn hoàn thành: "Đánh giá dịch vụ" (mở form); đã đánh giá thì hiện số sao kèm "Sửa" (trong 30 ngày) hoặc "Xem đánh giá".
+ */
+function ReviewButton({ order: o }: { order: Order }) {
+  const [open, setOpen] = useState(false)
+  const q = useOrderReviews(o.id)
+  const reviews = (q.data ?? []).flatMap((i) => (i.review ? [i.review] : []))
+  const pending = (q.data ?? []).some((i) => i.canReview && (i.isPackage || !(q.data ?? []).some((x) => x.isPackage)))
+  const avg = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0
+  return (
+    <>
+      {reviews.length && !pending ? (
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          <span className="text-gold">{'★'.repeat(Math.round(avg))}</span>
+          {reviews.some((r) => r.canEdit) ? 'Sửa đánh giá' : 'Xem đánh giá'}
+        </Button>
+      ) : (
+        <Button variant="success" size="sm" disabled={q.isPending} onClick={() => setOpen(true)}>
+          <Star />
+          Đánh giá dịch vụ
+        </Button>
+      )}
+      {open && <ReviewDialog orderId={o.id} vendorName={o.vendorName} onClose={() => setOpen(false)} />}
+    </>
   )
 }

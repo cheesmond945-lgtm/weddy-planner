@@ -83,7 +83,8 @@ export function OrderCard({ order: o, highlight, onOpenForm, onView, onViewInvoi
       {o.package && row('Sảnh', o.package.name)}
       {row('Ngày thực hiện', formatDate(o.eventDate))}
       {row('Tổng giá trị', formatMoney(o.totalAmount))}
-      {updated && updated.newTotalAmount !== null && (
+      {/* Tổng cũ → mới chỉ với chỉnh sửa sau cọc; đơn chưa cọc mà sửa giá thì thẻ chỉ hiện giá mới */}
+      {updated?.revisionType === 'AfterDeposit' && updated.newTotalAmount !== null && updated.newTotalAmount !== updated.oldTotalAmount && (
         <p className="border-b border-dashed border-line py-1.5 text-[12px] text-muted-foreground tabular-nums">
           Đã cập nhật: tổng {formatMoney(updated.oldTotalAmount)} → {formatMoney(updated.newTotalAmount)}
         </p>

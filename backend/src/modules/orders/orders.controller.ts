@@ -81,6 +81,12 @@ export class CoupleOrdersController {
     return this.orders.serviceOfOrder(req.user.sub, id);
   }
 
+  /** Đơn đã cọc còn yêu cầu đổi gói (Đổi hạng mục) được không: { lock: lý do khóa | null } */
+  @Get(':id/package-change-lock')
+  packageChangeLock(@Req() req: any, @Param('id') id: string) {
+    return this.orders.packageChangeLockForCouple(req.user.sub, id);
+  }
+
   /** Yêu cầu chỉnh sửa (Pending; hoặc Deposited trước ngày thực hiện, tiền cọc giữ nguyên): { changes?: ['Item'|'Quantity'|'EventDate'|'Other'], note } */
   @HttpCode(200)
   @Post(':id/revision-requests')
@@ -240,6 +246,13 @@ export class VendorOrdersController {
   @Patch(':id')
   edit(@Req() req: any, @Param('id') id: string, @Body() body: { content?: ContentInput; changeNote?: string; expectedVersion?: string }) {
     return this.orders.editDeposited(req.user.sub, id, body ?? {});
+  }
+
+  /** Xem trước đổi gói khi sửa đơn đã cọc: { packageIds, eventDate? } -> việc giữ tiến độ / thêm / bỏ (null nếu gói không đổi) */
+  @HttpCode(200)
+  @Post(':id/package-switch-preview')
+  packageSwitchPreview(@Req() req: any, @Param('id') id: string, @Body() body: { packageIds?: unknown; eventDate?: unknown }) {
+    return this.orders.previewPackageSwitch(req.user.sub, id, body ?? {});
   }
 
   /** Từ chối yêu cầu chỉnh sửa của khách với đơn đã cọc: { note? } */

@@ -1,11 +1,11 @@
 /**
  * Tiền cọc của đơn: MỘT công thức duy nhất cho form (ước tính), mock và tài liệu (docs/api/orders.md); backend tính chính thức giống hệt.
  *
- * Quy tắc: tổng × tỷ lệ / 100, làm tròn gần nhất đến 100.000đ, TỐI THIỂU 100.000đ (cọc 0đ thì khách không thanh toán được qua VietQR).
+ * Quy tắc: tổng × tỷ lệ / 100, làm tròn gần nhất đến 1.000đ, TỐI THIỂU 100.000đ (cọc 0đ thì khách không thanh toán được qua VietQR).
  * Chờ nhóm xác nhận (docs/CHOT_NGHIEP_VU_NCC.md mục "Chưa chốt").
  * Tiền cọc lớn hơn hoặc bằng tổng đơn thì đơn quá nhỏ để đặt cọc: không cho Gửi đơn (vẫn Lưu nháp).
  */
-export const DEPOSIT_ROUNDING = 100_000
+export const DEPOSIT_ROUNDING = 1_000
 export const DEPOSIT_MIN = 100_000
 /** Tỷ lệ cọc tối thiểu khi gửi đơn (%), như backend (order-rules.ts). Đợt 1 cọc qua VietQR, đợt 2 tiền mặt trả NCC. */
 export const DEPOSIT_PERCENT_MIN = 10

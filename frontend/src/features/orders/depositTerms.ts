@@ -20,7 +20,7 @@ export const DEPOSIT_TERMS_ARTICLES: DepositTermsArticle[] = [
   },
   {
     title: 'Điều 3. Hạn thanh toán cọc',
-    body: 'Đơn có hiệu lực thanh toán trong 24 giờ kể từ lúc nhà cung cấp gửi. Quá hạn, đơn tự động hết hạn và bạn cần nhắn nhà cung cấp gửi lại đơn mới.',
+    body: 'Đơn có hiệu lực thanh toán trong 12 giờ kể từ lúc nhà cung cấp gửi. Quá hạn, đơn tự động hết hạn và bạn cần nhắn nhà cung cấp gửi lại đơn mới.',
   },
   {
     title: 'Điều 4. Cách thanh toán',

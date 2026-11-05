@@ -2,7 +2,7 @@ import { LoaderCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
 interface AdminConfirmProps {
@@ -25,26 +25,24 @@ interface AdminConfirmProps {
 export function AdminConfirm({ open, onOpenChange, icon: Icon, title, children, notice, confirmLabel, confirmIcon: ConfirmIcon, danger, pending, onConfirm }: AdminConfirmProps) {
   return (
     <Dialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
-      <DialogContent className="max-w-[480px]">
-        <DialogHeader className="flex items-center gap-3">
-          <span className={cn('grid size-10 shrink-0 place-items-center rounded-full', danger ? 'bg-warn-soft text-warn' : 'bg-gold-soft text-gold-ink')}>
-            <Icon className="size-5" />
-          </span>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-[480px] px-6 pt-8 pb-6 text-center">
+        <span className={cn('mx-auto grid size-16 place-items-center rounded-full', danger ? 'bg-warn-soft text-warn' : 'bg-gold-soft text-gold-ink')}>
+          <Icon className="size-7" />
+        </span>
+        <DialogTitle className="mt-4 text-[22px]">{title}</DialogTitle>
         <DialogDescription asChild>
-          <div className="text-[14px] leading-relaxed text-muted-foreground">{children}</div>
+          <div className="mt-2 text-[14px] leading-relaxed text-muted-foreground">{children}</div>
         </DialogDescription>
-        {notice && <div className="mt-4 rounded-md border border-gold/30 bg-gold-soft px-4 py-3 text-[13px] text-gold-ink">{notice}</div>}
-        <DialogFooter>
-          <Button variant="outline" className="min-w-24 border-line-strong" disabled={pending} onClick={() => onOpenChange(false)}>
+        {notice && <div className="mt-4 rounded-md border border-gold/30 bg-gold-soft px-4 py-3 text-left text-[13px] text-gold-ink">{notice}</div>}
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <Button variant="outline" size="lg" className="border-line-strong" disabled={pending} onClick={() => onOpenChange(false)}>
             Hủy
           </Button>
-          <Button className="min-w-24" variant={danger ? 'destructive' : 'default'} disabled={pending} onClick={onConfirm}>
+          <Button size="lg" variant={danger ? 'destructive' : 'default'} disabled={pending} onClick={onConfirm}>
             {pending ? <LoaderCircle className="animate-spin" /> : ConfirmIcon && <ConfirmIcon />}
             {confirmLabel}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )

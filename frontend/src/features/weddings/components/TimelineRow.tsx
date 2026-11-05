@@ -28,7 +28,7 @@ export const dm = (s: string) => {
   return `${d.getDate()}/${d.getMonth() + 1}`
 }
 
-/** Nhãn dịch vụ của việc (icon + tên, màu theo danh mục) để lướt timeline vẫn biết việc thuộc dịch vụ nào; việc không gắn dịch vụ (việc của hai bạn) không có nhãn. */
+/** Nhãn dịch vụ của việc (icon + tên, màu theo danh mục) để lướt timeline vẫn biết việc thuộc dịch vụ nào; việc không gắn dịch vụ (tự thêm, hệ thống sinh) không có nhãn. */
 function ServiceTag({ item }: { item: TimelineItem }) {
   const slug = item.category?.slug
   if (!slug) return null

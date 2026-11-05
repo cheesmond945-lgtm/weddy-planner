@@ -39,17 +39,16 @@ export const hallLine = (hall: LinkPackage, prev?: Line, key = ''): Line => ({
 /** Dòng báo giá của sảnh hiện có: dòng đầu tiên gắn đúng sảnh (có thì là dòng 1). */
 export const hallLineIndex = (items: readonly OrderItemInput[], hallId: string | null | undefined) => (hallId ? items.findIndex((i) => i.packageId === hallId) : -1)
 
-/** NCC đã sửa số lượng hoặc đơn giá của dòng sảnh so với mặc định của gói (đổi sảnh sẽ ghi đè nên cần hỏi). */
-export const hallLineEdited = (line: OrderItemInput, hall: LinkPackage) => line.unitPrice !== hall.price || line.quantity !== defaultTables(hall)
-
 /**
- * Chọn / đổi sảnh: tạo hoặc cập nhật dòng sảnh và đưa lên đầu.
- * - Đã có dòng sảnh cũ (`oldHallId`): thay tại chỗ bằng dòng của sảnh mới.
+ * Chọn / đổi sảnh: tạo hoặc cập nhật dòng sảnh và đưa lên đầu. Dòng sảnh luôn nhảy theo gói (tên, đơn giá, số bàn tối thiểu);
+ * NCC điều chỉnh giá thì nhập lại sau.
+ * - Đã có dòng sảnh cũ (`oldHallId`, hoặc dòng gắn một sảnh khác trong `opts.hallIds` khi đơn lệch sảnh): thay tại chỗ bằng dòng của sảnh mới.
  * - Chưa có: dòng đầu còn trống thì dùng luôn; không thì chèn lên đầu, các dòng tự nhập giữ nguyên.
  * `newKey` đặt cho dòng mới tạo. `inPlaceOnly` (sửa sau cọc): không thêm dòng mới, chỉ thay dòng sảnh nếu có.
  */
-export function applyHall<T extends Line>(items: readonly T[], hall: LinkPackage, oldHallId: string | null | undefined, newKey: string, opts: { inPlaceOnly?: boolean } = {}): Line[] {
-  const at = hallLineIndex(items, oldHallId)
+export function applyHall<T extends Line>(items: readonly T[], hall: LinkPackage, oldHallId: string | null | undefined, newKey: string, opts: { inPlaceOnly?: boolean; hallIds?: readonly string[] } = {}): Line[] {
+  let at = hallLineIndex(items, oldHallId)
+  if (at < 0 && opts.hallIds) at = items.findIndex((i) => !!i.packageId && opts.hallIds!.includes(i.packageId))
   if (at >= 0) return items.map((i, k) => (k === at ? hallLine(hall, i) : i))
   if (opts.inPlaceOnly) return [...items]
   if (items.length && isBlank(items[0])) return items.map((i, k) => (k === 0 ? hallLine(hall, i) : i))

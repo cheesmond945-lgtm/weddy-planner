@@ -53,12 +53,14 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
   const { user } = useAuth()
   const viewer: Viewer = user?.role === 'VENDOR' ? 'VENDOR' : 'COUPLE'
   const rest = o.totalAmount - o.depositAmount
+  // Khách không thấy tỷ lệ cọc: tổng đổi sau cọc thì tỷ lệ không còn khớp số tiền cọc đã khóa, dễ gây thắc mắc; NCC vẫn thấy
+  const showPct = viewer === 'VENDOR'
   const rows: Row[] = [
     {
       name: 'Đợt 1 · Đặt cọc',
       percent: pct(o.depositPercent),
       amount: formatMoney(o.depositAmount),
-      due: o.depositDueDate ? formatDayTime(o.depositDueDate) : '1 ngày sau khi gửi đơn',
+      due: o.depositDueDate ? formatDayTime(o.depositDueDate) : '12 giờ sau khi gửi đơn',
       method: 'VietQR (trực tuyến)',
       state: depositState(o),
     },
@@ -77,17 +79,17 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
       {/* Màn rộng: bảng */}
       <table className="w-full table-fixed border-collapse max-md:hidden">
         <colgroup>
-          <col className="w-[19%]" />
-          <col className="w-[9%]" />
-          <col className="w-[16%]" />
-          <col className="w-[19%]" />
-          <col className="w-[18%]" />
-          <col className="w-[19%]" />
+          <col className={showPct ? 'w-[19%]' : 'w-[22%]'} />
+          {showPct && <col className="w-[9%]" />}
+          <col className={showPct ? 'w-[16%]' : 'w-[18%]'} />
+          <col className={showPct ? 'w-[19%]' : 'w-[22%]'} />
+          <col className={showPct ? 'w-[18%]' : 'w-[18%]'} />
+          <col className={showPct ? 'w-[19%]' : 'w-[20%]'} />
         </colgroup>
         <thead className="bg-surface-2">
           <tr>
             <th className={th}>Đợt</th>
-            <th className={th}>Tỷ lệ</th>
+            {showPct && <th className={th}>Tỷ lệ</th>}
             <th className={th}>Số tiền</th>
             <th className={th}>Hạn</th>
             <th className={th}>Phương thức</th>
@@ -98,7 +100,7 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
           {rows.map((r) => (
             <tr key={r.name}>
               <td className={cn(td, 'font-semibold')}>{r.name}</td>
-              <td className={cn(td, 'tabular-nums')}>{r.percent}</td>
+              {showPct && <td className={cn(td, 'tabular-nums')}>{r.percent}</td>}
               <td className={cn(td, 'font-semibold tabular-nums')}>{r.amount}</td>
               <td className={td}>{r.due}</td>
               <td className={td}>{r.method}</td>
@@ -114,8 +116,12 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
           <li key={r.name} className="px-3.5 py-3">
             <p className="mb-2 font-semibold">{r.name}</p>
             <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]">
-              <dt className="text-muted-foreground">Tỷ lệ</dt>
-              <dd className="tabular-nums">{r.percent}</dd>
+              {showPct && (
+                <>
+                  <dt className="text-muted-foreground">Tỷ lệ</dt>
+                  <dd className="tabular-nums">{r.percent}</dd>
+                </>
+              )}
               <dt className="text-muted-foreground">Số tiền</dt>
               <dd className="font-semibold tabular-nums">{r.amount}</dd>
               <dt className="text-muted-foreground">Hạn</dt>

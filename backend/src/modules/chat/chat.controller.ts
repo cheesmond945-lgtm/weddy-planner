@@ -1,6 +1,8 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Post, Put, Query, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { MAX_ATTACHMENT_BYTES } from './chat-attachments';
 import { ChatService } from './chat.service';
 
 /**
@@ -35,8 +37,27 @@ export class ConversationsController {
   }
 
   @Post(':id/messages')
-  send(@Req() req: any, @Param('id') id: string, @Body() body: { text?: string }) {
-    return this.chat.send(req.user, id, body?.text ?? '');
+  send(@Req() req: any, @Param('id') id: string, @Body() body: { text?: string; replyToId?: unknown }) {
+    return this.chat.send(req.user, id, body?.text ?? '', body?.replyToId);
+  }
+
+  /** Gửi ảnh / tệp / ghi âm (multipart: file, replyToId?, durationSec?) */
+  @Post(':id/attachments')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_ATTACHMENT_BYTES } }))
+  sendAttachment(@Req() req: any, @Param('id') id: string, @UploadedFile() file: Express.Multer.File | undefined, @Body() body: { replyToId?: unknown; durationSec?: unknown }) {
+    return this.chat.sendAttachment(req.user, id, file, body ?? {});
+  }
+
+  /** Thu hồi tin của chính mình với mọi người */
+  @Delete(':id/messages/:messageId')
+  recall(@Req() req: any, @Param('id') id: string, @Param('messageId') messageId: string) {
+    return this.chat.recall(req.user, id, messageId);
+  }
+
+  /** Thả / đổi cảm xúc ({ emoji }), emoji rỗng là gỡ */
+  @Put(':id/messages/:messageId/reaction')
+  react(@Req() req: any, @Param('id') id: string, @Param('messageId') messageId: string, @Body() body: { emoji?: unknown }) {
+    return this.chat.react(req.user, id, messageId, body?.emoji ?? null);
   }
 
   @Post(':id/read')
@@ -68,8 +89,27 @@ export class VendorConversationsController {
   }
 
   @Post(':id/messages')
-  send(@Req() req: any, @Param('id') id: string, @Body() body: { text?: string }) {
-    return this.chat.send(req.user, id, body?.text ?? '');
+  send(@Req() req: any, @Param('id') id: string, @Body() body: { text?: string; replyToId?: unknown }) {
+    return this.chat.send(req.user, id, body?.text ?? '', body?.replyToId);
+  }
+
+  /** Gửi ảnh / tệp / ghi âm (multipart: file, replyToId?, durationSec?) */
+  @Post(':id/attachments')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_ATTACHMENT_BYTES } }))
+  sendAttachment(@Req() req: any, @Param('id') id: string, @UploadedFile() file: Express.Multer.File | undefined, @Body() body: { replyToId?: unknown; durationSec?: unknown }) {
+    return this.chat.sendAttachment(req.user, id, file, body ?? {});
+  }
+
+  /** Thu hồi tin của chính mình với mọi người */
+  @Delete(':id/messages/:messageId')
+  recall(@Req() req: any, @Param('id') id: string, @Param('messageId') messageId: string) {
+    return this.chat.recall(req.user, id, messageId);
+  }
+
+  /** Thả / đổi cảm xúc ({ emoji }), emoji rỗng là gỡ */
+  @Put(':id/messages/:messageId/reaction')
+  react(@Req() req: any, @Param('id') id: string, @Param('messageId') messageId: string, @Body() body: { emoji?: unknown }) {
+    return this.chat.react(req.user, id, messageId, body?.emoji ?? null);
   }
 
   @Post(':id/read')

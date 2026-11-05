@@ -4,7 +4,7 @@
 > Quy ước chung: [README.md](README.md). Role: **Couple**, chỉ thấy đơn của mình và **không thấy bản nháp** (`Draft` trả 404).
 > Khách và NCC dùng **cùng một DTO `Order`** (mô tả ở phần Nhà cung cấp bên dưới, kiểu `frontend/src/types/vendorOrder.ts`), thêm hai trường để khách mở trang dịch vụ và hiện tên NCC: `serviceId` (`VendorProfiles.Id`) và `vendorName`. Trạng thái trả thô như CSDL: `Draft`, `Pending`, `NeedRevision`, `Deposited`, `Completed`, `Expired`, `Cancelled`.
 
-**Hai giai đoạn (cập nhật 28/10/2026):** trước cọc (`Pending`, `NeedRevision`) khách có Thanh toán cọc (chỉ `Pending`) và Yêu cầu chỉnh sửa (chỉ `Pending`). Sau cọc (`Deposited`, còn trước `eventDate`) khách **vẫn gửi được Yêu cầu chỉnh sửa**, đơn giữ `Deposited` và **tiền cọc không đổi**; NCC áp dụng bằng `PATCH` hoặc từ chối. **Khách không có API hủy đơn** (muốn hủy thì nhắn NCC; quy tắc hoàn cọc khi hủy gần ngày chưa chốt). Hai đợt thanh toán: đợt 1 cọc (tối thiểu 10%) qua VietQR trong 24 giờ, đợt 2 phần còn lại trả tiền mặt trực tiếp cho NCC, ngoài hệ thống.
+**Hai giai đoạn (cập nhật 28/10/2026):** trước cọc (`Pending`, `NeedRevision`) khách có Thanh toán cọc (chỉ `Pending`) và Yêu cầu chỉnh sửa (chỉ `Pending`). Sau cọc (`Deposited`, còn trước `eventDate`) khách **vẫn gửi được Yêu cầu chỉnh sửa**, đơn giữ `Deposited` và **tiền cọc không đổi**; NCC áp dụng bằng `PATCH` hoặc từ chối. **Khách không có API hủy đơn** (muốn hủy thì nhắn NCC; quy tắc hoàn cọc khi hủy gần ngày chưa chốt). Hai đợt thanh toán: đợt 1 cọc (tối thiểu 10%) qua VietQR trong 12 giờ, đợt 2 phần còn lại trả tiền mặt trực tiếp cho NCC, ngoài hệ thống.
 
 ### GET /orders
 **Đơn của khách** (trang Kế hoạch của tôi `/plan`, hiện dưới từng hạng mục): mọi đơn đã gửi của khách, **không có bản nháp**, mới nhất trước (tối đa 200). Lọc tùy chọn `?status=` (một trong 6 trạng thái trừ `Draft`; sai thì 400). Mỗi `Order` có thêm `category: { id, slug, name }` (lĩnh vực của NCC) để FE nhóm theo hạng mục. Trước khi đọc, backend quét hết hạn / tự hoàn thành riêng đơn của khách.
@@ -23,7 +23,7 @@ Trước khi đọc, backend tự đưa đơn `Pending` quá hạn cọc sang `E
 { "changes": ["Quantity", "EventDate"], "note": "Giảm từ 20 xuống 15 bàn và dời sang 25/04 được không ạ?" }
 ```
 
-- `changes` **tùy chọn**: các ô khách chọn, giá trị trong `Item` (Đổi hạng mục), `Quantity` (Đổi số lượng), `EventDate` (Đổi ngày thực hiện), `Other` (Khác). Lưu vào `OrderRevisionChanges`.
+- `changes` **tùy chọn**: các ô khách chọn, giá trị trong `Item` (Đổi hạng mục), `Quantity` (Đổi số bàn, chỉ đơn trung tâm tiệc cưới đặt theo bàn), `EventDate` (Đổi ngày thực hiện), `Other` (Khác). Lưu vào `OrderRevisionChanges`.
 - `note` **bắt buộc**: nội dung chi tiết, lưu `OrderRevisions.RequestNote`.
 - Thành công: tạo `OrderRevisions` (`BeforeDeposit`, `Requested`, `OldTotalAmount` = tổng hiện tại); đơn `Pending` → `NeedRevision` (hạn cọc tạm dừng, đơn không hết hạn khi chờ NCC); thêm **một tin hệ thống** vào chat (không thêm tin riêng của khách): `Khách yêu cầu chỉnh sửa đơn {OrderCode}: {nội dung chọn, nối bằng ", "} · "{note}"` (thiếu phần nào thì bỏ phần đó); báo NCC (`OrderRevisionRequested`). Phía khách hiển thị "Bạn đã yêu cầu chỉnh sửa đơn …".
 
@@ -79,12 +79,12 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 - Đơn `Expired` và `Cancelled` bị khóa. Muốn tiếp tục: NCC tạo **đơn mới** (mã mới) bằng cách chép hạng mục và ghi chú (FE gọi `POST /vendors/me/orders`, không có endpoint riêng).
 - **Backend tính tiền**, không tin số tiền từ giao diện:
   - `OrderItems.amount = quantity × unitPrice`; `totalAmount = SUM(amount)`.
-  - `depositAmount = totalAmount × depositPercent / 100`, **làm tròn gần nhất đến 100.000đ, TỐI THIỂU 100.000đ** (cọc 0đ thì khách không thanh toán được qua VietQR). Chờ nhóm xác nhận, xem mục "Chưa chốt" của CHOT; FE dùng đúng công thức này (`frontend/src/lib/deposit.ts`), backend làm giống hệt.
+  - `depositAmount = totalAmount × depositPercent / 100`, **làm tròn gần nhất đến 1.000đ, TỐI THIỂU 100.000đ** (cọc 0đ thì khách không thanh toán được qua VietQR). Chờ nhóm xác nhận, xem mục "Chưa chốt" của CHOT; FE dùng đúng công thức này (`frontend/src/lib/deposit.ts`), backend làm giống hệt.
   - **Tổng đơn quá nhỏ để đặt cọc:** nếu `depositAmount` (đã làm tròn, tối thiểu) **lớn hơn hoặc bằng** `totalAmount` thì không cho Gửi đơn (`400 VALIDATION_ERROR`, `details.deposit` = "Tổng đơn quá nhỏ để đặt cọc."). Lưu nháp vẫn được. Không kiểm khi Chỉnh sửa sau cọc (tiền cọc đã khóa).
   - `depositDueDate` = thời điểm gửi đơn + 1 ngày (24 giờ).
   - NCC chỉ nhập: hạng mục, `depositPercent`, `eventDate`, `note` (cùng tên và số điện thoại khách, điền sẵn từ tài khoản khách).
 - `depositPercent`: **tối thiểu 10** và nhỏ hơn 100 khi Lưu nháp, Gửi đơn và Chỉnh sửa đơn (sửa sau cọc giữ tỷ lệ đã chốt, không kiểm) (`400 VALIDATION_ERROR`, `details.depositPercent` = "Tỷ lệ đặt cọc tối thiểu 10%."). Lưu nháp không chặn; Chỉnh sửa sau cọc giữ tỷ lệ đã chốt. FE chỉ cho nhập số nguyên 10 đến 99.
-- "Tạo lại đơn" (đơn `Expired`/`Cancelled`): FE chép **toàn bộ** thông tin đơn cũ (cả ngày thực hiện nếu chưa qua) sang đơn mới, mã mới, hạn cọc 24 giờ mới.
+- "Tạo lại đơn" (đơn `Expired`/`Cancelled`): FE chép **toàn bộ** thông tin đơn cũ (cả ngày thực hiện nếu chưa qua) sang đơn mới, mã mới, hạn cọc 12 giờ mới.
 - Đơn vị tính (`unit`): `Gói` (số lượng mặc định 1) hoặc `Bàn` (số lượng tùy chỉnh).
 - Mã đơn `orderCode` dạng `DH<yyMM><số 4 chữ số>` (ví dụ `DH26100001`), không đổi dù sửa nhiều lần.
 
@@ -207,7 +207,7 @@ Response 200:
   "tiles": { "pending": 2, "expiringSoon": 1, "needsAction": 2, "upcoming": 1, "upcomingValue": 7900000, "dueToComplete": 1, "dueRestPending": 1 } } }
 ```
 
-`tiles`: `pending` = đơn Chờ cọc, `expiringSoon` = trong đó hạn cọc còn dưới 24 giờ; `needsAction` = `NeedRevision` + `Deposited` có yêu cầu chỉnh sửa đang chờ; `upcoming` / `upcomingValue` = `Deposited` có `eventDate` trong [hôm nay, hôm nay + 30 ngày] và tổng giá trị; `dueToComplete` = `Deposited` đã qua `eventDate`, `dueRestPending` = trong đó đợt 2 tiền mặt chưa ghi nhận. Bấm thẻ thì giao diện lọc danh sách: `status=Pending` · `needsAction=1` · `status=Deposited&from&to` · `status=Deposited&to=hôm qua`.
+`tiles`: `pending` = đơn Chờ cọc, `expiringSoon` = trong đó hạn cọc còn dưới 6 giờ; `needsAction` = `NeedRevision` + `Deposited` có yêu cầu chỉnh sửa đang chờ; `upcoming` / `upcomingValue` = `Deposited` có `eventDate` trong [hôm nay, hôm nay + 30 ngày] và tổng giá trị; `dueToComplete` = `Deposited` đã qua `eventDate`, `dueRestPending` = trong đó đợt 2 tiền mặt chưa ghi nhận. Bấm thẻ thì giao diện lọc danh sách: `status=Pending` · `needsAction=1` · `status=Deposited&from&to` · `status=Deposited&to=hôm qua`.
 
 ### GET /vendors/me/orders/:id
 

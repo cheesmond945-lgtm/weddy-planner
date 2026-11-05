@@ -1,7 +1,8 @@
 import { AlertCircle, BellRing, ChevronDown, LoaderCircle, MessageSquare } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ApiError } from '@/api'
+import { vendorOrdersApi, type PackageSwitchPreview } from '@/api/vendorOrders'
 import { Button } from '@/components/ui/button'
 import { DateField } from '@/components/DateField'
 import { Input } from '@/components/ui/input'
@@ -28,7 +29,7 @@ import { eventDateAdvice } from '../eventDate'
 import { useSaveOrder, type SaveOrderInput } from '../hooks'
 import { validateDraft, validateOrder, type OrderErrors } from '../validation'
 import { isVnPhone, PHONE_MESSAGE } from '@/lib/phone'
-import { applyHall, hallFieldState, hallLineEdited, hallLineIndex, hallTablesError, needsNoPackageConfirm, type LinkPackage } from '../orderLines'
+import { applyHall, hallFieldState, hallLineIndex, hallTablesError, needsNoPackageConfirm, type LinkPackage } from '../orderLines'
 import { OrderItemsEditor } from './OrderItemsEditor'
 import { PanelDialog } from './PanelDialog'
 
@@ -137,7 +138,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
                 {locked ? 'Tiền cọc đã chốt' : `Làm tròn ${formatMoney(DEPOSIT_ROUNDING)}, tối thiểu ${formatMoney(DEPOSIT_MIN)}`}
               </span>
             </td>
-            <td className={td}>{paidDate ? `Đã cọc ${formatDay(paidDate)}` : '1 ngày sau khi gửi đơn'}</td>
+            <td className={td}>{paidDate ? `Đã cọc ${formatDay(paidDate)}` : '12 giờ sau khi gửi đơn'}</td>
             <td className={td}>VietQR (trực tuyến)</td>
           </tr>
           <tr>
@@ -157,7 +158,7 @@ function ScheduleTable({ percent, onPercent, error, depositError, deposit, rest,
         </p>
       )}
       <p className="border-t border-line bg-surface-2 px-3 py-2 text-[12.5px] text-muted-foreground">
-        Cọc tối thiểu {DEPOSIT_PERCENT_MIN}% tổng đơn, tối đa 99%. Hệ thống chỉ ghi nhận khoản cọc qua VietQR; khách quá 24 giờ chưa cọc thì đơn tự hủy (hết hạn).
+        Cọc tối thiểu {DEPOSIT_PERCENT_MIN}% tổng đơn, tối đa 99%. Hệ thống chỉ ghi nhận khoản cọc qua VietQR; khách quá 12 giờ chưa cọc thì đơn tự hủy (hết hạn).
       </p>
     </div>
   )
@@ -201,12 +202,14 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   const venue = categorySlug === RESTAURANT_SLUG
   const currentHall = order?.package?.id ?? (mode.kind === 'again' ? mode.from.package?.id : undefined)
   const halls = (packages ?? []).filter((p) => isVenue(p.category) && (p.status === 'PUBLISHED' || p.id === currentHall))
-  const [pendingHall, setPendingHall] = useState<string | null>(null)
   const hallDates = useHallDates(venue ? values.packageId : null, values.eventDate, values.eventDate)
   // Sửa đơn đã cọc giữ nguyên sảnh và ngày: sảnh "bận" chính vì đơn này, không cảnh báo
   const keepsHall = mode.kind === 'edit' && values.packageId === mode.order.package?.id && values.eventDate === mode.order.eventDate
   const hallBusy = !keepsHall && !!values.eventDate && !!hallDates.data?.dates.includes(values.eventDate)
-  const busy = save.isPending
+  // Sửa đơn đã cọc mà đổi gói: xem trước việc chi tiết giữ tiến độ / thêm / bỏ (hiện trong hộp xác nhận lưu)
+  const [switchPreview, setSwitchPreview] = useState<PackageSwitchPreview | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const busy = save.isPending || previewing
   const dirty = !sameValues(values, initial)
   const items = filledItems(values.items)
   const total = totalOf(items)
@@ -214,6 +217,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   // Gói / sảnh của NCC dùng để gắn vào dòng báo giá. Trung tâm tiệc cưới chỉ gắn sảnh (ô Sảnh), lĩnh vực khác gắn gói ở từng dòng
   const toLink = (p: NonNullable<typeof packages>[number]): LinkPackage => ({ id: p.id, name: p.name, price: p.price, unit: isVenue(p.category) ? 'Bàn' : 'Gói', taskCount: p.taskCount ?? 0, minTables: p.minTables ?? null })
   const lookup = (packages ?? []).map(toLink)
+  const venueIds = (packages ?? []).filter((p) => isVenue(p.category)).map((p) => p.id)
   const linkable = (packages ?? []).filter((p) => p.status === 'PUBLISHED' && !isVenue(p.category)).map(toLink)
   const hallPkg = venue && values.packageId ? (lookup.find((p) => p.id === values.packageId) ?? null) : null
   const hallStatus = (packages ?? []).find((p) => p.id === values.packageId)?.status
@@ -249,19 +253,19 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
 
   const set = (patch: Partial<OrderFormValues>) => setValues((v) => ({ ...v, ...patch }))
 
-  /** Chọn / đổi sảnh: dòng 1 tự tạo hoặc đổi theo (đơn vị Bàn, giá và số bàn tối thiểu theo gói). */
-  function applyHallChoice(id: string) {
-    const next = lookup.find((p) => p.id === id)
-    if (!next) return
-    setValues((v) => ({ ...v, packageId: id, items: applyHall(v.items, next, v.packageId, newItemKey(), { inPlaceOnly: locked }) }))
-  }
+  /** Chọn / đổi sảnh: dòng 1 tự tạo hoặc nhảy theo (đơn vị Bàn, giá và số bàn tối thiểu theo gói); NCC điều chỉnh giá thì nhập lại sau. */
   function chooseHall(id: string) {
-    if (!id || id === values.packageId) return
-    const at = hallLineIndex(values.items, values.packageId)
-    // NCC đã sửa đơn giá / số bàn của dòng 1 thì hỏi trước khi ghi đè theo sảnh mới
-    if (hallPkg && at >= 0 && hallLineEdited(values.items[at], hallPkg)) setPendingHall(id)
-    else applyHallChoice(id)
+    const next = lookup.find((p) => p.id === id)
+    if (!next || (id === values.packageId && hallLineAt >= 0)) return
+    setValues((v) => ({ ...v, packageId: id, items: applyHall(v.items, next, v.packageId, newItemKey(), { inPlaceOnly: locked, hallIds: venueIds }) }))
   }
+  // Đơn chưa cọc mà dòng 1 gắn sảnh khác với ô Sảnh (dữ liệu cũ): khi gói tải xong thì cho dòng 1 nhảy theo sảnh đang chọn
+  const synced = useRef(false)
+  useEffect(() => {
+    if (synced.current || !packages || !venue || locked || !values.packageId) return
+    synced.current = true
+    if (hallLineAt < 0) chooseHall(values.packageId)
+  })
 
   function run(input: SaveOrderInput, notify: boolean) {
     save.mutate(input, {
@@ -306,8 +310,26 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
       setFormError(mode.kind === 'resend' ? 'Chưa có thay đổi nào so với đơn đang gửi.' : 'Chưa có thay đổi nào so với đơn hiện tại.')
       return
     }
-    // Không dòng nào (và không sảnh) gắn gói: sau khi khách cọc sẽ không có công việc của gói. Sửa đơn sau cọc không đổi được gói nên không hỏi.
+    // Không dòng nào (và không sảnh) gắn gói: sau khi khách cọc sẽ không có công việc của gói. Sửa đơn sau cọc thì không hỏi.
     if (mode.kind !== 'edit' && needsNoPackageConfirm(filledItems(values.items), venue)) return setConfirmNoPackage(true)
+    // Sửa đơn đã cọc mà đổi gói: xem trước việc chi tiết giữ tiến độ / thêm / bỏ rồi mới hỏi lưu
+    if (mode.kind === 'edit') {
+      const next = packageIdsOf(values.packageId, values.items)
+      const before = packageIdsOf(mode.order.package?.id ?? null, mode.order.items)
+      setSwitchPreview(null)
+      if (next.join('|') !== before.join('|')) {
+        setPreviewing(true)
+        vendorOrdersApi
+          .packageSwitchPreview(mode.order.id, next, values.eventDate)
+          .then((p) => {
+            setSwitchPreview(p)
+            setConfirmSend(true)
+          })
+          .catch((e: Error) => setFormError(e.message))
+          .finally(() => setPreviewing(false))
+        return
+      }
+    }
     setConfirmSend(true)
   }
 
@@ -335,11 +357,11 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
           : 'Tạo đơn'
   const subtitle =
     mode.kind === 'resend'
-      ? 'Gửi bản cập nhật sẽ đặt lại hạn đặt cọc 24 giờ và gửi một thẻ đơn mới cho khách.'
+      ? 'Gửi bản cập nhật sẽ đặt lại hạn đặt cọc 12 giờ và gửi một thẻ đơn mới cho khách.'
       : mode.kind === 'edit'
         ? 'Đơn đã đặt cọc: sửa được hạng mục, ngày, ghi chú. Tỷ lệ và tiền cọc đã khóa, tổng mới không nhỏ hơn tiền đã cọc.'
         : mode.kind === 'again'
-          ? 'Thông tin giữ nguyên như đơn cũ, chỉ đổi mã đơn. Gửi đơn thì khách có 24 giờ mới để đặt cọc.'
+          ? 'Thông tin giữ nguyên như đơn cũ, chỉ đổi mã đơn. Gửi đơn thì khách có 12 giờ mới để đặt cọc.'
           : mode.kind === 'draft'
             ? `Bản nháp ${mode.order.orderCode} · Gửi tới ${customer.name}`
             : `Gửi tới ${customer.name} trong cuộc trò chuyện này`
@@ -450,6 +472,8 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                 <Input
                   className={controlClass}
                   type="tel"
+                  // Không để trình duyệt tự điền số đã lưu: số của khách do NCC nhập (hoặc lấy từ tài khoản khách)
+                  autoComplete="off"
                   placeholder="09xx xxx xxx"
                   disabled={locked}
                   aria-invalid={errors.customerPhone ? true : undefined}
@@ -538,7 +562,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                 )}
               </div>
             )}
-            <OrderItemsEditor items={values.items} packages={venue ? [] : linkable} lookup={lookup} hall={hallPkg} lockPackages={locked} errors={errors} onChange={(next) => set({ items: next })} />
+            <OrderItemsEditor items={values.items} packages={venue ? [] : linkable} lookup={lookup} hall={hallPkg} lockPackages={locked} depositedPackageIds={locked ? packageIdsOf(mode.order.package?.id ?? null, mode.order.items) : undefined} errors={errors} onChange={(next) => set({ items: next })} />
           </Section>
 
           <Section title="Đặt cọc và thanh toán" hint="Chỉ khoản cọc đi qua hệ thống (VietQR). Phần còn lại khách trả trực tiếp cho bạn.">
@@ -558,20 +582,6 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
         </fieldset>
       </PanelDialog>
 
-      <ConfirmDialog
-        open={pendingHall !== null}
-        onOpenChange={(o) => !o && setPendingHall(null)}
-        title="Đổi sảnh?"
-        confirmLabel="Đổi và ghi đè dòng 1"
-        cancelLabel="Giữ sảnh hiện tại"
-        onConfirm={() => {
-          if (pendingHall) applyHallChoice(pendingHall)
-          setPendingHall(null)
-        }}
-      >
-        <p>Bạn đã sửa số bàn hoặc đơn giá của dòng 1. Đổi sảnh sẽ thay dòng 1 theo sảnh mới (tên, đơn giá, số bàn tối thiểu). Tiếp tục?</p>
-      </ConfirmDialog>
-
       <ConfirmDialog open={confirmNoPackage} onOpenChange={setConfirmNoPackage} title="Đơn chưa gắn gói" confirmLabel="Vẫn gửi" cancelLabel="Quay lại chọn gói" onConfirm={() => setConfirmSend(true)}>
         <p>Đơn chưa gắn gói nào, khách sẽ không có công việc trong timeline sau khi cọc. Vẫn gửi?</p>
       </ConfirmDialog>
@@ -587,9 +597,10 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
           {mode.kind === 'edit'
             ? 'Lưu chỉnh sửa cho khách? Tiền cọc đã khóa, tổng mới không thấp hơn tiền cọc.'
             : mode.kind === 'resend'
-              ? 'Gửi bản cập nhật cho khách? Hạn cọc được đặt lại 24 giờ.'
-              : 'Gửi đơn cho khách? Khách có 24 giờ để đặt cọc.'}
+              ? 'Gửi bản cập nhật cho khách? Hạn cọc được đặt lại 12 giờ.'
+              : 'Gửi đơn cho khách? Khách có 12 giờ để đặt cọc.'}
         </p>
+        {mode.kind === 'edit' && switchPreview && <PackageSwitchSummary preview={switchPreview} />}
       </ConfirmDialog>
 
       <PanelDialog
@@ -632,5 +643,39 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
 
       <UnsavedChangesGuard when={dirty && !busy} />
     </>
+  )
+}
+
+/** Gói của đơn (sảnh + gói các dòng, bỏ trùng, giữ thứ tự) để so trước / sau khi sửa */
+function packageIdsOf(hallId: string | null, items: readonly { packageId?: string | null }[]): string[] {
+  const out: string[] = []
+  for (const id of [hallId, ...items.map((i) => i.packageId)]) if (id && !out.includes(id)) out.push(id)
+  return out
+}
+
+/** Hộp xác nhận lưu khi đổi gói của đơn đã cọc: việc trùng tên giữ tiến độ, việc gói mới thêm, việc gói cũ bỏ */
+function PackageSwitchSummary({ preview: p }: { preview: PackageSwitchPreview }) {
+  const block = (title: string, names: string[], tone: string) =>
+    names.length > 0 && (
+      <div className="mt-2.5">
+        <b className={`text-[13px] font-semibold ${tone}`}>
+          {title} ({names.length})
+        </b>
+        <ul className="mt-1 list-disc pl-5 text-[13px] leading-relaxed">
+          {names.slice(0, 6).map((n, i) => (
+            <li key={`${n}-${i}`}>{n}</li>
+          ))}
+          {names.length > 6 && <li className="text-muted-foreground">và {names.length - 6} việc khác</li>}
+        </ul>
+      </div>
+    )
+  return (
+    <div className="mt-3 rounded-md border border-line bg-surface-2 px-3.5 py-3">
+      <p className="text-[13px] font-semibold">Đổi gói: công việc của đơn thay đổi như sau</p>
+      {block('Giữ tiến độ (trùng tên, không phải làm lại)', p.kept, 'text-sage')}
+      {block('Thêm việc của gói mới', p.added, 'text-gold-700')}
+      {block('Bỏ việc của gói cũ', p.removed, 'text-warn')}
+      {!p.kept.length && !p.added.length && !p.removed.length && <p className="mt-1.5 text-[13px] text-muted-foreground">Không có công việc nào thay đổi.</p>}
+    </div>
   )
 }

@@ -115,8 +115,8 @@ export function useSaveOrder() {
           : i.kind === 'edit'
             ? `Đã chỉnh sửa đơn ${o.orderCode}.`
             : i.kind === 'send' && i.resend
-              ? `Đã chỉnh sửa đơn ${o.orderCode}, hạn cọc mới là 24 giờ.`
-              : `Đã gửi đơn ${o.orderCode} cho khách, hạn cọc 24 giờ.`,
+              ? `Đã chỉnh sửa đơn ${o.orderCode}, hạn cọc mới là 12 giờ.`
+              : `Đã gửi đơn ${o.orderCode} cho khách, hạn cọc 12 giờ.`,
       )
     },
   })

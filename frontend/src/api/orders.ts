@@ -11,6 +11,8 @@ export const ordersApi = {
   get: (id: string): Promise<Order> => http.get(`/orders/${id}`),
   /** Dịch vụ của đơn, xem được cả khi NCC đang bị ẩn */
   getService: (id: string): Promise<ServiceDetail> => http.get(`/orders/${id}/service`),
+  /** Đơn đã cọc còn yêu cầu đổi gói (Đổi hạng mục) được không: lock là lý do khóa (NCC đã chuẩn bị nhiều / sắp tới ngày), null nếu được */
+  packageChangeLock: (id: string): Promise<{ lock: string | null }> => http.get(`/orders/${id}/package-change-lock`),
   /** Đơn Pending, hoặc Deposited còn trước ngày thực hiện (tiền cọc giữ nguyên). changes: 4 ô chọn tùy chọn; note: nội dung chi tiết, bắt buộc. */
   requestRevision: (id: string, body: { changes: RevisionChangeType[]; note: string }): Promise<Order> =>
     http.post(`/orders/${id}/revision-requests`, body),

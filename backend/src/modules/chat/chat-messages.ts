@@ -1,12 +1,31 @@
 import type { PrismaService } from '../../prisma/prisma.service';
 import { publish } from '../realtime/realtime.bus';
 
-type MessageType = 'Text' | 'Order' | 'DepositReceipt' | 'FinalInvoice';
+type MessageType = 'Text' | 'Order' | 'DepositReceipt' | 'FinalInvoice' | 'Image' | 'File' | 'Audio';
 
-/** Ghi một tin vào hội thoại, cập nhật thời điểm tin cuối và báo realtime cho cả hai bên. sender_id = null là tin hệ thống. */
+/** Tệp đính kèm của tin Image / File / Audio (đã upload lên bucket chat-files) */
+export interface MessageAttachment {
+  path: string;
+  name: string;
+  mime: string;
+  size: number;
+  duration?: number | null;
+}
+
+/** Phần đọc kèm mỗi tin: mã / trạng thái đơn, tin được trả lời, cảm xúc */
+export const messageInclude = {
+  orders: { select: { order_code: true, status: true } },
+  messages: { select: { id: true, sender_id: true, content: true, type: true, recalled_date: true } },
+  message_reactions: { select: { user_id: true, emoji: true } },
+} as const;
+
+/**
+ * Ghi một tin vào hội thoại, cập nhật thời điểm tin cuối và báo realtime cho cả hai bên. sender_id = null là tin hệ thống.
+ * `replyToId`: tin được trả lời (đã kiểm cùng hội thoại); `isAuto`: tin NCC do hệ thống trả lời tự động.
+ */
 export async function postMessage(
   prisma: PrismaService,
-  data: { conversationId: string; senderId: string | null; content: string; type?: MessageType; orderId?: string | null; isRead?: boolean },
+  data: { conversationId: string; senderId: string | null; content: string; type?: MessageType; orderId?: string | null; isRead?: boolean; replyToId?: string | null; isAuto?: boolean; attachment?: MessageAttachment },
 ) {
   const now = new Date();
   const [message, conv] = await prisma.$transaction([
@@ -19,8 +38,17 @@ export async function postMessage(
         type: data.type ?? 'Text',
         is_read: data.isRead ?? false,
         sent_date: now,
+        reply_to_id: data.replyToId ?? null,
+        is_auto: data.isAuto ?? false,
+        ...(data.attachment && {
+          attachment_path: data.attachment.path,
+          attachment_name: data.attachment.name,
+          attachment_mime: data.attachment.mime,
+          attachment_size: data.attachment.size,
+          attachment_duration: data.attachment.duration ?? null,
+        }),
       },
-      include: { orders: { select: { order_code: true, status: true } } },
+      include: messageInclude,
     }),
     prisma.conversations.update({ where: { id: data.conversationId }, data: { last_message_date: now }, select: { couple_id: true, vendor_id: true } }),
   ]);
@@ -37,28 +65,6 @@ export async function notify(
     data: { user_id: data.userId, type: data.type, title: data.title, content: data.content, reference_type: data.referenceType ?? null, reference_id: data.referenceId ?? null },
   });
   publish({ users: [data.userId], event: 'notification', data: { type: data.type, referenceType: data.referenceType ?? null, referenceId: data.referenceId ?? null } });
-}
-
-/**
- * Báo tin nhắn mới: mỗi hội thoại chỉ giữ một thông báo NewMessage chưa đọc cho mỗi người nhận,
- * đã có thì không tạo thêm. Người nhận mở hội thoại (markNewMessageRead) thì tin kế tiếp báo lại.
- * Lỗi ghi thông báo không được làm hỏng việc gửi tin, nên hàm này không ném lỗi.
- */
-export async function notifyNewMessage(prisma: PrismaService, data: { userId: string; conversationId: string; from: string; content: string }) {
-  try {
-    const where = { user_id: data.userId, type: 'NewMessage', reference_type: 'Conversation', reference_id: data.conversationId, is_read: false };
-    if (await prisma.notifications.count({ where })) return;
-    await notify(prisma, {
-      userId: data.userId,
-      type: 'NewMessage',
-      title: `Tin nhắn mới từ ${data.from}`,
-      content: data.content.length > 120 ? `${data.content.slice(0, 117)}...` : data.content,
-      referenceType: 'Conversation',
-      referenceId: data.conversationId,
-    });
-  } catch {
-    /* bỏ qua: thông báo chỉ là phụ */
-  }
 }
 
 /** Người nhận đã mở hội thoại: đánh dấu đã đọc thông báo NewMessage của hội thoại đó. */

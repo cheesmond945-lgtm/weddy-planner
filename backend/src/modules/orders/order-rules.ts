@@ -36,6 +36,10 @@ export const wantsSend = (body: { send?: unknown } | null | undefined) => body?.
 
 export const HOUR = 3_600_000;
 export const DAY = 86_400_000;
+/** Khách có từng này giờ để đặt cọc kể từ lúc NCC gửi (hoặc gửi bản cập nhật) đơn; quá hạn thì đơn tự hết hạn */
+export const DEPOSIT_HOLD_HOURS = 12;
+/** Đơn chờ cọc còn dưới từng này giờ là "sắp hết hạn" (thẻ số liệu của NCC, khớp mức gấp ở FE) */
+export const DEPOSIT_SOON_HOURS = 6;
 
 // ---------- Thời gian (giờ Việt Nam) ----------
 
@@ -95,12 +99,12 @@ export function weddingDateIssue(
 
 // ---------- Tiền cọc ----------
 
-export const DEPOSIT_ROUNDING = 100_000;
+export const DEPOSIT_ROUNDING = 1_000;
 export const DEPOSIT_MIN = 100_000;
 /** Tỷ lệ cọc tối thiểu (%), áp khi lưu nháp, gửi và chỉnh sửa đơn. Đợt 1 (cọc) khách chuyển khoản qua VietQR, đợt 2 (còn lại) trả tiền mặt cho NCC. */
 export const DEPOSIT_PERCENT_MIN = 10;
 
-/** Tổng × tỷ lệ / 100, làm tròn gần nhất đến 100.000đ, tối thiểu 100.000đ (cọc 0đ thì khách không thanh toán được). */
+/** Tổng × tỷ lệ / 100, làm tròn gần nhất đến 1.000đ, tối thiểu 100.000đ (cọc 0đ thì khách không thanh toán được). */
 export function depositOf(total: number, percent: number): number {
   if (!(percent > 0 && percent < 100) || !(total > 0)) return 0;
   const rounded = Math.round((total * percent) / 100 / DEPOSIT_ROUNDING) * DEPOSIT_ROUNDING;
@@ -116,7 +120,7 @@ export const CANCEL_LABEL: Record<CancelReason, string> = { CUSTOMER_REQUEST: 'K
 
 export const CHANGE_TYPES = ['Item', 'Quantity', 'EventDate', 'Other'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
-export const CHANGE_LABEL: Record<ChangeType, string> = { Item: 'Đổi hạng mục', Quantity: 'Đổi số lượng', EventDate: 'Đổi ngày thực hiện', Other: 'Khác' };
+export const CHANGE_LABEL: Record<ChangeType, string> = { Item: 'Đổi hạng mục', Quantity: 'Đổi số bàn', EventDate: 'Đổi ngày thực hiện', Other: 'Khác' };
 
 export const UNITS = ['Gói', 'Bàn'] as const;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -285,18 +289,19 @@ export function sameContent(a: ParsedContent, b: ParsedContent): boolean {
 }
 
 /**
- * Sửa sau cọc: việc chi tiết đã sinh theo gói lúc cọc nên KHÔNG đổi gói của dòng. Gói của mỗi dòng lấy từ dòng hiện có CÙNG ID
- * (order_items.id), không khớp theo tên nên đổi tên dòng không làm mất gói; dòng mới (không id, hoặc id lạ) không gắn gói.
+ * Sửa sau cọc: gói của dòng theo NCC gửi lên (NCC đổi được gói khi khách muốn đổi; việc chi tiết đổi theo ở packageSwitchPlan:
+ * việc trùng tên giữ tiến độ, việc chỉ gói cũ có bị bỏ, việc chỉ gói mới có được thêm). Gói phải thuộc NCC (checkItemPackages).
  * Riêng dòng đang gắn sảnh cũ của đơn khi sảnh đổi sang `hall.to` thì chuyển theo sảnh mới (dòng sảnh đổi theo sảnh).
+ * `current` giữ cho nơi gọi cũ, không còn dùng để khóa gói.
  */
 export function carryItemPackages<T extends { id?: string | null; packageId?: string | null }>(
   items: readonly T[],
   current: readonly { id?: string | null; packageId?: string | null }[],
   hall?: { from: string | null; to: string | null },
 ): (T & { packageId: string | null })[] {
+  void current;
   return items.map((i) => {
-    const cur = i.id ? current.find((c) => c.id === i.id) : undefined;
-    let pkg = cur?.packageId ?? null;
+    let pkg = i.packageId ?? null;
     if (pkg && hall?.to && hall.from && pkg === hall.from && hall.to !== hall.from) pkg = hall.to;
     return { ...i, packageId: pkg };
   });
@@ -350,4 +355,22 @@ export function orderVersionOf(o: {
 export function assertOrderFresh(expected: unknown, current: string): void {
   if (expected === undefined || expected === null || expected === '') return;
   if (expected !== current) fail('ORDER_STALE', 'Đơn đã được cập nhật ở nơi khác, vui lòng mở lại.', 409);
+}
+
+/** Khách không yêu cầu đổi gói (Đổi hạng mục) khi còn dưới từng này ngày tới ngày thực hiện (NCC đang chuẩn bị gấp) */
+export const PACKAGE_CHANGE_MIN_DAYS = 7;
+/** ... hoặc khi NCC đã hoàn thành từ tỷ lệ này số việc của gói trở lên (đã chuẩn bị nhiều, đổi gói sẽ phí công) */
+export const PACKAGE_CHANGE_MAX_DONE = 0.5;
+
+/**
+ * Đơn đã cọc còn cho khách yêu cầu đổi gói (Đổi hạng mục) không: trả lý do khóa (hiện cho khách) hoặc null nếu còn đổi được.
+ * Chỉ áp dụng cho đơn đã cọc; NCC vẫn tự đổi được gói trong "Chỉnh sửa đơn" nếu đồng ý.
+ * `done` / `total`: số việc của gói (mã 'PKG:') đã xong / tổng của đơn.
+ */
+export function packageChangeLock(o: { deposited: boolean; today: string; eventDate: string; done: number; total: number }): string | null {
+  if (!o.deposited || !o.eventDate) return null;
+  const days = Math.round((Date.parse(o.eventDate) - Date.parse(o.today)) / DAY);
+  if (days < PACKAGE_CHANGE_MIN_DAYS) return `Còn dưới ${PACKAGE_CHANGE_MIN_DAYS} ngày đến ngày thực hiện, nhà cung cấp đang chuẩn bị nên không đổi gói được nữa.`;
+  if (o.total > 0 && o.done / o.total >= PACKAGE_CHANGE_MAX_DONE) return `Nhà cung cấp đã hoàn thành ${o.done}/${o.total} việc chuẩn bị của gói nên không đổi gói được nữa.`;
+  return null;
 }

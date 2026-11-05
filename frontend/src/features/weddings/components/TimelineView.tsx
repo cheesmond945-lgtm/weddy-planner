@@ -43,19 +43,6 @@ const saveView = (v: ViewMode) => {
   }
 }
 
-/** Banner khi có việc chi tiết nhà cung cấp đang chờ khách. Bấm "Xem" để lọc "Việc của tôi". */
-function WaitingBanner({ count, onPick }: { count: number; onPick: () => void }) {
-  if (!count) return null
-  return (
-    <div role="status" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-gold-500 bg-gold-100 px-4 py-3 text-sm text-gold-800">
-      <span className="font-semibold">Có {count} việc bạn cần làm</span>
-      <button type="button" className="font-semibold underline underline-offset-2" onClick={onPick}>
-        Xem
-      </button>
-    </div>
-  )
-}
-
 /**
  * Trang Timeline khi đã có thông tin đám cưới: danh sách theo hạn tăng dần, lọc Chưa xong / Đã xong / Tất cả (?show=) và theo hạng mục (?category=).
  * Việc chi tiết của dịch vụ đã cọc nằm TRONG thẻ nhóm của Mốc chốt; Mốc chốt chưa cọc là một thẻ riêng có dòng "N việc chi tiết mở sau khi bạn đặt cọc".
@@ -139,7 +126,6 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
       },
       { replace: true, preventScrollReset: true },
     )
-  const waitingCount = items.filter((i) => i.kind === 'SERVICE_TASK' && i.status === 'Waiting').length
   const setFilters = (patch: Partial<Filters>) => setParam({ ...(patch.q !== undefined && { q: patch.q.trim() }), ...(patch.month !== undefined && { month: patch.month }), ...(patch.owner !== undefined && { owner: patch.owner === 'all' ? '' : (patch.owner as OwnerFilter) }) })
   const resetFilters = () => setParam({ q: '', month: '', owner: '', category: '' })
   const setLeave = (id: string, on: boolean) =>
@@ -184,7 +170,6 @@ export function TimelineView({ wedding }: { wedding: Wedding }) {
 
   return (
     <>
-      <WaitingBanner count={waitingCount} onPick={() => { setView('time'); setParam({ month: '', q: '', owner: 'mine', category: '', show: 'todo' }) }} />
 
       {/* Tab Timeline trong Kế hoạch của tôi: lọc trạng thái bên trái, nút Thêm việc bên phải (thông tin đám cưới đã ở đầu trang Kế hoạch) */}
       <div className="flex flex-wrap items-center justify-between gap-3">

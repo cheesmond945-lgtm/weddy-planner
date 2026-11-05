@@ -91,7 +91,7 @@ export function GalleryDialog({ title, images, open, onOpenChange }: GalleryDial
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-[900px]">
+        <DialogContent className="max-h-[92vh] max-w-[900px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Ảnh của {title}</DialogTitle>
             <DialogDescription className="sr-only">{images.length} ảnh</DialogDescription>

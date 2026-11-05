@@ -224,3 +224,70 @@ export interface CancelInput {
 export function cancelPlan(input: CancelInput): { deleteIds: string[]; reopenBook: boolean } {
   return { deleteIds: input.details.filter((d) => d.status !== 'Done').map((d) => d.id), reopenBook: input.others.length === 0 };
 }
+
+/** Tên việc để so trùng khi đổi gói: bỏ dấu, viết thường, gộp khoảng trắng ("Chốt  mẫu Hoa" = "chot mau hoa"). */
+export const taskNameKey = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * Đổi gói của đơn đã cọc (sửa đơn sau cọc): chỉ đụng tới việc của gói BỊ BỎ và gói ĐƯỢC THÊM, việc của gói vẫn giữ không đổi
+ * (kể cả việc NCC đã bỏ khỏi đơn: không sinh lại).
+ * - Việc của gói thêm trùng tên (taskNameKey) với một việc của gói bỏ: dùng lại dòng cũ, đổi mã / tên sang việc mới, GIỮ trạng thái,
+ *   ngày đã tích, ngày đã chốt (NCC không phải tích lại việc đã làm).
+ * - Việc của gói thêm không trùng: tạo mới như lúc cọc (hạn theo planPackageTasks trên các việc của gói thêm).
+ * - Việc của gói bỏ không được dùng lại: xóa (kể cả việc đã xong, gói cũ không còn trong đơn).
+ * `rows`: dòng 'PKG:' hiện có của đơn; `rowTasks`: package_tasks.id -> gói và tên của các dòng đó (gồm việc đã xóa mềm);
+ * `added`: việc của các gói được thêm, đúng thứ tự gói rồi thứ tự việc.
+ */
+export function packageSwitchPlan(input: {
+  weddingId: string;
+  orderId: string;
+  categoryId: string | null;
+  ctx: { today: string; event: string; deposit: string };
+  rows: readonly { id: string; code: string; title: string | null }[];
+  rowTasks: ReadonlyMap<string, { packageId: string; title: string }>;
+  removedPackageIds: ReadonlySet<string>;
+  added: readonly PackageTaskRef[];
+}): {
+  relink: { id: string; task_code: string; title: string; display_order: number }[];
+  create: TaskRow[];
+  deleteIds: string[];
+  /** Tên việc giữ tiến độ / thêm mới / bỏ, để xem trước và báo khách */
+  kept: string[];
+  addedTitles: string[];
+  removedTitles: string[];
+} {
+  // Dòng của gói bị bỏ: ứng viên dùng lại theo tên
+  const free = input.rows.flatMap((r) => {
+    const ref = input.rowTasks.get(pkgTaskIdOf(r.code) ?? '');
+    return ref && input.removedPackageIds.has(ref.packageId) ? [{ row: r, key: taskNameKey(ref.title), title: ref.title }] : [];
+  });
+  const plan = planPackageTasks({ D: input.ctx.deposit, E: input.ctx.event, I: input.ctx.today, tasks: input.added.map((t) => ({ id: t.id, offsetDays: t.offsetDays })) });
+  const dateOf = new Map(plan.tasks.map((p) => [p.id, p.date]));
+  const base = { wedding_id: input.weddingId, category_id: input.categoryId, order_id: input.orderId, task_type: 'Detail' as const };
+
+  const relink: { id: string; task_code: string; title: string; display_order: number }[] = [];
+  const create: TaskRow[] = [];
+  const kept: string[] = [];
+  const addedTitles: string[] = [];
+  const used = new Set<string>();
+  input.added.forEach((t, i) => {
+    const match = free.find((f) => !used.has(f.row.id) && f.key === taskNameKey(t.title));
+    if (match) {
+      used.add(match.row.id);
+      relink.push({ id: match.row.id, task_code: pkgCode(t.id, input.orderId), title: taskTitle(t.title, t.note), display_order: PKG_DISPLAY_ORDER + i });
+      kept.push(t.title);
+      return;
+    }
+    create.push({ ...base, title: taskTitle(t.title, t.note), scheduled_date: asDate(dateOf.get(t.id)!), status: initialStatus(t.owner), task_code: pkgCode(t.id, input.orderId), display_order: PKG_DISPLAY_ORDER + i });
+    addedTitles.push(t.title);
+  });
+  const dropped = free.filter((f) => !used.has(f.row.id));
+  return { relink, create, deleteIds: dropped.map((f) => f.row.id), kept, addedTitles, removedTitles: dropped.map((f) => f.title) };
+}

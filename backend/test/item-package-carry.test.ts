@@ -1,6 +1,6 @@
 /*
- * Sửa sau cọc giữ gói của dòng theo ID dòng (không theo tên), chạy bằng: npm test
- * Lỗi cũ: khớp theo tên nên đổi tên dòng gắn gói làm mất liên kết gói (và việc chi tiết của gói).
+ * Sửa sau cọc: gói của dòng theo NCC gửi lên (NCC đổi được gói khi khách muốn đổi; việc chi tiết đổi theo ở packageSwitchPlan,
+ * test/package-switch.test.ts). Dòng gắn sảnh cũ đổi theo sảnh mới. Chạy bằng: npm test
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -16,29 +16,26 @@ const current = [
 ];
 
 describe('carryItemPackages', () => {
-  it('đổi tên dòng gắn gói vẫn giữ gói (khớp theo id)', () => {
-    const out = carryItemPackages([{ id: I1, itemName: 'Tên hoàn toàn mới', packageId: null }], current);
+  it('đổi tên dòng gắn gói vẫn giữ gói (client gửi kèm gói của dòng)', () => {
+    const out = carryItemPackages([{ id: I1, itemName: 'Tên hoàn toàn mới', packageId: A }], current);
     assert.equal(out[0].packageId, A);
   });
-  it('client gửi packageId khác cho dòng cũ thì bị bỏ qua (gói đã chốt lúc cọc)', () => {
-    assert.equal(carryItemPackages([{ id: I2, packageId: B }], current)[0].packageId, null);
-    assert.equal(carryItemPackages([{ id: I1, packageId: B }], current)[0].packageId, A);
+  it('NCC đổi gói của dòng sau cọc: theo gói client gửi', () => {
+    assert.equal(carryItemPackages([{ id: I2, packageId: B }], current)[0].packageId, B);
+    assert.equal(carryItemPackages([{ id: I1, packageId: B }], current)[0].packageId, B);
+    assert.equal(carryItemPackages([{ id: I1, packageId: null }], current)[0].packageId, null);
   });
-  it('dòng mới (không id) hoặc id lạ không gắn gói', () => {
-    const out = carryItemPackages([{ packageId: A }, { id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', packageId: A }], current);
-    assert.deepEqual(out.map((x) => x.packageId), [null, null]);
-  });
-  it('đổi thứ tự dòng không làm lệch gói', () => {
-    const out = carryItemPackages([{ id: I2 }, { id: I1 }], current);
-    assert.deepEqual(out.map((x) => x.packageId), [null, A]);
+  it('dòng mới gắn gói được', () => {
+    const out = carryItemPackages([{ packageId: A }, { packageId: null }], current);
+    assert.deepEqual(out.map((x) => x.packageId), [A, null]);
   });
   it('đổi sảnh: dòng đang gắn sảnh cũ chuyển sang sảnh mới, dòng gắn gói khác giữ nguyên', () => {
     const cur = [{ id: I1, packageId: A }, { id: I2, packageId: B }];
-    const out = carryItemPackages([{ id: I1 }, { id: I2 }], cur, { from: A, to: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' });
+    const out = carryItemPackages([{ id: I1, packageId: A }, { id: I2, packageId: B }], cur, { from: A, to: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' });
     assert.deepEqual(out.map((x) => x.packageId), ['cccccccc-cccc-4ccc-8ccc-cccccccccccc', B]);
   });
   it('giữ nguyên sảnh: không đổi gì', () => {
-    assert.equal(carryItemPackages([{ id: I1 }], current, { from: A, to: A })[0].packageId, A);
+    assert.equal(carryItemPackages([{ id: I1, packageId: A }], current, { from: A, to: A })[0].packageId, A);
   });
 });
 

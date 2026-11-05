@@ -48,16 +48,17 @@ export class OverviewService {
       .slice(0, 3)
       .map((t) => ({ id: t.id, title: t.title, dueDate: t.dueDate!, daysLeft: daysBetween(today, t.dueDate!), category: t.category }));
 
-    // Tiến độ theo dịch vụ; việc không gắn dịch vụ (việc của hai bạn) chỉ tính vào tổng ở thẻ Công việc
-    const groups = new Map<string, { slug: string; name: string; done: number; total: number }>();
+    // Tiến độ theo dịch vụ; việc không gắn dịch vụ (khách tự thêm, hệ thống sinh) gom thành nhóm "Việc ngoài dịch vụ"
+    const groups = new Map<string, { slug: string | null; name: string; done: number; total: number }>();
     for (const t of open) {
-      if (!t.category) continue;
-      const g = groups.get(t.category.slug) ?? { slug: t.category.slug, name: t.category.name, done: 0, total: 0 };
+      const key = t.category?.slug ?? '';
+      const g = groups.get(key) ?? { slug: t.category?.slug ?? null, name: t.category?.name ?? 'Việc ngoài dịch vụ', done: 0, total: 0 };
       g.total++;
       if (t.isDone) g.done++;
-      groups.set(t.category.slug, g);
+      groups.set(key, g);
     }
-    const byCategory = [...groups.values()];
+    // "Việc ngoài dịch vụ" xếp cuối
+    const byCategory = [...groups.values()].sort((a, b) => Number(a.slug === null) - Number(b.slug === null));
 
     return {
       done: open.filter((t) => t.isDone).length,

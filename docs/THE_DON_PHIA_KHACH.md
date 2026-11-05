@@ -54,7 +54,7 @@ Thẻ nằm **bên trái** khung chat (tin của NCC gửi).
 |---|---|---|---|---|
 | **Draft** | — | **Khách không thấy thẻ** | — | — |
 | **Pending** | Chờ thanh toán cọc (vàng) | *Không có ô gợi ý* (hạn đã hiện ở dòng "Hạn đặt cọc", đỏ khi < 6 giờ) | **Thanh toán cọc** | Yêu cầu chỉnh sửa · Xem chi tiết |
-| **NeedRevision** | Chờ chỉnh sửa (cam) | "Đã gửi yêu cầu chỉnh sửa, chờ NCC cập nhật." + hộp nhắc lại: "Nội dung: Đổi số lượng · "Giảm còn 15 bàn nhé."" | — | Xem chi tiết |
+| **NeedRevision** | Chờ chỉnh sửa (cam) | "Đã gửi yêu cầu chỉnh sửa, chờ NCC cập nhật." + hộp nhắc lại: "Nội dung: Đổi số bàn · "Giảm còn 15 bàn nhé."" | — | Xem chi tiết |
 | **Deposited** | Đã đặt cọc (xanh lá) | "Đã đặt cọc. Muốn đổi, bấm Yêu cầu chỉnh sửa (tiền cọc giữ nguyên). Muốn hủy đơn, bạn nhắn NCC ngay trong chat." Đang có yêu cầu chờ NCC: "Đã gửi yêu cầu chỉnh sửa, chờ NCC xử lý. Tiền cọc giữ nguyên." + nội dung | **Xem việc cần làm** (sang timeline) | Yêu cầu chỉnh sửa (trước ngày thực hiện, khi chưa có yêu cầu chờ) · Xem chi tiết |
 | **Completed** | Hoàn thành (xanh đậm) | "Đơn đã hoàn thành." | — | Xem chi tiết · **Xem hóa đơn** (chỉ khi NCC đã xuất) |
 | **Expired** | Đã hết hạn (xám) | "Đơn đã hết hạn đặt cọc. Nhắn NCC nếu bạn vẫn muốn đặt." | — | Xem chi tiết · Nhắn tin cho NCC (cuộn xuống ô nhập) |
@@ -79,7 +79,7 @@ Quá hạn cọc thì nút khóa, hiện "Đơn đã hết hạn đặt cọc".
 ```
 ┌ Yêu cầu chỉnh sửa đơn DH26100009 ─────────────┐
 │ Bạn muốn thay đổi gì?                          │
-│ ☐ Đổi hạng mục      ☐ Đổi số lượng             │
+│ ☐ Đổi hạng mục      ☐ Đổi số bàn             │
 │ ☐ Đổi ngày thực hiện ☐ Khác                    │
 │ Nội dung chi tiết *                            │
 │ [                                          ]   │
@@ -102,7 +102,7 @@ Thông tin đơn · Bảng hạng mục đầy đủ · Lịch thanh toán 2 đ�
 | NCC gửi / gửi lại đơn / sửa sau cọc | `Order` | NCC | Thẻ đơn (mục 1) |
 | Khách cọc thành công | `DepositReceipt` | Hệ thống | Thẻ "Giấy xác nhận cọc XNC…: đã nhận 400.000đ cho đơn DH…" + nút **Xem** |
 | NCC xuất hóa đơn cuối | `FinalInvoice` | NCC | Thẻ "Hóa đơn HD… cho đơn DH…: tổng …, đã cọc …" + nút **Xem** |
-| Khách yêu cầu sửa (trước cọc) | Tin hệ thống (Text) | Hệ thống | "Bạn đã yêu cầu chỉnh sửa đơn DH…: Đổi số lượng · "…"" |
+| Khách yêu cầu sửa (trước cọc) | Tin hệ thống (Text) | Hệ thống | "Bạn đã yêu cầu chỉnh sửa đơn DH…: Đổi số bàn · "…"" |
 | Đơn hết hạn | Tin hệ thống | Hệ thống | "Đơn DH… đã hết hạn đặt cọc." |
 | NCC hủy đơn | Tin hệ thống | Hệ thống | "Studio Mây Wedding đã hủy đơn DH… · Lý do: Khách yêu cầu hủy" |
 | Đơn hoàn thành | Tin hệ thống | Hệ thống | "Đơn DH… đã hoàn thành." |
