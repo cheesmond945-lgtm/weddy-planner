@@ -10,15 +10,16 @@ import * as be from '../../../../backend/src/modules/weddings/budget-split.ts'
 
 type Impl = typeof fe
 const M = 1_000_000
+// Tỷ lệ theo % để dễ đọc như tài liệu: TT = Trang trí, CA = Chụp ảnh, TP = Trang phục, TD = Trang điểm, HC = Hoa cưới
+const SLUG = { TT: 'decor', CA: 'chup-anh', TP: 'trang-phuc', TD: 'makeup', HC: 'hoa-cuoi' } as const
+type K = keyof typeof SLUG
+const member = (k: K, medianTr: number) => ({ id: k, slug: SLUG[k], median: medianTr * M })
+const total = (xs: { ratio: number }[]) => xs.reduce((s, c) => s + c.ratio, 0)
 
 for (const [side, S] of [
   ['frontend', fe],
   ['backend', be as unknown as Impl],
 ] as const) {
-  // Tỷ lệ theo % để dễ đọc như tài liệu: TT = Trang trí, CA = Chụp ảnh, TP = Trang phục, TD = Trang điểm, HC = Hoa cưới
-  const SLUG = { TT: 'decor', CA: 'chup-anh', TP: 'trang-phuc', TD: 'makeup', HC: 'hoa-cuoi' } as const
-  type K = keyof typeof SLUG
-  const member = (k: K, medianTr: number) => ({ id: k, slug: SLUG[k], median: medianTr * M })
   const items = (spec: Partial<Record<K, number | [number, 'L']>>) =>
     (Object.keys(spec) as K[]).map((k) => {
       const v = spec[k]!
@@ -26,7 +27,6 @@ for (const [side, S] of [
     })
   /** { TT: '30,00', … } để so như tài liệu */
   const pct = (xs: { id: string; ratio: number }[]) => Object.fromEntries(xs.map((c) => [c.id, S.ratioText(c.ratio)]))
-  const total = (xs: { ratio: number }[]) => xs.reduce((s, c) => s + c.ratio, 0)
 
   describe(`${side}: 8.1 khởi tạo`, () => {
     it('T01 Cân bằng: tỷ lệ theo giá trung vị', () => {
