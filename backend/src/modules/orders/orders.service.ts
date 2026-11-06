@@ -732,7 +732,7 @@ export class OrdersService {
     if (!changeNote) return fail('VALIDATION_ERROR', 'Nhập nội dung thay đổi để khách biết.', 400, { changeNote: 'Nhập nội dung thay đổi để khách biết.' });
 
     const current = this.currentOf(order);
-    const p = parseContent({ ...(body.content ?? {}), customerName: current.customerName, customerPhone: current.customerPhone, depositPercent: current.depositPercent }, 'edit', { currentEventDate: current.eventDate, weddingDate: ymd(order.weddings?.wedding_date ?? null) || null });
+    const p = parseContent({ ...(body.content ?? {}), customerName: body.content?.customerName ?? current.customerName, customerPhone: body.content?.customerPhone ?? current.customerPhone, depositPercent: current.depositPercent }, 'edit', { currentEventDate: current.eventDate, weddingDate: ymd(order.weddings?.wedding_date ?? null) || null });
     // Đổi sảnh hoặc ngày thì sảnh mới phải trống ngày đó; giữ nguyên thì không kiểm lại (đơn cũ chưa có sảnh: phải chọn)
     const hall = await this.checkHall(vendor, p, { strict: true, exceptOrderId: id, keep: { packageId: order.package_id, eventDate: current.eventDate } });
     p.packageId = hall?.id ?? null;
@@ -756,7 +756,7 @@ export class OrdersService {
         const busy = await findHallConflict(tx, hall.id, p.eventDate, id);
         if (busy) return fail('HALL_BUSY', hallBusyMessage('VENDOR', hall.name, p.eventDate, busy), 409);
       }
-      const r = await tx.orders.updateMany({ where: { id, status: 'Deposited' }, data: { event_date: new Date(p.eventDate), note: p.note, total_amount: p.total, package_id: p.packageId } });
+      const r = await tx.orders.updateMany({ where: { id, status: 'Deposited' }, data: { customer_name: p.customerName, customer_phone: p.customerPhone, event_date: new Date(p.eventDate), note: p.note, total_amount: p.total, package_id: p.packageId } });
       if (!r.count) return fail('ORDER_NOT_EDITABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 409);
       await tx.order_items.deleteMany({ where: { order_id: id } });
       await tx.order_items.createMany({ data: this.itemRows(id, p) });

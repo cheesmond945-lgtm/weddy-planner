@@ -252,8 +252,8 @@ export function parseContent(c: ContentInput, mode: ParseMode, opts: { currentEv
 
 /** Các thay đổi nội dung giữa đơn hiện tại và nội dung mới, theo ChangeType (để ghi OrderRevisionChanges sau cọc). */
 export function changeTypesBetween(
-  prev: { eventDate: string; note: string | null; items: ParsedItem[]; packageId?: string | null },
-  next: { eventDate: string; note: string | null; items: ParsedItem[]; packageId?: string | null },
+  prev: { eventDate: string; note: string | null; items: ParsedItem[]; packageId?: string | null; customerName?: string; customerPhone?: string },
+  next: { eventDate: string; note: string | null; items: ParsedItem[]; packageId?: string | null; customerName?: string; customerPhone?: string },
 ): ChangeType[] {
   const out = new Set<ChangeType>();
   const key = (i: ParsedItem) => i.itemName.trim().toLowerCase();
@@ -270,7 +270,9 @@ export function changeTypesBetween(
     const n = next.items.find((x) => key(x) === key(p));
     return !!n && n.unitPrice !== p.unitPrice;
   });
-  if (priceChanged || (prev.note ?? '') !== (next.note ?? '')) out.add('Other');
+  // Đổi tên hoặc số điện thoại khách trên đơn tính là thay đổi khác
+  const contactChanged = (prev.customerName ?? '') !== (next.customerName ?? '') || (prev.customerPhone ?? '') !== (next.customerPhone ?? '');
+  if (priceChanged || contactChanged || (prev.note ?? '') !== (next.note ?? '')) out.add('Other');
   return [...out];
 }
 

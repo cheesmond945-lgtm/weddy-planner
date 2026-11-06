@@ -462,7 +462,6 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                 <Input
                   className={controlClass}
                   placeholder="VD: Minh Anh & Quốc Huy"
-                  disabled={locked}
                   aria-invalid={errors.customerName ? true : undefined}
                   value={values.customerName}
                   onChange={(e) => set({ customerName: e.target.value })}
@@ -475,7 +474,6 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
                   // Không để trình duyệt tự điền số đã lưu: số của khách do NCC nhập (hoặc lấy từ tài khoản khách)
                   autoComplete="off"
                   placeholder="09xx xxx xxx"
-                  disabled={locked}
                   aria-invalid={errors.customerPhone ? true : undefined}
                   value={values.customerPhone}
                   onChange={(e) => set({ customerPhone: e.target.value })}

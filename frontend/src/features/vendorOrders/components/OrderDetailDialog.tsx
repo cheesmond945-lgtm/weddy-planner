@@ -95,9 +95,9 @@ export function OrderDetailSections({ order: o, vendorView, onViewInvoice }: { o
     <>
       <Section title="Thông tin đơn">
         <dl className="grid grid-cols-3 gap-x-4 gap-y-3 max-sm:grid-cols-1">
-          {/* Khách xem đơn của chính mình: không lặp tên và số điện thoại của họ */}
-          {vendorView && <Item label="Khách hàng">{o.customerName}</Item>}
-          {vendorView && <Item label="Số điện thoại">{o.customerPhone || '—'}</Item>}
+          {/* Cả hai phía đều thấy tên và số điện thoại ghi trên đơn (NCC có thể sửa, kể cả sau cọc) */}
+          <Item label="Khách hàng">{o.customerName}</Item>
+          <Item label="Số điện thoại">{o.customerPhone || '—'}</Item>
           <Item label="Ngày thực hiện">{formatDate(o.eventDate)}</Item>
           {o.package && <Item label="Sảnh">{o.package.name}</Item>}
           {o.completedDate && <Item label="Ngày hoàn thành">{formatDay(o.completedDate)}</Item>}
