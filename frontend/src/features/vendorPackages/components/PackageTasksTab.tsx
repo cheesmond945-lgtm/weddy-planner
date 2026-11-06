@@ -29,7 +29,7 @@ function OwnerBadge({ owner }: { owner: PackageTaskOwner }) {
 
 /**
  * Tab "Công việc" của gói: trái là danh sách NCC khai, phải là bản xem trước "Khách sẽ thấy sau khi đặt cọc".
- * Mọi thao tác chỉ đổi danh sách trên màn (draft); xuống CSDL khi bấm lưu ở thanh dưới của trang.
+ * Gói đã tạo: mỗi thao tác lưu thẳng xuống CSDL. Gói mới: chỉ đổi danh sách trên màn, lưu cùng gói ở tab Thông tin gói.
  */
 export function PackageTasksTab({ draft, disabled }: { draft: PackageTasksDraft; disabled?: boolean }) {
   const [filter, setFilter] = useState<Filter>('ALL')
@@ -49,10 +49,10 @@ export function PackageTasksTab({ draft, disabled }: { draft: PackageTasksDraft;
 
   // Hiện số thứ tự theo vị trí trong cả danh sách (không đổi khi lọc)
   const shown = list.map((task, index) => ({ task, index })).filter(({ task }) => filter === 'ALL' || task.owner === filter)
-  const edit = (update: (rows: TaskDraft[]) => TaskDraft[]) => draft.setRows(update)
+  const edit = (update: (rows: TaskDraft[]) => TaskDraft[]) => void draft.apply(update)
 
   const addButton = (
-    <Button type="button" size="sm" disabled={disabled || full} title={full ? `Tối đa ${MAX_TASKS} công việc mỗi gói` : undefined} onClick={() => setDialog({})}>
+    <Button type="button" size="sm" disabled={disabled || full || draft.saving} title={full ? `Tối đa ${MAX_TASKS} công việc mỗi gói` : undefined} onClick={() => setDialog({})}>
       <Plus />
       Thêm công việc
     </Button>
@@ -60,7 +60,11 @@ export function PackageTasksTab({ draft, disabled }: { draft: PackageTasksDraft;
 
   return (
     <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] items-start gap-5 max-lg:grid-cols-1">
-      <p className="col-span-full text-[13px] text-muted-foreground">Công việc lưu ngay, không cần Admin duyệt, và chỉ áp dụng cho các đơn đặt cọc sau khi lưu.</p>
+      <p className="col-span-full text-[13px] text-muted-foreground">
+        {draft.autoSave
+          ? 'Công việc lưu ngay khi bạn thêm, sửa hoặc xóa, không cần Admin duyệt, và chỉ áp dụng cho các đơn đặt cọc sau khi lưu.'
+          : 'Công việc được lưu cùng gói khi bạn bấm Lưu nháp hoặc Gửi duyệt ở tab Thông tin gói, không cần Admin duyệt.'}
+      </p>
       <section className={card} aria-labelledby="package-tasks-title">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -69,7 +73,8 @@ export function PackageTasksTab({ draft, disabled }: { draft: PackageTasksDraft;
             </h2>
             <p className="mt-0.5 text-[13px] text-muted-foreground">{list.length} công việc</p>
           </div>
-          {addButton}
+          {/* Danh sách trống: nút Thêm nằm giữa khung bên dưới, không lặp ở đây */}
+          {list.length > 0 && addButton}
         </div>
 
         {list.length > 0 && (

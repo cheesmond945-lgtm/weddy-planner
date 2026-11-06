@@ -13,7 +13,7 @@ const closed = (o: Order) => o.status === 'Expired' || o.status === 'Cancelled'
 
 /**
  * Đơn của một hạng mục trên trang Kế hoạch của tôi (mới nhất trước): mỗi đơn một dòng gọn (mã đơn, trạng thái, tổng tiền,
- * hạn cọc nếu đang chờ cọc), bấm "Xem chi tiết đơn hàng" mở popup có thẻ đơn đầy đủ (thanh toán cọc, yêu cầu chỉnh sửa, hóa đơn,
+ * hạn cọc nếu đang chờ cọc), bấm "Xem chi tiết" mở popup có thẻ đơn đầy đủ (thanh toán cọc, yêu cầu chỉnh sửa, hóa đơn,
  * nhắn NCC). Đơn hết hạn / đã hủy thu gọn sau nút "Xem …" để hạng mục không dài khi NCC đã tạo lại đơn nhiều lần.
  * `embedded`: nằm trong thẻ nhà cung cấp (dưới đường kẻ), không tiêu đề, dòng không viền riêng.
  */
@@ -89,7 +89,7 @@ function OrderRow({ order: o, onOpen, embedded }: { order: Order; onOpen: () => 
       )}
       {o.status === 'Pending' && o.depositDueDate && <span className="text-[13px] text-warn">{depositDeadline(o.depositDueDate)}</span>}
       <span className="ml-auto inline-flex items-center gap-0.5 text-[13px] font-medium text-gold-700 group-hover:underline">
-        Xem chi tiết đơn hàng
+        Xem chi tiết
         <ChevronRight className="size-4" aria-hidden />
       </span>
     </button>

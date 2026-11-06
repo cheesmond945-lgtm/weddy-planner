@@ -2,7 +2,7 @@ import { Clock, Eye, EyeOff, Send, Sparkles, Trash2 } from 'lucide-react'
 import { AiWriteDialog } from '@/components/AiWriteDialog'
 import { formatMoney } from '@/lib/format'
 import { vendorPackagesApi } from '@/api/vendorPackages'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { FormField } from '@/components/FormField'
 import { MoneyInput } from '@/components/MoneyInput'
@@ -88,6 +88,8 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
   const [checkMode, setCheckMode] = useState<'draft' | 'submit' | null>(null)
   const [confirm, setConfirm] = useState<'submit' | 'remove' | 'hide' | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
+  // Gói mới vừa lưu xong: bỏ chặn rời trang trước khi sang trang của gói (form lúc đó chưa nạp lại nên vẫn bị coi là chưa lưu)
+  const [createdId, setCreatedId] = useState<string | null>(null)
   const isUpdate = pkg?.status === 'PUBLISHED'
   const hasUpdate = isUpdate && !!pkg.pendingUpdate
   const resubmit = pkg?.status === 'NEEDS_REVISION' || pkg?.pendingUpdate?.status === 'NEEDS_REVISION'
@@ -103,6 +105,10 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
   // Gợi ý số bàn tối thiểu khi đã nhập sức chứa hợp lệ
   const capacityNum = Number(values.capacity)
   const suggestedTables = venue && Number.isInteger(capacityNum) && capacityNum >= GUESTS_PER_TABLE ? suggestMinTables(capacityNum) : null
+
+  useEffect(() => {
+    if (createdId) navigate(paths.vendor.package(createdId), { replace: true })
+  }, [createdId, navigate])
 
   const set = (patch: Partial<PackageFormValues>) => setValues((v) => ({ ...v, ...patch }))
   const input = (invalid?: boolean) => cn(controlClass, off && 'bg-surface-2', invalid && 'border-destructive')
@@ -123,19 +129,28 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
       }
       return
     }
+    // Gói mới (lưu nháp hay gửi duyệt) và gói nháp gửi duyệt phải có ít nhất một công việc
+    // Gói đã đăng gửi bản cập nhật thì không đòi (BE chỉ đòi khi gửi duyệt gói lần đầu)
+    if ((!pkg || (submit && !isUpdate)) && tasks && !tasks.loading && tasks.rows.length === 0) {
+      onTabChange?.('tasks')
+      toast('Gói mới cần có ít nhất một công việc. Hãy thêm công việc ở tab Công việc rồi lưu lại.')
+      return
+    }
     if (submit) return setConfirm('submit')
     doSave(false)
   }
 
   function doSave(submit: boolean) {
     save.mutate(
-      { id: pkg?.id, body: toRequest(values, venue), submit },
+      // Gói mới: lưu nháp + lưu công việc xong mới gửi duyệt (BE đòi gói có ít nhất 1 việc khi gửi duyệt)
+      { id: pkg?.id, body: toRequest(values, venue), submit: submit && !!pkg },
       {
         // Lưu gói xong mới lưu công việc (gói mới có id rồi); công việc lỗi thì giữ danh sách và trạng thái chưa lưu.
         // Gói mới: sau đó sang trang của gói vừa tạo
         onSuccess: async ({ pkg: saved }) => {
-          if (tasks) await tasks.save(saved.id, { afterPackage: true })
-          if (!pkg) navigate(paths.vendor.package(saved.id), { replace: true })
+          const tasksOk = tasks ? await tasks.save(saved.id, { afterPackage: true }) : true
+          if (submit && !pkg && tasksOk) await action.mutateAsync({ action: 'submit', pkg: saved }).catch(() => undefined)
+          if (!pkg) setCreatedId(saved.id)
         },
       },
     )
@@ -306,56 +321,17 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
 
       {readOnly ? (
         <>
-          {tasks && pkg && (tasksDirty || tab === 'tasks') && (
-            <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
-              {tasksDirty && <span className="mr-auto text-[13px] font-medium text-gold-ink max-sm:w-full">Có thay đổi chưa lưu</span>}
-              {tasksDirty ? (
-                <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={tasks.discard}>
-                  Hủy
-                </Button>
-              ) : (
-                <Button asChild variant="outline" className="h-10 border-line-strong">
-                  <Link to={listHref}>Hủy</Link>
-                </Button>
-              )}
-              <Button type="button" className="h-10" disabled={busy || !tasksDirty} onClick={() => void tasks.save(pkg.id)}>
-                {tasks.saving ? 'Đang lưu…' : 'Lưu công việc'}
-              </Button>
-            </div>
-          )}
-          {/* Tab Công việc: chỉ thanh lưu công việc, không có Ẩn / Cập nhật của gói */}
+          {/* Tab Công việc: công việc lưu ngay nên không có thanh nút, cũng không có Ẩn / Cập nhật của gói */}
           {!(tab === 'tasks' && tasks) && actions}
         </>
       ) : tab === 'tasks' && tasks ? (
-        // Tab Công việc: lưu ngay, không cần Admin duyệt, nên không có Lưu nháp / Gửi duyệt
-        <div className="grid gap-2">
-          <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
-            {tasksDirty && <span className="mr-auto text-[13px] font-medium text-gold-ink max-sm:w-full">Có thay đổi chưa lưu</span>}
-            {pkg && tasksDirty ? (
-              <Button type="button" variant="outline" className="h-10 border-line-strong" disabled={busy} onClick={tasks.discard}>
-                Hủy
-              </Button>
-            ) : (
-              <Button asChild variant="outline" className="h-10 border-line-strong">
-                <Link to={listHref}>Hủy</Link>
-              </Button>
-            )}
-            {pkg ? (
-              <Button type="button" className="h-10" disabled={busy || !tasksDirty} onClick={() => void tasks.save(pkg.id)}>
-                {tasks.saving ? 'Đang lưu…' : 'Lưu công việc'}
-              </Button>
-            ) : (
-              <Button type="button" className="h-10" disabled={busy} onClick={() => handleSave(false)}>
-                {busy ? 'Đang lưu…' : 'Lưu gói và công việc'}
-              </Button>
-            )}
-          </div>
+        // Tab Công việc: gói đã tạo lưu ngay từng thao tác, gói mới lưu cùng gói ở tab Thông tin gói, nên không có thanh nút
+        <>
           {pkg && dirty && <p className="text-right text-[12.5px] text-muted-foreground">Thông tin gói còn thay đổi chưa lưu — chuyển sang tab Thông tin gói để lưu hoặc gửi duyệt</p>}
-          {!pkg && <p className="text-right text-[12.5px] text-muted-foreground">Công việc được lưu ngay, không cần duyệt. Gửi duyệt gói ở tab Thông tin gói.</p>}
-        </div>
+          {!pkg && <p className="text-right text-[12.5px] text-muted-foreground">Gói mới cần có ít nhất một công việc. Thêm xong, chuyển sang tab Thông tin gói để lưu nháp hoặc gửi duyệt.</p>}
+        </>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2.5 max-sm:[&>a]:flex-1 max-sm:[&>button]:flex-1">
-          {(dirty || tasksDirty) &&<span className="text-[13px] font-medium text-gold-ink max-sm:w-full">Có thay đổi chưa lưu</span>}
           {pkg && (!isUpdate || hasUpdate) && (
             <Button type="button" variant="outline" className="mr-auto h-10 border-warn/50 text-warn hover:bg-warn-soft" disabled={busy} onClick={() => setConfirm('remove')}>
               <Trash2 />
@@ -455,7 +431,7 @@ export function PackageEditor({ pkg, profile, category, vendorName, readOnly, ac
         }
         onUse={(description) => set({ description })}
       />
-      <UnsavedChangesGuard when={((dirty && !readOnly) || tasksDirty) && !busy} />
+      <UnsavedChangesGuard when={((dirty && !readOnly) || tasksDirty) && !busy && !createdId} />
     </form>
   )
 }

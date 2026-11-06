@@ -396,6 +396,8 @@ export class VendorPackagesService {
     const errors: Record<string, string> = {};
     if (!pkg.description?.trim()) errors.description = 'Vui lòng nhập mô tả.';
     if (pkg.package_albums.length === 0) errors.photos = 'Cần ít nhất 1 ảnh.';
+    // Công việc lưu thẳng (không qua Admin duyệt) nhưng gói gửi duyệt lần đầu phải có ít nhất 1 việc
+    if ((await this.prisma.package_tasks.count({ where: { package_id: id, deleted_at: null } })) === 0) errors.tasks = 'Gói cần có ít nhất 1 công việc.';
     if (Object.keys(errors).length) return fail('VALIDATION_ERROR', 'Gói chưa đủ thông tin để gửi duyệt.', 400, errors);
 
     if (vendor.status !== 'Approved') {

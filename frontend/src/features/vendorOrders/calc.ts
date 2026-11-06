@@ -174,7 +174,7 @@ export function orderHint(o: Order): { text: string; tone: 'info' | 'warn' | 'ok
       return { text: `Đã hoàn thành ngày ${o.completedDate ? formatDay(o.completedDate) : ''}. Đã tính hoa hồng.`, tone: 'ok' }
     case 'Cancelled':
       return {
-        text: `NCC đã hủy đơn ngày ${o.cancelledDate ? formatDay(o.cancelledDate) : ''}${o.cancelReason ? ` · Lý do: ${CANCEL_REASON[o.cancelReason].label}` : ''}.`,
+        text: `${o.cancelReason ? 'NCC đã hủy đơn' : 'Khách đã hủy đơn (chưa đặt cọc)'} ngày ${o.cancelledDate ? formatDay(o.cancelledDate) : ''}${o.cancelReason ? ` · Lý do: ${CANCEL_REASON[o.cancelReason].label}` : ''}.`,
         tone: 'warn',
       }
   }

@@ -139,6 +139,13 @@ export interface PackageTasksDraft {
    * afterPackage: vừa lưu gói xong, báo lỗi theo kiểu "Đã lưu gói, công việc chưa lưu được".
    */
   save: (id: string, opts?: { afterPackage?: boolean }) => Promise<boolean>
+  /**
+   * Thêm / sửa / xóa / đổi thứ tự một việc. Gói đã tạo: lưu thẳng xuống CSDL (không cần Admin duyệt), lỗi thì giữ danh sách đã lưu.
+   * Gói mới (chưa có id): chỉ đổi danh sách trên màn, lưu cùng gói.
+   */
+  apply: (update: (rows: TaskDraft[]) => TaskDraft[]) => Promise<boolean>
+  /** Gói đã có id: mỗi thao tác lưu ngay */
+  autoSave: boolean
 }
 
 /**
@@ -164,6 +171,10 @@ export function usePackageTasksDraft(packageId: string | undefined): PackageTask
     // Gói mới vừa tạo: bản nháp còn gắn với "chưa có id"
     const current = mine ?? (draft && draft.pid === undefined ? draft.rows : null)
     if (!current || !isDirty(current, id === packageId ? saved : [])) return true
+    return persist(id, current, opts)
+  }
+
+  async function persist(id: string, current: TaskDraft[], opts?: { afterPackage?: boolean; revertOnError?: boolean }) {
     setSaving(true)
     try {
       const out: PackageTask[] = await vendorPackagesApi.saveTasks(id, toRequest(current))
@@ -174,7 +185,7 @@ export function usePackageTasksDraft(packageId: string | undefined): PackageTask
       toast(opts?.afterPackage ? 'Đã lưu công việc.' : 'Đã lưu công việc của gói.')
       return true
     } catch (e) {
-      setDraft({ pid: id, rows: current })
+      setDraft(opts?.revertOnError ? null : { pid: id, rows: current })
       toast(opts?.afterPackage ? 'Đã lưu gói, công việc chưa lưu được — thử lại' : `Chưa lưu được công việc: ${(e as Error).message}`)
       return false
     } finally {
@@ -189,6 +200,17 @@ export function usePackageTasksDraft(packageId: string | undefined): PackageTask
     loadError: query.isError ? query.error : null,
     saving,
     setRows: (update) => setDraft({ pid: packageId, rows: update(rows) }),
+    autoSave: !!packageId,
+    apply: async (update) => {
+      if (saving) return false
+      const next = update(rows)
+      if (!packageId) {
+        setDraft({ pid: undefined, rows: next })
+        return true
+      }
+      if (!isDirty(next, saved)) return true
+      return persist(packageId, next, { revertOnError: true })
+    },
     discard: () => setDraft(null),
     save,
   }

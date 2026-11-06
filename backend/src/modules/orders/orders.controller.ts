@@ -51,6 +51,13 @@ export class CoupleOrdersController {
     return this.adjustments.demoPay(req.user.sub, id);
   }
 
+  /** Khách tự hủy đơn chưa thanh toán cọc (Pending / NeedRevision): { note? } */
+  @HttpCode(200)
+  @Post(':id/cancel')
+  cancelUnpaid(@Req() req: any, @Param('id') id: string, @Body() body: { note?: unknown }) {
+    return this.orders.cancelByCouple(req.user.sub, id, body ?? {});
+  }
+
   /** Khách yêu cầu hủy đơn đã cọc (cọc không hoàn): { note? } */
   @HttpCode(200)
   @Post(':id/cancel-requests')

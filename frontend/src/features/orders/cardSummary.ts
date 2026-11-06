@@ -62,5 +62,6 @@ export function depositChip(dueIso: string, nowMs: number): DepositChip {
 export function endedReason(status: string, cancelReason?: string | null): string {
   if (status === 'Expired') return 'Quá hạn đặt cọc'
   if (cancelReason === 'VENDOR_UNABLE') return 'NCC không thể thực hiện, NCC hoàn cọc'
+  if (!cancelReason) return 'Bạn đã hủy khi chưa đặt cọc'
   return 'Theo yêu cầu của bạn, cọc không hoàn'
 }

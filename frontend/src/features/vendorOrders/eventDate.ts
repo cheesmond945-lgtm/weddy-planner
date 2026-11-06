@@ -5,8 +5,8 @@ import { formatDate } from '@/lib/date'
  * Chặn cứng nằm ở validateOrder; ở đây là phần nhắc (không chặn) hiện dưới ô ngày.
  */
 
-/** Dịch vụ làm trong chính ngày cưới: ngày thực hiện lệch ngày cưới thì nhắc. Chụp ảnh và trang phục được làm trước ngày cưới. */
-const DAY_OF_SLUGS = ['nha-hang', 'decor', 'makeup', 'hoa-cuoi']
+/** Chỉ Trung tâm tiệc cưới phải đúng ngày cưới: ngày thực hiện lệch ngày cưới thì nhắc. Dịch vụ khác (hoa cưới, decor, makeup, chụp ảnh, trang phục) được làm trước ngày cưới. */
+const DAY_OF_SLUGS = ['nha-hang']
 
 /** Số ngày tối thiểu từ hôm nay (ngày cọc) tới ngày thực hiện để timeline đủ thời gian chuẩn bị (MIN_AFTER_DEPOSIT ở backend). */
 const MIN_LEAD_DAYS: Record<string, number> = { 'nha-hang': 2, 'chup-anh': 2, decor: 2, 'trang-phuc': 3, makeup: 3, 'hoa-cuoi': 2 }

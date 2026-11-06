@@ -25,6 +25,8 @@ export const ordersApi = {
   payGuestChange: (id: string): Promise<PayInfo & { adjustmentId: string; demoMode: boolean }> => http.post(`/orders/${id}/guest-changes/pay`),
   checkGuestChangePay: (id: string): Promise<PayCheckResult> => http.post(`/orders/${id}/guest-changes/pay/check`),
   demoGuestChangePay: (id: string): Promise<PayCheckResult> => http.post(`/orders/${id}/guest-changes/pay/demo-confirm`),
+  /** Khách tự hủy đơn chưa thanh toán cọc (Pending / NeedRevision): hủy ngay, không cần NCC xác nhận */
+  cancelUnpaid: (id: string, note?: string): Promise<Order> => http.post(`/orders/${id}/cancel`, { note }),
   /** Khách yêu cầu hủy đơn đã cọc (tiền cọc không hoàn), chờ NCC xác nhận */
   requestCancel: (id: string, note?: string): Promise<Order> => http.post(`/orders/${id}/cancel-requests`, { note }),
   withdrawCancel: (id: string): Promise<Order> => http.delete(`/orders/${id}/cancel-requests`),

@@ -1,13 +1,9 @@
 import { Clock, Star } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
-import { chatApi } from '@/api/chat'
 import { Badge } from '@/components/Badge'
 import { FormError } from '@/components/FormField'
 import { Button } from '@/components/ui/button'
-import { chatPanel } from '@/features/chat/chatPanel'
-import { planningKeys } from '@/features/weddings/hooks'
 import { canRequestRevision, formatDayTime } from '@/features/vendorOrders/calc'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
 import { ReviewDialog } from '@/features/reviews/components/ReviewDialog'
@@ -21,7 +17,6 @@ import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
-import { useAuth } from '@/store/auth'
 import { openRevision } from '@/features/vendorOrders/calc'
 import type { InvoiceType, Order } from '@/types/order'
 import { depositChip, endedReason, itemsSummaryParts } from '../cardSummary'
@@ -29,13 +24,13 @@ import { useCreateDeposit } from '../hooks'
 import { DepositQrDialog } from './DepositQrDialog'
 import { DepositTermsDialog } from './DepositTermsDialog'
 import { EventDateNote } from './EventDateNote'
-import { CoupleOrderRequests } from './OrderRequests'
+import { CoupleCancelUnpaid, CoupleOrderRequests } from './OrderRequests'
 
 /**
  * Một dòng của phần tiền: MỘT cỡ chữ và một màu cho mọi nhãn, một cỡ cho mọi giá trị; "Tổng giá trị" (strong) chỉ đậm hơn.
  * Nhãn bên trái cắt "…" nếu dài, giá trị bên phải không xuống dòng và thẳng cột (tabular-nums).
  */
-const ROW = 'flex items-baseline justify-between gap-3 py-1 text-[13.5px] leading-snug'
+const ROW = 'flex items-baseline justify-between gap-3 py-1.5 text-[13.5px] leading-snug'
 const money = (label: ReactNode, value: ReactNode, opts: { strong?: boolean; accent?: boolean; note?: ReactNode } = {}) => (
   <div className="py-0.5">
     <div className={cn(ROW, 'py-0.5')}>
@@ -74,26 +69,6 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   const [termsOpen, setTermsOpen] = useState(false)
   const [agreed, setAgreed] = useState(false)
   const deposit = useCreateDeposit()
-  const qc = useQueryClient()
-  const { user } = useAuth()
-  const [opening, setOpening] = useState(false)
-
-  // "Nhắn tin" (thẻ ở Kế hoạch): mở khung chat trượt bên phải như nút Nhắn tin ở thẻ dịch vụ thay vì chuyển sang trang Tin nhắn;
-  // không tìm thấy hội thoại (danh sách chưa tải được) thì mới mở trang Tin nhắn
-  const openChat = async (conversationId: string) => {
-    const page = () => navigate(`${paths.chat}?c=${encodeURIComponent(conversationId)}`)
-    setOpening(true)
-    try {
-      const list = await qc.fetchQuery({ queryKey: planningKeys.conversations(user?.id), queryFn: chatApi.listConversations, staleTime: 30_000 })
-      const conversation = list.find((c) => c.id === conversationId)
-      if (conversation) chatPanel.open({ conversation, draft: '', packageName: null })
-      else page()
-    } catch {
-      page()
-    } finally {
-      setOpening(false)
-    }
-  }
 
   const chat = variant === 'chat'
   const status = ORDER_STATUS[o.status]
@@ -121,7 +96,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
 
   const detailLink = (
     <button type="button" onClick={() => setDetail(true)} className="ml-auto text-[13px] font-medium text-gold-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
-      Xem chi tiết →
+      Xem chi tiết đơn hàng →
     </button>
   )
 
@@ -135,7 +110,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   )
 
   // Hết hạn / Hủy: một dòng "NCC · trạng thái · lý do ngắn", không bóng, chữ nhạt
-  if (ended) {
+  if (ended && chat) {
     return (
       <article data-order={o.id} className={cn(shell, 'bg-surface-2/60 px-4 py-3 text-muted-foreground')}>
         <p className="line-clamp-2 text-[13.5px] leading-snug [overflow-wrap:anywhere]">
@@ -180,19 +155,19 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
       </div>
 
       {/* Phần tiền */}
-      <dl className="mt-4 border-t border-line pt-3">
+      <dl className="mt-5 border-t border-line pt-4">
         {money('Ngày thực hiện', formatDate(o.eventDate))}
         {money('Tổng giá trị', formatMoney(o.totalAmount), { strong: true })}
         {updated && <div className="pb-1 text-right text-xs text-gold-ink">Đã cập nhật: {formatMoney(updated.oldTotalAmount)} → {formatMoney(updated.newTotalAmount as number)}</div>}
         {money(paidDate ? `Đã cọc · ${formatDayTime(paidDate)}` : 'Tiền cọc', formatMoney(o.depositAmount), { accent: awaitingDeposit })}
         {money('Còn lại', formatMoney(restAmount), {
-          note: restKnown && o.status !== 'NeedRevision' ? <span className={REST_TONE_CLASS[restLabel(o, 'COUPLE').tone]}>{restLabel(o, 'COUPLE').text}</span> : undefined,
+          note: restKnown && o.status !== 'NeedRevision' && !ended ? <span className={REST_TONE_CLASS[restLabel(o, 'COUPLE').tone]}>{restLabel(o, 'COUPLE').text}</span> : undefined,
         })}
       </dl>
       <EventDateNote order={o} />
 
       {/* Phần hành động */}
-      <div className="mt-4 border-t border-line pt-4">
+      <div className="mt-5 border-t border-line pt-5">
         {chip && (
           <p
             className={cn(
@@ -204,6 +179,9 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
             {chip.text}
           </p>
         )}
+        {ended && (
+          <p className="mb-3 inline-flex items-center gap-1.5 rounded-pill bg-surface-2 px-3 py-1 text-xs font-semibold text-muted-foreground">{endedReason(o.status, o.cancelReason)}</p>
+        )}
         {(o.status === 'NeedRevision' || (o.status === 'Deposited' && waiting)) && (
           <p className="mb-3 inline-flex items-center gap-1.5 rounded-pill bg-[color-mix(in_srgb,var(--gold)_16%,var(--surface))] px-3 py-1 text-xs font-semibold text-gold-ink">
             <Clock className="size-3.5 shrink-0" aria-hidden />
@@ -214,7 +192,7 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
         {/* Sau cọc: đổi số khách (đơn tiệc), yêu cầu hủy đơn */}
         <CoupleOrderRequests order={o} />
 
-        <div className="flex flex-wrap gap-2 [&>button]:min-w-[140px] [&>button]:grow [&>button]:basis-[140px]">
+        <div className="flex flex-wrap gap-3 [&>button]:min-w-[140px] [&>button]:grow [&>button]:basis-[140px]">
           {o.status === 'Pending' && (
             <Button variant="success" size={chat ? 'default' : 'sm'} disabled={chip?.overdue || !agreed || deposit.isPending} onClick={() => deposit.mutate(o.id)}>
               {chip?.overdue ? 'Đã hết hạn đặt cọc' : 'Thanh toán cọc'}
@@ -230,21 +208,17 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
               Yêu cầu chỉnh sửa
             </Button>
           )}
+          {(o.status === 'Pending' || o.status === 'NeedRevision') && <CoupleCancelUnpaid order={o} size={o.status === 'Pending' && chat ? 'default' : 'sm'} />}
           {o.status === 'Completed' && <ReviewButton order={o} />}
           {finalInvoice && (
             <Button variant="outline" size="sm" onClick={() => setInvoice('FinalInvoice')}>
               Xem hóa đơn
             </Button>
           )}
-          {!chat && o.conversationId && (
-            <Button size="sm" disabled={opening} onClick={() => void openChat(o.conversationId!)}>
-              {opening ? 'Đang mở…' : 'Nhắn tin'}
-            </Button>
-          )}
         </div>
         {deposit.isError && <FormError message={deposit.error.message} />}
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {o.status === 'Pending' && !chip?.overdue && (
             <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="accent-primary" />

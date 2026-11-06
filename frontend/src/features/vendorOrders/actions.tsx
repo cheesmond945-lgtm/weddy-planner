@@ -55,7 +55,7 @@ export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAct
         : { key: 'invoice', label: 'Xuất hóa đơn', primary: false, ...(rest !== 'Received' && { disabledReason: 'Ghi nhận đã nhận tiền trước khi xuất hóa đơn.' }) },
     )
   }
-  if (canCancel(o)) out.push({ key: 'cancel', label: 'Hủy đơn', primary: false, danger: true })
+  if (canCancel(o)) out.push({ key: 'cancel', label: o.cancelRequest ? 'Đồng ý hủy đơn' : 'Hủy đơn', primary: false, danger: true })
   return out
 }
 

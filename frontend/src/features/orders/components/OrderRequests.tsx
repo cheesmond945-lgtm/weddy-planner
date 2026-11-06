@@ -42,7 +42,7 @@ export function CoupleOrderRequests({ order: o }: { order: Order }) {
   return (
     <>
       {change && (
-        <div className="mt-2.5 rounded-sm bg-surface-2 px-2.5 py-2 text-[13px]">
+        <div className="mt-3 rounded-sm bg-surface-2 px-3 py-2.5 text-[13px] leading-relaxed">
           {change.status === 'AwaitingVendor' ? (
             <>
               Đang chờ nhà cung cấp xác nhận đổi {change.oldGuestCount ? `${change.oldGuestCount} → ` : ''}
@@ -51,7 +51,7 @@ export function CoupleOrderRequests({ order: o }: { order: Order }) {
           ) : (
             <>
               Nhà cung cấp đã đồng ý đổi thành <b>{change.newGuestCount} khách</b>. Nộp cọc bổ sung <b>{formatMoney(change.extraDeposit)}</b> để áp dụng.
-              <div className="mt-2">
+              <div className="mt-2.5">
                 <Button size="sm" variant="success" onClick={() => setPaying(true)}>
                   Nộp cọc bổ sung
                 </Button>
@@ -61,16 +61,16 @@ export function CoupleOrderRequests({ order: o }: { order: Order }) {
         </div>
       )}
       {o.cancelRequest && (
-        <div className="mt-2.5 rounded-sm bg-warn-soft px-2.5 py-2 text-[13px] text-warn">
+        <div className="mt-3 rounded-sm bg-warn-soft px-3 py-2.5 text-[13px] leading-relaxed text-warn">
           Bạn đã yêu cầu hủy đơn ngày {formatDate(o.cancelRequest.requestedDate.slice(0, 10))}, đang chờ nhà cung cấp xác nhận. Tiền cọc không được hoàn.
-          <div className="mt-2">
+          <div className="mt-2.5">
             <Button size="sm" variant="outline" disabled={withdraw.isPending} onClick={() => withdraw.mutate(undefined)}>
               Rút yêu cầu hủy
             </Button>
           </div>
         </div>
       )}
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-3 mb-4 flex flex-wrap gap-2">
         {!o.cancelRequest && (
           <Button size="sm" variant="outline" className="border-warn/60 text-warn hover:bg-warn-soft hover:text-warn" onClick={() => setCancelling(true)}>
             Yêu cầu hủy đơn
@@ -80,6 +80,49 @@ export function CoupleOrderRequests({ order: o }: { order: Order }) {
       {cancelling && <CancelRequestDialog order={o} onClose={() => setCancelling(false)} />}
       {paying && change && <ExtraDepositDialog order={o} onClose={() => setPaying(false)} />}
     </>
+  )
+}
+
+/** Đơn chưa thanh toán cọc (chờ cọc / chờ NCC chỉnh sửa): khách tự hủy ngay, không mất phí, không cần NCC xác nhận. */
+export function CoupleCancelUnpaid({ order: o, size = 'sm' }: { order: Order; size?: 'sm' | 'default' }) {
+  const [open, setOpen] = useState(false)
+  if (o.status !== 'Pending' && o.status !== 'NeedRevision') return null
+  return (
+    <>
+      <Button size={size} variant="outline" className="border-warn/60 text-warn hover:bg-warn-soft hover:text-warn" onClick={() => setOpen(true)}>
+        Hủy đơn
+      </Button>
+      {open && <CancelUnpaidDialog order={o} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+function CancelUnpaidDialog({ order: o, onClose }: { order: Order; onClose: () => void }) {
+  const [note, setNote] = useState('')
+  const send = useOrderWrite((v: string) => ordersApi.cancelUnpaid(o.id, v || undefined), 'Đã hủy đơn')
+  return (
+    <Dialog open onOpenChange={(open) => !open && !send.isPending && onClose()}>
+      <DialogContent className="max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle>Hủy đơn {o.orderCode}?</DialogTitle>
+          <DialogDescription>
+            Bạn chưa thanh toán cọc nên đơn được hủy ngay, không mất phí và không cần nhà cung cấp xác nhận. Nhà cung cấp sẽ nhận được thông báo; hạng mục sẽ trở về "chưa chọn" trong kế hoạch.
+          </DialogDescription>
+        </DialogHeader>
+        <label className="text-[13px] font-medium">
+          Lý do <span className="font-normal text-muted-foreground">(không bắt buộc)</span>
+          <Input value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} className="mt-1.5" autoFocus />
+        </label>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={send.isPending}>
+            Giữ đơn
+          </Button>
+          <Button variant="destructive" disabled={send.isPending} onClick={() => send.mutate(note.trim(), { onSuccess: onClose })}>
+            {send.isPending ? 'Đang hủy…' : 'Hủy đơn'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

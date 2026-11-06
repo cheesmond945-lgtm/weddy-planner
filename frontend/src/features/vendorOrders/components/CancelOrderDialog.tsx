@@ -3,8 +3,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatDate } from '@/lib/date'
-import { cn } from '@/lib/utils'
-import { CANCEL_REASONS, type CancelReason, type Order } from '@/types/vendorOrder'
+import { formatMoney } from '@/lib/format'
+import type { CancelReason, Order } from '@/types/vendorOrder'
 import { CANCEL_REASON } from '../constants'
 
 interface CancelOrderDialogProps {
@@ -15,13 +15,12 @@ interface CancelOrderDialogProps {
 }
 
 /**
- * Hủy đơn đã cọc (chỉ trước ngày sự kiện). Bắt buộc chọn lý do: khách yêu cầu hủy (khách mất cọc) hoặc NCC không thể
- * thực hiện (NCC hoàn cọc ngoài hệ thống); ghi chú tùy chọn. Hủy xong đơn bị khóa, không tính hoa hồng.
+ * Hủy đơn đã cọc (chỉ trước ngày thực hiện). Không chọn lý do: lý do duy nhất là "Khách yêu cầu hủy"
+ * (khách mất cọc); nếu khách đã gửi yêu cầu hủy trên hệ thống thì hiện kèm ngày gửi và lời nhắn của khách. Ghi chú cho khách tùy chọn. Hủy xong đơn bị khóa, không tính hoa hồng.
  */
 export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: CancelOrderDialogProps) {
-  const [reason, setReason] = useState<CancelReason | null>(null)
   const [note, setNote] = useState('')
-  const [tried, setTried] = useState(false)
+  const req = o.cancelRequest
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
@@ -33,25 +32,15 @@ export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: Cancel
           </DialogDescription>
         </DialogHeader>
 
-        <fieldset className="grid gap-2" aria-invalid={tried && !reason ? true : undefined}>
-          <legend className="mb-1 text-[13px] font-medium">Lý do hủy *</legend>
-          {CANCEL_REASONS.map((r) => (
-            <label key={r} className={cn('flex cursor-pointer items-start gap-2.5 rounded-md border border-line px-3 py-2.5 text-sm', reason === r && 'border-warn/60 bg-warn-soft')}>
-              <input type="radio" name="cancel-reason" className="mt-1 accent-[var(--warn)]" checked={reason === r} onChange={() => setReason(r)} />
-              <span>
-                <b className="block font-semibold">{CANCEL_REASON[r].label}</b>
-                <span className="text-[12.5px] text-muted-foreground">{CANCEL_REASON[r].effect}</span>
-              </span>
-            </label>
-          ))}
-          {tried && !reason && (
-            <span role="alert" className="text-xs text-destructive">
-              Chọn lý do hủy đơn.
-            </span>
-          )}
-        </fieldset>
+        <div className="grid gap-1 rounded-md border border-warn/40 bg-warn-soft px-3.5 py-3 text-sm">
+          <b className="font-semibold">Lý do hủy: {CANCEL_REASON.CUSTOMER_REQUEST.label}</b>
+          <span className="text-[12.5px] text-muted-foreground">
+            {req ? `Khách gửi yêu cầu ngày ${formatDate(req.requestedDate.slice(0, 10))}. ` : ''}Tiền cọc {formatMoney(o.depositAmount)} không hoàn cho khách.
+          </span>
+          {req?.note && <span className="mt-1 text-[13px]">Lời nhắn của khách: “{req.note}”</span>}
+        </div>
 
-        <label className="grid gap-1 text-[13px] font-medium">
+        <label className="grid gap-1.5 text-[13px] font-medium">
           Ghi chú cho khách (không bắt buộc)
           <textarea
             rows={2}
@@ -67,14 +56,7 @@ export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: Cancel
           <Button variant="outline" onClick={onClose} disabled={busy}>
             Quay lại
           </Button>
-          <Button
-            variant="destructive"
-            disabled={busy}
-            onClick={() => {
-              setTried(true)
-              if (reason) onConfirm(reason, note.trim())
-            }}
-          >
+          <Button variant="destructive" disabled={busy} onClick={() => onConfirm('CUSTOMER_REQUEST', note.trim())}>
             {busy ? (
               <>
                 <LoaderCircle className="animate-spin" />

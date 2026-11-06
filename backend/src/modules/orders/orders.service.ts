@@ -23,7 +23,6 @@ import { publish } from '../realtime/realtime.bus';
 import {
   CANCEL_LABEL,
   CategoryOrder,
-  CANCEL_REASONS,
   CHANGE_LABEL,
   CHANGE_TYPES,
   CancelReason,
@@ -969,6 +968,35 @@ export class OrdersService {
   }
 
   /**
+   * Khách tự hủy đơn CHƯA thanh toán cọc (Pending hoặc NeedRevision): hủy ngay, không cần NCC xác nhận, không mất tiền.
+   * Ghi CancelledDate, CancelReason để trống (đơn chưa cọc, khác với hủy sau cọc); tin hệ thống vào chat và báo NCC.
+   */
+  async cancelByCouple(userId: string, id: string, body: { note?: unknown }) {
+    const order = await this.ownedByCouple(userId, id);
+    if (order.status !== 'Pending' && order.status !== 'NeedRevision') {
+      return fail('ORDER_NOT_CANCELLABLE', 'Chỉ tự hủy được đơn chưa thanh toán cọc.', 409);
+    }
+    const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 500) || null : null;
+    const r = await this.prisma.orders.updateMany({
+      where: { id, status: { in: ['Pending', 'NeedRevision'] } },
+      data: { status: 'Cancelled', cancelled_date: new Date(), cancel_reason: null },
+    });
+    if (!r.count) return fail('ORDER_NOT_CANCELLABLE', 'Đơn không còn ở trạng thái chưa thanh toán cọc.', 409);
+    const content = `Khách đã hủy đơn ${order.order_code} (chưa đặt cọc)${note ? ` · "${note}"` : ''}.`;
+    const conversationId = await this.conversationOf(order);
+    if (conversationId) await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content });
+    await notify(this.prisma, {
+      userId: order.vendor_profiles!.user_id!,
+      type: 'OrderCancelled',
+      title: 'Khách đã hủy đơn',
+      content,
+      referenceType: 'Order',
+      referenceId: id,
+    }).catch(() => undefined);
+    return this.dtoOf(id);
+  }
+
+  /**
    * NCC hủy đơn đã cọc: chỉ khi Deposited và hôm nay (giờ VN) còn TRƯỚC EventDate. Bắt buộc chọn lý do
    * (CUSTOMER_REQUEST: khách mất cọc; VENDOR_UNABLE: NCC hoàn cọc ngoài hệ thống), ghi chú tùy chọn.
    * Ghi CancelledDate, CancelReason; ghi chú (nếu có) CHỈ đưa vào tin hệ thống trong chat, không lưu cột; tin hệ thống vào chat; không tính hoa hồng; xóa việc chi tiết trên timeline của khách.
@@ -976,8 +1004,9 @@ export class OrdersService {
   async cancel(userId: string, id: string, body: { reason?: string; note?: string }) {
     const { order } = await this.ownedByVendor(userId, id);
     const reason = body?.reason;
-    if (!reason || !(CANCEL_REASONS as readonly string[]).includes(reason)) {
-      return fail('VALIDATION_ERROR', 'Chọn lý do hủy đơn.', 400, { reason: `Chọn một trong: ${CANCEL_REASONS.join(', ')}.` });
+    // Lý do duy nhất: khách yêu cầu hủy (khách mất cọc); không còn lý do "NCC không thể thực hiện"
+    if (reason !== 'CUSTOMER_REQUEST') {
+      return fail('VALIDATION_ERROR', 'Lý do hủy đơn không hợp lệ.', 400, { reason: 'Chỉ hủy được đơn theo yêu cầu của khách (CUSTOMER_REQUEST).' });
     }
     if (order.status !== 'Deposited' || todayVn() >= ymd(order.event_date)) {
       return fail('ORDER_NOT_CANCELLABLE', 'Chỉ hủy được đơn đã đặt cọc và còn trước ngày thực hiện.', 422);
