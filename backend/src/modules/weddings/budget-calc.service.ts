@@ -337,10 +337,8 @@ export class BudgetCalcService {
       planVendors,
       city: w.city ?? null,
       ward: (w as { ward?: string | null }).ward ?? null,
-      styles: (w.style ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+      // Cột weddings.style đã xóa khỏi DB (bỏ phong cách 30/10/2026): không còn thẻ phong cách của khách
+      styles: [] as string[],
     };
   }
 

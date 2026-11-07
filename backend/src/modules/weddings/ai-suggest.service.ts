@@ -64,7 +64,8 @@ export class AiSuggestService {
 
     // Nơi tổ chức (phường/xã): cột weddings.ward chưa có trên DB thì Prisma bỏ cột này, coi như chưa có dữ liệu
     const ward = (w as { ward?: string | null }).ward ?? null;
-    const weddingStyles = (w.style ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    // Cột weddings.style đã xóa khỏi DB (bỏ phong cách 30/10/2026): không còn thẻ phong cách của khách
+    const weddingStyles: string[] = [];
     const ctx: SuggestContext = {
       slug: categorySlug,
       categoryName: category.name ?? '',

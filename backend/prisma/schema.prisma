@@ -233,10 +233,6 @@ model orders {
   cancel_reason         String?            @db.VarChar(20)
   /// Gói / sảnh của đơn (Trung tâm tổ chức sự kiện): sảnh bận vào event_date khi đơn Deposited hoặc Completed (prisma/sql/2026-10-31-package-busy-dates.sql)
   package_id            String?            @db.Uuid
-  /// Ngày cưới: giờ NCC có mặt / xong việc đã chốt với khách; dayof_confirmed_at NULL là chưa chốt (prisma/sql/2026-11-02-wedding-day-schedule.sql)
-  dayof_start_at        DateTime?          @db.Timestamptz(6)
-  dayof_end_at          DateTime?          @db.Timestamptz(6)
-  dayof_confirmed_at    DateTime?          @db.Timestamptz(6)
   /// Số khách của đơn tiệc; khách yêu cầu hủy đơn đã cọc (backend/prisma/manual/2026-11-02-02-order-adjustments.sql)
   guest_count           Int?
   cancel_requested_date DateTime?          @db.Timestamptz(6)
@@ -374,11 +370,6 @@ model service_packages {
   hidden_by              String?                 @db.VarChar(10)
   /// Lý do Admin ẩn gói (NCC tự ẩn thì để trống)
   hidden_reason          String?
-  /// Ngày cưới: có mặt trước giờ chính bao nhiêu phút, làm trong bao nhiêu phút; NULL dùng mặc định theo lĩnh vực (prisma/sql/2026-11-02-wedding-day-schedule.sql)
-  dayof_lead_minutes     Int?
-  dayof_duration_minutes Int?
-  /// Sảnh: giờ sớm nhất đơn vị khác được vào setup trong ngày cưới (giờ VN)
-  setup_open_time        DateTime?               @db.Time(6)
   /// "mâm" hoặc "gói" (backend/prisma/manual/2026-10-30-01-budget-tiers.sql)
   unit                   String                  @default("gói") @db.VarChar(10)
   order_items            order_items[]
@@ -482,7 +473,6 @@ model users {
   notifications                                notifications[]
   search_histories                             search_histories[]
   vendor_profiles                              vendor_profiles?
-  wedding_members                              wedding_members?
   weddings                                     weddings?
 }
 
@@ -571,11 +561,8 @@ model weddings {
   budget                   Decimal?                   @db.Decimal(18, 2)
   guest_count              Int?
   city                     String?                    @db.VarChar(100)
-  style                    String?                    @db.VarChar(100)
   created_date             DateTime?                  @default(now()) @db.Timestamptz(6)
   updated_date             DateTime?                  @default(now()) @db.Timestamptz(6)
-  /// Giờ chính của ngày cưới (đón khách / làm lễ), giờ VN (prisma/sql/2026-11-02-wedding-day-schedule.sql)
-  main_time                DateTime?                  @db.Time(6)
   /// Phường/xã nơi tổ chức (Hà Nội, có tiền tố "Phường …"/"Xã …"), NULL là chưa chọn (backend/prisma/manual/2026-11-01-01-wedding-ward.sql)
   ward                     String?                    @db.VarChar(50)
   /// AUTO, SAVING, BALANCED, PREMIUM (backend/prisma/manual/2026-10-30-01-budget-tiers.sql)
@@ -594,7 +581,6 @@ model weddings {
   wedding_categories       wedding_categories[]
   wedding_category_budgets wedding_category_budgets[]
   wedding_extra_costs      wedding_extra_costs[]
-  wedding_members          wedding_members[]
   wedding_share_links      wedding_share_links?
   users                    users?                     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
@@ -721,20 +707,3 @@ model message_reactions {
   @@id([message_id, user_id])
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model wedding_members {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  wedding_id   String   @db.Uuid
-  user_id      String   @unique(map: "uq_wedding_members_user") @db.Uuid
-  role         String   @db.VarChar(20)
-  relation     String?  @db.VarChar(20)
-  display_name String?  @db.VarChar(40)
-  tabs         String[]
-  joined_date  DateTime @default(now()) @db.Timestamptz(6)
-  users        users    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  weddings     weddings @relation(fields: [wedding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@unique([wedding_id, user_id], map: "uq_wedding_members_wedding_user")
-}
