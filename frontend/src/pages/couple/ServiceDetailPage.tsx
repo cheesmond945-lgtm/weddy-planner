@@ -10,7 +10,7 @@ import { HallCalendar, HallDayBadge, HallsVerdict } from '@/features/halls/compo
 import { useMyOrders } from '@/features/orders/hooks'
 import { RESTAURANT_SLUG } from '@/features/vendors/constants'
 import { useWedding } from '@/features/weddings/hooks'
-import { AddToPlanButton, ChoosePackageButton, OpenChatButton, usePlanItemOf } from '@/features/weddings/planActions'
+import { AddToPlanButton, OpenChatButton, usePlanItemOf } from '@/features/weddings/planActions'
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { formatDate } from '@/lib/date'
 import { formatUnitPrice } from '@/features/catalog/price'
@@ -74,15 +74,8 @@ export default function ServiceDetailPage() {
         <ServiceDetailView
           service={service}
           sidebarLead={halls ? <HallsVerdict serviceId={service.id} weddingDate={wedding?.date} bookedHall={bookedHall} /> : undefined}
-          // Cuối khung chi tiết gói: lịch sảnh (trung tâm tiệc) và nút chọn gói này cho kế hoạch
-          packageExtra={(pkg) => (
-            <>
-              {halls && <HallCalendar packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} />}
-              <div className="mt-4">
-                <ChoosePackageButton service={service} packageId={pkg.id} packageName={pkg.name} />
-              </div>
-            </>
-          )}
+          // Cuối khung chi tiết gói: lịch sảnh (trung tâm tiệc)
+          packageExtra={halls ? (pkg) => <HallCalendar packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
           packageBadge={halls ? (pkg) => <HallDayBadge packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
           packagesSubtitle={halls && wedding?.date ? `Sảnh bận hay còn trống vào ngày cưới của bạn (${formatDate(wedding.date)}). Bấm Xem chi tiết để xem lịch tháng.` : undefined}
           headActions={<FavoriteButton service={service} variant="icon" />}
