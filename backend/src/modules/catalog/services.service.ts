@@ -77,7 +77,7 @@ export const categoryRank = (slug: string) => {
 };
 
 /** Thời gian giữ danh sách NCC đang hiện trong bộ nhớ: NCC/Admin sửa gói thì khách thấy chậm tối đa chừng này. */
-const VISIBLE_TTL_MS = 30_000;
+const VISIBLE_TTL_MS = Number(process.env.CATALOG_CACHE_TTL_MS) > 0 ? Number(process.env.CATALOG_CACHE_TTL_MS) : 300_000;
 
 /**
  * Frontend gọi "dịch vụ" = nhà cung cấp (vendor_profiles) đã duyệt có ít nhất một gói Approved.

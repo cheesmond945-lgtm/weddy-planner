@@ -288,7 +288,7 @@ export class ChatService {
       const last = c.messages[0];
       return {
         id: c.id,
-        customer: { name: w && w.bride_name && !w.bride_name.startsWith('(') ? `${w.groom_name} & ${w.bride_name}` : (w?.groom_name ?? u?.full_name ?? ''), phone: u?.phone_number ?? '', weddingDate: w?.wedding_date ? w.wedding_date.toISOString().slice(0, 10) : null },
+        customer: { name: u?.full_name ?? w?.groom_name ?? '', phone: u?.phone_number ?? '', weddingDate: w?.wedding_date ? w.wedding_date.toISOString().slice(0, 10) : null },
         unreadCount: unread.get(c.id) ?? 0,
         lastMessage: last ? toLastMessage(last, c.couple_id) : null,
         latestOrder: latestSent ? { id: latestSent.id, orderCode: latestSent.order_code, status: latestSent.status } : null,

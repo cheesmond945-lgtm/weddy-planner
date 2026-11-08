@@ -21,3 +21,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 .idea/
+
+# Bản sao lưu database + ảnh (chứa dữ liệu riêng tư, KHÔNG commit)
+backups/
