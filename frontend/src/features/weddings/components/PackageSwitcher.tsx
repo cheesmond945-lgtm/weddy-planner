@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { PlanItem } from '@/types/wedding'
-import { packageLabel, packageOptionText } from '../budgetView'
+import { packageLabel, packageOptionText, plannedOptionText } from '../budgetView'
 import { useChoosePackage } from '../hooks'
 
 /**
@@ -64,7 +64,7 @@ export function PackageSwitcher({ item, guestCount, hideLocked = false }: { item
         <ul role="listbox" aria-label={`Đổi gói của ${item.service.name}`} className="absolute top-full left-0 z-30 mt-1 max-h-[320px] w-[min(420px,90vw)] overflow-auto rounded-md border border-line bg-surface py-1 shadow-[0_8px_24px_rgb(var(--shadow-rgb)/0.16)]">
           <li>
             <button type="button" role="option" aria-selected={pkg?.source === 'PLANNED'} onClick={() => select(null)} className={cn('block w-full px-3.5 py-2 text-left text-sm hover:bg-accent-soft', pkg?.source === 'PLANNED' && 'font-semibold text-gold-700')}>
-              Dùng gói dự kiến (gói rẻ nhất đủ chỗ)
+              {plannedOptionText(item.service.category.slug === 'nha-hang')}
             </button>
           </li>
           {item.packages.map((p) => {

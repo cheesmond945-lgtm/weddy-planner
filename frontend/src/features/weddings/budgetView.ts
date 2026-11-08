@@ -27,6 +27,9 @@ export function packageLabel(p: PlanPackageRef | null) {
   return `Gói dự kiến: ${p.name}, bấm để đổi`
 }
 
+/** Dòng "Dùng gói dự kiến" trong danh sách đổi gói: chỉ tiệc mới xét sức chứa nên mới ghi "đủ chỗ" */
+export const plannedOptionText = (venue: boolean) => `Dùng gói dự kiến (gói rẻ nhất${venue ? ' đủ chỗ' : ''})`
+
 /** Nhãn đơn vị giá: "/ bàn" cho gói tính theo bàn, "/ gói" cho trọn gói. */
 export const unitLabel = (unit: 'TABLE' | 'PACKAGE' | null | undefined) => (unit === 'TABLE' ? '/ bàn' : '/ gói')
 

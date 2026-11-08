@@ -6,7 +6,7 @@ import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import type { Budget, BudgetVendor, PlanItem } from '@/types/wedding'
 import { chargedTables } from '@/features/catalog/price'
-import { packageLabel, packageOptionText } from '../budgetView'
+import { packageLabel, packageOptionText, plannedOptionText } from '../budgetView'
 import { useChoosePackage, usePatchWedding } from '../hooks'
 import { openSuggestions } from '../suggestDialog'
 
@@ -190,7 +190,7 @@ export function BudgetPackagePicker({
                   onClick={() => select(null)}
                   className={cn('block w-full px-3.5 py-2 text-left text-sm hover:bg-accent-soft', pkg?.source === 'PLANNED' && 'font-semibold text-gold-700')}
                 >
-                  Dùng gói dự kiến (gói rẻ nhất đủ chỗ)
+                  {plannedOptionText(withTables)}
                 </button>
               </li>
               {options.map((p) => {

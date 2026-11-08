@@ -136,7 +136,7 @@ export function PartnerRegistrationDialog({ open, onOpenChange }: { open: boolea
               </Button>
               <Button type="button" className="h-10 gap-2 px-5" disabled={register.isPending} onClick={submit}>
                 {register.isPending && <LoaderCircle className="animate-spin" />}
-                Đã đúng, gửi
+                Xác nhận
               </Button>
             </Footer>
           </div>

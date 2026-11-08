@@ -16,4 +16,28 @@ export const PRESET_LABEL: Record<BudgetPreset, string> = { BALANCED: 'Cân bằ
 
 export const PRESET_HINT = 'Chia phần ngân sách còn lại cho các dịch vụ chưa chọn.'
 
+/** Dịch vụ được dành thêm của hai mức Ưu tiên (slug danh mục, khớp hệ số h > 1 trong budgetSplit.ts) */
+export const PRESET_FOCUS: Record<'SPACE' | 'VISUAL', string[]> = {
+  SPACE: ['decor', 'hoa-cuoi'],
+  VISUAL: ['chup-anh', 'trang-phuc', 'makeup'],
+}
+
+export type PresetOption = (typeof PRESET_OPTIONS)[number] & { disabled?: boolean }
+
+/**
+ * Ba mức theo các dịch vụ khách đang chọn ở form: mô tả mức Ưu tiên chỉ kể dịch vụ ưu tiên đang được chọn; không còn dịch vụ
+ * ưu tiên nào thì mức đó không có tác dụng (chia như Cân bằng) nên khóa thẻ. `nameOf`: tên hiển thị theo slug.
+ */
+export function presetOptionsFor(selected: string[], nameOf: (slug: string) => string): PresetOption[] {
+  const names = (slugs: string[]) => slugs.map((s) => nameOf(s).toLowerCase())
+  return PRESET_OPTIONS.map((o) => {
+    if (o.value === 'BALANCED') return o
+    const focus = PRESET_FOCUS[o.value]
+    const picked = focus.filter((s) => selected.includes(s))
+    return picked.length
+      ? { ...o, description: `Dành thêm cho ${names(picked).join(', ')}.` }
+      : { ...o, description: `Cần chọn ${names(focus).slice(0, -1).join(', ')} hoặc ${names(focus).at(-1)}.`, disabled: true }
+  })
+}
+
 // Tỷ lệ Tùy chỉnh (số nguyên theo 0,01%, tự cân bằng, khóa, bỏ khỏi phần chia): budgetSplit.ts

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { useAreas, useCategories, useCategoryMinCosts } from '@/features/catalog/hooks'
 import { addDays, toISODate, today } from '@/lib/date'
 import type { BudgetPreset, Wedding, WeddingInput } from '@/types/wedding'
+import { presetOptionsFor } from '../presets'
 import { validateWeddingForm, type WeddingFormErrors } from '../weddingFormRules'
 import { BudgetPresetPicker } from './BudgetPresetPicker'
 
@@ -39,6 +40,9 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
   // Lần đầu: mặc định chọn tất cả dịch vụ như prototype
   const [services, setServices] = useState<string[] | null>(initial?.categorySlugs ?? null)
   const serviceValue = services ?? categories.map((c) => c.slug)
+  // Mức Ưu tiên mà khách bỏ hết dịch vụ được ưu tiên thì không còn tác dụng: khóa thẻ, đang chọn thì tính là Cân bằng
+  const presetOptions = presetOptionsFor(serviceValue, (slug) => categories.find((c) => c.slug === slug)?.name ?? slug)
+  const preset = presetOptions.find((o) => o.value === budgetPreset)?.disabled ? 'BALANCED' : budgetPreset
   // Giá thấp nhất từng hạng mục theo số khách đang nhập: kiểm tra ngân sách đủ tối thiểu cho các dịch vụ đã chọn
   const { data: minCosts } = useCategoryMinCosts(Number(guestCount) > 0 ? Math.floor(Number(guestCount)) : 0)
   const [errors, setErrors] = useState<Errors>({})
@@ -58,7 +62,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
     setErrors(errs)
     setTried(true)
     if (Object.keys(errs).length) return
-    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, ward, guestCount: guests, budget, ...(budgetPreset !== 'CUSTOM' && { budgetPreset }), categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
+    onSubmit({ groomName: groomName.trim(), brideName: brideName.trim(), date, ward, guestCount: guests, budget, ...(preset !== 'CUSTOM' && { budgetPreset: preset }), categorySlugs: serviceValue, ...(initial?.version && { version: initial.version }) })
   }
 
   return (
@@ -135,15 +139,6 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
         error={errors.ward}
       />
 
-      <BudgetField
-        value={budget}
-        onChange={(v) => {
-          setBudget(v)
-          setErrors((x) => ({ ...x, budget: undefined }))
-        }}
-        error={budgetError}
-      />
-
       <div>
         <span id={ids.services} className="mb-1.5 block text-[13px] font-medium">
           <Required>Dịch vụ muốn sử dụng</Required>
@@ -172,7 +167,17 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
         )}
       </div>
 
-      <BudgetPresetPicker value={budgetPreset} onChange={setBudgetPreset} />
+      {/* Ngân sách sau dịch vụ (ước tiền khi đã biết cần gì), liền với mức chia (mô tả mức chia kể tên dịch vụ đã chọn) */}
+      <BudgetField
+        value={budget}
+        onChange={(v) => {
+          setBudget(v)
+          setErrors((x) => ({ ...x, budget: undefined }))
+        }}
+        error={budgetError}
+      />
+
+      <BudgetPresetPicker value={preset} onChange={setBudgetPreset} options={presetOptions} />
 
       <FormError message={error} />
 

@@ -1024,6 +1024,12 @@ export class OrdersService {
       await this.prisma.order_adjustments.updateMany({ where: { order_id: id, status: { in: ['AwaitingVendor', 'AwaitingDeposit'] } }, data: { status: 'Rejected', decided_date: new Date() } });
     }
     await this.timelineHook('hủy đơn', order.order_code, () => onOrderCancelled(this.prisma, { id, wedding_id: order.wedding_id!, vendor_id: order.vendor_id! }));
+    // Gỡ NCC khỏi kế hoạch (tab Dịch vụ khớp tab Ngân sách: hạng mục về chưa chọn); đơn hủy vẫn nằm trong lịch sử đơn của hạng mục.
+    // NCC còn đơn khác đang hiệu lực trong đám cưới này thì giữ.
+    const stillActive = await this.prisma.orders.count({
+      where: { wedding_id: order.wedding_id!, vendor_id: order.vendor_id!, id: { not: id }, status: { in: ['Pending', 'NeedRevision', 'Deposited', 'Completed'] } },
+    });
+    if (!stillActive) await this.prisma.plan_vendors.deleteMany({ where: { wedding_id: order.wedding_id!, vendor_id: order.vendor_id! } });
 
     const label = CANCEL_LABEL[reason as CancelReason];
     const conversationId = await this.conversationOf(order);
@@ -1034,7 +1040,7 @@ export class OrdersService {
       userId: order.weddings!.user_id!,
       type: 'OrderCancelled',
       title: 'Đơn dịch vụ đã bị hủy',
-      content: `Đơn ${order.order_code} đã bị nhà cung cấp hủy. Lý do: ${label}. Các việc chi tiết của dịch vụ ${order.vendor_profiles?.service_categories?.name ?? ''} đã được gỡ khỏi timeline.`,
+      content: `Đơn ${order.order_code} đã bị nhà cung cấp hủy. Lý do: ${label}. Nhà cung cấp đã được gỡ khỏi kế hoạch, các việc chi tiết của dịch vụ ${order.vendor_profiles?.service_categories?.name ?? ''} đã được gỡ khỏi timeline.`,
       referenceType: 'Order',
       referenceId: id,
     }).catch(() => undefined);

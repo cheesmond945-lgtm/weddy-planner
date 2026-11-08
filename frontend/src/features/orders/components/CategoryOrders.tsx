@@ -6,7 +6,9 @@ import { depositDeadline } from '@/features/vendorOrders/calc'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { Order } from '@/types/order'
+import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
+import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
+import type { InvoiceType, Order } from '@/types/order'
 import { MyOrderCard } from './MyOrderCard'
 
 const closed = (o: Order) => o.status === 'Expired' || o.status === 'Cancelled'
@@ -14,12 +16,14 @@ const closed = (o: Order) => o.status === 'Expired' || o.status === 'Cancelled'
 /**
  * Đơn của một hạng mục trên trang Kế hoạch của tôi (mới nhất trước): mỗi đơn một dòng gọn (mã đơn, trạng thái, tổng tiền,
  * hạn cọc nếu đang chờ cọc), bấm "Xem chi tiết" mở popup có thẻ đơn đầy đủ (thanh toán cọc, yêu cầu chỉnh sửa, hóa đơn,
- * nhắn NCC). Đơn hết hạn / đã hủy thu gọn sau nút "Xem …" để hạng mục không dài khi NCC đã tạo lại đơn nhiều lần.
+ * nhắn NCC). Đơn hết hạn / đã hủy không còn thao tác nên mở thẳng bảng chi tiết đơn; thu gọn sau nút "Xem …" để hạng mục
+ * không dài khi NCC đã tạo lại đơn nhiều lần.
  * `embedded`: nằm trong thẻ nhà cung cấp (dưới đường kẻ), không tiêu đề, dòng không viền riêng.
  */
 export function CategoryOrders({ orders, onRevise, embedded = false }: { orders: Order[]; onRevise: (o: Order) => void; embedded?: boolean }) {
   const [showClosed, setShowClosed] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [invoice, setInvoice] = useState<InvoiceType | null>(null)
   if (!orders.length) return null
   const open = orders.filter((o) => !closed(o))
   const old = orders.filter(closed)
@@ -51,7 +55,11 @@ export function CategoryOrders({ orders, onRevise, embedded = false }: { orders:
         </button>
       )}
       {/* Popup chi tiết: thẻ đơn đầy đủ; nút đóng của khung nằm trong góc thẻ */}
-      <Dialog open={!!opened} onOpenChange={(o) => !o && setOpenId(null)}>
+      {opened && closed(opened) && (
+        <OrderDetailDialog order={opened} viewer="couple" onClose={() => setOpenId(null)} onViewInvoice={(_, type) => setInvoice(type)} />
+      )}
+      {opened && invoice && <InvoiceDialog order={opened} type={invoice} vendorName={opened.vendorName} onClose={() => setInvoice(null)} />}
+      <Dialog open={!!opened && !closed(opened)} onOpenChange={(o) => !o && setOpenId(null)}>
         <DialogContent className="max-w-[480px] border-0 bg-transparent p-0 [&>button:last-child]:top-4 [&>button:last-child]:right-4">
           <DialogTitle className="sr-only">Chi tiết đơn hàng</DialogTitle>
           <DialogDescription className="sr-only">Thông tin, thanh toán và thao tác của đơn dịch vụ</DialogDescription>
