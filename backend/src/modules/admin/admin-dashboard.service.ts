@@ -45,10 +45,12 @@ export class AdminDashboardService {
       this.counts(),
       this.prisma.vendor_profiles.findMany({
         where: PENDING_VENDOR,
+        relationLoadStrategy: 'join',
         include: { service_categories: true, vendor_verifications: { orderBy: { submitted_date: 'desc' }, take: 1 } },
       }),
       this.prisma.service_packages.findMany({
         where: PENDING_PACKAGE,
+        relationLoadStrategy: 'join',
         include: { vendor_profiles: { include: { service_categories: true } }, package_verifications: { orderBy: { created_date: 'desc' }, take: 1 } },
       }),
     ]);

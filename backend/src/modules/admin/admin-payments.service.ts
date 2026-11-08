@@ -32,6 +32,7 @@ export class AdminPaymentsService {
   private load(where: object = {}) {
     return this.prisma.commission_statements.findMany({
       where,
+      relationLoadStrategy: 'join',
       include: { commissions: { select: { order_amount: true } }, vendor_profiles: { select: { id: true, user_id: true, business_name: true, service_categories: true } } },
     });
   }
@@ -108,6 +109,7 @@ export class AdminPaymentsService {
     const row = UUID.test(id)
       ? await this.prisma.commission_statements.findUnique({
           where: { id },
+          relationLoadStrategy: 'join',
           include: {
             commissions: { include: { orders: { select: { id: true, order_code: true, customer_name: true, event_date: true, completed_date: true, total_amount: true } } }, orderBy: { created_date: 'asc' } },
             vendor_profiles: { include: { service_categories: true, users: { select: { full_name: true, email: true, phone_number: true, status: true } } } },

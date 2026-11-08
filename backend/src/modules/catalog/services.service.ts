@@ -1,4 +1,4 @@
-import { HttpException, Injectable } from '@nestjs/common';
+import { HttpException, Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../integrations/storage/storage.service';
 import { Paginated } from '../../common/utils/pagination';
@@ -85,7 +85,7 @@ const VISIBLE_TTL_MS = Number(process.env.CATALOG_CACHE_TTL_MS) > 0 ? Number(pro
  * Rating/reviewCount (điểm Google Maps) chưa có trong CSDL nên trả 0; FE hiện link googleMapsUrl để xem trên Google.
  */
 @Injectable()
-export class ServicesService {
+export class ServicesService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService, private readonly storage: StorageService) {}
 
   /**
@@ -93,21 +93,43 @@ export class ServicesService {
    * `alsoHidden`: id các NCC đang bị ẩn (Hidden) vẫn được trả về, dành cho cặp đôi đã có đơn với NCC đó (xem withOrderWith).
    */
   private async loadVisible(alsoHidden: string[] = []) {
-    // DB ở xa (mỗi truy vấn ~100ms+), danh mục ít đổi: giữ kết quả VISIBLE_TTL_MS, các yêu cầu cùng lúc dùng chung một lần đọc
+    // DB ở xa (mỗi truy vấn ~100ms+, tải dữ liệu lớn có lúc mất vài giây): giữ kết quả VISIBLE_TTL_MS, các yêu cầu cùng lúc dùng chung một lần đọc.
+    // Hết hạn thì trả ngay bản cũ và làm mới ngầm (stale-while-revalidate), người dùng không phải chờ lượt tải lại.
     const now = Date.now();
-    if (!this.visibleCache || this.visibleCache.at + VISIBLE_TTL_MS < now) {
-      const data = this.queryVisible({ status: 'Approved' });
-      this.visibleCache = { at: now, data };
-      data.catch(() => (this.visibleCache = null));
-    }
-    if (!alsoHidden.length) return this.visibleCache.data;
+    if (!this.visibleCache) this.refreshVisible();
+    else if (this.visibleCache.at + VISIBLE_TTL_MS < now && !this.refreshing) this.refreshVisible();
+    const cache = this.visibleCache!;
+    if (!alsoHidden.length) return cache.data;
     // NCC bị ẩn mà cặp đôi đã có đơn: đọc riêng (không cache), ghép vào theo đúng thứ tự created_date, id
-    const [visible, hidden] = await Promise.all([this.visibleCache.data, this.queryVisible({ status: 'Hidden', id: { in: alsoHidden } })]);
+    const [visible, hidden] = await Promise.all([cache.data, this.queryVisible({ status: 'Hidden', id: { in: alsoHidden } })]);
     const key = (v: (typeof visible)[number]) => `${v.created_date?.toISOString() ?? '~'}|${v.id}`;
     return [...visible, ...hidden].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
   }
 
   private visibleCache: { at: number; data: ReturnType<ServicesService['queryVisible']> } | null = null;
+  private refreshing = false;
+
+  /** Đọc lại danh mục NCC. Lần đầu: yêu cầu chờ chính lượt đọc này. Các lần sau: bản cũ vẫn được phục vụ cho tới khi đọc xong, lỗi thì giữ bản cũ. */
+  private refreshVisible() {
+    const data = this.queryVisible({ status: 'Approved' });
+    this.refreshing = true;
+    if (!this.visibleCache) this.visibleCache = { at: Date.now(), data };
+    data.then(
+      () => {
+        this.visibleCache = { at: Date.now(), data };
+        this.refreshing = false;
+      },
+      () => {
+        this.refreshing = false;
+        if (this.visibleCache?.data === data) this.visibleCache = null;
+      },
+    );
+  }
+
+  /** Nạp sẵn lúc khởi động để người đầu tiên mở trang Dịch vụ không phải chờ. */
+  onModuleInit() {
+    void this.loadVisible().catch(() => undefined);
+  }
 
   private async queryVisible(status: { status: 'Approved' } | { status: 'Hidden'; id: { in: string[] } }) {
     return this.prisma.vendor_profiles.findMany({
@@ -117,6 +139,7 @@ export class ServicesService {
         ...status,
       },
       orderBy: [{ created_date: 'asc' }, { id: 'asc' }],
+      relationLoadStrategy: 'join',
       include: {
         service_categories: { select: { id: true, name: true } },
         service_packages: {
@@ -137,6 +160,7 @@ export class ServicesService {
     const pkgs = await this.prisma.service_packages.findMany({
       where: { vendor_id: vendorId, status: 'Approved' },
       orderBy: [{ price: 'asc' }, { id: 'asc' }],
+      relationLoadStrategy: 'join',
       include: { package_albums: { orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }], take: 1 } },
     });
     return pkgs.map((p) => ({ id: p.id, name: p.name, price: Number(p.price), imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null }));

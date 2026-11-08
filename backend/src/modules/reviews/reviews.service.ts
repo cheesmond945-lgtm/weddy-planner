@@ -76,6 +76,7 @@ export class ReviewsService {
         orderBy: [{ created_date: 'desc' }, { id: 'asc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
+        relationLoadStrategy: 'join',
         include: { order_items: { include: { service_packages: { select: { name: true } }, orders: { include: { weddings: { include: { users: { select: { full_name: true } } } } } } } } },
       }),
     ]);
@@ -87,6 +88,7 @@ export class ReviewsService {
     const o = UUID.test(orderId)
       ? await this.prisma.orders.findFirst({
           where: { id: orderId, weddings: { user_id: userId }, status: { not: 'Draft' } },
+          relationLoadStrategy: 'join',
           include: { weddings: true, order_items: { include: { reviews: true, service_packages: { select: { name: true } } }, orderBy: { id: 'asc' } } },
         })
       : null;
@@ -110,6 +112,7 @@ export class ReviewsService {
     const o = UUID.test(orderId)
       ? await this.prisma.orders.findFirst({
           where: { id: orderId, vendor_profiles: { user_id: userId } },
+          relationLoadStrategy: 'join',
           include: { order_items: { include: { reviews: true, service_packages: { select: { name: true } } }, orderBy: { id: 'asc' } } },
         })
       : null;

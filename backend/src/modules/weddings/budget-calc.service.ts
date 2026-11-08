@@ -198,6 +198,7 @@ export class BudgetCalcService {
     const [w, plan] = await Promise.all([
       this.prisma.weddings.findUniqueOrThrow({
         where: { id: weddingId },
+        relationLoadStrategy: 'join',
         include: {
           wedding_categories: true,
           // Bảng chưa có (SQL chưa chạy): coi như chưa có chi phí khác
@@ -210,6 +211,7 @@ export class BudgetCalcService {
       }),
       this.prisma.plan_vendors.findMany({
         where: { wedding_id: weddingId },
+        relationLoadStrategy: 'join',
         include: {
           vendor_profiles: {
             select: {

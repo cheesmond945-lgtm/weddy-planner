@@ -58,6 +58,7 @@ export class CatalogService {
         orderBy: { created_date: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
+        relationLoadStrategy: 'join',
         include: {
           package_albums: { where: { is_cover: true }, take: 1 },
           vendor_profiles: {
@@ -91,6 +92,7 @@ export class CatalogService {
   async packageDetail(id: string) {
     const p = await this.prisma.service_packages.findFirst({
       where: { id, ...this.visibleWhere() },
+      relationLoadStrategy: 'join',
       include: {
         package_albums: { orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }] },
         package_tags: true,

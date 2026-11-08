@@ -269,6 +269,7 @@ export class WeddingsService {
     const rows = await this.prisma.plan_vendors.findMany({
       where: { wedding_id: weddingId },
       orderBy: { created_date: 'asc' },
+      relationLoadStrategy: 'join',
       include: { vendor_profiles: { select: { id: true, user_id: true, category_id: true, service_categories: { select: { name: true } } } } },
     });
     return rows.flatMap((r) => (r.vendor_profiles ? [{ ...r.vendor_profiles, slug: categorySlug(r.vendor_profiles.service_categories?.name ?? null) }] : []));

@@ -73,6 +73,7 @@ export class CommissionsService {
     const period = `${m[2]}-${m[1]}`;
     const row = await this.prisma.commission_statements.findUnique({
       where: { vendor_id_period_month: { vendor_id: v.id, period_month: new Date(`${period}-01`) } },
+      relationLoadStrategy: 'join',
       include: { commissions: { include: { orders: { include: { payments: true } } }, orderBy: { created_date: 'asc' } } },
     });
     const summary = row

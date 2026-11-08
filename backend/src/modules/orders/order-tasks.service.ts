@@ -280,6 +280,7 @@ export class OrderTasksService {
         display_order: 500,
         task_confirmations: { create: { confirmed_date: day, confirmed_by: userId, confirmed_at: now } },
       },
+      relationLoadStrategy: 'join',
       include: { task_confirmations: { select: { confirmed_date: true, confirmed_at: true } } },
     });
     const [created] = pkg
@@ -388,6 +389,7 @@ export class OrderTasksService {
       row = await this.prisma.timeline_tasks.update({
         where: { id: task.id },
         data: { status: next, completed_date: next === 'Done' ? now : null },
+        relationLoadStrategy: 'join',
         include: { task_confirmations: { select: { confirmed_date: true, confirmed_at: true } } },
       });
       const was = task.status;

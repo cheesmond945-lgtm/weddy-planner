@@ -1,57 +1,21 @@
+import type { ComponentType } from 'react'
 import { createBrowserRouter } from 'react-router'
 import { AdminLayout } from '@/layouts/AdminLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { CoupleLayout } from '@/layouts/CoupleLayout'
 import { VendorLayout } from '@/layouts/VendorLayout'
-import NotFoundPage from '@/pages/NotFoundPage'
-import PublicPlanPage from '@/pages/PublicPlanPage'
-import DepositTermsPreviewPage from '@/pages/preview/DepositTermsPreviewPage'
-import TermsPreviewPage from '@/pages/preview/TermsPreviewPage'
-import AdminAccountPage from '@/pages/admin/AdminAccountPage'
-import AdminCatalogPage from '@/pages/admin/AdminCatalogPage'
-import AdminCommissionsPage from '@/pages/admin/AdminCommissionsPage'
-import AdminConsultationRequestsPage from '@/pages/admin/AdminConsultationRequestsPage'
-import AdminDashboardPage from '@/pages/admin/AdminDashboardPage'
-import AdminOrdersPage from '@/pages/admin/AdminOrdersPage'
-import AdminPackageDetailPage from '@/pages/admin/AdminPackageDetailPage'
-import AdminPaymentDetailPage from '@/pages/admin/AdminPaymentDetailPage'
-import AdminPaymentsPage from '@/pages/admin/AdminPaymentsPage'
-import AdminUsersPage from '@/pages/admin/AdminUsersPage'
-import AdminVendorDetailPage from '@/pages/admin/AdminVendorDetailPage'
-import AdminVendorsPage from '@/pages/admin/AdminVendorsPage'
-import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
-import LoginPage from '@/pages/auth/LoginPage'
-import RegisterPage from '@/pages/auth/RegisterPage'
-import SetPasswordPage from '@/pages/auth/SetPasswordPage'
-import ChatPage from '@/pages/couple/ChatPage'
-import CoupleAccountPage from '@/pages/couple/CoupleAccountPage'
-import ComparePage from '@/pages/couple/ComparePage'
-import FavoritesPage from '@/pages/couple/FavoritesPage'
-import PlanBudgetPage from '@/pages/couple/PlanBudgetPage'
-import PlanLayoutPage from '@/pages/couple/PlanLayoutPage'
-import PlanOverviewPage from '@/pages/couple/PlanOverviewPage'
-import PlanServicesPage from '@/pages/couple/PlanServicesPage'
-import PlanTimelinePage from '@/pages/couple/PlanTimelinePage'
-import ServiceDetailPage from '@/pages/couple/ServiceDetailPage'
-import ServicesPage from '@/pages/couple/ServicesPage'
-import VendorCatalogPage from '@/pages/vendor/VendorCatalogPage'
-import VendorChatPage from '@/pages/vendor/VendorChatPage'
-import VendorCommissionsPage from '@/pages/vendor/VendorCommissionsPage'
-import VendorDashboardPage from '@/pages/vendor/VendorDashboardPage'
-import VendorCalendarPage from '@/pages/vendor/VendorCalendarPage'
-import VendorOrderDetailPage from '@/pages/vendor/VendorOrderDetailPage'
-import VendorOrdersPage from '@/pages/vendor/VendorOrdersPage'
-import VendorPackagePage from '@/pages/vendor/VendorPackagePage'
-import VendorProfilePage from '@/pages/vendor/VendorProfilePage'
 import { RedirectKeepSearch } from './RedirectKeepSearch'
-import VendorAccountPage from '@/pages/vendor/VendorAccountPage'
 import { GuestOrRole, RequireRole } from './RequireRole'
 import { paths } from './paths'
 
+/** Mỗi trang là một chunk riêng, chỉ tải khi người dùng vào trang đó (giảm bundle đầu). */
+type PageModule = { default: ComponentType }
+const page = (load: () => Promise<PageModule>) => async () => ({ Component: (await load()).default })
+
 export const router = createBrowserRouter([
   // TẠM THỜI: xem thử điều khoản, xóa sau
-  { path: '/preview/terms', element: <TermsPreviewPage /> },
-  { path: '/preview/deposit-terms', element: <DepositTermsPreviewPage /> },
+  { path: '/preview/terms', lazy: page(() => import('@/pages/preview/TermsPreviewPage')) },
+  { path: '/preview/deposit-terms', lazy: page(() => import('@/pages/preview/DepositTermsPreviewPage')) },
   // Phía cặp đôi (NCC, Admin đã đăng nhập không vào được, chuyển về trang quản lý)
   {
     element: <GuestOrRole roles={['COUPLE']} />,
@@ -60,31 +24,31 @@ export const router = createBrowserRouter([
         element: <CoupleLayout />,
         children: [
           // Ai cũng xem được (như prototype)
-          { path: paths.services, element: <ServicesPage /> },
-          { path: '/services/:serviceId', element: <ServiceDetailPage /> },
+          { path: paths.services, lazy: page(() => import('@/pages/couple/ServicesPage')) },
+          { path: '/services/:serviceId', lazy: page(() => import('@/pages/couple/ServiceDetailPage')) },
           // Cần đăng nhập với role cặp đôi
           {
             element: <RequireRole roles={['COUPLE']} />,
             children: [
-              { path: paths.favorites, element: <FavoritesPage /> },
-              { path: paths.compare, element: <ComparePage /> },
+              { path: paths.favorites, lazy: page(() => import('@/pages/couple/FavoritesPage')) },
+              { path: paths.compare, lazy: page(() => import('@/pages/couple/ComparePage')) },
               // Kế hoạch của tôi: mỗi subtab một route con, reload hay dán link vẫn đúng tab
               {
                 path: paths.plan,
-                element: <PlanLayoutPage />,
+                lazy: page(() => import('@/pages/couple/PlanLayoutPage')),
                 children: [
                   // /plan: trang khung tự chuyển sang tab đầu tiên được xem
                   { index: true, element: null },
-                  { path: paths.planTab.overview, element: <PlanOverviewPage /> },
-                  { path: paths.planTab.timeline, element: <PlanTimelinePage /> },
-                  { path: paths.planTab.services, element: <PlanServicesPage /> },
-                  { path: paths.planTab.budget, element: <PlanBudgetPage /> },
+                  { path: paths.planTab.overview, lazy: page(() => import('@/pages/couple/PlanOverviewPage')) },
+                  { path: paths.planTab.timeline, lazy: page(() => import('@/pages/couple/PlanTimelinePage')) },
+                  { path: paths.planTab.services, lazy: page(() => import('@/pages/couple/PlanServicesPage')) },
+                  { path: paths.planTab.budget, lazy: page(() => import('@/pages/couple/PlanBudgetPage')) },
                 ],
               },
               // Link cũ /timeline (trang Lập Timeline trước đây) sang tab Timeline của Kế hoạch
               { path: '/timeline', element: <RedirectKeepSearch to={paths.timeline} /> },
-              { path: paths.chat, element: <ChatPage /> },
-              { path: paths.account, element: <CoupleAccountPage /> },
+              { path: paths.chat, lazy: page(() => import('@/pages/couple/ChatPage')) },
+              { path: paths.account, lazy: page(() => import('@/pages/couple/CoupleAccountPage')) },
             ],
           },
         ],
@@ -96,10 +60,10 @@ export const router = createBrowserRouter([
   {
     element: <AuthLayout />,
     children: [
-      { path: paths.login, element: <LoginPage /> },
-      { path: paths.register, element: <RegisterPage /> },
-      { path: paths.forgotPassword, element: <ForgotPasswordPage /> },
-      { path: paths.setPassword, element: <SetPasswordPage /> },
+      { path: paths.login, lazy: page(() => import('@/pages/auth/LoginPage')) },
+      { path: paths.register, lazy: page(() => import('@/pages/auth/RegisterPage')) },
+      { path: paths.forgotPassword, lazy: page(() => import('@/pages/auth/ForgotPasswordPage')) },
+      { path: paths.setPassword, lazy: page(() => import('@/pages/auth/SetPasswordPage')) },
     ],
   },
 
@@ -110,17 +74,17 @@ export const router = createBrowserRouter([
       {
         element: <VendorLayout />,
         children: [
-          { path: paths.vendor.dashboard, element: <VendorDashboardPage /> },
-          { path: paths.vendor.profile, element: <VendorProfilePage /> },
-          { path: paths.vendor.account, element: <VendorAccountPage /> },
-          { path: paths.vendor.catalog, element: <VendorCatalogPage /> },
-          { path: paths.vendor.packageNew, element: <VendorPackagePage /> },
-          { path: '/vendor/catalog/:packageId', element: <VendorPackagePage /> },
-          { path: paths.vendor.orders, element: <VendorOrdersPage /> },
-          { path: '/vendor/orders/:orderId', element: <VendorOrderDetailPage /> },
-          { path: paths.vendor.calendar, element: <VendorCalendarPage /> },
-          { path: paths.vendor.chat, element: <VendorChatPage /> },
-          { path: paths.vendor.commissions, element: <VendorCommissionsPage /> },
+          { path: paths.vendor.dashboard, lazy: page(() => import('@/pages/vendor/VendorDashboardPage')) },
+          { path: paths.vendor.profile, lazy: page(() => import('@/pages/vendor/VendorProfilePage')) },
+          { path: paths.vendor.account, lazy: page(() => import('@/pages/vendor/VendorAccountPage')) },
+          { path: paths.vendor.catalog, lazy: page(() => import('@/pages/vendor/VendorCatalogPage')) },
+          { path: paths.vendor.packageNew, lazy: page(() => import('@/pages/vendor/VendorPackagePage')) },
+          { path: '/vendor/catalog/:packageId', lazy: page(() => import('@/pages/vendor/VendorPackagePage')) },
+          { path: paths.vendor.orders, lazy: page(() => import('@/pages/vendor/VendorOrdersPage')) },
+          { path: '/vendor/orders/:orderId', lazy: page(() => import('@/pages/vendor/VendorOrderDetailPage')) },
+          { path: paths.vendor.calendar, lazy: page(() => import('@/pages/vendor/VendorCalendarPage')) },
+          { path: paths.vendor.chat, lazy: page(() => import('@/pages/vendor/VendorChatPage')) },
+          { path: paths.vendor.commissions, lazy: page(() => import('@/pages/vendor/VendorCommissionsPage')) },
         ],
       },
     ],
@@ -133,25 +97,25 @@ export const router = createBrowserRouter([
       {
         element: <AdminLayout />,
         children: [
-          { path: paths.admin.dashboard, element: <AdminDashboardPage /> },
-          { path: paths.admin.consultationRequests, element: <AdminConsultationRequestsPage /> },
-          { path: paths.admin.vendors, element: <AdminVendorsPage /> },
-          { path: '/admin/vendors/:id', element: <AdminVendorDetailPage /> },
-          { path: paths.admin.catalog, element: <AdminCatalogPage /> },
-          { path: '/admin/catalog/:id', element: <AdminPackageDetailPage /> },
-          { path: paths.admin.orders, element: <AdminOrdersPage /> },
-          { path: paths.admin.payments, element: <AdminPaymentsPage /> },
-          { path: '/admin/payments/:id', element: <AdminPaymentDetailPage /> },
-          { path: paths.admin.commissions, element: <AdminCommissionsPage /> },
-          { path: paths.admin.users, element: <AdminUsersPage /> },
-          { path: paths.admin.account, element: <AdminAccountPage /> },
+          { path: paths.admin.dashboard, lazy: page(() => import('@/pages/admin/AdminDashboardPage')) },
+          { path: paths.admin.consultationRequests, lazy: page(() => import('@/pages/admin/AdminConsultationRequestsPage')) },
+          { path: paths.admin.vendors, lazy: page(() => import('@/pages/admin/AdminVendorsPage')) },
+          { path: '/admin/vendors/:id', lazy: page(() => import('@/pages/admin/AdminVendorDetailPage')) },
+          { path: paths.admin.catalog, lazy: page(() => import('@/pages/admin/AdminCatalogPage')) },
+          { path: '/admin/catalog/:id', lazy: page(() => import('@/pages/admin/AdminPackageDetailPage')) },
+          { path: paths.admin.orders, lazy: page(() => import('@/pages/admin/AdminOrdersPage')) },
+          { path: paths.admin.payments, lazy: page(() => import('@/pages/admin/AdminPaymentsPage')) },
+          { path: '/admin/payments/:id', lazy: page(() => import('@/pages/admin/AdminPaymentDetailPage')) },
+          { path: paths.admin.commissions, lazy: page(() => import('@/pages/admin/AdminCommissionsPage')) },
+          { path: paths.admin.users, lazy: page(() => import('@/pages/admin/AdminUsersPage')) },
+          { path: paths.admin.account, lazy: page(() => import('@/pages/admin/AdminAccountPage')) },
         ],
       },
     ],
   },
 
   // Xem kế hoạch qua link công khai: khung riêng, đầu trang chỉ có Đăng nhập và Đăng ký
-  { path: '/xem/:token/:tab?', element: <PublicPlanPage /> },
+  { path: '/xem/:token/:tab?', lazy: page(() => import('@/pages/PublicPlanPage')) },
 
-  { path: '*', element: <NotFoundPage /> },
+  { path: '*', lazy: page(() => import('@/pages/NotFoundPage')) },
 ])
