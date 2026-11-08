@@ -111,7 +111,8 @@ export class ServicesService implements OnModuleInit {
 
   /** Đọc lại danh mục NCC. Lần đầu: yêu cầu chờ chính lượt đọc này. Các lần sau: bản cũ vẫn được phục vụ cho tới khi đọc xong, lỗi thì giữ bản cũ. */
   private refreshVisible() {
-    const data = this.queryVisible({ status: 'Approved' });
+    // Lỗi mạng thoáng qua (kết nối bị ngắt, quá hạn): thử lại một lần trước khi báo lỗi
+    const data = this.queryVisible({ status: 'Approved' }).catch(() => this.queryVisible({ status: 'Approved' }));
     this.refreshing = true;
     if (!this.visibleCache) this.visibleCache = { at: Date.now(), data };
     data.then(

@@ -15,6 +15,11 @@ export const catalogKeys = {
   reviewSummary: (id: string) => ['catalog', 'service', id, 'review-summary'] as const,
 }
 
+/** Id + tên lĩnh vực, truy vấn nhẹ: ô chọn lĩnh vực trong form Admin không phải chờ danh mục NCC */
+export function useCategoryOptions() {
+  return useQuery({ queryKey: ['catalog', 'category-options'], queryFn: catalogApi.listCategoryOptions, staleTime: 10 * 60_000 })
+}
+
 /** Chi phí thấp nhất từng hạng mục theo số khách, dạng { slug: chi phí }; chưa có số khách thì vẫn tính (1 bàn) */
 export function useCategoryMinCosts(guests: number) {
   return useQuery({

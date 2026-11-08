@@ -3,7 +3,7 @@ import { Copy, LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useCategories } from '@/features/catalog/hooks'
+import { useCategoryOptions } from '@/features/catalog/hooks'
 import { controlClass, Field } from '@/features/vendors/components/FormParts'
 import { ApiError } from '@/api/client'
 import type { Role } from '@/types/auth'
@@ -39,7 +39,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /** Thêm mới / sửa thông tin tài khoản (hộp "Thêm mới tài khoản", "Sửa thông tin tài khoản"). */
 export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialogProps) {
   const save = useSaveUser(user?.id ?? null)
-  const { data: categories = [] } = useCategories()
+  const { data: categories = [] } = useCategoryOptions()
   const [v, setV] = useState({
     username: user?.username ?? preset?.username ?? '',
     email: user?.email ?? preset?.email ?? '',

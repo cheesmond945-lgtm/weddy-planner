@@ -19,6 +19,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         idleTimeoutMillis: 10 * 60_000,
         keepAlive: true,
         connectionTimeoutMillis: 15_000,
+        // Mạng tới DB có lúc đứng hẳn: truy vấn quá 25s thì báo lỗi thay vì treo vô hạn (kéo theo mọi request dùng chung)
+        query_timeout: 25_000,
       }), ...(Object.keys(omit).length && { omit: omit as never }) });
   }
   private keepWarm?: NodeJS.Timeout;
