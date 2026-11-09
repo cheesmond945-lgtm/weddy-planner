@@ -20,7 +20,7 @@ export interface UserPreset {
   phone?: string
   categoryId?: string
   consultationId?: string
-  /** Tạo từ yêu cầu hợp tác: tên đăng nhập, vai trò, lĩnh vực lấy từ yêu cầu và bị khóa (email, SĐT vẫn sửa được) */
+  /** Tạo từ yêu cầu hợp tác: vai trò, lĩnh vực lấy từ yêu cầu và bị khóa (tên đăng nhập, email, SĐT vẫn sửa được) */
   locked?: boolean
 }
 
@@ -149,7 +149,7 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
       size="md"
       onRequestClose={() => !save.isPending && onClose()}
       title={user ? 'Sửa thông tin tài khoản' : 'Thêm mới tài khoản'}
-      subtitle={preset?.consultationId ? 'Điền sẵn từ yêu cầu đăng ký. Tên đăng nhập là tên người liên hệ; email và số điện thoại có thể chỉnh nếu nhà cung cấp gửi sai.' : undefined}
+      subtitle={preset?.consultationId ? 'Điền sẵn từ yêu cầu đăng ký. Tên đăng nhập mặc định là tên người liên hệ, có thể chỉnh; email và số điện thoại cũng có thể chỉnh nếu nhà cung cấp gửi sai.' : undefined}
       footer={
         <>
           {formError && (
@@ -169,7 +169,7 @@ export function UserFormDialog({ user, preset, onClose, onSaved }: UserFormDialo
     >
       <fieldset disabled={save.isPending} className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 max-sm:grid-cols-1">
         <Field label={<>Tên đăng nhập <b className="text-destructive">*</b></>} error={errors.username}>
-          <Input className={controlClass} placeholder="Tên đăng nhập" aria-invalid={errors.username ? true : undefined} disabled={locked} value={v.username} onChange={(e) => set({ username: e.target.value })} />
+          <Input className={controlClass} placeholder="Tên đăng nhập" aria-invalid={errors.username ? true : undefined} value={v.username} onChange={(e) => set({ username: e.target.value })} />
         </Field>
         <Field label={<>Email <b className="text-destructive">*</b></>} error={errors.email} hint={user && !emailEditable ? 'Email là thông tin đăng nhập, người dùng tự đổi trong tài khoản của mình.' : undefined}>
           <Input className={controlClass} type="email" placeholder="Email" aria-invalid={errors.email ? true : undefined} disabled={!emailEditable} value={v.email} onChange={(e) => set({ email: e.target.value })} />
