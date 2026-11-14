@@ -1,0 +1,48 @@
+# Tự build backend (thư mục backend/) và deploy lên Azure App Service mỗi khi push lên nhánh main.
+# Cần 1 secret trong GitHub repo: AZURE_WEBAPP_PUBLISH_PROFILE (nội dung file "Download publish profile" của App Service).
+# Biến môi trường của app (DATABASE_URL, JWT_SECRET...) đặt ở Azure Portal > App Service > Environment variables, không đặt ở đây.
+name: Deploy backend lên Azure
+
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', '.github/workflows/backend-azure.yml']
+  workflow_dispatch: # cho phép bấm chạy tay ở tab Actions
+
+env:
+  AZURE_WEBAPP_NAME: Forever # tên App Service trên Azure Portal
+  NODE_VERSION: '22.x'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Cài thư viện
+        run: npm ci
+
+      - name: Sinh Prisma client và build
+        # prisma.config.ts cần DATABASE_URL lúc generate; giá trị giả, không kết nối DB
+        run: DATABASE_URL="postgresql://u:p@localhost:5432/db" npx prisma generate && npm run build
+
+      - name: Bỏ thư viện chỉ dùng lúc build và đóng gói
+        run: |
+          npm prune --omit=dev
+          zip -qr ../backend.zip dist node_modules package.json
+
+      - name: Deploy lên Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: backend.zip
