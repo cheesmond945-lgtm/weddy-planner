@@ -2,7 +2,7 @@
 FROM node:22-slim AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm i -g npm@11 && npm ci
 COPY . .
 # prisma.config.ts cần DATABASE_URL lúc generate; chỉ là giá trị giả, không kết nối DB
 RUN DATABASE_URL="postgresql://u:p@localhost:5432/db" npx prisma generate && npm run build && npm prune --omit=dev

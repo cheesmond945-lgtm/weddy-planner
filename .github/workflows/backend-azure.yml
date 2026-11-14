@@ -29,7 +29,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Cài thư viện
-        run: npm ci
+        # package-lock.json tạo bằng npm 11; npm 10 đi kèm Node 22 báo lệch lock (Missing: webpack) nên nâng npm trước
+        run: npm i -g npm@11 && npm ci
 
       - name: Sinh Prisma client và build
         # prisma.config.ts cần DATABASE_URL lúc generate; giá trị giả, không kết nối DB
