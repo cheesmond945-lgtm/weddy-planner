@@ -384,7 +384,7 @@ export class OrdersService {
     if (!(deposit > 0)) return fail('ORDER_NOT_PAYABLE', 'Đơn chưa có số tiền cọc.', 409);
     // Dòng thanh toán chưa trả (giữ nguyên nếu đã có)
     const payment = await this.prisma.payments.upsert({ where: { order_id: orderId }, create: { order_id: orderId, status: 'Unpaid' }, update: {} });
-    return { paymentId: payment.id, demoMode: demoPaymentEnabled(), ...buildPayInfo(cfg, { amount: deposit, content: depositContent(o.order_code!) }) };
+    return { paymentId: payment.id, demoMode: demoPaymentEnabled(), ...buildPayInfo(cfg, { amount: deposit, content: depositContent(o.order_code!), expiresAt: o.deposit_due_date }) };
   }
 
   /** Lời báo cho khách nếu sảnh của đơn đã bận ngày thực hiện (khách khác đã cọc, hoặc NCC đánh dấu bận); null nếu còn trống / đơn không theo sảnh. */

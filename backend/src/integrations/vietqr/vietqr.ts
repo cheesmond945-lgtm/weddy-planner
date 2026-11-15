@@ -9,9 +9,6 @@
  * - Xác nhận đã nhận tiền bằng cách hỏi SePay (sepay.ts), không tin kết quả do trình duyệt báo.
  */
 
-/** Thời hạn hiển thị một mã QR trên giao diện (sau đó vẫn bấm kiểm tra lại được). */
-export const PAYMENT_TTL_MS = 15 * 60 * 1000;
-
 /** Tiền tố bắt buộc của nội dung chuyển khoản (SePay) */
 export const SEPAY_PREFIX = 'SEVQR ';
 export const MAX_CONTENT_LENGTH = 25;
@@ -71,10 +68,11 @@ export interface PayInfo {
   bankBin: string;
   accountNo: string;
   accountName: string;
-  expiresAt: string;
+  /** Hạn thanh toán của khoản này (VD hạn cọc của đơn); null nếu khoản không có hạn riêng. Mã QR không tự hết hiệu lực. */
+  expiresAt: string | null;
 }
 
-export function buildPayInfo(cfg: VietqrConfig, o: { amount: number; content: string }): PayInfo {
+export function buildPayInfo(cfg: VietqrConfig, o: { amount: number; content: string; expiresAt?: Date | null }): PayInfo {
   const qs = new URLSearchParams({ amount: String(Math.round(o.amount)), addInfo: o.content, accountName: cfg.accountName });
   return {
     qrUrl: `https://img.vietqr.io/image/${cfg.bankBin}-${cfg.accountNo}-compact2.png?${qs}`,
@@ -83,6 +81,6 @@ export function buildPayInfo(cfg: VietqrConfig, o: { amount: number; content: st
     bankBin: cfg.bankBin,
     accountNo: cfg.accountNo,
     accountName: cfg.accountName,
-    expiresAt: new Date(Date.now() + PAYMENT_TTL_MS).toISOString(),
+    expiresAt: o.expiresAt ? o.expiresAt.toISOString() : null,
   };
 }

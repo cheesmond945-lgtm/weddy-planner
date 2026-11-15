@@ -40,7 +40,8 @@ interface VietqrPanelProps {
 export function VietqrPanel({ info, check, onPaid, demoPay }: VietqrPanelProps) {
   const [message, setMessage] = useState('')
   const [checking, setChecking] = useState(false)
-  const [left, setLeft] = useState(() => Math.max(0, new Date(info.expiresAt).getTime() - Date.now()))
+  const deadline = info.expiresAt ? new Date(info.expiresAt).getTime() : null
+  const [now, setNow] = useState(() => Date.now())
   const [demoBusy, setDemoBusy] = useState(false)
   const busy = useRef(false)
   const done = useRef(false)
@@ -83,20 +84,29 @@ export function VietqrPanel({ info, check, onPaid, demoPay }: VietqrPanelProps) 
     }
   }
 
+  // Cập nhật mỗi phút là đủ vì chỉ hiện giờ và phút còn lại
   useEffect(() => {
-    const t = setInterval(() => setLeft(Math.max(0, new Date(info.expiresAt).getTime() - Date.now())), 1000)
+    if (deadline === null) return
+    const t = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(t)
-  }, [info.expiresAt])
+  }, [deadline])
 
-  const expired = left <= 0
-  // Luôn tự kiểm tra cho tới khi đóng hộp thoại / rời trang, kể cả khi mã đã quá thời hạn hiển thị
+  // Mã QR không tự hết hiệu lực; chỉ có hạn thanh toán của đơn. Tự kiểm tra cho tới khi đóng hộp thoại / rời trang.
   useEffect(() => {
     const t = setInterval(() => void run(), POLL_MS)
     return () => clearInterval(t)
   }, [run])
 
-  const mm = String(Math.floor(left / 60000)).padStart(2, '0')
-  const ss = String(Math.floor((left % 60000) / 1000)).padStart(2, '0')
+  const left = deadline === null ? null : Math.max(0, deadline - now)
+  const hh = left === null ? 0 : Math.floor(left / 3_600_000)
+  const mm = left === null ? 0 : Math.floor((left % 3_600_000) / 60_000)
+  const deadlineText = deadline === null ? '' : new Date(deadline).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', hour12: false })
+  const status =
+    left === null
+      ? 'Đang chờ thanh toán'
+      : left <= 0
+        ? 'Đã quá hạn thanh toán. Nếu bạn đã chuyển khoản, hệ thống vẫn tự ghi nhận khi nhận được tiền.'
+        : `Đang chờ thanh toán · hạn ${deadlineText} (còn ${hh > 0 ? `${hh} giờ ` : ''}${mm} phút)`
   const rows: [string, string, boolean][] = [
     ['Số tài khoản', info.accountNo, true],
     ['Chủ tài khoản', info.accountName, false],
@@ -122,7 +132,7 @@ export function VietqrPanel({ info, check, onPaid, demoPay }: VietqrPanelProps) 
         </p>
         <p className="mt-1.5 flex items-center gap-1.5 text-[13px]" aria-live="polite">
           {checking && <LoaderCircle className="size-3.5 animate-spin" />}
-          {expired ? 'Mã đã quá thời hạn hiển thị. Nếu bạn đã chuyển khoản, hệ thống vẫn tự ghi nhận khi nhận được tiền.' : `Đang chờ thanh toán · còn ${mm}:${ss}`}
+          {status}
         </p>
         {message && <p className="mt-1 text-[13px] text-muted-foreground">{message}</p>}
         {demoPay && (

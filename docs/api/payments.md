@@ -12,7 +12,7 @@ Cặp đôi đặt cọc cho đơn dịch vụ (mục 7.3) và NCC nộp hoa h�
 4. Mỗi giao dịch SePay chỉ dùng được **một lần**: id giao dịch lưu vào `payments.transaction_code` / `commission_statements.transaction_code` (cùng `UNIQUE`), và BE tra cả hai bảng trước khi nhận. Hai lần kiểm tra đồng thời vẫn chỉ ghi một lần (cập nhật có điều kiện trạng thái).
 5. Cọc: đơn `Pending` → `Deposited`, `payments` → `Paid`, tạo giấy xác nhận cọc, mở việc chi tiết trên timeline, thêm tin hệ thống vào hội thoại, báo NCC. Hoa hồng: bảng kê `Unpaid` → `Paid`, báo NCC và Admin. Đơn bị hủy / hết hạn trong lúc khách đang chuyển: không ghi, báo liên hệ hoàn tiền và ghi log.
 
-Mã QR hiển thị 15 phút (`expiresAt`); hết hạn vẫn bấm kiểm tra lại được. SePay giới hạn khoảng 2 lần gọi mỗi giây nên BE giữ danh sách giao dịch 3 giây.
+Mã QR không tự hết hiệu lực: bấm thanh toán lúc nào trong hạn cọc (12 giờ kể từ khi gửi đơn) cũng nhận lại đúng mã đó. `expiresAt` là hạn thanh toán của đơn (`deposit_due_date`), `null` với khoản không có hạn riêng (hoa hồng, cọc bổ sung); giao diện hiện hạn này thay cho đồng hồ đếm ngược. SePay giới hạn khoảng 2 lần gọi mỗi giây nên BE giữ danh sách giao dịch 3 giây.
 
 Admin xác nhận tay một bảng kê hoa hồng bằng `POST /admin/commissions/:id/record-payment` (xem [admin.md](admin.md)). Đơn cọc chưa có thao tác xác nhận tay.
 

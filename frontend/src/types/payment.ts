@@ -8,7 +8,8 @@ export interface PayInfo {
   bankBin: string
   accountNo: string
   accountName: string
-  expiresAt: string
+  /** Hạn thanh toán của khoản (VD hạn cọc của đơn); null nếu không có hạn riêng. Mã QR không tự hết hiệu lực. */
+  expiresAt: string | null
   /** true khi backend bật PAYMENT_DEMO_MODE: hiện nút "Tôi đã thanh toán" để thử */
   demoMode?: boolean
 }
