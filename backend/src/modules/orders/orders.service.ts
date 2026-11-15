@@ -943,11 +943,19 @@ export class OrdersService {
     return { restPayment: restPaymentOf({ status: order.status, total: Number(order.total_amount), deposit: Number(order.deposit_amount) }, pay), taskId: pay?.id ?? null };
   }
 
-  /** Xuất hóa đơn cuối (mỗi đơn một lần): Deposited hoặc Completed. Tạo Invoices FinalInvoice và gửi tin FinalInvoice (NCC gửi). */
-  async finalInvoice(userId: string, id: string) {
-    const { order } = await this.ownedByVendor(userId, id);
+  /**
+   * Xuất hóa đơn cuối (mỗi đơn một lần): Deposited hoặc Completed. Tạo Invoices FinalInvoice và gửi tin FinalInvoice (NCC gửi).
+   * `restReceived: true`: NCC xác nhận đã nhận đủ phần còn lại ngay khi xuất (đơn tự hoàn thành mà NCC chưa ghi nhận tiền):
+   * ghi nhận rồi xuất trong một lần bấm, giống Hoàn tất.
+   */
+  async finalInvoice(userId: string, id: string, body: { restReceived?: unknown } = {}) {
+    let { order } = await this.ownedByVendor(userId, id);
     if (!['Deposited', 'Completed'].includes(order.status ?? '')) return fail('INVOICE_NOT_AVAILABLE', 'Chỉ xuất được hóa đơn cho đơn đã đặt cọc hoặc đã hoàn thành.', 409);
     if (order.invoices.some((i) => i.type === 'FinalInvoice')) return fail('INVOICE_EXISTS', 'Đơn đã xuất hóa đơn cuối.', 409);
+    if (body?.restReceived === true && this.restOf(order).status === 'Pending') {
+      await this.recordRestPayment(userId, id);
+      order = await this.loadFull(id);
+    }
     // Hóa đơn cuối ghi "đã thanh toán tiền mặt": chỉ xuất khi NCC đã ghi nhận đã nhận phần còn lại
     const rest = this.restOf(order);
     const blocked = finalInvoiceGate(rest);

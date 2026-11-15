@@ -297,7 +297,7 @@ export class VendorOrdersController {
 
   @HttpCode(200)
   @Post(':id/final-invoice')
-  finalInvoice(@Req() req: any, @Param('id') id: string) {
-    return this.orders.finalInvoice(req.user.sub, id);
+  finalInvoice(@Req() req: any, @Param('id') id: string, @Body() body: { restReceived?: unknown }) {
+    return this.orders.finalInvoice(req.user.sub, id, body ?? {});
   }
 }

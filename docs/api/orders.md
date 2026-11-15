@@ -283,7 +283,7 @@ Response 200: `{ "data": Order }`. Lỗi: 404, 409 `ORDER_NOT_COMPLETABLE` (khô
 
 ### POST /vendors/me/orders/:id/final-invoice
 
-**Xuất hóa đơn cuối** khi khách yêu cầu, mỗi đơn một lần. Chỉ khi `Deposited` hoặc `Completed`. Tạo `Invoices` loại `FinalInvoice`, thêm tin `FinalInvoice` vào hội thoại.
+**Xuất hóa đơn cuối** khi khách yêu cầu, mỗi đơn một lần. Chỉ khi `Deposited` hoặc `Completed`. Tạo `Invoices` loại `FinalInvoice`, thêm tin `FinalInvoice` vào hội thoại. Chỉ xuất khi phần còn lại đã ghi nhận "đã nhận" (hóa đơn ghi đã thanh toán đủ). Body tùy chọn `{ "restReceived": true }`: NCC xác nhận đã nhận đủ ngay lúc xuất, hệ thống ghi nhận rồi xuất (dùng cho đơn tự hoàn thành mà NCC chưa ghi nhận tiền); thiếu mà chưa ghi nhận thì 409 `REST_PAYMENT_NOT_RECORDED`.
 
 Response 200: `{ "data": Order }` (đã có hóa đơn trong `invoices`). Lỗi: 404, 409 `INVOICE_NOT_AVAILABLE` (đơn chưa cọc, hết hạn hoặc đã hủy), 409 `INVOICE_EXISTS`.
 

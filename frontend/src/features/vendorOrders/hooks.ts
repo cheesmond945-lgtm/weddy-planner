@@ -165,7 +165,7 @@ export function useRejectRevision() {
 export function useIssueFinalInvoice() {
   const sync = useSyncOrder()
   return useMutation({
-    mutationFn: (orderId: string) => vendorOrdersApi.issueFinalInvoice(orderId),
+    mutationFn: ({ orderId, restReceived }: { orderId: string; restReceived?: boolean }) => vendorOrdersApi.issueFinalInvoice(orderId, restReceived),
     onSuccess: (o) => {
       sync(o)
       toast(`Đã xuất hóa đơn cho đơn ${o.orderCode} và gửi vào cuộc trò chuyện.`)

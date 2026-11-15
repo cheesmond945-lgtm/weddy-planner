@@ -106,8 +106,9 @@ export const vendorOrdersApi = {
   clearRestPayment: (orderId: string): Promise<RestResult> => http.delete(`/vendors/me/orders/${orderId}/rest-payment`),
 
   /** Xuất hóa đơn (mỗi đơn một lần). */
-  issueFinalInvoice: (orderId: string): Promise<Order> =>
-    http.post(`/vendors/me/orders/${orderId}/final-invoice`),
+  /** restReceived: NCC xác nhận đã nhận đủ phần còn lại ngay lúc xuất (đơn đã hoàn thành mà chưa ghi nhận tiền) */
+  issueFinalInvoice: (orderId: string, restReceived?: boolean): Promise<Order> =>
+    http.post(`/vendors/me/orders/${orderId}/final-invoice`, restReceived ? { restReceived: true } : {}),
 
   /** Xem trước đổi gói khi sửa đơn đã cọc: việc giữ tiến độ (trùng tên) / thêm / bỏ; null khi gói không đổi */
   packageSwitchPreview: (orderId: string, packageIds: string[], eventDate?: string): Promise<PackageSwitchPreview | null> =>

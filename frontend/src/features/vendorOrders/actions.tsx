@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ConfirmDialog } from '@/features/vendors/components/ConfirmDialog'
 import type { CancelReason, InvoiceType, Order } from '@/types/vendorOrder'
-import { canCancel, completeFromText, eventPassed, openRevision } from './calc'
+import { canCancel, eventPassed, openRevision } from './calc'
 import type { OrderFormMode } from './components/OrderFormDialog'
 import { CancelOrderDialog } from './components/CancelOrderDialog'
 import { RejectRevisionDialog } from './components/RejectRevisionDialog'
@@ -26,35 +26,42 @@ export interface OrderAction {
 /**
  * Thao tác của NCC trên một đơn, theo docs/api/THE_DON_HANG.md mục 4 (dùng chung cho thẻ đơn, màn chi tiết, bảng đơn):
  * Draft: Tiếp tục soạn. Pending: Chỉnh sửa đơn. NeedRevision: Chỉnh sửa đơn (chính). Expired, Cancelled: Tạo lại đơn (chính).
- * Deposited: Chỉnh sửa (chính khi khách đang yêu cầu chỉnh sửa, kèm Từ chối yêu cầu), Hoàn tất (luôn hiện; trước ngày sự kiện bị khóa
- * kèm chữ "Hoàn tất được từ <ngày>"), Ghi nhận / Bỏ ghi nhận tiền mặt (Bỏ ghi nhận khóa khi đã có hóa đơn cuối),
- * Xuất hóa đơn (khóa tới khi đã ghi nhận tiền mặt), Hủy đơn (chỉ khi còn trước ngày sự kiện).
- * Completed: Xuất hóa đơn (nếu chưa xuất) hoặc Xem hóa đơn. Đơn chưa cọc tự hết hạn, NCC không hủy.
+ * Đơn đã cọc / hoàn thành, mỗi giai đoạn một nút chính (nhóm chốt 15/11/2026):
+ * - Trước ngày thực hiện: Chỉnh sửa, Ghi nhận đã nhận tiền (khách trả sớm), Xuất hóa đơn (mở khi đã ghi nhận), Hủy đơn. Không hiện Hoàn tất.
+ * - Sau ngày thực hiện, chưa hoàn tất: Hoàn tất (chính; chưa ghi nhận tiền thì hỏi "đã nhận đủ chưa" và ghi nhận luôn), Chỉnh sửa.
+ * - Đã hoàn thành: Xuất hóa đơn (chính; chưa ghi nhận tiền, vd đơn tự hoàn thành, thì hỏi và ghi nhận luôn) hoặc Xem hóa đơn.
+ * Bỏ ghi nhận (sửa ghi nhận nhầm) là nút phụ ở cuối, chỉ khi đã ghi nhận và chưa xuất hóa đơn cuối.
  */
 export function actionsOf(o: Order, opts: { withView?: boolean } = {}): OrderAction[] {
   const out: OrderAction[] = []
   const hasFinal = o.invoices.some((i) => i.type === 'FinalInvoice')
   const requested = o.status === 'Deposited' && !!openRevision(o)
+  const rest = o.restPayment?.status
+  const passed = eventPassed(o)
   if (opts.withView) out.push({ key: 'view', label: 'Xem chi tiết', primary: false })
   if (o.status === 'Draft') out.push({ key: 'continue', label: 'Tiếp tục soạn', primary: false })
   if (o.status === 'Pending') out.push({ key: 'resend', label: 'Chỉnh sửa đơn', primary: false })
   if (o.status === 'NeedRevision') out.push({ key: 'resend', label: 'Chỉnh sửa đơn', primary: true })
   if (o.status === 'Expired' || o.status === 'Cancelled') out.push({ key: 'again', label: 'Tạo lại đơn', primary: true })
-  if (o.status === 'Deposited') out.push({ key: 'edit', label: requested ? 'Chỉnh sửa theo yêu cầu' : 'Chỉnh sửa', primary: requested })
-  if (requested) out.push({ key: 'reject', label: 'Từ chối yêu cầu', primary: false })
-  // Hoàn tất luôn hiện với đơn Đã cọc; trước ngày thực hiện thì khóa kèm chữ "Hoàn tất được từ <ngày>"
-  if (o.status === 'Deposited') out.push(eventPassed(o) ? { key: 'complete', label: 'Hoàn tất', primary: true } : { key: 'complete', label: 'Hoàn tất', primary: false, disabledReason: completeFromText(o) })
-  if (o.status === 'Deposited' || o.status === 'Completed') {
-    const rest = o.restPayment?.status
-    // Đợt 2 (tiền mặt phần còn lại): NCC ghi nhận đã nhận; hóa đơn cuối chỉ xuất sau khi đã ghi nhận
-    if (rest === 'Pending') out.push({ key: 'receiveRest', label: 'Ghi nhận đã nhận tiền', primary: false })
-    if (rest === 'Received') out.push({ key: 'unreceiveRest', label: 'Bỏ ghi nhận đã nhận tiền', primary: false, ...(hasFinal && { disabledReason: 'Đã xuất hóa đơn cuối, không thể bỏ ghi nhận đã nhận tiền.' }) })
-    out.push(
-      hasFinal
-        ? { key: 'viewInvoice', label: 'Xem hóa đơn', primary: false }
-        : { key: 'invoice', label: 'Xuất hóa đơn', primary: false, ...(rest !== 'Received' && { disabledReason: 'Ghi nhận đã nhận tiền trước khi xuất hóa đơn.' }) },
-    )
+  if (o.status === 'Deposited') {
+    // Sau ngày thực hiện: Hoàn tất là nút chính (gồm cả ghi nhận tiền), không hiện Ghi nhận / Xuất hóa đơn riêng
+    if (passed && !requested) out.push({ key: 'complete', label: 'Hoàn tất', primary: true })
+    out.push({ key: 'edit', label: requested ? 'Chỉnh sửa theo yêu cầu' : 'Chỉnh sửa', primary: requested })
+    if (requested) out.push({ key: 'reject', label: 'Từ chối yêu cầu', primary: false })
+    if (passed && requested) out.push({ key: 'complete', label: 'Hoàn tất', primary: false })
+    if (!passed) {
+      // Trước ngày thực hiện: khách trả sớm thì ghi nhận; hóa đơn cuối mở khi đã ghi nhận
+      if (rest === 'Pending') out.push({ key: 'receiveRest', label: 'Ghi nhận đã nhận tiền', primary: false })
+      if (!hasFinal) out.push({ key: 'invoice', label: 'Xuất hóa đơn', primary: false, ...(rest !== 'Received' && { disabledReason: 'Ghi nhận đã nhận tiền trước khi xuất hóa đơn.' }) })
+    }
   }
+  if (o.status === 'Completed') {
+    // Chưa ghi nhận tiền (đơn tự hoàn thành, NCC quên bấm): Xuất hóa đơn hỏi "đã nhận đủ chưa" rồi ghi nhận luôn
+    out.push(hasFinal ? { key: 'viewInvoice', label: 'Xem hóa đơn', primary: false } : { key: 'invoice', label: 'Xuất hóa đơn', primary: true })
+  }
+  if (o.status === 'Deposited' && hasFinal) out.push({ key: 'viewInvoice', label: 'Xem hóa đơn', primary: false })
+  // Nút phụ: sửa ghi nhận nhầm, chỉ khi chưa xuất hóa đơn cuối (hóa đơn ghi "đã thanh toán đủ" không hủy được)
+  if ((o.status === 'Deposited' || o.status === 'Completed') && rest === 'Received' && !hasFinal) out.push({ key: 'unreceiveRest', label: 'Bỏ ghi nhận đã nhận tiền', primary: false })
   if (canCancel(o)) out.push({ key: 'cancel', label: o.cancelRequest ? 'Đồng ý hủy đơn' : 'Hủy đơn', primary: false, danger: true })
   return out
 }
@@ -91,7 +98,7 @@ export function useOrderActionRunner({ onOpenForm, onAgain, onView, onViewInvoic
   const reject = useRejectRevision()
   const restAction = useRestAction()
   const [confirm, setConfirm] = useState<{
-    type: 'complete' | 'invoice' | 'again' | 'cancel' | 'reject' | 'receiveRest' | 'unreceiveRest'
+    type: 'complete' | 'invoice' | 'invoiceRecord' | 'again' | 'cancel' | 'reject' | 'receiveRest' | 'unreceiveRest'
     order: Order
   } | null>(null)
 
@@ -112,7 +119,9 @@ export function useOrderActionRunner({ onOpenForm, onAgain, onView, onViewInvoic
       case 'complete':
         return eventPassed(o) ? setConfirm({ type: 'complete', order: o }) : undefined
       case 'invoice':
-        return o.restPayment?.status === 'Received' ? setConfirm({ type: 'invoice', order: o }) : undefined
+        // Đã ghi nhận tiền: xác nhận xuất; đơn đã hoàn thành mà chưa ghi nhận: hỏi đã nhận đủ chưa rồi ghi nhận và xuất
+        if (o.restPayment?.status === 'Received') return setConfirm({ type: 'invoice', order: o })
+        return o.status === 'Completed' ? setConfirm({ type: 'invoiceRecord', order: o }) : undefined
       case 'receiveRest':
         return setConfirm({ type: 'receiveRest', order: o })
       case 'unreceiveRest':
@@ -148,12 +157,24 @@ export function useOrderActionRunner({ onOpenForm, onAgain, onView, onViewInvoic
       <ConfirmDialog open={confirm?.type === 'unreceiveRest'} onOpenChange={close} title="Bỏ ghi nhận đã nhận tiền?" confirmLabel="Bỏ ghi nhận" onConfirm={() => o && void restAction(o.id, false, o.orderCode)}>
         <p>Đơn {o && <b>{o.orderCode}</b>} sẽ quay về trạng thái chưa nhận tiền phần còn lại.</p>
       </ConfirmDialog>
-      <ConfirmDialog open={confirm?.type === 'invoice'} onOpenChange={close} title="Xuất hóa đơn?" confirmLabel="Xuất hóa đơn" onConfirm={() => o && invoice.mutate(o.id)}>
+      <ConfirmDialog open={confirm?.type === 'invoice'} onOpenChange={close} title="Xuất hóa đơn?" confirmLabel="Xuất hóa đơn" onConfirm={() => o && invoice.mutate({ orderId: o.id })}>
         {o && (
           <p>
             Hóa đơn của đơn <b>{o.orderCode}</b> được gửi vào cuộc trò chuyện với khách. Mỗi đơn chỉ xuất một lần.
           </p>
         )}
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirm?.type === 'invoiceRecord'}
+        onOpenChange={close}
+        title="Đã nhận đủ tiền?"
+        confirmLabel="Đã nhận, xuất hóa đơn"
+        cancelLabel="Chưa, để sau"
+        onConfirm={() => o && invoice.mutate({ orderId: o.id, restReceived: true })}
+      >
+        <p>
+          Hóa đơn cuối ghi khách đã thanh toán đủ. Bạn đã nhận đủ <b>{o ? formatMoney(o.restPayment?.amount ?? o.totalAmount - o.depositAmount) : ''}</b> phần còn lại chưa? Bấm "Đã nhận, xuất hóa đơn" để ghi nhận và gửi hóa đơn của đơn {o && <b>{o.orderCode}</b>} cho khách.
+        </p>
       </ConfirmDialog>
       <ConfirmDialog open={confirm?.type === 'again'} onOpenChange={close} title="Tạo lại đơn?" confirmLabel="Tạo lại đơn" onConfirm={() => o && (onAgain ? onAgain(o) : onOpenForm({ kind: 'again', from: o }))}>
         <p>Tạo đơn mới với cùng thông tin, mã đơn mới.</p>
