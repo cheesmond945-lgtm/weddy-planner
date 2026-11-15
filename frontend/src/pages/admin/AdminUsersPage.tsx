@@ -13,6 +13,7 @@ import { PAGE_SIZE, ROLE_LABEL } from '@/features/adminUsers/constants'
 import { UserFormDialog } from '@/features/adminUsers/components/UserFormDialog'
 import { UserTable, type UserAction } from '@/features/adminUsers/components/UserTable'
 import { useAdminUsers, useDeleteUser, useLockUser } from '@/features/adminUsers/hooks'
+import { useCategoryOptions } from '@/features/catalog/hooks'
 import type { Role } from '@/types/auth'
 import type { AdminUser, AdminUserStatus } from '@/types/admin'
 
@@ -23,6 +24,8 @@ export default function AdminUsersPage() {
   const [params, setParams] = useSearchParams()
   const role = (params.get('vaitro') ?? '') as Role | ''
   const status = (params.get('tt') ?? '') as AdminUserStatus | ''
+  const categoryId = params.get('linhvuc') ?? ''
+  const { data: categories = [] } = useCategoryOptions()
   const page = Math.max(1, Number(params.get('trang')) || 1)
   const [search, setSearch] = useState(params.get('q') ?? '')
   const q = useDebounced(search.trim())
@@ -38,10 +41,10 @@ export default function AdminUsersPage() {
     setParams(next, { replace: true })
   }
 
-  const { data, isPending, isError, error, refetch, isPlaceholderData } = useAdminUsers({ q: q || undefined, role: role || undefined, status: status || undefined, page, pageSize: PAGE_SIZE })
+  const { data, isPending, isError, error, refetch, isPlaceholderData } = useAdminUsers({ q: q || undefined, role: role || undefined, status: status || undefined, categoryId: categoryId || undefined, page, pageSize: PAGE_SIZE })
   const lock = useLockUser()
   const del = useDeleteUser()
-  const filtering = !!(search || role || status)
+  const filtering = !!(search || role || status || categoryId)
   const clear = () => {
     setSearch('')
     setParams(new URLSearchParams(), { replace: true })
@@ -71,6 +74,14 @@ export default function AdminUsersPage() {
             {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABEL[r]}
+              </option>
+            ))}
+          </FilterSelect>
+          <FilterSelect label="Lọc theo lĩnh vực cung cấp" value={categoryId} onChange={(v) => set({ linhvuc: v })}>
+            <option value="">Tất cả lĩnh vực</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </FilterSelect>

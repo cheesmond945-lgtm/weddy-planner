@@ -151,6 +151,9 @@ export interface AdminUser {
   email: string
   phone: string | null
   role: Role
+  /** Lĩnh vực cung cấp (tên): chỉ có với nhà cung cấp, vai trò khác là null */
+  category: string | null
+  categoryId: string | null
   status: AdminUserStatus
   /** ISO */
   createdAt: string
@@ -180,6 +183,8 @@ export interface AdminUserQuery {
   q?: string
   role?: Role
   status?: AdminUserStatus
+  /** Lọc theo lĩnh vực cung cấp (id) */
+  categoryId?: string
   page?: number
   pageSize?: number
 }
