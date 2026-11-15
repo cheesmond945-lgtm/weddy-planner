@@ -34,7 +34,6 @@ export function UserTable({ users, startIndex, onAction }: UserTableProps) {
       <thead>
         <tr>
           <th className={th}>STT</th>
-          <th className={th}>Mã người dùng</th>
           <th className={th}>Tên người dùng</th>
           <th className={th}>Số điện thoại</th>
           <th className={th}>Email</th>
@@ -65,7 +64,6 @@ export function UserTable({ users, startIndex, onAction }: UserTableProps) {
           return (
             <tr key={u.id} className="transition-colors last:[&>td]:border-b-0 hover:bg-surface-2">
               <td className={cn(td, 'text-muted-foreground tabular-nums')}>{startIndex + i + 1}</td>
-              <td className={cn(td, 'font-semibold whitespace-nowrap tabular-nums')}>{u.code}</td>
               <td className={cn(td, 'whitespace-nowrap')}>
                 <span className="block font-medium">{u.name}</span>
                 <span className="text-[12px] text-muted-foreground">@{u.username}</span>

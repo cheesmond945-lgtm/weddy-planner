@@ -68,7 +68,7 @@ export default function AdminUsersPage() {
 
       <TableCard>
         <FilterBar>
-          <SearchBox value={search} onChange={setSearch} placeholder="Tìm theo tên, mã, email, doanh nghiệp..." />
+          <SearchBox value={search} onChange={setSearch} placeholder="Tìm theo tên, email, doanh nghiệp..." />
           <FilterSelect label="Lọc theo vai trò" value={role} onChange={(v) => set({ vaitro: v })}>
             <option value="">Tất cả vai trò</option>
             {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
@@ -127,7 +127,7 @@ export default function AdminUsersPage() {
         notice="Các đơn hàng đang xử lý vẫn được giữ nguyên. Người dùng sẽ nhận được email thông báo."
         onConfirm={() => dialog?.type === 'lock' && lock.mutate({ id: dialog.user.id, lock: true }, { onSuccess: () => setDialog(null) })}
       >
-        Người dùng <strong className="text-ink">{target?.name}</strong> ({target?.code}) sẽ không thể đăng nhập và sử dụng nền tảng cho đến khi được mở khóa.
+        Người dùng <strong className="text-ink">{target?.name}</strong> sẽ không thể đăng nhập và sử dụng nền tảng cho đến khi được mở khóa.
       </AdminConfirm>
 
       <AdminConfirm
@@ -140,7 +140,7 @@ export default function AdminUsersPage() {
         pending={lock.isPending}
         onConfirm={() => dialog?.type === 'unlock' && lock.mutate({ id: dialog.user.id, lock: false }, { onSuccess: () => setDialog(null) })}
       >
-        Mở khóa tài khoản cho người dùng <strong className="text-ink">{target?.name}</strong> ({target?.code}) đăng nhập và tiếp tục sử dụng nền tảng.
+        Mở khóa tài khoản cho người dùng <strong className="text-ink">{target?.name}</strong> đăng nhập và tiếp tục sử dụng nền tảng.
       </AdminConfirm>
 
       <AdminConfirm
@@ -154,7 +154,7 @@ export default function AdminUsersPage() {
         pending={del.isPending}
         onConfirm={() => dialog?.type === 'delete' && del.mutate(dialog.user.id, { onSuccess: () => setDialog(null) })}
       >
-        Bạn sắp xóa vĩnh viễn tài khoản của <strong className="text-ink">{target?.name}</strong> ({target?.code}). Hành động này không thể hoàn tác và toàn bộ dữ liệu liên quan sẽ bị xóa.
+        Bạn sắp xóa vĩnh viễn tài khoản của <strong className="text-ink">{target?.name}</strong>. Hành động này không thể hoàn tác và toàn bộ dữ liệu liên quan sẽ bị xóa.
       </AdminConfirm>
     </>
   )
