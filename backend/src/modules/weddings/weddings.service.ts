@@ -46,6 +46,8 @@ export interface WeddingPatchBody {
 const DEFAULT_CITY = 'Hà Nội';
 /** Tên cô dâu do bản cũ tự điền khi tạo đám cưới (lúc form chưa hỏi tên); trả về rỗng để form bắt nhập lại. */
 const NAME_PLACEHOLDER = '(chưa cập nhật)';
+/** Tên cô dâu/chú rể trả cho FE: chưa nhập (null hoặc chuỗi giữ chỗ cũ) thì trả chuỗi rỗng. */
+export const coupleName = (v: string | null) => (v && v !== NAME_PLACEHOLDER ? v : '');
 
 const todayVN = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
 
@@ -97,8 +99,8 @@ export class WeddingsService {
     const { slugById } = await this.categoryMaps();
     return {
       id: w.id,
-      groomName: w.groom_name === NAME_PLACEHOLDER ? '' : w.groom_name,
-      brideName: w.bride_name === NAME_PLACEHOLDER ? '' : w.bride_name,
+      groomName: coupleName(w.groom_name),
+      brideName: coupleName(w.bride_name),
       date: ymd(w.wedding_date),
       location: w.city,
       ward: w.ward ?? null,
@@ -118,12 +120,11 @@ export class WeddingsService {
 
   async saveMine(userId: string, body: WeddingInputBody) {
     const errors: Record<string, string> = {};
+    // Tên cô dâu, chú rể không bắt buộc: để trống thì lưu null, các màn hiện chữ thay thế
     const groomName = typeof body.groomName === 'string' ? body.groomName.trim() : '';
-    if (!groomName) errors.groomName = 'Vui lòng nhập tên chú rể.';
-    else if (groomName.length > 100) errors.groomName = 'Tối đa 100 ký tự.';
+    if (groomName.length > 100) errors.groomName = 'Tối đa 100 ký tự.';
     const brideName = typeof body.brideName === 'string' ? body.brideName.trim() : '';
-    if (!brideName) errors.brideName = 'Vui lòng nhập tên cô dâu.';
-    else if (brideName.length > 100) errors.brideName = 'Tối đa 100 ký tự.';
+    if (brideName.length > 100) errors.brideName = 'Tối đa 100 ký tự.';
     const date = typeof body.date === 'string' ? body.date : '';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) errors.date = 'Chọn ngày tổ chức.';
     else if (date <= todayVN()) errors.date = 'Ngày tổ chức phải sau hôm nay.';
@@ -149,8 +150,8 @@ export class WeddingsService {
     const existing = await this.findWedding(userId);
     // Cột style giữ trong DB nhưng không dùng nữa (bỏ phong cách 30/10/2026)
     const data = {
-      groom_name: groomName,
-      bride_name: brideName,
+      groom_name: groomName || null,
+      bride_name: brideName || null,
       wedding_date: new Date(date),
       city: DEFAULT_CITY,
       guest_count: guest!,

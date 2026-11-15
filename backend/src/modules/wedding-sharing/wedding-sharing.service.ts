@@ -5,7 +5,7 @@ import { ymd } from '../orders/order-mapping';
 import { BudgetService } from '../weddings/budget.service';
 import { OverviewService } from '../weddings/overview.service';
 import { TimelineService } from '../weddings/timeline.service';
-import { WeddingsService } from '../weddings/weddings.service';
+import { WeddingsService, coupleName } from '../weddings/weddings.service';
 import type { PlanTab } from './plan-tabs';
 import { DEFAULT_SHARE_TABS, hashToken, isTokenShape, linkToken, normalizeTabs } from './sharing-rules';
 
@@ -100,7 +100,7 @@ export class WeddingSharingService {
   async publicPlan(token: string) {
     const { link, tabs } = await this.publicLink(token);
     const w = link.weddings;
-    return { wedding: { groomName: w.groom_name, brideName: w.bride_name, date: ymd(w.wedding_date) }, tabs };
+    return { wedding: { groomName: coupleName(w.groom_name), brideName: coupleName(w.bride_name), date: ymd(w.wedding_date) }, tabs };
   }
 
   /** Số liệu một tab, đã lọc ở backend: tab bị tắt thì 404; không có ghi chú, đơn hàng, email. */

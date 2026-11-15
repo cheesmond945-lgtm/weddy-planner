@@ -69,7 +69,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField
-          label={<Required>Tên cô dâu</Required>}
+          label="Tên cô dâu"
           icon={<UserRound />}
           maxLength={100}
           autoComplete="off"
@@ -83,7 +83,7 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
           className={FIELD}
         />
         <FormField
-          label={<Required>Tên chú rể</Required>}
+          label="Tên chú rể"
           icon={<UserRound />}
           maxLength={100}
           autoComplete="off"

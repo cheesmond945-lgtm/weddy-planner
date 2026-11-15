@@ -173,9 +173,9 @@ export default function PublicPlanPage() {
         </div>
         <div className="mb-5">
           <h1 className="text-[clamp(30px,4.6vw,46px)] leading-[1.08] tracking-[-0.02em]">
-            {p.wedding.groomName}
+            {p.wedding.groomName || 'Chú rể'}
             <span className="px-[0.22em] font-medium text-primary italic">&amp;</span>
-            {p.wedding.brideName}
+            {p.wedding.brideName || 'Cô dâu'}
           </h1>
           <p className="mt-1.5 text-muted-foreground">
             <b className="font-semibold text-ink">{formatDate(p.wedding.date)}</b>, còn {left} ngày

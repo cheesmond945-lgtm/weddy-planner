@@ -34,7 +34,7 @@ Chưa thiết lập đám cưới: các endpoint (trừ `GET`/`PUT /weddings/me`
 | Trường | Quy tắc |
 |---|---|
 | `date` | Ngày, bắt buộc, sau hôm nay |
-| `groomName`, `brideName` | Bắt buộc, tối đa 100 ký tự. Lỗi: "Vui lòng nhập tên chú rể." / "Vui lòng nhập tên cô dâu." |
+| `groomName`, `brideName` | Không bắt buộc, tối đa 100 ký tự. Để trống thì lưu null và response trả `""` (FE hiện "Chú rể" / "Cô dâu") |
 | `location` | **Chỉ có ở response**, BE luôn lưu `"Hà Nội"` (NCC chỉ có ở Hà Nội nên form không hỏi). Body có gửi thì bị bỏ qua. Vẫn trả về để gợi ý AI lọc theo khu vực |
 | `ward` | "Nơi tổ chức": một phường/xã của Hà Nội từ 01/07/2025 (Nghị quyết 1656/NQ-UBTVQH15: 51 phường, 75 xã), **có tiền tố**: `"Phường Cầu Giấy"`, `"Xã Đông Anh"`. Danh sách: `backend/src/modules/weddings/wards.ts`. Form bắt buộc chọn; API nhận `null`/không gửi (không gửi thì giữ nguyên khi sửa). Giá trị khác danh sách: lỗi "Nơi tổ chức phải là một phường/xã của Hà Nội." `null` ở response là đám cưới cũ chưa chọn. Chưa chạy `prisma/manual/2026-11-01-01-wedding-ward.sql` thì trường bị bỏ qua khi lưu |
 | `guestCount` | "Số khách dự kiến", bắt buộc, số nguyên ≥ 1 |

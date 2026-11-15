@@ -26,8 +26,6 @@ const vnd = (x: number) => `${(Math.ceil(x / 100_000) * 100_000).toLocaleString(
 export function validateWeddingForm(v: WeddingFormValues, todayIso: string, minCosts?: Record<string, number>): WeddingFormErrors {
   const errs: WeddingFormErrors = {}
   const guests = v.guestCount ? Number(v.guestCount) : NaN
-  if (!v.brideName.trim()) errs.brideName = 'Vui lòng nhập tên cô dâu.'
-  if (!v.groomName.trim()) errs.groomName = 'Vui lòng nhập tên chú rể.'
   if (!v.date) errs.date = 'Vui lòng chọn ngày tổ chức.'
   else if (v.date <= todayIso) errs.date = 'Ngày tổ chức phải sau hôm nay.'
   if (!v.ward) errs.ward = 'Vui lòng chọn nơi tổ chức.'

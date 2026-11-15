@@ -22,6 +22,10 @@ describe('validateWeddingForm', () => {
     assert.deepEqual(validateWeddingForm(valid, TODAY), {})
   })
 
+  it('tên cô dâu, chú rể để trống vẫn hợp lệ (không bắt buộc)', () => {
+    assert.deepEqual(validateWeddingForm({ ...valid, brideName: '', groomName: '  ' }, TODAY), {})
+  })
+
   it('ngày trong quá khứ hoặc hôm nay: báo lỗi ngày', () => {
     assert.equal(validateWeddingForm({ ...valid, date: '2026-10-01' }, TODAY).date, 'Ngày tổ chức phải sau hôm nay.')
     assert.equal(validateWeddingForm({ ...valid, date: TODAY }, TODAY).date, 'Ngày tổ chức phải sau hôm nay.')
