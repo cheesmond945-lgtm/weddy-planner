@@ -17,7 +17,8 @@ interface CancelOrderDialogProps {
 /**
  * Hủy đơn đã cọc (chỉ trước ngày thực hiện). Lý do tự suy ra, NCC không chọn (để không gán lỗi cho khách mà giữ cọc):
  * - Khách đã gửi yêu cầu hủy: "Khách yêu cầu hủy", khách mất cọc, NCC giữ cọc và trả hoa hồng trên tiền cọc (nút "Đồng ý hủy đơn").
- * - Khách chưa yêu cầu: NCC chủ động hủy là lỗi phía NCC, "NCC không thể thực hiện", NCC hoàn 100% cọc ngoài hệ thống, không hoa hồng.
+ * - Khách chưa yêu cầu: NCC chủ động hủy là lỗi phía NCC, "NCC không thể thực hiện", NCC hoàn 100% cọc ngoài hệ thống;
+ *   hoa hồng trên tiền cọc vẫn tính như phí hủy, để NCC không né hoa hồng bằng cách hủy rồi làm ngoài hệ thống.
  * Ghi chú cho khách tùy chọn. Hủy xong đơn bị khóa.
  */
 export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: CancelOrderDialogProps) {
@@ -44,7 +45,7 @@ export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: Cancel
             </span>
           ) : (
             <span className="text-[12.5px] text-muted-foreground">
-              Khách chưa yêu cầu hủy nên đây là hủy do phía nhà cung cấp. Bạn phải <b className="font-semibold text-ink">hoàn lại 100% tiền cọc {deposit}</b> cho khách (chuyển khoản trực tiếp, ngoài hệ thống). Không tính hoa hồng.
+              Khách chưa yêu cầu hủy nên đây là hủy do phía nhà cung cấp. Bạn phải <b className="font-semibold text-ink">hoàn lại 100% tiền cọc {deposit}</b> cho khách (chuyển khoản trực tiếp, ngoài hệ thống). Hoa hồng trên tiền cọc vẫn được tính như phí hủy đơn.
             </span>
           )}
           {req?.note && <span className="mt-1 text-[13px]">Lời nhắn của khách: “{req.note}”</span>}

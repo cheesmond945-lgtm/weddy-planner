@@ -66,7 +66,7 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 
 - `POST /orders/:id/cancel-requests` `{ note? }`: đơn Deposited, còn trước ngày thực hiện. Tiền cọc không hoàn. Ghi `orders.cancel_requested_date`, `cancel_request_note`; báo NCC. Đã gửi rồi: 409 `CANCEL_ALREADY_REQUESTED`.
 - `DELETE /orders/:id/cancel-requests`: khách rút yêu cầu.
-- NCC đồng ý: `POST /vendors/me/orders/:id/cancel` với `reason = CUSTOMER_REQUEST` (đơn Cancelled, không hoa hồng, cọc tính là khoản mất trong tab Ngân sách, hạng mục trở về chưa chọn). NCC từ chối: `POST /vendors/me/orders/:id/cancel-requests/reject` `{ note? }`, đơn giữ nguyên.
+- NCC đồng ý: `POST /vendors/me/orders/:id/cancel` với `reason = CUSTOMER_REQUEST` (đơn Cancelled, hoa hồng tính trên tiền cọc, cọc tính là khoản mất trong tab Ngân sách, hạng mục trở về chưa chọn). NCC từ chối: `POST /vendors/me/orders/:id/cancel-requests/reject` `{ note? }`, đơn giữ nguyên.
 - `Order` có thêm `guestCount`, `cancelRequest { requestedDate, note } | null`, `guestChanges[]` (mới nhất trước).
 
 ## Quy tắc nghiệp vụ (tóm tắt)

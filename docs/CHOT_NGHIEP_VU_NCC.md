@@ -64,8 +64,8 @@
 
 - Tỷ lệ theo loại dịch vụ (`ServiceCategories.CommissionRate`): Nhà hàng 5%, Decor 7%, Hoa cưới 8%, Trang phục 8%, Chụp ảnh 8%, Makeup 10%. Tỷ lệ được chụp lại vào `Commissions.Rate` lúc đơn hoàn thành.
 - Tính trên `TotalAmount` cuối cùng **khi đơn `Completed`**; kỳ = tháng chứa `CompletedDate`.
-- **Hủy do `VENDOR_UNABLE` (NCC hoàn 100% cọc cho khách): không có hoa hồng.** Lý do này chỉ NCC tự chọn khi hủy; điều khoản khách (Điều 8) và điều khoản đối tác (Điều 8) đều nêu NCC hủy thì hoàn cọc, chọn sai lý do để giữ cọc là vi phạm.
-- **Đơn hủy sau cọc do `CUSTOMER_REQUEST` (khách mất cọc): hoa hồng = tỷ lệ × `DepositAmount`**, kỳ = tháng chứa `CancelledDate`, `Commissions.OrderAmount` = tiền cọc. Hoàn thành thì tỷ lệ × cọc + tỷ lệ × phần còn lại = tỷ lệ × tổng đơn, nên không thu trùng. Mục đích: NCC không né hoa hồng bằng cách hủy đơn rồi làm ngoài hệ thống. Đơn `Expired` và đơn khách tự hủy khi chưa cọc: không có hoa hồng.
+- **Hủy do `VENDOR_UNABLE` (NCC hoàn 100% cọc cho khách): vẫn tính hoa hồng trên tiền cọc, như phí hủy của NCC.** Nếu không tính, NCC chỉ cần chọn lý do này, hoàn cọc rồi làm ngoài hệ thống là né được hoa hồng. Tính cả hai lý do thì lý do hủy không ảnh hưởng tiền, NCC không có động cơ chọn sai. Điều khoản khách (Điều 8) và điều khoản đối tác (Điều 1, 8) đều nêu NCC hủy thì hoàn cọc cho khách. Chưa có cơ chế kiểm tra NCC có hoàn cọc thật hay không (hướng phát triển: khách xác nhận đã nhận lại cọc, thống kê tỷ lệ hủy theo NCC).
+- **Đơn hủy sau cọc (`CUSTOMER_REQUEST` hoặc `VENDOR_UNABLE`): hoa hồng = tỷ lệ × `DepositAmount`**, kỳ = tháng chứa `CancelledDate`, `Commissions.OrderAmount` = tiền cọc. Hoàn thành thì tỷ lệ × cọc + tỷ lệ × phần còn lại = tỷ lệ × tổng đơn, nên không thu trùng. Mục đích: NCC không né hoa hồng bằng cách hủy đơn rồi làm ngoài hệ thống. Đơn `Expired` và đơn khách tự hủy khi chưa cọc: không có hoa hồng.
 - Hạn nộp **ngày 25 tháng sau**; NCC nộp một lần cho cả bảng kê **qua VietQR**. Không có upload minh chứng / Admin xác nhận.
 - Giao diện hiển thị đúng số backend trả về, không tự tính lại.
 

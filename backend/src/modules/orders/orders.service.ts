@@ -1002,9 +1002,10 @@ export class OrdersService {
 
   /**
    * NCC hủy đơn đã cọc: chỉ khi Deposited và hôm nay (giờ VN) còn TRƯỚC EventDate. Lý do (quy tắc nhóm chốt):
-   * - CUSTOMER_REQUEST: khách hủy, khách mất cọc; NCC giữ cọc nên trả hoa hồng trên TIỀN CỌC. Chỉ dùng được khi khách ĐÃ gửi
+   * - CUSTOMER_REQUEST: khách hủy, khách mất cọc; NCC giữ cọc. Chỉ dùng được khi khách ĐÃ gửi
    *   yêu cầu hủy (POST /orders/:id/cancel-requests), để NCC không gán lỗi cho khách mà giữ cọc.
-   * - VENDOR_UNABLE: lỗi do NCC, NCC hoàn 100% cọc cho khách ngoài hệ thống, không hoa hồng; NCC chủ động hủy được.
+   * - VENDOR_UNABLE: lỗi do NCC, NCC hoàn 100% cọc cho khách ngoài hệ thống; NCC chủ động hủy được.
+   * Cả hai lý do đều tính hoa hồng trên TIỀN CỌC (VENDOR_UNABLE: như phí hủy của NCC), để NCC không né hoa hồng bằng cách hủy rồi làm ngoài hệ thống.
    * Ghi CancelledDate, CancelReason; ghi chú (nếu có) CHỈ đưa vào tin hệ thống trong chat, không lưu cột; xóa việc chi tiết trên timeline của khách.
    */
   async cancel(userId: string, id: string, body: { reason?: string; note?: string }) {
@@ -1026,8 +1027,9 @@ export class OrdersService {
     const note = body.note?.trim() || null;
 
     const cancelledAt = new Date();
-    // Khách yêu cầu hủy: NCC giữ tiền cọc nên vẫn phải trả hoa hồng trên tiền cọc (cùng transaction với việc đổi trạng thái).
-    // NCC không thể thực hiện: NCC hoàn cọc cho khách nên không có hoa hồng.
+    // Hủy sau cọc (cả hai lý do) đều tính hoa hồng trên tiền cọc, cùng transaction với việc đổi trạng thái. Nếu VENDOR_UNABLE không tính,
+    // NCC chỉ cần chọn lý do đó, hoàn cọc rồi làm ngoài hệ thống là né được hoa hồng; tính cả hai thì lý do hủy không ảnh hưởng tiền.
+    // Với VENDOR_UNABLE khoản này như phí hủy của NCC (NCC vẫn phải hoàn 100% cọc cho khách).
     const cancelled = await this.prisma.$transaction(async (tx) => {
       const r = await tx.orders.updateMany({
         // Khách hủy: yêu cầu hủy phải còn (khách chưa rút) lúc ghi
@@ -1036,7 +1038,7 @@ export class OrdersService {
         data: { status: 'Cancelled', cancelled_date: cancelledAt, cancel_reason: reason, ...(dbFeatures.orderAdjustments && { cancel_requested_date: null, cancel_request_note: null }) },
       });
       if (!r.count) return false;
-      if (byCustomer) await addCommission(tx, order, vendor, cancelledAt, order.deposit_amount);
+      await addCommission(tx, order, vendor, cancelledAt, order.deposit_amount);
       return true;
     });
     if (!cancelled) return fail('ORDER_NOT_CANCELLABLE', 'Đơn không còn ở trạng thái đã đặt cọc, hoặc khách đã rút yêu cầu hủy.', 422);
