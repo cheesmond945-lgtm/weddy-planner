@@ -71,10 +71,20 @@ export async function expirePending(prisma: PrismaService, scope: Prisma.ordersW
  * Hoa hồng của một đơn hoàn thành vào bảng kê của THÁNG HOÀN THÀNH (giờ VN), hạn nộp ngày 25 tháng sau.
  * Bảng kê đã thanh toán thì đã khép lại: hoa hồng được tính dồn sang bảng kê tháng sau (lặp tới kỳ chưa thanh toán).
  */
-async function addCommission(tx: Prisma.TransactionClient, o: { id: string; total_amount: Prisma.Decimal | null }, vendor: { id: string; category_id: string | null }, completedAt: Date) {
+/**
+ * `base` mặc định là tổng đơn (đơn hoàn thành). Đơn bị hủy sau cọc: truyền tiền cọc, vì NCC đã giữ khoản cọc đó
+ * (đóng chỗ lách "hủy đơn rồi làm ngoài hệ thống"). Hoàn thành: rate × (cọc + phần còn lại) = rate × tổng; hủy: rate × cọc.
+ */
+export async function addCommission(
+  tx: Prisma.TransactionClient,
+  o: { id: string; total_amount: Prisma.Decimal | null },
+  vendor: { id: string; category_id: string | null },
+  completedAt: Date,
+  base: Prisma.Decimal | number | null = o.total_amount,
+) {
   const category = await tx.service_categories.findUniqueOrThrow({ where: { id: vendor.category_id! } });
   const rate = Number(category.commission_rate);
-  const total = Number(o.total_amount);
+  const total = Number(base);
   const commission = Math.round((total * rate) / 100);
   const vn = new Date(completedAt.getTime() + 7 * HOUR);
   let periodMonth = new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), 1));

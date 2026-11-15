@@ -12,7 +12,7 @@ export const DEPOSIT_TERMS_ARTICLES: DepositTermsArticle[] = [
   {
     title: 'Điều 1. Hủy đơn sau khi đặt cọc',
     key: true,
-    body: 'Sau khi thanh toán cọc thành công, nếu bạn hủy đơn thì khoản cọc sẽ không được hoàn lại. Đơn chuyển sang trạng thái “Đã hủy” và các công việc liên quan trong timeline sẽ bị xóa.',
+    body: 'Sau khi thanh toán cọc thành công, nếu bạn là bên yêu cầu hủy đơn thì khoản cọc sẽ không được hoàn lại. Đơn chuyển sang trạng thái “Đã hủy” và các công việc liên quan trong timeline sẽ bị xóa. Trường hợp nhà cung cấp là bên hủy hoặc không thể thực hiện, áp dụng Điều 8.',
   },
   {
     title: 'Điều 2. Kiểm tra đơn trước khi cọc',
@@ -38,5 +38,10 @@ export const DEPOSIT_TERMS_ARTICLES: DepositTermsArticle[] = [
   {
     title: 'Điều 7. Thanh toán phần còn lại',
     body: 'Phần còn lại (tổng đơn trừ tiền cọc) bạn thanh toán trực tiếp cho nhà cung cấp theo thỏa thuận giữa hai bên. Bạn có thể yêu cầu nhà cung cấp xuất hóa đơn cuối sau khi dịch vụ hoàn thành.',
+  },
+  {
+    title: 'Điều 8. Nhà cung cấp hủy hoặc không thực hiện được',
+    key: true,
+    body: 'Nếu nhà cung cấp hủy đơn, không thể thực hiện dịch vụ theo đơn đã đặt cọc, hoặc không có mặt thực hiện vào ngày hẹn, bạn được hoàn lại 100% tiền cọc. Nhà cung cấp có trách nhiệm hoàn cọc cho bạn; nếu chưa nhận được, hãy liên hệ Forever để được hỗ trợ. Nhà cung cấp vi phạm có thể bị Forever xử lý theo điều khoản đối tác, kể cả khóa tài khoản.',
   },
 ]

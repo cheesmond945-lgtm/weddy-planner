@@ -22,7 +22,7 @@ export const CHANGE_LABEL: Record<RevisionChangeType, string> = {
 
 /** Lý do hủy đơn: nhãn và hệ quả (hoàn cọc xử lý ngoài hệ thống). */
 export const CANCEL_REASON: Record<CancelReason, { label: string; effect: string }> = {
-  CUSTOMER_REQUEST: { label: 'Khách yêu cầu hủy', effect: 'Khách mất cọc.' },
-  VENDOR_UNABLE: { label: 'NCC không thể thực hiện', effect: 'NCC hoàn cọc cho khách ngoài hệ thống.' },
+  CUSTOMER_REQUEST: { label: 'Khách yêu cầu hủy', effect: 'Khách mất cọc, NCC giữ cọc và trả hoa hồng trên tiền cọc.' },
+  VENDOR_UNABLE: { label: 'NCC không thể thực hiện', effect: 'NCC hoàn 100% cọc cho khách ngoài hệ thống, không tính hoa hồng.' },
 }
 

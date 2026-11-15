@@ -22,7 +22,7 @@ export function PeriodOrders({ summary, detail, loading }: { summary: Commission
       <header className="flex flex-wrap items-end justify-between gap-2 px-5 pt-[18px] pb-4">
         <div>
           <h2 className="font-sans text-[15px] font-semibold tracking-normal">Đơn hoàn thành trong kỳ {formatPeriod(summary.period)}</h2>
-          <p className="mt-0.5 text-[12.5px] text-muted-foreground">Đơn khách đã thanh toán đủ (cọc và phần còn lại) và được đánh dấu hoàn thành.</p>
+          <p className="mt-0.5 text-[12.5px] text-muted-foreground">Đơn hoàn thành (tính trên tổng đơn) và đơn bị hủy sau khi khách đã cọc (tính trên tiền cọc).</p>
         </div>
         {lines.length > 0 && <span className="rounded-pill bg-gold-soft px-3 py-1 text-[12px] font-medium text-gold-ink">{lines.length} đơn</span>}
       </header>
@@ -63,7 +63,8 @@ export function PeriodOrders({ summary, detail, loading }: { summary: Commission
                   </td>
                   <td className={cn(td, 'whitespace-nowrap tabular-nums')}>{formatDay(l.eventDate)}</td>
                   <td className={cn(td, 'whitespace-nowrap tabular-nums')}>
-                    {formatDay(l.completedDate)}
+                    {l.orderStatus === 'Cancelled' ? formatDay(l.cancelledDate) : formatDay(l.completedDate)}
+                    {l.orderStatus === 'Cancelled' && <span className="mt-1 block w-fit rounded-pill bg-gold-soft px-2 text-[11px] text-gold-ink">Đã hủy · tính trên tiền cọc</span>}
                     {/* Hoàn thành ở kỳ đã thanh toán thì được tính dồn sang kỳ này */}
                     {l.originPeriod && <span className="mt-1 block w-fit rounded-pill bg-info-soft px-2 text-[11px] text-info">Dồn từ kỳ {formatPeriod(l.originPeriod)}</span>}
                   </td>

@@ -6,6 +6,7 @@ import { lateDaysOf, ymd, ymdVN } from '../orders/order-mapping';
 /*
  * Hoa hồng NCC trả Forever (docs/api/commissions.md), theo mô hình của CSDL:
  * - Một bảng kê cho mỗi NCC mỗi tháng; đơn vào kỳ của THÁNG HOÀN THÀNH (khi NCC thu đủ phần còn lại).
+ * - Đơn bị hủy sau cọc (NCC giữ cọc) vào kỳ của tháng hủy, hoa hồng tính trên TIỀN CỌC: rate × cọc + rate × còn lại = rate × tổng.
  * - Tỷ lệ lấy từ service_categories.commission_rate, lưu cố định vào từng dòng (commissions.rate).
  * - Bảng kê chỉ có hai trạng thái Unpaid/Paid do Admin ghi nhận (mã giao dịch, ngày trả); không có minh chứng NCC tự gửi.
  */
@@ -104,13 +105,19 @@ export class CommissionsService {
         eventDate: ymd(o.event_date),
         /** Ngày đơn hoàn thành (NCC xác nhận thu đủ hoặc hệ thống tự hoàn thành), giờ VN */
         completedDate: o.completed_date ? ymdVN(o.completed_date) : null,
+        /** Completed: tính trên tổng đơn. Cancelled: khách hủy sau cọc, NCC giữ cọc nên tính trên tiền cọc */
+        orderStatus: o.status === 'Cancelled' ? 'Cancelled' : 'Completed',
+        cancelledDate: o.cancelled_date ? ymdVN(o.cancelled_date) : null,
         category: cat,
         rate: Number(c.rate),
         baseAmount: Number(c.order_amount),
         commissionAmount: Number(c.amount),
         payments,
         // Đơn hoàn thành ở tháng khác kỳ này là đơn được tính dồn (bảng kê tháng đó đã thanh toán)
-        originPeriod: o.completed_date && ymdVN(o.completed_date).slice(0, 7) !== period ? ymdVN(o.completed_date).slice(0, 7) : null,
+        originPeriod: (() => {
+          const at = o.completed_date ?? o.cancelled_date;
+          return at && ymdVN(at).slice(0, 7) !== period ? ymdVN(at).slice(0, 7) : null;
+        })(),
       };
     });
 

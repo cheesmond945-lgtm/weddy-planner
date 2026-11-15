@@ -21,7 +21,7 @@ export const TERMS_ARTICLES: TermsArticle[] = [
       'Đối tác chiết khấu cho Forever {{TY_LE}}% trên giá trị đơn thực tế, theo tỷ lệ áp dụng cho loại dịch vụ {{TEN_LOAI_DICH_VU}}.',
       'Giá trị đơn thực tế là tổng giá trị cuối cùng của đơn trên Forever, sau mọi lần chỉnh sửa.',
       'Phí chỉ áp dụng khi khách hàng đã thanh toán hoàn tất cho Đối tác, tức là khi đơn chuyển sang trạng thái “Hoàn thành”. Đơn chuyển sang “Hoàn thành” khi Đối tác xác nhận sau ngày thực hiện dịch vụ, hoặc khi hệ thống tự xác nhận do đã quá ngày thực hiện dịch vụ hơn 7 ngày.',
-      'Đơn hết hạn cọc hoặc bị khách hủy không phát sinh hoa hồng.',
+      'Đơn hết hạn cọc hoặc khách hủy khi chưa đặt cọc không phát sinh hoa hồng. Đơn bị hủy do khách yêu cầu sau khi đã đặt cọc vẫn phát sinh hoa hồng trên số tiền cọc mà Đối tác giữ lại. Đơn Đối tác hủy vì không thể thực hiện và đã hoàn cọc cho khách thì không phát sinh hoa hồng.',
     ],
   },
   {
@@ -78,6 +78,7 @@ export const TERMS_ARTICLES: TermsArticle[] = [
     title: 'Điều 8. Thực hiện đơn và đặt cọc',
     paragraphs: [
       'Khi khách hàng đã đặt cọc, Đối tác có trách nhiệm thực hiện dịch vụ đúng hạng mục, đúng ngày và đúng chất lượng đã thỏa thuận trên đơn.',
+      'Nếu Đối tác hủy đơn, không thể thực hiện dịch vụ hoặc không có mặt vào ngày hẹn, Đối tác phải hoàn lại 100% tiền cọc cho khách hàng và chọn đúng lý do “NCC không thể thực hiện” khi hủy đơn. Không được ghi lý do “Khách yêu cầu hủy” khi khách không yêu cầu để giữ tiền cọc. Vi phạm sẽ bị xử lý theo Điều 11.',
       'Phần tiền còn lại do khách hàng thanh toán trực tiếp cho Đối tác. Khi khách hàng yêu cầu, Đối tác xuất hóa đơn cuối trên hệ thống.',
       'Mọi thay đổi về giá hoặc hạng mục sau khi khách cọc phải thực hiện qua chức năng chỉnh sửa đơn. Tổng giá trị mới không được thấp hơn số tiền khách đã cọc.',
     ],

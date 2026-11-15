@@ -111,7 +111,7 @@ export class AdminPaymentsService {
           where: { id },
           relationLoadStrategy: 'join',
           include: {
-            commissions: { include: { orders: { select: { id: true, order_code: true, customer_name: true, event_date: true, completed_date: true, total_amount: true } } }, orderBy: { created_date: 'asc' } },
+            commissions: { include: { orders: { select: { id: true, order_code: true, customer_name: true, event_date: true, completed_date: true, cancelled_date: true, status: true, total_amount: true } } }, orderBy: { created_date: 'asc' } },
             vendor_profiles: { include: { service_categories: true, users: { select: { full_name: true, email: true, phone_number: true, status: true } } } },
           },
         })
@@ -124,9 +124,10 @@ export class AdminPaymentsService {
     const [y, m] = period.split('-').map(Number);
     // Dòng hoa hồng thiếu đơn (dữ liệu hỏng) thì bỏ qua
     const lines = row.commissions.flatMap((c) => (c.orders ? [{ ...c, orders: c.orders }] : [])).map((c) => {
-      const done = c.orders.completed_date;
+      const done = c.orders.completed_date ?? c.orders.cancelled_date;
       const completedMonth = done ? ymdVN(done).slice(0, 7) : null;
       return {
+        orderStatus: c.orders.status === 'Cancelled' ? 'Cancelled' : 'Completed',
         id: c.id,
         orderId: c.orders.id,
         orderCode: c.orders.order_code,
