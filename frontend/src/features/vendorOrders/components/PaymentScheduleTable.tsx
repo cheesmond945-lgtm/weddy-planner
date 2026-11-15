@@ -68,7 +68,8 @@ export function PaymentScheduleTable({ order: o }: { order: Order }) {
       name: 'Đợt 2 · Thanh toán phần còn lại',
       percent: pct(100 - o.depositPercent),
       amount: formatMoney(rest),
-      due: `Hạn chót: ${formatDate(o.eventDate)} (ngày cưới)${viewer === 'COUPLE' ? '. Bạn có thể trả sớm hơn.' : ''}`,
+      // Cột đã tên "Hạn" nên ô chỉ ghi ngày; là ngày thực hiện của đơn (có thể khác ngày cưới, vd chụp ảnh trước ngày cưới)
+      due: `${formatDate(o.eventDate)} (ngày thực hiện)${viewer === 'COUPLE' ? '. Bạn có thể trả sớm hơn.' : ''}`,
       method: 'Trả trực tiếp cho NCC',
       state: restState(o, viewer),
     },

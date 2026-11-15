@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { Minus, Plus } from 'lucide-react'
+import { useId, useState, type ReactNode } from 'react'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/date'
@@ -15,11 +16,28 @@ import { PaymentScheduleTable } from './PaymentScheduleTable'
 
 const INVOICE_LABEL: Record<InvoiceType, string> = { DepositReceipt: 'Giấy xác nhận cọc', FinalInvoice: 'Hóa đơn cuối' }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** Một mục của chi tiết đơn. `collapsible`: tiêu đề là nút +/- để thu gọn hoặc mở nội dung (mặc định thu gọn trừ khi `defaultOpen`). */
+function Section({ title, children, collapsible, defaultOpen = false }: { title: ReactNode; children: ReactNode; collapsible?: boolean; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const id = useId()
+  const shown = !collapsible || open
   return (
     <section className="mb-[18px] border-b border-line pb-[18px] last:mb-0 last:border-b-0 last:pb-1">
-      <h4 className="mb-3 font-sans text-[15px] font-semibold tracking-normal">{title}</h4>
-      {children}
+      {collapsible ? (
+        <h4 className={cn('font-sans text-[15px] font-semibold tracking-normal', shown && 'mb-3')}>
+          <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 text-left hover:text-primary">
+            <span>{title}</span>
+            <span className="grid size-6 shrink-0 place-items-center rounded-full border border-line text-muted-foreground" aria-hidden>
+              {open ? <Minus className="size-3.5" /> : <Plus className="size-3.5" />}
+            </span>
+          </button>
+        </h4>
+      ) : (
+        <h4 className="mb-3 font-sans text-[15px] font-semibold tracking-normal">{title}</h4>
+      )}
+      <div id={id} hidden={!shown}>
+        {children}
+      </div>
     </section>
   )
 }
@@ -153,7 +171,14 @@ export function OrderDetailSections({ order: o, vendorView, onViewInvoice }: { o
         <PaymentScheduleTable order={o} />
       </Section>
 
-      <Section title="Lịch sử chỉnh sửa">
+      <Section
+        collapsible
+        title={
+          <>
+            Lịch sử chỉnh sửa{o.revisions.length > 0 && <span className="ml-1.5 font-normal text-muted-foreground">({o.revisions.length})</span>}
+          </>
+        }
+      >
         {o.revisions.length ? (
           <ul className="grid gap-2.5">
             {o.revisions.map((r) => (
