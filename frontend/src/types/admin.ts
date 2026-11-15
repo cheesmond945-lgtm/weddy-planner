@@ -151,6 +151,8 @@ export interface AdminUser {
   email: string
   phone: string | null
   role: Role
+  /** Tên doanh nghiệp: chỉ có với nhà cung cấp đã điền hồ sơ, còn lại là null */
+  businessName: string | null
   /** Lĩnh vực cung cấp (tên): chỉ có với nhà cung cấp, vai trò khác là null */
   category: string | null
   categoryId: string | null

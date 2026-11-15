@@ -68,7 +68,7 @@ export default function AdminUsersPage() {
 
       <TableCard>
         <FilterBar>
-          <SearchBox value={search} onChange={setSearch} placeholder="Tìm kiếm theo tên, mã, email..." />
+          <SearchBox value={search} onChange={setSearch} placeholder="Tìm theo tên, mã, email, doanh nghiệp..." />
           <FilterSelect label="Lọc theo vai trò" value={role} onChange={(v) => set({ vaitro: v })}>
             <option value="">Tất cả vai trò</option>
             {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (

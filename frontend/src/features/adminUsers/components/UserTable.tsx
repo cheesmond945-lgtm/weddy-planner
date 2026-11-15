@@ -39,6 +39,7 @@ export function UserTable({ users, startIndex, onAction }: UserTableProps) {
           <th className={th}>Số điện thoại</th>
           <th className={th}>Email</th>
           <th className={th}>Vai trò</th>
+          <th className={th}>Tên doanh nghiệp</th>
           <th className={th}>Lĩnh vực cung cấp</th>
           <th className={th}>Ngày tạo</th>
           <th className={th}>Thời gian truy cập</th>
@@ -72,6 +73,7 @@ export function UserTable({ users, startIndex, onAction }: UserTableProps) {
               <td className={cn(td, 'whitespace-nowrap tabular-nums')}>{u.phone ?? '—'}</td>
               <td className={cn(td, 'whitespace-nowrap')}>{u.email}</td>
               <td className={cn(td, 'whitespace-nowrap')}>{ROLE_LABEL[u.role]}</td>
+              <td className={cn(td, 'whitespace-nowrap')}>{u.businessName ?? '—'}</td>
               <td className={cn(td, 'whitespace-nowrap')}>{u.category ?? '—'}</td>
               <td className={cn(td, 'text-[13px] text-muted-foreground tabular-nums')}>
                 <Stamp iso={u.createdAt} />

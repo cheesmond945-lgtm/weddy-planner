@@ -59,7 +59,7 @@ type UserRow = {
   status: string | null;
   created_date: Date | null;
   last_login_at: Date | null;
-  vendor_profiles: { status: string | null; service_categories: { id: string; name: string | null } | null; _count: { vendor_documents: number; service_packages: number; vendor_verifications: number } } | null;
+  vendor_profiles: { status: string | null; business_name: string | null; service_categories: { id: string; name: string | null } | null; _count: { vendor_documents: number; service_packages: number; vendor_verifications: number } } | null;
 };
 
 /** NCC đã bắt đầu tạo hồ sơ: đã gửi xác minh (không còn nháp), hoặc đã tải giấy tờ / ảnh, tạo gói dịch vụ. Hồ sơ trống do Admin tạo kèm tài khoản chưa tính. */
@@ -90,6 +90,8 @@ export class AdminUsersService {
       email: u.email,
       phone: u.phone_number,
       role: ROLE_OUT[u.role ?? ''] ?? 'COUPLE',
+      /** Tên doanh nghiệp: chỉ có với nhà cung cấp đã điền hồ sơ, còn lại là null */
+      businessName: u.vendor_profiles?.business_name?.trim() || null,
       /** Lĩnh vực cung cấp: chỉ có với nhà cung cấp, vai trò khác là null */
       category: u.vendor_profiles?.service_categories?.name ?? null,
       categoryId: u.vendor_profiles?.service_categories?.id ?? null,
@@ -101,14 +103,14 @@ export class AdminUsersService {
 
   private async allRows() {
     return this.prisma.users.findMany({
-      select: { id: true, username: true, email: true, full_name: true, phone_number: true, role: true, status: true, created_date: true, last_login_at: true, vendor_profiles: { select: { status: true, service_categories: { select: { id: true, name: true } }, _count: { select: { vendor_documents: true, service_packages: true, vendor_verifications: true } } } } },
+      select: { id: true, username: true, email: true, full_name: true, phone_number: true, role: true, status: true, created_date: true, last_login_at: true, vendor_profiles: { select: { status: true, business_name: true, service_categories: { select: { id: true, name: true } }, _count: { select: { vendor_documents: true, service_packages: true, vendor_verifications: true } } } } },
     });
   }
 
   async list(q: UserQueryDto) {
     const all = this.dtos(await this.allRows());
     const filtered = all
-      .filter((u) => matches(q.q, u.name, u.username, u.email, u.phone, u.code) && (!q.role || u.role === q.role) && (!q.status || u.status === q.status) && (!q.categoryId || u.categoryId === q.categoryId))
+      .filter((u) => matches(q.q, u.name, u.username, u.email, u.phone, u.code, u.businessName) && (!q.role || u.role === q.role) && (!q.status || u.status === q.status) && (!q.categoryId || u.categoryId === q.categoryId))
       .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '') || a.id.localeCompare(b.id));
     const page = Math.max(1, Math.trunc(Number(q.page)) || 1);
     const size = Math.min(200, Math.max(1, Math.trunc(Number(q.pageSize)) || 10));
