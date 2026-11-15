@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { InvoiceType, Order, OrderRevision } from '@/types/vendorOrder'
+import type { InvoiceType, Order } from '@/types/vendorOrder'
+import { revisionHistory, type HistoryEntry, type HistoryStep } from '../revisionHistory'
 import { CANCEL_REASON } from '../constants'
 import { changesLabel, formatDay, formatDayTime, orderHint } from '../calc'
 import { OrderActions } from './OrderActions'
@@ -71,36 +72,41 @@ const REVISION_STATUS = {
   Rejected: { label: 'NCC đã từ chối', tone: 'neutral' },
 } as const
 
-function RevisionRow({ r }: { r: OrderRevision }) {
-  const requested = r.status === 'Requested'
-  // Yêu cầu của khách sau cọc (đang chờ hoặc bị từ chối): ghi chú là của khách, không phải "nội dung thay đổi" của NCC
-  const customerAfterDeposit = r.revisionType === 'AfterDeposit' && r.status !== 'Applied'
-  const status = REVISION_STATUS[r.status] ?? REVISION_STATUS.Applied
+/** Một thẻ lịch sử: phần khách yêu cầu (nếu có) và phần NCC đã sửa (nếu đã sửa), một dòng tổng của lần sửa đó (revisionHistory.ts). */
+function RevisionRow({ e }: { e: HistoryEntry }) {
+  const requested = e.status === 'Requested'
+  const status = REVISION_STATUS[e.status] ?? REVISION_STATUS.Applied
+  const what = (changes: HistoryStep['changes']) => (changes.length ? `: ${changesLabel({ changes })}` : '')
   return (
     <li className={cn('rounded-md border border-line px-3.5 py-3 text-[13.5px]', requested && 'border-l-[3px] border-l-warn')}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">
-          {formatDayTime(r.createdDate)} · {REVISION_TYPE[r.revisionType]}
+          {formatDayTime(e.at)} · {REVISION_TYPE[e.revisionType]}
         </span>
         <Badge tone={status.tone}>{status.label}</Badge>
       </div>
-      {r.changes.length > 0 && <p className="mt-1.5 font-medium">{changesLabel(r)}</p>}
-      <p className="mt-1 text-muted-foreground">
-        {customerAfterDeposit
-          ? `Khách yêu cầu: ${r.requestNote ?? ''}`
-          : r.revisionType === 'AfterDeposit'
-          ? r.requestNote
-            ? `Nội dung thay đổi: ${r.requestNote}`
-            : 'NCC chỉnh sửa đơn.'
-          : r.requestNote
-            ? r.requestNote
-            : r.changes.length
-              ? ''
-              : 'NCC tự chỉnh sửa đơn (không có yêu cầu của khách).'}
-      </p>
+      {e.request && (
+        <div className="mt-1.5">
+          <p>
+            <b className="font-medium">Khách yêu cầu</b>
+            <span className="text-muted-foreground"> lúc {formatDayTime(e.request.date)}</span>
+            {what(e.request.changes)}
+          </p>
+          {e.request.note && <p className="mt-0.5 text-muted-foreground">"{e.request.note}"</p>}
+        </div>
+      )}
+      {e.edit && (
+        <div className="mt-1.5">
+          <p>
+            <b className="font-medium">NCC đã sửa</b>
+            <span className="text-muted-foreground"> lúc {formatDayTime(e.edit.date)}</span>
+            {what(e.edit.changes)}
+          </p>
+          {e.edit.note && <p className="mt-0.5 text-muted-foreground">Nội dung thay đổi: {e.edit.note}</p>}
+        </div>
+      )}
       <p className="mt-1.5 tabular-nums">
-        Tổng {formatMoney(r.oldTotalAmount)} → {r.newTotalAmount === null ? <span className="text-muted-foreground">chưa áp dụng</span> : <b className="font-semibold">{formatMoney(r.newTotalAmount)}</b>}
-        {r.appliedDate && <span className="ml-2 text-[12.5px] text-muted-foreground">Áp dụng {formatDayTime(r.appliedDate)}</span>}
+        Tổng {formatMoney(e.oldTotal)} → {e.newTotal === null ? <span className="text-muted-foreground">chưa áp dụng</span> : <b className="font-semibold">{formatMoney(e.newTotal)}</b>}
       </p>
     </li>
   )
@@ -135,6 +141,8 @@ export function OrderDetailSections({
 }) {
   const th = 'border-y border-line bg-surface-2 px-3 py-2.5 text-left text-[11.5px] font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase'
   const td = 'px-3 py-2.5 align-top text-[13.5px]'
+  // Yêu cầu của khách và lần NCC sửa đáp ứng nó gộp một thẻ
+  const history = revisionHistory(o.revisions)
   return (
     <>
       <Section title="Thông tin đơn">
@@ -205,14 +213,14 @@ export function OrderDetailSections({
         collapsible
         title={
           <>
-            Lịch sử chỉnh sửa{o.revisions.length > 0 && <span className="ml-1.5 font-normal text-muted-foreground">({o.revisions.length})</span>}
+            Lịch sử chỉnh sửa{history.length > 0 && <span className="ml-1.5 font-normal text-muted-foreground">({history.length})</span>}
           </>
         }
       >
-        {o.revisions.length ? (
+        {history.length ? (
           <ul className="grid gap-2.5">
-            {o.revisions.map((r) => (
-              <RevisionRow key={r.id} r={r} />
+            {history.map((e) => (
+              <RevisionRow key={e.id} e={e} />
             ))}
           </ul>
         ) : (
