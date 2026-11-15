@@ -69,6 +69,7 @@
   --c4: #4f7fa8;
   --c5: #7a62a8;
   --c6: #b8664a;
+  --c7: #7f9140;
 
   /* Font */
   --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
@@ -118,6 +119,7 @@
     --c4: #7faad0;
     --c5: #a590ce;
     --c6: #de9276;
+    --c7: #aebd68;
     --shadow-rgb: 0 0 0;
   }
 }
@@ -159,5 +161,6 @@
   --c4: #7faad0;
   --c5: #a590ce;
   --c6: #de9276;
+  --c7: #aebd68;
   --shadow-rgb: 0 0 0;
 }

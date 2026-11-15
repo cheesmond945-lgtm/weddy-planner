@@ -15,7 +15,7 @@ const ICON_BY_SLUG: Record<string, LucideIcon> = {
 const COLOR_BY_SLUG: Record<string, string> = {
   'nha-hang': 'var(--c1)',
   decor: 'var(--c2)',
-  'hoa-cuoi': 'var(--c2)',
+  'hoa-cuoi': 'var(--c7)',
   'trang-phuc': 'var(--c3)',
   'trang-diem': 'var(--c4)',
   makeup: 'var(--c4)',

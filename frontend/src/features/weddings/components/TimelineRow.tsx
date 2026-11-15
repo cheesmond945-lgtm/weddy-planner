@@ -1,4 +1,4 @@
-import { Ban, CalendarDays, Check, Clock, Hourglass, Lock, Pencil, Sparkles, Store, Trash2 } from 'lucide-react'
+import { Ban, CalendarDays, Check, Clock, Hourglass, Lock, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { CategoryIcon, categoryColor } from '@/features/catalog/categoryIcons'
@@ -141,12 +141,12 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
           ),
         ].filter(Boolean)
     return (
-      <div data-state={done ? 'done' : 'todo'} className={cn('flex items-start gap-4 rounded-[22px] border border-line border-l-[4px] border-l-sage/50 bg-[color-mix(in_srgb,var(--sage-soft)_35%,var(--surface))] pl-[17px] pr-5 py-[16px] shadow-card max-[640px]:gap-3 max-[640px]:px-4', nested && 'gap-3 rounded-2xl px-4 py-3 shadow-sm max-[640px]:px-3', done && 'border-line/70 border-l-sage/25 bg-surface-2/60 opacity-60 shadow-none', leaving && !done && 'pointer-events-none -translate-x-6 scale-[0.98] opacity-0 duration-300')}>
-        {/* Ô biểu tượng đúng chỗ vòng tròn tick của việc khung: tên việc thẳng hàng với việc khung, và khác hình (vuông bo, biểu tượng NCC) để biết đây là việc của đơn */}
-        <span aria-hidden className={cn('grid size-[26px] shrink-0 place-items-center rounded-lg', done ? 'bg-sage/25 text-sage' : 'bg-sage-soft text-sage')}>
-          {done ? <Check className="size-4" strokeWidth={3} /> : <Store className="size-[15px]" strokeWidth={2} />}
-        </span>
-        <div className="min-w-0 flex-1">
+      <div
+        data-state={done ? 'done' : 'todo'}
+        style={{ '--cc': item.category?.slug ? categoryColor(item.category.slug) : 'var(--sage)' } as CSSProperties}
+        className={cn('rounded-[22px] border border-line border-l-[4px] border-l-(--cc) bg-[color-mix(in_srgb,var(--cc)_8%,var(--surface))] pl-[59px] pr-5 py-[16px] shadow-card max-[640px]:pl-[50px] max-[640px]:pr-4', nested && 'rounded-2xl py-3 pl-[50px] pr-4 shadow-sm max-[640px]:pr-3', done && 'border-line/70 border-l-(--cc)/30 bg-surface-2/60 opacity-60 shadow-none', leaving && !done && 'pointer-events-none -translate-x-6 scale-[0.98] opacity-0 duration-300')}
+      >
+        {/* pl-[59px] = chừa đúng chỗ vòng tick của việc khung, để tên việc thẳng hàng với việc khung */}
         <div className="flex items-start justify-between gap-3">
           <div className={cn('min-w-0 flex-1 leading-snug font-semibold [overflow-wrap:anywhere]', nested ? 'text-[15.5px]' : 'text-[17px]', done && 'text-muted-foreground')}>
             <TaskTitle as="div" title={item.title} className="" noteClassName="text-[13px]" />
@@ -165,7 +165,6 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
           )}
         </div>
         {notes.length > 0 && <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted-foreground">{notes}</div>}
-        </div>
       </div>
     )
   }
