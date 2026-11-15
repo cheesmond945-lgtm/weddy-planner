@@ -54,6 +54,10 @@ Tạo hoặc cập nhật. Body: `Wedding` không có `id` và `location`. Respo
 
 - **Lần đầu tạo**: lưu ngày tạo làm mốc bắt đầu, tạo 4 việc mặc định (việc đầu đã xong): Xác định ngân sách và quy mô tiệc; Lập danh sách khách mời sơ bộ; Thiết kế và gửi thiệp mời; Xác nhận lần cuối với các nhà cung cấp.
 - **Đổi `date`**: các hạn trên timeline **tự tính lại theo tỷ lệ** thời gian giữa mốc bắt đầu và ngày cưới (prototype lưu mỗi mốc dạng tỷ lệ 0..1).
+- **Đổi `date` khi đã có đơn đã cọc** (nhóm chốt 15/11/2026; xem trước bằng `POST /weddings/me/timeline/regenerate-preview`, có `warnings[].kind` và `blocked`):
+  - **Tiệc cưới đã cọc ngày khác ngày mới:** 409 `VENUE_DATE_LOCKED` (`details.serviceId`, `orderCode`, `eventDate`). Khách nhắn nhà hàng đổi ngày tiệc trước (nhà hàng sửa đơn, hệ thống kiểm sảnh trống), rồi đổi ngày cưới sang đúng ngày tiệc.
+  - **Đơn đã cọc làm đúng ngày cưới cũ** (trang trí, trang điểm…): lưu được; hệ thống gửi thay khách yêu cầu "Đổi ngày thực hiện" (order_revisions AfterDeposit, Requested), tin hệ thống vào chat, báo NCC. Đơn có yêu cầu này không tự hoàn thành và NCC chưa hoàn tất được cho tới khi sửa ngày hoặc từ chối. NCC không nhận ngày mới mà khách hủy thì khách mất cọc.
+  - Đơn làm trước ngày cưới cũ (chụp ngoại cảnh, thử váy): chỉ nhắc khách. Đơn sau ngày cưới mới: báo NCC như trước.
 
 Lỗi: 400 `VALIDATION_ERROR`, `details` theo từng trường (`groomName`, `brideName`, `date`, `ward`, `guestCount`, `budget`, `budgetPreset`, `categorySlugs`); 400 `BUDGET_TOO_LOW` khi `budget` nhỏ hơn gói rẻ nhất trên Forever, hoặc nhỏ hơn tổng giá thấp nhất của các `categorySlugs` đã chọn theo số khách (`details.budget`, `details.categorySlugs`; cùng quy tắc với form, xem `GET /categories/min-costs` ở catalog.md)
 
@@ -140,7 +144,7 @@ Mỗi hạng mục chọn **một** dịch vụ.
 }
 ```
 
-`PlanItemStatus` (nhãn FE trong ngoặc): `PLANNED` (Dự kiến) → `DISCUSSING` (Đang trao đổi, khi bắt đầu nhắn tin hoặc khi cặp đôi yêu cầu sửa đơn) → `AWAITING_DEPOSIT` (Chờ thanh toán cọc, khi NCC gửi đơn) → `CONFIRMED` (Đã chốt, khi cọc xong).
+`PlanItemStatus` (nhãn FE trong ngoặc): `PLANNED` (Dự kiến) → `DISCUSSING` (Đang trao đổi, khi bắt đầu nhắn tin hoặc khi cặp đôi yêu cầu sửa đơn) → `AWAITING_DEPOSIT` (Chờ thanh toán cọc, khi NCC gửi đơn) → `CONFIRMED` (Đã chốt, khi cọc xong) → `COMPLETED` (Hoàn thành, khi đơn chuyển Completed). Chờ cọc, Đã chốt, Hoàn thành đều khóa hạng mục (không thêm NCC khác cùng hạng mục, không bỏ khỏi kế hoạch). Đơn bị hủy thì NCC không còn giữ hạng mục: tab Ngân sách bỏ NCC đó và cho chọn lại, đơn hủy chỉ còn trong lịch sử đơn ở tab Dịch vụ.
 
 `price` và `package` theo mục 7 (cách tính số 6): có đơn thì tổng đơn (`source: ORDER`, khóa đổi gói), khách đã chọn gói thì gói đó (`SELECTED`), chưa chọn thì gói dự kiến (`PLANNED`). `packages`: các gói đổi được, `cost` theo số bàn hiện tại, `fits = false` là không đủ chỗ cho số khách. `packageName`: tên dòng đầu của đơn nếu có, không thì tên gói đang tính.
 

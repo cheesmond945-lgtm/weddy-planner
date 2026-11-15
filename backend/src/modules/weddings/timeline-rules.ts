@@ -81,27 +81,45 @@ export interface OrderForDateChange {
   /** Ngày thực hiện của đơn */
   eventDate: string;
   vendorName: string;
+  /** Đơn tiệc cưới (hạng mục nhà hàng): sảnh gắn với ngày nên khóa việc đổi ngày cưới */
+  venue?: boolean;
 }
 
 export type DateChangeKind =
+  /** Đơn tiệc đã cọc khác ngày cưới mới: CHẶN đổi ngày cưới, khách phải nhắn nhà hàng đổi ngày tiệc trước */
+  | 'VENUE_LOCKED'
+  /** Đơn đã cọc làm đúng ngày cưới cũ (trang trí, trang điểm…): hệ thống gửi yêu cầu đổi ngày thực hiện cho NCC */
+  | 'WEDDING_DAY'
   /** Đơn đã cọc, ngày thực hiện khác ngày cưới mới (có thể là dịch vụ làm trước ngày cưới nên chỉ nhắc) */
   | 'DIFFERENT'
   /** Ngày thực hiện sau ngày cưới mới: đơn lệch thật, cần NCC đổi ngày */
   | 'AFTER_WEDDING';
 
+export interface DateChangeIssue {
+  kind: DateChangeKind;
+  blocksDeposit: boolean;
+  /** Không cho lưu ngày cưới mới (VENUE_LOCKED) */
+  blocksChange: boolean;
+}
+
 /**
- * Đơn bị ảnh hưởng khi khách đổi ngày cưới sang `newWedding`; null nếu không ảnh hưởng.
- * - Deposited: khác ngày cưới mới thì nhắc (DIFFERENT), sau ngày cưới mới thì AFTER_WEDDING;
+ * Đơn bị ảnh hưởng khi khách đổi ngày cưới từ `oldWedding` sang `newWedding`; null nếu không ảnh hưởng.
+ * - Deposited, đơn tiệc, khác ngày cưới mới: VENUE_LOCKED (chặn đổi; đổi đúng sang ngày tiệc thì được);
+ * - Deposited, đúng ngày cưới cũ: WEDDING_DAY (dịch vụ trong ngày cưới, gửi yêu cầu đổi ngày cho NCC);
+ * - Deposited khác: sau ngày cưới mới thì AFTER_WEDDING, khác ngày cưới mới thì nhắc (DIFFERENT, có thể là dịch vụ làm trước);
  * - Pending / NeedRevision: chỉ khi ngày thực hiện sau ngày cưới mới (AFTER_WEDDING, `blocksDeposit`: khách chưa cọc được cho tới khi NCC đổi ngày);
  * - các trạng thái khác (nháp, hết hạn, hủy, hoàn thành): không ảnh hưởng.
  */
-export function dateChangeIssue(o: OrderForDateChange, newWedding: string): { kind: DateChangeKind; blocksDeposit: boolean } | null {
+export function dateChangeIssue(o: OrderForDateChange, newWedding: string, oldWedding?: string | null): DateChangeIssue | null {
   if (!o.eventDate) return null;
+  const issue = (kind: DateChangeKind, blocksDeposit = false): DateChangeIssue => ({ kind, blocksDeposit, blocksChange: kind === 'VENUE_LOCKED' });
   if (o.status === 'Deposited') {
-    if (o.eventDate > newWedding) return { kind: 'AFTER_WEDDING', blocksDeposit: false };
-    return o.eventDate !== newWedding ? { kind: 'DIFFERENT', blocksDeposit: false } : null;
+    if (o.eventDate === newWedding) return null;
+    if (o.venue) return issue('VENUE_LOCKED');
+    if (oldWedding && o.eventDate === oldWedding) return issue('WEDDING_DAY');
+    return issue(o.eventDate > newWedding ? 'AFTER_WEDDING' : 'DIFFERENT');
   }
-  if ((o.status === 'Pending' || o.status === 'NeedRevision') && o.eventDate > newWedding) return { kind: 'AFTER_WEDDING', blocksDeposit: true };
+  if ((o.status === 'Pending' || o.status === 'NeedRevision') && o.eventDate > newWedding) return issue('AFTER_WEDDING', true);
   return null;
 }
 
@@ -110,6 +128,12 @@ const dmyOf = (s: string) => s.split('-').reverse().join('/');
 /** Câu cảnh báo cho khách trong hộp xem trước đổi ngày cưới. */
 export function customerDateWarning(o: OrderForDateChange, issue: { kind: DateChangeKind; blocksDeposit: boolean }, newWedding: string): string {
   const base = `Đơn ${o.orderCode} của ${o.vendorName} thực hiện ngày ${dmyOf(o.eventDate)}`;
+  if (issue.kind === 'VENUE_LOCKED') {
+    return `Bạn đã đặt cọc tiệc cưới tại ${o.vendorName} ngày ${dmyOf(o.eventDate)} (đơn ${o.orderCode}). Muốn dời ngày cưới, hãy nhắn nhà hàng đổi ngày tiệc trước (nhà hàng chỉ đổi được khi sảnh còn trống ngày mới), sau đó đổi ngày cưới sang đúng ngày tiệc.`;
+  }
+  if (issue.kind === 'WEDDING_DAY') {
+    return `${base}, đúng ngày cưới cũ. Khi bạn xác nhận, hệ thống gửi yêu cầu đổi ngày thực hiện sang ${dmyOf(newWedding)} cho nhà cung cấp. Nếu nhà cung cấp không nhận được ngày mới và bạn hủy đơn thì tiền cọc không được hoàn.`;
+  }
   if (issue.kind === 'DIFFERENT') return `${base}, khác ngày cưới mới. Nhắn NCC để chỉnh sửa đơn.`;
   if (issue.blocksDeposit) return `${base}, sau ngày cưới mới (${dmyOf(newWedding)}) nên bạn chưa đặt cọc được cho tới khi nhà cung cấp đổi ngày. Bạn bấm "Yêu cầu chỉnh sửa" và chọn "Đổi ngày thực hiện".`;
   return `${base}, sau ngày cưới mới (${dmyOf(newWedding)}). Nhắn NCC để cập nhật ngày thực hiện của đơn.`;
@@ -118,6 +142,11 @@ export function customerDateWarning(o: OrderForDateChange, issue: { kind: DateCh
 /** Câu báo cho NCC khi khách đã đổi ngày cưới làm đơn của họ lệch (chỉ AFTER_WEDDING). */
 export function vendorDateNotice(o: OrderForDateChange, newWedding: string): string {
   return `Khách đã đổi ngày cưới sang ${dmyOf(newWedding)}, đơn ${o.orderCode} đang thực hiện ngày ${dmyOf(o.eventDate)} (sau ngày cưới). Hãy cập nhật ngày thực hiện của đơn.`;
+}
+
+/** Nội dung yêu cầu đổi ngày hệ thống gửi thay khách cho đơn làm đúng ngày cưới cũ (WEDDING_DAY). */
+export function weddingDayRequestNote(oldWedding: string, newWedding: string): string {
+  return `Khách đã đổi ngày cưới từ ${dmyOf(oldWedding)} sang ${dmyOf(newWedding)}. Đề nghị đổi ngày thực hiện của đơn sang ${dmyOf(newWedding)}.`;
 }
 
 // ---------- Kiểm tra toàn vẹn (npm run timelines:audit) ----------

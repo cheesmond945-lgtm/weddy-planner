@@ -5,6 +5,11 @@ import { publish } from '../realtime/realtime.bus';
 import { applyRestReceived, closableDetailTasksWhere, type RestDb } from './rest-payment';
 import { AUTO_COMPLETE_DAYS, HOUR, addDaysYmd, autoCompleteCutoff, completedChatText, endOfDayVn, money, todayVn, ymdOf } from './order-rules';
 
+/** Đơn còn yêu cầu chỉnh sửa "Đổi ngày thực hiện" đang chờ NCC xử lý: chưa hoàn tất / tự hoàn thành được. */
+export const DATE_CHANGE_PENDING_WHERE: Prisma.ordersWhereInput = {
+  order_revisions: { some: { status: 'Requested', order_revision_changes: { some: { change_type: 'EventDate' } } } },
+};
+
 /*
  * Chuyển trạng thái đơn do thời gian hoặc do NCC (hết hạn cọc, hoàn thành). Mọi bước đều idempotent: chỉ xử lý dòng thật sự
  * đổi trạng thái (updateMany có điều kiện theo trạng thái cũ), nên chạy lặp hoặc chạy song song không gửi tin hay thông báo trùng.
@@ -148,10 +153,11 @@ export async function completeOrder(prisma: PrismaService, orderId: string, comp
 /**
  * Đơn Deposited có EventDate < hôm nay − 7 (đã quá ngày thực hiện hơn 7 ngày) tự hoàn thành; CompletedDate = cuối ngày EventDate + 7 (giờ VN)
  * để hoa hồng vào đúng tháng. Không kiểm tra đã ghi nhận đợt 2 hay chưa.
+ * Bỏ qua đơn còn yêu cầu đổi ngày thực hiện chưa xử lý (DATE_CHANGE_PENDING_WHERE): ví dụ khách dời ngày cưới, dịch vụ chưa diễn ra.
  */
 export async function autoComplete(prisma: PrismaService, scope: Prisma.ordersWhereInput = {}) {
   const cutoff = autoCompleteCutoff(todayVn());
-  const rows = await prisma.orders.findMany({ where: { status: 'Deposited', event_date: { lt: cutoff }, ...scope }, select: { id: true, event_date: true } });
+  const rows = await prisma.orders.findMany({ where: { status: 'Deposited', event_date: { lt: cutoff }, NOT: DATE_CHANGE_PENDING_WHERE, ...scope }, select: { id: true, event_date: true } });
   let n = 0;
   for (const o of rows) {
     const completedAt = endOfDayVn(addDaysYmd(ymdOf(o.event_date!), AUTO_COMPLETE_DAYS));

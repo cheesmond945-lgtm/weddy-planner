@@ -1,11 +1,12 @@
 import type { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { notify } from '../chat/chat-messages';
+import { notify, postMessage } from '../chat/chat-messages';
+import { categoryKindOf } from '../catalog/category-kind';
 import { syncOrderPackageTasks as syncOrderPackageTasksOf, type SyncDb } from './order-package-sync';
 import { loadPackageMeta, packagesOfOrder } from './package-task-meta';
 import { baseCode, cancelPlan, frameRows, isOrderTaskCode, isRemovedCode, packageSwitchPlan, PKG_PREFIX, pkgTaskIdOf, replanOrderTasks, type PackageTaskRef, type ServiceRef } from './timeline-rows';
 import { replanOnWeddingDateChange } from './timeline-schedule';
-import { customerDateWarning, dateChangeIssue, vendorDateNotice } from './timeline-rules';
+import { customerDateWarning, dateChangeIssue, vendorDateNotice, weddingDayRequestNote, type DateChangeKind } from './timeline-rules';
 import { serviceKeyOf, TIMELINE_TEMPLATES, templateOf, type ServiceKey } from './timeline-templates';
 
 const ymdOf = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
@@ -112,15 +113,19 @@ export interface DateChangePlan {
   changes: { id: string; title: string; oldDate: string; newDate: string }[];
   /** Dòng cần UPDATE khi xác nhận */
   updates: { id: string; date: Date }[];
-  /** Đơn có ngày thực hiện lệch ngày cưới mới: đã cọc khác ngày, hoặc sau ngày cưới mới (chưa cọc thì kèm blocksDeposit) */
-  warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string; kind: 'DIFFERENT' | 'AFTER_WEDDING'; blocksDeposit: boolean }[];
+  /** Đơn có ngày thực hiện lệch ngày cưới mới (xem DateChangeKind); chưa cọc thì kèm blocksDeposit */
+  warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string; kind: DateChangeKind; blocksDeposit: boolean; blocksChange: boolean }[];
+  /** Có đơn tiệc đã cọc khác ngày cưới mới: không cho lưu ngày cưới mới */
+  blocked: boolean;
 }
 
 /**
  * Khi khách đổi ngày cưới: tính các việc sẽ đổi hạn (replanOnWeddingDateChange) và cảnh báo đơn lệch ngày. Chỉ đọc;
  * nơi gọi tự UPDATE `updates` (xem trước thì không, lưu ngày cưới thì trong cùng transaction).
+ * `oldWedding`: ngày cưới trước khi đổi (để nhận ra đơn làm đúng ngày cưới cũ); bỏ trống thì đọc từ DB.
  */
-export async function planWeddingDateChange(db: Db, weddingId: string, newWedding: string): Promise<DateChangePlan> {
+export async function planWeddingDateChange(db: Db, weddingId: string, newWedding: string, oldWedding?: string | null): Promise<DateChangePlan> {
+  const before = oldWedding !== undefined ? oldWedding : ymdOf((await db.weddings.findUnique({ where: { id: weddingId }, select: { wedding_date: true } }))?.wedding_date ?? null) || null;
   const [allTasks, cats, orders] = await Promise.all([
     db.timeline_tasks.findMany({ where: { wedding_id: weddingId }, select: { id: true, title: true, task_code: true, scheduled_date: true, status: true, order_id: true, category_id: true } }),
     db.service_categories.findMany({ select: { id: true, name: true } }),
@@ -141,40 +146,66 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
 
   const changes = replanOnWeddingDateChange(TIMELINE_TEMPLATES, { wedding: newWedding, today, tasks: existing, services });
   const byCode = new Map(tasks.map((t) => [t.task_code, t]));
+  const isVenue = (categoryId: string | null) => categoryKindOf(cats.find((c) => c.id === categoryId)?.name ?? null) === 'nha-hang';
   const warnings = orders.flatMap((o) => {
     const eventDate = ymdOf(o.event_date);
-    const view = { orderCode: o.order_code ?? '', status: o.status, eventDate, vendorName: o.vendor_profiles?.business_name ?? '' };
-    const issue = dateChangeIssue(view, newWedding);
+    const view = { orderCode: o.order_code ?? '', status: o.status, eventDate, vendorName: o.vendor_profiles?.business_name ?? '', venue: isVenue(o.vendor_profiles?.category_id ?? null) };
+    const issue = dateChangeIssue(view, newWedding, before);
     if (!issue) return [];
-    return [{ orderCode: view.orderCode, vendorName: view.vendorName, serviceId: o.vendor_profiles?.id ?? '', eventDate, kind: issue.kind, blocksDeposit: issue.blocksDeposit, message: customerDateWarning(view, issue, newWedding) }];
+    return [{ orderCode: view.orderCode, vendorName: view.vendorName, serviceId: o.vendor_profiles?.id ?? '', eventDate, kind: issue.kind, blocksDeposit: issue.blocksDeposit, blocksChange: issue.blocksChange, message: customerDateWarning(view, issue, newWedding) }];
   });
+  // Đơn tiệc (chặn đổi) lên đầu để khách thấy trước
+  warnings.sort((a, b) => Number(b.blocksChange) - Number(a.blocksChange));
   return {
     changes: changes.map((c) => ({ id: byCode.get(c.code)!.id, title: byCode.get(c.code)!.title ?? '', oldDate: c.from, newDate: c.to })),
     updates: changes.map((c) => ({ id: byCode.get(c.code)!.id, date: new Date(`${c.to}T00:00:00Z`) })),
     warnings,
+    blocked: warnings.some((w) => w.blocksChange),
   };
 }
 
 /**
- * Sau khi khách lưu ngày cưới mới: báo các NCC có đơn đang giữ ngày thực hiện sau ngày cưới mới (đã cọc, hoặc chưa cọc nhưng đang chờ / chỉnh sửa)
- * để họ chỉnh sửa đơn. Chỉ báo trường hợp AFTER_WEDDING (cần hành động); lỗi ghi thông báo không làm hỏng việc đổi ngày cưới.
+ * Sau khi khách lưu ngày cưới mới (lỗi ở đây không làm hỏng việc đổi ngày cưới):
+ * - WEDDING_DAY (đơn đã cọc làm đúng ngày cưới cũ): hệ thống gửi thay khách yêu cầu chỉnh sửa "Đổi ngày thực hiện" sang ngày cưới mới
+ *   (order_revisions AfterDeposit, Requested), tin hệ thống vào chat và báo NCC. Đơn có yêu cầu này không tự hoàn thành (order-lifecycle autoComplete)
+ *   cho tới khi NCC sửa đơn (yêu cầu thành Applied) hoặc từ chối. NCC không nhận ngày mới mà khách hủy thì khách mất cọc (nhóm chốt).
+ * - AFTER_WEDDING (đơn giữ ngày sau ngày cưới mới): báo NCC chỉnh sửa đơn.
  */
-export async function notifyVendorsOfWeddingDate(prisma: PrismaService, weddingId: string, newWedding: string) {
-  const orders = await prisma.orders.findMany({
-    where: { wedding_id: weddingId, status: { in: ['Deposited', 'Pending', 'NeedRevision'] } },
-    select: { id: true, order_code: true, status: true, event_date: true, vendor_profiles: { select: { user_id: true, business_name: true } } },
-  });
+export async function notifyVendorsOfWeddingDate(prisma: PrismaService, weddingId: string, newWedding: string, oldWedding?: string | null) {
+  const [orders, wedding] = await Promise.all([
+    prisma.orders.findMany({
+      where: { wedding_id: weddingId, status: { in: ['Deposited', 'Pending', 'NeedRevision'] } },
+      select: {
+        id: true,
+        order_code: true,
+        status: true,
+        event_date: true,
+        total_amount: true,
+        vendor_profiles: { select: { user_id: true, business_name: true } },
+        order_revisions: { where: { status: 'Requested' }, select: { id: true } },
+      },
+    }),
+    prisma.weddings.findUnique({ where: { id: weddingId }, select: { user_id: true } }),
+  ]);
   for (const o of orders) {
+    const vendorUser = o.vendor_profiles?.user_id;
+    if (!vendorUser) continue;
     const view = { orderCode: o.order_code ?? '', status: o.status, eventDate: ymdOf(o.event_date), vendorName: o.vendor_profiles?.business_name ?? '' };
-    if (dateChangeIssue(view, newWedding)?.kind !== 'AFTER_WEDDING' || !o.vendor_profiles?.user_id) continue;
-    await notify(prisma, {
-      userId: o.vendor_profiles.user_id,
-      type: 'WeddingDateChanged',
-      title: 'Khách đã đổi ngày cưới',
-      content: vendorDateNotice(view, newWedding),
-      referenceType: 'Order',
-      referenceId: o.id,
-    }).catch(() => undefined);
+    const kind = dateChangeIssue(view, newWedding, oldWedding)?.kind;
+    if (kind === 'WEDDING_DAY' && oldWedding) {
+      const note = weddingDayRequestNote(oldWedding, newWedding);
+      // Đã có yêu cầu chỉnh sửa đang chờ thì không tạo thêm (mỗi đơn một yêu cầu đang chờ), chỉ báo NCC
+      if (!o.order_revisions.length) {
+        await prisma.order_revisions.create({
+          data: { order_id: o.id, revision_type: 'AfterDeposit', request_note: note, old_total_amount: o.total_amount, status: 'Requested', order_revision_changes: { create: [{ change_type: 'EventDate' }] } },
+        });
+      }
+      const conv = wedding?.user_id ? await prisma.conversations.findFirst({ where: { couple_id: wedding.user_id, vendor_id: vendorUser }, select: { id: true } }) : null;
+      if (conv) await postMessage(prisma, { conversationId: conv.id, senderId: null, orderId: o.id, isRead: true, content: `Yêu cầu đổi ngày thực hiện đơn ${view.orderCode}: ${note}` });
+      await notify(prisma, { userId: vendorUser, type: 'WeddingDateChanged', title: 'Khách đã đổi ngày cưới', content: `Đơn ${view.orderCode}: ${note} Vào đơn để sửa ngày thực hiện.`, referenceType: 'Order', referenceId: o.id }).catch(() => undefined);
+    } else if (kind === 'AFTER_WEDDING') {
+      await notify(prisma, { userId: vendorUser, type: 'WeddingDateChanged', title: 'Khách đã đổi ngày cưới', content: vendorDateNotice(view, newWedding), referenceType: 'Order', referenceId: o.id }).catch(() => undefined);
+    }
   }
 }
 

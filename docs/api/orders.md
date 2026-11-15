@@ -75,7 +75,7 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 - **Chỉ một khoản trong hệ thống: tiền cọc qua VietQR** (`Payments`). Phần còn lại khách trả **tiền mặt trực tiếp cho NCC, ngoài hệ thống, không ghi nhận**. Không có nhiều đợt, không có "ghi nhận thanh toán", không có "đã thu / còn phải thu".
 - **Hai giai đoạn.** Trước cọc: khách Thanh toán cọc, Yêu cầu chỉnh sửa; NCC Chỉnh sửa đơn. Sau cọc (`Deposited`): khách **Yêu cầu chỉnh sửa** được (trước `eventDate`, `AfterDeposit` / `Requested`, đơn vẫn `Deposited`, tiền cọc giữ nguyên), không hủy; **NCC Chỉnh sửa** (áp dụng yêu cầu nếu có), **Từ chối yêu cầu**, hoặc **Hủy đơn**.
 - **Mỗi hạng mục tối đa MỘT đơn `Deposited` cùng lúc** (một đám cưới, tính theo hạng mục của NCC, không phân biệt NCC). Khách đặt cọc đơn thứ hai cùng hạng mục, hoặc NCC Gửi / Cập nhật / Tạo lại đơn khi hạng mục đã có đơn `Deposited` khác, đều bị chặn `409 CATEGORY_ALREADY_DEPOSITED`; muốn đổi NCC thì NCC cũ hủy đơn trước. Đơn `Completed` không giữ chỗ; lưu nháp không bị chặn. Kiểm tra cả trong transaction ghi nhận cọc (khóa theo đám cưới + hạng mục) để hai khoản cọc song song không cùng thành công.
-- **NCC hủy đơn:** chỉ khi `Deposited` và hôm nay (giờ VN) **nhỏ hơn** `eventDate` (xem `POST …/cancel`). Đơn `Pending` không cọc thì tự `Expired`, không hủy được.
+- **NCC hủy đơn:** chỉ khi `Deposited`, hôm nay (giờ VN) **nhỏ hơn** `eventDate` (xem `POST …/cancel`). Khách đã yêu cầu hủy: lý do "Khách yêu cầu hủy", khách mất cọc. Khách chưa yêu cầu: lý do "NCC không thể thực hiện", NCC hoàn cọc. Đơn `Pending` không cọc thì tự `Expired`, không hủy được.
 - Đơn `Expired` và `Cancelled` bị khóa. Muốn tiếp tục: NCC tạo **đơn mới** (mã mới) bằng cách chép hạng mục và ghi chú (FE gọi `POST /vendors/me/orders`, không có endpoint riêng).
 - **Backend tính tiền**, không tin số tiền từ giao diện:
   - `OrderItems.amount = quantity × unitPrice`; `totalAmount = SUM(amount)`.
@@ -259,7 +259,10 @@ Response 200: `{ "data": Order }`. Lỗi: 404, 409 `REVISION_NOT_FOUND` (không 
 
 ### POST /vendors/me/orders/:id/cancel
 
-**NCC hủy đơn đã cọc.** Chỉ khi `Deposited` và hôm nay (giờ Việt Nam) nhỏ hơn `eventDate`.
+**NCC hủy đơn đã cọc.** Chỉ khi `Deposited` và hôm nay (giờ Việt Nam) nhỏ hơn `eventDate`. Quy tắc nhóm chốt: **khách hủy thì khách mất cọc, lỗi do NCC thì NCC hoàn cọc**.
+
+- `CUSTOMER_REQUEST` (khách mất cọc): chỉ dùng khi **khách đã gửi yêu cầu hủy** (`cancelRequest` khác null, xem `POST /orders/:id/cancel-requests`), để NCC không gán lỗi cho khách. Chưa có yêu cầu: 409 `CANCEL_NOT_REQUESTED`. FE: nút "Đồng ý hủy đơn".
+- `VENDOR_UNABLE` (NCC không thể thực hiện, NCC hoàn cọc cho khách ngoài hệ thống): NCC chủ động hủy, không cần khách yêu cầu. Tin hệ thống và thông báo ghi rõ số tiền cọc NCC phải hoàn; cọc không tính là khoản mất trong tab Ngân sách. FE: nút "Hủy đơn" khi khách chưa yêu cầu.
 
 ```json
 { "reason": "CUSTOMER_REQUEST", "note": "Khách báo không tổ chức nữa." }
@@ -274,7 +277,7 @@ Response 200: `{ "data": Order }`. Lỗi: 400 `VALIDATION_ERROR` (thiếu hoặc
 
 **Hoàn tất.** Chỉ khi `Deposited` và `eventDate` **đã qua** (hôm nay theo giờ Việt Nam lớn hơn `eventDate`). Thành công: `Completed`, ghi `completedDate`, tạo `Commissions` gắn vào bảng kê của tháng chứa `completedDate` (xem [commissions.md](commissions.md)), thêm tin hệ thống "Đơn … đã hoàn thành".
 
-Response 200: `{ "data": Order }`. Lỗi: 404, 409 `ORDER_NOT_COMPLETABLE` (không phải `Deposited`), 409 `ORDER_EVENT_NOT_PASSED`.
+Response 200: `{ "data": Order }`. Lỗi: 404, 409 `ORDER_NOT_COMPLETABLE` (không phải `Deposited`), 409 `ORDER_EVENT_NOT_PASSED`, 409 `DATE_CHANGE_PENDING` (khách đang có yêu cầu "Đổi ngày thực hiện" chưa xử lý, vd vừa dời ngày cưới; đơn như vậy cũng không tự hoàn thành).
 
 ### POST /vendors/me/orders/:id/final-invoice
 

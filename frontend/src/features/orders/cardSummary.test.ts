@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { depositChip, endedReason, itemsSummary, itemsSummaryParts } from './cardSummary.ts'
+import { depositChip, depositedStatusLabel, endedReason, itemsSummary, itemsSummaryParts } from './cardSummary.ts'
 
 describe('itemsSummary: một dòng hạng mục', () => {
   it('sảnh tính theo bàn: tên · số bàn', () => {
@@ -46,5 +46,24 @@ describe('endedReason', () => {
     assert.equal(endedReason('Expired'), 'Quá hạn đặt cọc')
     assert.match(endedReason('Cancelled', 'VENDOR_UNABLE'), /NCC không thể thực hiện/)
     assert.match(endedReason('Cancelled', 'CUSTOMER_REQUEST'), /cọc không hoàn/)
+  })
+})
+
+describe('depositedStatusLabel: nhãn đơn đã cọc phía khách', () => {
+  const base = { status: 'Deposited', eventDate: '2026-11-13', restPayment: { status: 'Pending' as const }, revisions: [] }
+  it('chưa tới ngày thực hiện: giữ "Đã đặt cọc"', () => {
+    assert.equal(depositedStatusLabel(base, '2026-11-13'), null)
+  })
+  it('qua ngày, chưa thanh toán phần còn lại', () => {
+    assert.equal(depositedStatusLabel(base, '2026-11-15')?.label, 'Chờ thanh toán phần còn lại')
+  })
+  it('qua ngày, đã thanh toán đủ', () => {
+    assert.equal(depositedStatusLabel({ ...base, restPayment: { status: 'Received' } }, '2026-11-15')?.label, 'Chờ NCC hoàn tất')
+  })
+  it('có yêu cầu đổi ngày đang chờ: ưu tiên "Chờ NCC đổi ngày"', () => {
+    assert.equal(depositedStatusLabel({ ...base, revisions: [{ status: 'Requested', changes: ['EventDate'] }] }, '2026-11-15')?.label, 'Chờ NCC đổi ngày')
+  })
+  it('đơn không phải đã cọc: không đổi nhãn', () => {
+    assert.equal(depositedStatusLabel({ ...base, status: 'Completed' }, '2026-11-15'), null)
   })
 })

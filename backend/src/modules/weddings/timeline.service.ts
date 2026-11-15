@@ -192,10 +192,10 @@ export class TimelineService {
     const w = await this.weddings.requireWedding(userId);
     if (!isDate(weddingDate)) return fail('VALIDATION_ERROR', 'Chọn ngày tổ chức hợp lệ.', 400);
     if (weddingDate <= vnYmd(new Date())) return fail('VALIDATION_ERROR', 'Ngày tổ chức phải sau hôm nay.', 400);
-    const plan = await planWeddingDateChange(this.prisma, w.id, weddingDate);
+    const plan = await planWeddingDateChange(this.prisma, w.id, weddingDate, w.wedding_date ? toYmd(w.wedding_date) : null);
     const daysLeft = dayOf(weddingDate) - dayOf(vnYmd(new Date()));
     const changes = plan.changes.sort((a, b) => a.newDate.localeCompare(b.newDate));
-    return { count: changes.length, changes, warnings: plan.warnings, level: levelOf(daysLeft), daysLeft };
+    return { count: changes.length, changes, warnings: plan.warnings, blocked: plan.blocked, level: levelOf(daysLeft), daysLeft };
   }
 
   private async task(userId: string, id: string) {

@@ -12,14 +12,14 @@ import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
 import { PaidInFullBadge } from '@/features/vendorOrders/components/OrderBadges'
 import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
 import { REST_TONE_CLASS, restLabel } from '@/features/vendorOrders/restPayment'
-import { useNow } from '@/lib/clock'
+import { todayVN, useNow } from '@/lib/clock'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { paths } from '@/routes/paths'
 import { openRevision } from '@/features/vendorOrders/calc'
 import type { InvoiceType, Order } from '@/types/order'
-import { depositChip, endedReason, itemsSummaryParts } from '../cardSummary'
+import { depositChip, depositedStatusLabel, endedReason, itemsSummaryParts } from '../cardSummary'
 import { useCreateDeposit } from '../hooks'
 import { DepositQrDialog } from './DepositQrDialog'
 import { DepositTermsDialog } from './DepositTermsDialog'
@@ -71,7 +71,8 @@ export function CoupleOrderCard({ order: o, variant, categorySlug, onRevise, onM
   const deposit = useCreateDeposit()
 
   const chat = variant === 'chat'
-  const status = ORDER_STATUS[o.status]
+  // Đơn đã cọc mà đã qua ngày thực hiện hoặc đang chờ đổi ngày: nhãn rõ hơn "Đã đặt cọc"
+  const status = depositedStatusLabel(o, todayVN()) ?? ORDER_STATUS[o.status]
   // Đơn hết hạn / đã hủy cùng tông xám
   const ended = o.status === 'Expired' || o.status === 'Cancelled'
   const chip = o.status === 'Pending' && o.depositDueDate ? depositChip(o.depositDueDate, Date.now()) : null

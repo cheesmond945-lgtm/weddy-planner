@@ -128,12 +128,20 @@ export interface Timeline {
   daysLeft: number | null
 }
 
+export type DateChangeKind = 'VENUE_LOCKED' | 'WEDDING_DAY' | 'DIFFERENT' | 'AFTER_WEDDING'
+
 export interface DateChangePreview {
   /** Số việc chưa xong sẽ đổi hạn */
   count: number
   changes: { id: string; title: string; oldDate: string; newDate: string }[]
-  /** Đơn có ngày thực hiện lệch ngày cưới mới: đã cọc khác ngày, hoặc sau ngày cưới mới. blocksDeposit: đơn chưa cọc, khách chưa cọc được cho tới khi NCC đổi ngày */
-  warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string; kind?: 'DIFFERENT' | 'AFTER_WEDDING'; blocksDeposit?: boolean }[]
+  /**
+   * Đơn có ngày thực hiện lệch ngày cưới mới. kind: VENUE_LOCKED (đã cọc tiệc ngày khác, chặn đổi), WEDDING_DAY (đơn làm đúng ngày cưới cũ,
+   * hệ thống gửi yêu cầu đổi ngày cho NCC), DIFFERENT (đã cọc khác ngày, chỉ nhắc), AFTER_WEDDING (sau ngày cưới mới).
+   * blocksDeposit: đơn chưa cọc, khách chưa cọc được cho tới khi NCC đổi ngày. blocksChange: không cho lưu ngày cưới mới
+   */
+  warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string; kind?: DateChangeKind; blocksDeposit?: boolean; blocksChange?: boolean }[]
+  /** Có đơn tiệc đã cọc khác ngày cưới mới: không cho đổi ngày cưới */
+  blocked?: boolean
   level: PrepLevel
   daysLeft: number
 }
@@ -411,7 +419,7 @@ export interface ImportReport {
 
 // ---- Kế hoạch (5.1) ----
 
-export type PlanItemStatus = 'PLANNED' | 'DISCUSSING' | 'AWAITING_DEPOSIT' | 'CONFIRMED'
+export type PlanItemStatus = 'PLANNED' | 'DISCUSSING' | 'AWAITING_DEPOSIT' | 'CONFIRMED' | 'COMPLETED'
 
 export interface PlanItem {
   id: string

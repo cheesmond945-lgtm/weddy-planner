@@ -3,7 +3,7 @@ import type { Prisma } from '../../generated/prisma/client';
 import { buildPayInfo, depositContent, depositMatchContents, vietqrConfig } from '../../integrations/vietqr/vietqr';
 import { demoPaymentEnabled } from '../../integrations/vietqr/demo-mode';
 import { SepayService } from '../../integrations/vietqr/sepay.service';
-import { dbFeatures } from '../../prisma/db-features';
+import { dbFeatures, requireDbFeature } from '../../prisma/db-features';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ServicesService } from '../catalog/services.service';
 import { Paginated } from '../../common/utils/pagination';
@@ -13,7 +13,7 @@ import { findHallConflict, lockHallDay, usesHalls } from '../halls/hall-store';
 import { applyOrderPackageSwitch, onOrderCancelled, onOrderDeposited, onOrderEventDateChanged, planOrderPackageSwitch } from '../weddings/timeline-hooks';
 import { packagesOfOrder } from '../weddings/package-task-meta';
 import { OrderJobsService } from './order-jobs.service';
-import { addCommission, completeOrder, notifyRestCleared, notifyRestReceived } from './order-lifecycle';
+import { DATE_CHANGE_PENDING_WHERE, addCommission, completeOrder, notifyRestCleared, notifyRestReceived } from './order-lifecycle';
 import { runAfter } from '../../common/after-response';
 import { payCode } from '../weddings/timeline-rows';
 import { UPCOMING_DAYS, needsActionWhere, parseStatusFilter, restPendingWhere, tileWheres } from './order-filters';
@@ -22,6 +22,7 @@ import { ORDER_INCLUDE, OrderRow, toOrderDto, ymd, ymdVN } from './order-mapping
 import { publish } from '../realtime/realtime.bus';
 import {
   CANCEL_LABEL,
+  CANCEL_REASONS,
   CategoryOrder,
   CHANGE_LABEL,
   CHANGE_TYPES,
@@ -870,6 +871,9 @@ export class OrdersService {
     const { order } = await this.ownedByVendor(userId, id);
     if (order.status !== 'Deposited') return fail('ORDER_NOT_COMPLETABLE', 'Chỉ hoàn tất được đơn đã đặt cọc.', 409);
     if (todayVn() <= ymd(order.event_date)) return fail('ORDER_EVENT_NOT_PASSED', 'Chỉ hoàn tất được khi đã qua ngày thực hiện.', 409);
+    if (await this.prisma.orders.count({ where: { id, ...DATE_CHANGE_PENDING_WHERE } })) {
+      return fail('DATE_CHANGE_PENDING', 'Khách đang yêu cầu đổi ngày thực hiện (dịch vụ chưa diễn ra). Hãy sửa ngày thực hiện của đơn hoặc từ chối yêu cầu trước khi hoàn tất.', 409);
+    }
     const gate = completeGate(this.restOf(order), body?.restReceived);
     if (typeof gate !== 'string') return fail(gate.code, gate.message, gate.status, gate.details);
     if (!(await completeOrder(this.prisma, id, new Date(), 'VENDOR', { restReceived: gate === 'record' }))) return fail('ORDER_NOT_COMPLETABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 409);
@@ -997,19 +1001,27 @@ export class OrdersService {
   }
 
   /**
-   * NCC hủy đơn đã cọc: chỉ khi Deposited và hôm nay (giờ VN) còn TRƯỚC EventDate. Bắt buộc chọn lý do
-   * (CUSTOMER_REQUEST: khách mất cọc; VENDOR_UNABLE: NCC hoàn cọc ngoài hệ thống), ghi chú tùy chọn.
-   * Ghi CancelledDate, CancelReason; ghi chú (nếu có) CHỈ đưa vào tin hệ thống trong chat, không lưu cột; tin hệ thống vào chat; hoa hồng trên TIỀN CỌC chỉ khi CUSTOMER_REQUEST (NCC giữ cọc), VENDOR_UNABLE thì NCC hoàn cọc, không hoa hồng; xóa việc chi tiết trên timeline của khách.
+   * NCC hủy đơn đã cọc: chỉ khi Deposited và hôm nay (giờ VN) còn TRƯỚC EventDate. Lý do (quy tắc nhóm chốt):
+   * - CUSTOMER_REQUEST: khách hủy, khách mất cọc; NCC giữ cọc nên trả hoa hồng trên TIỀN CỌC. Chỉ dùng được khi khách ĐÃ gửi
+   *   yêu cầu hủy (POST /orders/:id/cancel-requests), để NCC không gán lỗi cho khách mà giữ cọc.
+   * - VENDOR_UNABLE: lỗi do NCC, NCC hoàn 100% cọc cho khách ngoài hệ thống, không hoa hồng; NCC chủ động hủy được.
+   * Ghi CancelledDate, CancelReason; ghi chú (nếu có) CHỈ đưa vào tin hệ thống trong chat, không lưu cột; xóa việc chi tiết trên timeline của khách.
    */
   async cancel(userId: string, id: string, body: { reason?: string; note?: string }) {
     const { vendor, order } = await this.ownedByVendor(userId, id);
     const reason = body?.reason;
-    // CUSTOMER_REQUEST: khách mất cọc, NCC giữ cọc. VENDOR_UNABLE: NCC hoàn 100% cọc cho khách (ngoài hệ thống)
-    if (reason !== 'CUSTOMER_REQUEST' && reason !== 'VENDOR_UNABLE') {
-      return fail('VALIDATION_ERROR', 'Lý do hủy đơn không hợp lệ.', 400, { reason: 'Lý do phải là CUSTOMER_REQUEST hoặc VENDOR_UNABLE.' });
+    if (!CANCEL_REASONS.includes(reason as CancelReason)) {
+      return fail('VALIDATION_ERROR', 'Lý do hủy đơn không hợp lệ.', 400, { reason: 'Chọn CUSTOMER_REQUEST (khách yêu cầu hủy) hoặc VENDOR_UNABLE (NCC không thể thực hiện).' });
     }
     if (order.status !== 'Deposited' || todayVn() >= ymd(order.event_date)) {
       return fail('ORDER_NOT_CANCELLABLE', 'Chỉ hủy được đơn đã đặt cọc và còn trước ngày thực hiện.', 422);
+    }
+    const byCustomer = reason === 'CUSTOMER_REQUEST';
+    if (byCustomer) {
+      requireDbFeature('orderAdjustments');
+      if (!(order as { cancel_requested_date?: Date | null }).cancel_requested_date) {
+        return fail('CANCEL_NOT_REQUESTED', 'Khách chưa gửi yêu cầu hủy đơn, không ghi lý do "Khách yêu cầu hủy" được. Nếu nhà cung cấp không thể thực hiện, chọn lý do VENDOR_UNABLE và hoàn cọc cho khách.', 409);
+      }
     }
     const note = body.note?.trim() || null;
 
@@ -1018,15 +1030,16 @@ export class OrdersService {
     // NCC không thể thực hiện: NCC hoàn cọc cho khách nên không có hoa hồng.
     const cancelled = await this.prisma.$transaction(async (tx) => {
       const r = await tx.orders.updateMany({
-        where: { id, status: 'Deposited' },
+        // Khách hủy: yêu cầu hủy phải còn (khách chưa rút) lúc ghi
+        where: { id, status: 'Deposited', ...(byCustomer && { cancel_requested_date: { not: null } }) },
         // Hủy thì bỏ luôn yêu cầu hủy của khách (nếu có)
         data: { status: 'Cancelled', cancelled_date: cancelledAt, cancel_reason: reason, ...(dbFeatures.orderAdjustments && { cancel_requested_date: null, cancel_request_note: null }) },
       });
       if (!r.count) return false;
-      if (reason === 'CUSTOMER_REQUEST') await addCommission(tx, order, vendor, cancelledAt, order.deposit_amount);
+      if (byCustomer) await addCommission(tx, order, vendor, cancelledAt, order.deposit_amount);
       return true;
     });
-    if (!cancelled) return fail('ORDER_NOT_CANCELLABLE', 'Đơn không còn ở trạng thái đã đặt cọc.', 422);
+    if (!cancelled) return fail('ORDER_NOT_CANCELLABLE', 'Đơn không còn ở trạng thái đã đặt cọc, hoặc khách đã rút yêu cầu hủy.', 422);
     // Yêu cầu đổi số khách đang chờ không còn ý nghĩa
     if (dbFeatures.orderAdjustments) {
       await this.prisma.order_adjustments.updateMany({ where: { order_id: id, status: { in: ['AwaitingVendor', 'AwaitingDeposit'] } }, data: { status: 'Rejected', decided_date: new Date() } });
@@ -1040,15 +1053,17 @@ export class OrdersService {
     if (!stillActive) await this.prisma.plan_vendors.deleteMany({ where: { wedding_id: order.wedding_id!, vendor_id: order.vendor_id! } });
 
     const label = CANCEL_LABEL[reason as CancelReason];
+    // Lỗi do NCC: nhắc rõ khoản cọc NCC phải hoàn (chuyển trực tiếp, ngoài hệ thống)
+    const refund = byCustomer ? '' : ` · NCC hoàn lại ${Number(order.deposit_amount ?? 0).toLocaleString('vi-VN')}đ tiền cọc cho khách`;
     const conversationId = await this.conversationOf(order);
     if (conversationId) {
-      await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `NCC đã hủy đơn ${order.order_code} · Lý do: ${label}${note ? ` · ${note}` : ''}` });
+      await postMessage(this.prisma, { conversationId, senderId: null, orderId: id, isRead: true, content: `NCC đã hủy đơn ${order.order_code} · Lý do: ${label}${refund}${note ? ` · ${note}` : ''}` });
     }
     await notify(this.prisma, {
       userId: order.weddings!.user_id!,
       type: 'OrderCancelled',
       title: 'Đơn dịch vụ đã bị hủy',
-      content: `Đơn ${order.order_code} đã bị nhà cung cấp hủy. Lý do: ${label}. Nhà cung cấp đã được gỡ khỏi kế hoạch, các việc chi tiết của dịch vụ ${order.vendor_profiles?.service_categories?.name ?? ''} đã được gỡ khỏi timeline.`,
+      content: `Đơn ${order.order_code} đã bị nhà cung cấp hủy. Lý do: ${label}${refund}. Nhà cung cấp đã được gỡ khỏi kế hoạch, các việc chi tiết của dịch vụ ${order.vendor_profiles?.service_categories?.name ?? ''} đã được gỡ khỏi timeline.`,
       referenceType: 'Order',
       referenceId: id,
     }).catch(() => undefined);

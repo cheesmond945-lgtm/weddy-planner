@@ -98,7 +98,8 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, 
                         <RatingMeta service={item.service} />
                         <PackageSwitcher item={item} guestCount={guestCount} hideLocked={mine.length > 0} />
                       </div>
-                      <Badge tone={PLAN_STATUS[item.status].tone}>{PLAN_STATUS[item.status].label}</Badge>
+                      {/* Có đơn đang chạy thì nhãn đơn (ngay dưới) đã nói trạng thái; không lặp nhãn dịch vụ để tránh hai chữ cho cùng một ý */}
+                      {!busy && <Badge tone={PLAN_STATUS[item.status].tone}>{PLAN_STATUS[item.status].label}</Badge>}
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           size="sm"

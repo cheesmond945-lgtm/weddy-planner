@@ -31,7 +31,7 @@ export interface ImportBody {
   dateOrder?: unknown;
 }
 
-const PLAN_STATUS_LABEL: Record<string, string> = { PLANNED: 'Dự kiến', DISCUSSING: 'Đang trao đổi', AWAITING_DEPOSIT: 'Chờ thanh toán cọc', CONFIRMED: 'Đã chốt' };
+const PLAN_STATUS_LABEL: Record<string, string> = { PLANNED: 'Dự kiến', DISCUSSING: 'Đang trao đổi', AWAITING_DEPOSIT: 'Chờ thanh toán cọc', CONFIRMED: 'Đã đặt cọc', COMPLETED: 'Hoàn thành' };
 
 /** Tiêu đề cột của file mẫu và file tải về (frontend ghép cột tự động theo các tên này và từ đồng nghĩa). */
 export const TASK_HEADER = ['Việc', 'Hạn', 'Ghi chú'];

@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import type { CancelReason, Order } from '@/types/vendorOrder'
 import { CANCEL_REASON } from '../constants'
 
@@ -16,51 +15,40 @@ interface CancelOrderDialogProps {
 }
 
 /**
- * Hủy đơn đã cọc (chỉ trước ngày thực hiện). NCC chọn lý do, mặc định là "Khách yêu cầu hủy":
- * - Khách yêu cầu hủy: khách mất cọc, NCC giữ cọc và vẫn trả hoa hồng trên tiền cọc.
- * - NCC không thể thực hiện: NCC hoàn 100% cọc cho khách, không có hoa hồng.
- * Nếu khách đã gửi yêu cầu hủy trên hệ thống thì hiện kèm ngày gửi và lời nhắn. Ghi chú cho khách tùy chọn. Hủy xong đơn bị khóa.
+ * Hủy đơn đã cọc (chỉ trước ngày thực hiện). Lý do tự suy ra, NCC không chọn (để không gán lỗi cho khách mà giữ cọc):
+ * - Khách đã gửi yêu cầu hủy: "Khách yêu cầu hủy", khách mất cọc, NCC giữ cọc và trả hoa hồng trên tiền cọc (nút "Đồng ý hủy đơn").
+ * - Khách chưa yêu cầu: NCC chủ động hủy là lỗi phía NCC, "NCC không thể thực hiện", NCC hoàn 100% cọc ngoài hệ thống, không hoa hồng.
+ * Ghi chú cho khách tùy chọn. Hủy xong đơn bị khóa.
  */
 export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: CancelOrderDialogProps) {
-  const [reason, setReason] = useState<CancelReason>('CUSTOMER_REQUEST')
   const [note, setNote] = useState('')
   const req = o.cancelRequest
+  const reason: CancelReason = req ? 'CUSTOMER_REQUEST' : 'VENDOR_UNABLE'
   const deposit = formatMoney(o.depositAmount)
-  const effect: Record<CancelReason, string> = {
-    CUSTOMER_REQUEST: `Khách mất cọc ${deposit}. Bạn giữ tiền cọc nên vẫn phải trả hoa hồng trên tiền cọc.`,
-    VENDOR_UNABLE: `Bạn phải hoàn lại 100% tiền cọc ${deposit} cho khách. Không tính hoa hồng. Chỉ chọn khi chính bạn không thể thực hiện, chọn sai lý do là vi phạm điều khoản đối tác.`,
-  }
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
       <DialogContent className="max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Hủy đơn {o.orderCode}?</DialogTitle>
+          <DialogTitle>{req ? `Đồng ý hủy đơn ${o.orderCode}?` : `Hủy đơn ${o.orderCode}?`}</DialogTitle>
           <DialogDescription>
             Đơn đã đặt cọc, thực hiện ngày {formatDate(o.eventDate)}. Hủy xong đơn bị khóa. Hệ thống gửi tin báo hủy vào cuộc trò chuyện với khách.
           </DialogDescription>
         </DialogHeader>
 
-        <fieldset className="grid gap-2" disabled={busy}>
-          <legend className="mb-1 text-[13px] font-medium">Lý do hủy</legend>
-          {(['CUSTOMER_REQUEST', 'VENDOR_UNABLE'] as const).map((r) => (
-            <label
-              key={r}
-              className={cn('grid cursor-pointer gap-0.5 rounded-md border px-3.5 py-3 text-sm', reason === r ? 'border-gold bg-gold-soft/60' : 'border-line bg-surface')}
-            >
-              <span className="flex items-center gap-2">
-                <input type="radio" name="cancel-reason" checked={reason === r} onChange={() => setReason(r)} />
-                <b className="font-semibold">{CANCEL_REASON[r].label}</b>
-              </span>
-              <span className="pl-6 text-[12.5px] text-muted-foreground">{effect[r]}</span>
-            </label>
-          ))}
-          {reason === 'CUSTOMER_REQUEST' && req && (
+        <div className="grid gap-1 rounded-md border border-warn/40 bg-warn-soft px-3.5 py-3 text-sm">
+          <b className="font-semibold">Lý do hủy: {CANCEL_REASON[reason].label}</b>
+          {req ? (
             <span className="text-[12.5px] text-muted-foreground">
-              Khách gửi yêu cầu ngày {formatDate(req.requestedDate.slice(0, 10))}.{req.note ? ` Lời nhắn của khách: “${req.note}”` : ''}
+              Khách gửi yêu cầu ngày {formatDate(req.requestedDate.slice(0, 10))}. Khách mất cọc {deposit}. Bạn giữ tiền cọc nên vẫn phải trả hoa hồng trên tiền cọc.
+            </span>
+          ) : (
+            <span className="text-[12.5px] text-muted-foreground">
+              Khách chưa yêu cầu hủy nên đây là hủy do phía nhà cung cấp. Bạn phải <b className="font-semibold text-ink">hoàn lại 100% tiền cọc {deposit}</b> cho khách (chuyển khoản trực tiếp, ngoài hệ thống). Không tính hoa hồng.
             </span>
           )}
-        </fieldset>
+          {req?.note && <span className="mt-1 text-[13px]">Lời nhắn của khách: “{req.note}”</span>}
+        </div>
 
         <label className="grid gap-1.5 text-[13px] font-medium">
           Ghi chú cho khách (không bắt buộc)
@@ -68,7 +56,7 @@ export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: Cancel
             rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder={reason === 'VENDOR_UNABLE' ? 'VD: Studio trùng lịch, xin lỗi khách. Sẽ hoàn cọc trong hôm nay.' : 'VD: Khách báo dời lịch sang năm sau.'}
+            placeholder={req ? 'VD: Chúc hai bạn mọi điều tốt đẹp.' : 'VD: Studio trùng lịch, xin lỗi khách. Sẽ hoàn cọc trong hôm nay.'}
             className="rounded-md border border-line bg-surface px-3 py-2 text-sm leading-relaxed font-normal outline-none focus:border-gold"
           />
           <span className="text-xs font-normal text-muted-foreground">Ghi chú chỉ hiện trong tin nhắn thông báo hủy đơn, không lưu vào đơn.</span>
@@ -84,6 +72,8 @@ export function CancelOrderDialog({ order: o, busy, onClose, onConfirm }: Cancel
                 <LoaderCircle className="animate-spin" />
                 Đang hủy…
               </>
+            ) : req ? (
+              'Đồng ý hủy'
             ) : (
               'Hủy đơn'
             )}

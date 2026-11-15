@@ -258,6 +258,7 @@ export class BudgetCalcService {
           deposit_amount: true,
           status: true,
           cancel_reason: true,
+          cancelled_date: true,
           payments: { select: { paid_date: true } },
         },
       }),
@@ -281,14 +282,21 @@ export class BudgetCalcService {
       reviewCount: ratings.get(p.vendorId)?.reviewCount ?? 0,
     });
 
-    // Đơn còn hiệu lực mới nhất của từng NCC; không còn đơn hiệu lực mà có đơn đã hủy thì hạng mục trở về chưa chọn
+    // Đơn còn hiệu lực mới nhất của từng NCC; không còn đơn hiệu lực mà có đơn hủy SAU lúc NCC vào kế hoạch thì hạng mục
+    // trở về chưa chọn. Khách chọn lại chính NCC đó sau khi hủy (dòng plan_vendors mới hơn lần hủy) thì tính bình thường.
     const activeOf = new Map<string, (typeof orders)[number]>();
-    const cancelledVendors = new Set<string>();
+    const lastCancelledAt = new Map<string, number>();
     for (const o of orders) {
       if (!o.vendor_id) continue;
-      if (o.status === 'Cancelled') cancelledVendors.add(o.vendor_id);
-      else if (!activeOf.has(o.vendor_id)) activeOf.set(o.vendor_id, o);
+      if (o.status === 'Cancelled') {
+        const at = (o.cancelled_date ?? new Date(0)).getTime();
+        if (at > (lastCancelledAt.get(o.vendor_id) ?? -1)) lastCancelledAt.set(o.vendor_id, at);
+      } else if (!activeOf.has(o.vendor_id)) activeOf.set(o.vendor_id, o);
     }
+    const cancelledSinceAdded = (vendorId: string, addedAt: Date | null) => {
+      const at = lastCancelledAt.get(vendorId);
+      return at !== undefined && (!addedAt || at >= addedAt.getTime());
+    };
     // Cọc mất: đơn hủy theo yêu cầu của khách, đã nộp cọc (NCC không thực hiện được thì hoàn cọc ngoài hệ thống)
     const lostDeposits = orders.filter((o) => o.status === 'Cancelled' && o.cancel_reason === 'CUSTOMER_REQUEST' && o.payments?.paid_date).reduce((s, o) => s + Number(o.deposit_amount ?? 0), 0);
 
@@ -312,7 +320,7 @@ export class BudgetCalcService {
           selectedPackageId: p.package_id ?? null,
           orderTotal: active ? Number(active.total_amount) : null,
           orderDeposited: active && (active.status === 'Deposited' || active.status === 'Completed') ? Number(active.deposit_amount ?? 0) : null,
-          cancelled: !active && cancelledVendors.has(p.vendor_id),
+          cancelled: !active && cancelledSinceAdded(p.vendor_id, p.created_date ?? null),
           packages: vendorPackages.filter((k) => k.vendorId === p.vendor_id),
         },
       ];

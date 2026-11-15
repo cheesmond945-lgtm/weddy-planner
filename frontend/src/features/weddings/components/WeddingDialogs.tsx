@@ -10,7 +10,7 @@ import { compareStore } from '@/features/compare/store'
 import { formatDate } from '@/lib/date'
 import { paths } from '@/routes/paths'
 import { useAuth } from '@/store/auth'
-import type { DateChangePreview, WeddingInput } from '@/types/wedding'
+import type { DateChangeKind, DateChangePreview, WeddingInput } from '@/types/wedding'
 import { useSaveWedding, useWedding } from '../hooks'
 import { LetterDialogContent } from '@/components/LetterDialog'
 import { usePlanActions } from '../planActions'
@@ -131,12 +131,18 @@ export function WeddingEditDialog({ open, onOpenChange }: { open: boolean; onOpe
       .catch((e: Error) => setCheckError(e.message))
       .finally(() => setChecking(false))
   }
-  const messageVendor = (serviceId: string, orderCode: string, eventDate: string) => {
+  const messageVendor = (serviceId: string, orderCode: string, eventDate: string, kind?: DateChangeKind) => {
     const newDate = pending?.input.date
+    const on = newDate ? ` sang ${formatDate(newDate)}` : ''
+    // Tiệc đã cọc: chưa đổi ngày cưới, hỏi nhà hàng còn sảnh ngày mới không; đơn khác: khách đã đổi ngày cưới, xin cập nhật ngày thực hiện
+    const draft =
+      kind === 'VENUE_LOCKED'
+        ? `Chào nhà hàng, mình muốn dời tiệc cưới (đơn ${orderCode}, hiện là ${formatDate(eventDate)})${on}. Sảnh còn trống ngày đó không ạ? Nếu được nhờ nhà hàng cập nhật ngày thực hiện của đơn giúp mình.`
+        : `Chào shop, mình vừa đổi ngày cưới${on}. Mình muốn cập nhật ngày thực hiện đơn ${orderCode} (hiện là ${formatDate(eventDate)}), bên mình trao đổi được không ạ?`
     setPending(null)
     onOpenChange(false)
     catalogApi.getService(serviceId).then(
-      (service) => openChat(service, { draft: `Chào shop, mình vừa đổi ngày cưới${newDate ? ` sang ${formatDate(newDate)}` : ''}. Mình muốn cập nhật ngày thực hiện đơn ${orderCode} (hiện là ${formatDate(eventDate)}), bên mình trao đổi được không ạ?` }),
+      (service) => openChat(service, { draft }),
       () => toast('Không mở được khung chat với nhà cung cấp'),
     )
   }

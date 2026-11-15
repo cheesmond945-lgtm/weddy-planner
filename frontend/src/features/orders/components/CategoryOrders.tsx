@@ -4,12 +4,14 @@ import { Badge } from '@/components/Badge'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { depositDeadline } from '@/features/vendorOrders/calc'
 import { ORDER_STATUS } from '@/features/vendorOrders/constants'
+import { todayVN } from '@/lib/clock'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { InvoiceDialog } from '@/features/vendorOrders/components/InvoiceDialog'
 import { OrderDetailDialog } from '@/features/vendorOrders/components/OrderDetailDialog'
 import type { InvoiceType, Order } from '@/types/order'
 import { MyOrderCard } from './MyOrderCard'
+import { depositedStatusLabel } from '../cardSummary'
 
 const closed = (o: Order) => o.status === 'Expired' || o.status === 'Cancelled'
 
@@ -72,7 +74,8 @@ export function CategoryOrders({ orders, onRevise, embedded = false }: { orders:
 
 /** Một dòng đơn: mã đơn, trạng thái, gói (sảnh), tổng tiền; đang chờ cọc thì kèm hạn cọc (để không bị bỏ sót khi chi tiết nằm trong popup) */
 function OrderRow({ order: o, onOpen, embedded }: { order: Order; onOpen: () => void; embedded: boolean }) {
-  const status = ORDER_STATUS[o.status]
+  // Đơn đã cọc mà đã qua ngày thực hiện hoặc đang chờ đổi ngày: nhãn rõ hơn "Đã đặt cọc"
+  const status = depositedStatusLabel(o, todayVN()) ?? ORDER_STATUS[o.status]
   return (
     <button
       type="button"

@@ -15,7 +15,9 @@ const fail = (code: string, message: string, status: number, details?: unknown):
   throw new HttpException({ code, message, ...(details !== undefined && { details }) }, status);
 };
 
-export type PlanStatus = 'PLANNED' | 'DISCUSSING' | 'AWAITING_DEPOSIT' | 'CONFIRMED';
+export type PlanStatus = 'PLANNED' | 'DISCUSSING' | 'AWAITING_DEPOSIT' | 'CONFIRMED' | 'COMPLETED';
+/** Đã có NCC giữ hạng mục (chờ cọc, đã chốt, hoàn thành): không thêm NCC khác cùng hạng mục, không bỏ khỏi kế hoạch. */
+const LOCKED_STATUSES: PlanStatus[] = ['AWAITING_DEPOSIT', 'CONFIRMED', 'COMPLETED'];
 
 export interface WeddingInputBody {
   groomName?: string;
@@ -164,14 +166,20 @@ export class WeddingsService {
     let weddingId: string;
     // Đổi ngày cưới: cập nhật hạn các việc khung chưa xong trong cùng transaction, rồi báo NCC
     let dateChanged = false;
+    const oldDate = existing ? ymd(existing.wedding_date) || null : null;
+    if (existing && oldDate !== date) {
+      // Đã cọc tiệc cưới ngày khác: không cho đổi, khách nhắn nhà hàng đổi ngày tiệc trước (sảnh gắn với ngày)
+      const lock = (await planWeddingDateChange(this.prisma, existing.id, date, oldDate)).warnings.find((x) => x.blocksChange);
+      if (lock) return fail('VENUE_DATE_LOCKED', lock.message, 409, { serviceId: lock.serviceId, orderCode: lock.orderCode, eventDate: lock.eventDate });
+    }
     if (existing) {
       weddingId = existing.id;
       await this.prisma.$transaction(async (tx) => {
         if (body.version !== undefined) await bumpVersion(tx, weddingId, body.version);
         await tx.weddings.update({ where: { id: weddingId }, data: { ...data, updated_date: new Date() } });
-        if (ymd(existing.wedding_date) !== date) {
+        if (oldDate !== date) {
           dateChanged = true;
-          for (const u of (await planWeddingDateChange(tx, weddingId, date)).updates) await tx.timeline_tasks.update({ where: { id: u.id }, data: { scheduled_date: u.date } });
+          for (const u of (await planWeddingDateChange(tx, weddingId, date, oldDate)).updates) await tx.timeline_tasks.update({ where: { id: u.id }, data: { scheduled_date: u.date } });
         }
         // Ngân sách sửa tay của hạng mục bị bỏ chọn không còn ý nghĩa: xóa cùng
         if (dbFeatures.budgetTiers) await tx.wedding_category_budgets.deleteMany({ where: { wedding_id: weddingId, category_id: { notIn: categoryIds } } });
@@ -187,7 +195,7 @@ export class WeddingsService {
       weddingId = created.id;
     }
     await onWeddingCategories(this.prisma, weddingId, new Date(date), categoryIds);
-    if (dateChanged) await notifyVendorsOfWeddingDate(this.prisma, weddingId, date).catch(() => undefined);
+    if (dateChanged) await notifyVendorsOfWeddingDate(this.prisma, weddingId, date, oldDate).catch(() => undefined);
     return this.getMine(userId);
   }
 
@@ -241,7 +249,8 @@ export class WeddingsService {
       const conversationId = (v.user_id && convByVendorUser.get(v.user_id)) || null;
       let status: PlanStatus = conversationId ? 'DISCUSSING' : 'PLANNED';
       if (order?.status === 'Pending') status = 'AWAITING_DEPOSIT';
-      else if (order?.status === 'Deposited' || order?.status === 'Completed') status = 'CONFIRMED';
+      else if (order?.status === 'Deposited') status = 'CONFIRMED';
+      else if (order?.status === 'Completed') status = 'COMPLETED';
       else if (order?.status === 'NeedRevision') status = 'DISCUSSING';
       out.set(v.id, { status, order, conversationId });
     }
@@ -358,10 +367,11 @@ export class WeddingsService {
     const sameCategory = current.filter((v) => v.category_id === vendor.category_id);
     if (sameCategory.length) {
       const statuses = await this.statuses(w.user_id, w.id, sameCategory);
-      const locked = sameCategory.find((v) => ['AWAITING_DEPOSIT', 'CONFIRMED'].includes(statuses.get(v.id)!.status));
+      const locked = sameCategory.find((v) => LOCKED_STATUSES.includes(statuses.get(v.id)!.status));
       if (locked) {
         const [old] = await this.services.summaries([locked.id]);
-        const state = statuses.get(locked.id)!.status === 'CONFIRMED' ? 'đã chốt (đã đặt cọc)' : 'đang chờ đặt cọc';
+        const lockedStatus = statuses.get(locked.id)!.status;
+        const state = lockedStatus === 'COMPLETED' ? 'đã hoàn thành' : lockedStatus === 'CONFIRMED' ? 'đã đặt cọc' : 'đang chờ đặt cọc';
         return fail(
           'PLAN_CATEGORY_LOCKED',
           `Hạng mục ${(vendor.service_categories?.name ?? 'này').toLowerCase()} ${state} với ${old?.name ?? 'nhà cung cấp khác'}, nên chưa thêm ${vendor.business_name ?? 'dịch vụ này'} vào kế hoạch được. Bạn vẫn nhắn tin tư vấn bình thường.`,
@@ -412,7 +422,7 @@ export class WeddingsService {
     const vendor = (await this.vendorsInPlan(w.id)).find((v) => v.id === id);
     if (!vendor) return fail('PLAN_ITEM_NOT_FOUND', 'Không tìm thấy mục trong kế hoạch.', 404);
     const st = (await this.statuses(w.user_id, w.id, [vendor])).get(id)!;
-    if (['AWAITING_DEPOSIT', 'CONFIRMED'].includes(st.status)) return fail('PLAN_ITEM_LOCKED', 'Dịch vụ đang chờ cọc hoặc đã chốt, không thể bỏ.', 409);
+    if (LOCKED_STATUSES.includes(st.status)) return fail('PLAN_ITEM_LOCKED', 'Dịch vụ đang chờ cọc, đã chốt hoặc đã hoàn thành, không thể bỏ.', 409);
     // Đơn NCC đang chờ chỉnh sửa theo yêu cầu của khách: chưa bỏ được (bỏ thì đơn mất chỗ hiện trong hạng mục)
     const revising = await this.prisma.orders.count({ where: { wedding_id: w.id, vendor_id: id, status: 'NeedRevision' } });
     if (revising) return fail('PLAN_ITEM_LOCKED', 'Nhà cung cấp đang chỉnh sửa đơn theo yêu cầu của bạn, chưa bỏ khỏi kế hoạch được. Hãy nhắn nhà cung cấp hoặc chờ đơn mới.', 409);

@@ -142,6 +142,7 @@ export const canRequestRevision = (o: Pick<Order, 'status' | 'eventDate' | 'revi
 export const changesLabel = (r: Pick<OrderRevision, 'changes'>) => r.changes.map((c) => CHANGE_LABEL[c]).join(', ')
 
 /** NCC hủy được đơn đã cọc khi hôm nay (giờ Việt Nam) còn trước ngày thực hiện dịch vụ. */
+/** NCC hủy đơn đã cọc, còn trước ngày thực hiện: khách đã yêu cầu thì khách mất cọc, chưa yêu cầu thì NCC hoàn cọc. */
 export const canCancel = (o: Pick<Order, 'status' | 'eventDate'>) => o.status === 'Deposited' && todayVN() < o.eventDate
 
 /** Đã qua ngày thực hiện dịch vụ (giờ Việt Nam): được đánh dấu hoàn thành. */
