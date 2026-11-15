@@ -9,14 +9,19 @@ import { PanelDialog } from './PanelDialog'
 
 const TITLE: Record<InvoiceType, string> = { DepositReceipt: 'Giấy xác nhận cọc', FinalInvoice: 'Hóa đơn cuối' }
 
+/** Tiêu đề và dòng phụ của chứng từ (dùng chung cho hộp thoại riêng và màn chi tiết đơn). */
+export function invoiceHeading(o: Order, type: InvoiceType) {
+  const inv = o.invoices.find((i) => i.type === type)
+  return { title: `${TITLE[type]} ${inv?.invoiceCode ?? ''}`, subtitle: `Đơn ${o.orderCode}${inv ? ` · phát hành ${formatDayTime(inv.createdDate)}` : ''}` }
+}
+
 /**
- * Xem giấy xác nhận cọc hoặc hóa đơn cuối của đơn (Invoices). Đọc thông tin từ đơn và hồ sơ NCC, không lưu bản chụp riêng.
+ * Nội dung giấy xác nhận cọc hoặc hóa đơn cuối của đơn (Invoices). Đọc thông tin từ đơn và hồ sơ NCC, không lưu bản chụp riêng.
  * Đây không phải hóa đơn điện tử theo quy định thuế (CSDL mục 9.7).
  */
-export function InvoiceDialog({ order: o, type, onClose, vendorName: vendorNameProp }: { order: Order; type: InvoiceType; onClose: () => void; vendorName?: string }) {
+export function InvoiceContent({ order: o, type, vendorName: vendorNameProp }: { order: Order; type: InvoiceType; vendorName?: string }) {
   const { data: profile } = useVendorProfile()
   const { user } = useAuth()
-  const inv = o.invoices.find((i) => i.type === type)
   const rest = o.totalAmount - o.depositAmount
   const vendorName = vendorNameProp ?? profile?.businessName ?? user?.name ?? 'Nhà cung cấp'
   const th = 'border-y border-line bg-surface-2 px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase'
@@ -30,14 +35,7 @@ export function InvoiceDialog({ order: o, type, onClose, vendorName: vendorNameP
   )
 
   return (
-    <PanelDialog
-      open
-      size="md"
-      onRequestClose={onClose}
-      title={`${TITLE[type]} ${inv?.invoiceCode ?? ''}`}
-      subtitle={`Đơn ${o.orderCode}${inv ? ` · phát hành ${formatDayTime(inv.createdDate)}` : ''}`}
-      footer={<Button onClick={onClose}>Đóng</Button>}
-    >
+    <>
       {info('Nhà cung cấp', vendorName)}
       {info('Khách hàng', o.customerName)}
       {info('Số điện thoại', o.customerPhone || '—')}
@@ -88,6 +86,16 @@ export function InvoiceDialog({ order: o, type, onClose, vendorName: vendorNameP
           : 'Số tiền còn lại được trả trực tiếp cho NCC ngoài hệ thống, không có giao dịch trên hệ thống.'}{' '}
         Chứng từ này không phải hóa đơn điện tử theo quy định thuế.
       </p>
+    </>
+  )
+}
+
+/** Xem chứng từ trong một hộp thoại riêng (mở từ thẻ đơn, khung chat…). Trong màn chi tiết đơn thì chứng từ hiện ngay trong popup đó. */
+export function InvoiceDialog({ order: o, type, onClose, vendorName }: { order: Order; type: InvoiceType; onClose: () => void; vendorName?: string }) {
+  const { title, subtitle } = invoiceHeading(o, type)
+  return (
+    <PanelDialog open size="md" onRequestClose={onClose} title={title} subtitle={subtitle} footer={<Button onClick={onClose}>Đóng</Button>}>
+      <InvoiceContent order={o} type={type} vendorName={vendorName} />
     </PanelDialog>
   )
 }
