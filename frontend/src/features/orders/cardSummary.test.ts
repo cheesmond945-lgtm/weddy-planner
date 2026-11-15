@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { depositChip, depositedStatusLabel, endedReason, itemsSummary, itemsSummaryParts } from './cardSummary.ts'
+import { autoCancelAt, depositChip, depositedStatusLabel, endedReason, itemsSummary, itemsSummaryParts } from './cardSummary.ts'
 
 describe('itemsSummary: một dòng hạng mục', () => {
   it('sảnh tính theo bàn: tên · số bàn', () => {
@@ -65,5 +65,18 @@ describe('depositedStatusLabel: nhãn đơn đã cọc phía khách', () => {
   })
   it('đơn không phải đã cọc: không đổi nhãn', () => {
     assert.equal(depositedStatusLabel({ ...base, status: 'Completed' }, '2026-11-15'), null)
+  })
+})
+
+describe('yêu cầu hủy của khách', () => {
+  const base = { status: 'Deposited', eventDate: '2026-12-05', restPayment: { status: 'Pending' as const }, revisions: [] }
+  it('đang chờ NCC xác nhận hủy: ưu tiên nhãn này', () => {
+    assert.equal(depositedStatusLabel({ ...base, cancelRequest: { requestedDate: '2026-11-15T03:00:00Z' } }, '2026-11-15')?.label, 'Chờ NCC xác nhận hủy')
+  })
+  it('tự hủy sau 24 giờ', () => {
+    assert.equal(autoCancelAt('2026-11-15T03:00:00.000Z', '2026-12-05'), '2026-11-16T03:00:00.000Z')
+  })
+  it('ngày thực hiện tới sớm hơn 24 giờ: tự hủy lúc 0 giờ ngày thực hiện (giờ VN)', () => {
+    assert.equal(autoCancelAt('2026-12-04T10:00:00.000Z', '2026-12-05'), '2026-12-04T17:00:00.000Z')
   })
 })

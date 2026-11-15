@@ -66,7 +66,9 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 
 - `POST /orders/:id/cancel-requests` `{ note? }`: đơn Deposited, còn trước ngày thực hiện. Tiền cọc không hoàn. Ghi `orders.cancel_requested_date`, `cancel_request_note`; báo NCC. Đã gửi rồi: 409 `CANCEL_ALREADY_REQUESTED`.
 - `DELETE /orders/:id/cancel-requests`: khách rút yêu cầu.
-- NCC đồng ý: `POST /vendors/me/orders/:id/cancel` với `reason = CUSTOMER_REQUEST` (đơn Cancelled, hoa hồng tính trên tiền cọc, cọc tính là khoản mất trong tab Ngân sách, hạng mục trở về chưa chọn). NCC từ chối: `POST /vendors/me/orders/:id/cancel-requests/reject` `{ note? }`, đơn giữ nguyên.
+- NCC đồng ý: `POST /vendors/me/orders/:id/cancel` với `reason = CUSTOMER_REQUEST` (đơn Cancelled, hoa hồng trên tiền cọc, cọc tính là khoản mất trong tab Ngân sách, hạng mục trở về chưa chọn). **NCC không từ chối được** (nhóm chốt 15/11/2026: khách đã chấp nhận mất cọc): `POST …/cancel-requests/reject` trả 409 `CANCEL_REJECT_NOT_ALLOWED`.
+- **Tự hủy:** NCC chưa đồng ý sau **24 giờ** kể từ lúc khách gửi (hoặc tới 0 giờ ngày thực hiện nếu sớm hơn) thì job nền hủy với `CUSTOMER_REQUEST`, như NCC đồng ý (order-cancel.ts `autoCancelRequested`, chạy mỗi phút khi `ORDER_JOBS_ENABLED=true` và khi có người mở màn). Đơn đang có yêu cầu hủy không tự hoàn thành.
+- Trong lúc chờ: thẻ đơn phía khách "Chờ NCC xác nhận hủy" kèm giờ tự hủy; tab Ngân sách gắn chữ "Đang chờ hủy" (`cancelRequested`), số tiền và khóa hạng mục giữ nguyên tới khi hủy xong.
 - `Order` có thêm `guestCount`, `cancelRequest { requestedDate, note } | null`, `guestChanges[]` (mới nhất trước).
 
 ## Quy tắc nghiệp vụ (tóm tắt)

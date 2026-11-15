@@ -226,6 +226,8 @@ export interface BudgetVendor {
   /** Chi phí: có đơn thì giá đơn, chưa có đơn thì theo gói đang chọn (mặc định gói rẻ nhất) */
   cost: number
   hasOrder: boolean
+  /** Khách đang yêu cầu hủy đơn đã cọc (chờ NCC xác nhận, tối đa 24 giờ): hiện chữ "Đang chờ hủy", số tiền giữ nguyên */
+  cancelRequested?: boolean
   /** Nguồn của số chi phí: PLANNED "Dự kiến", ORDER "Theo đơn", DEPOSITED "Đã cọc" */
   costSource: BudgetCostSource
   /** Tiền cọc đã trả (đơn đã cọc) */

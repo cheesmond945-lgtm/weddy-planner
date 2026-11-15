@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import type { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { autoComplete, expirePending } from './order-lifecycle';
+import { autoCancelRequested } from './order-cancel';
 import { remindFrameTasks, remindTaskDeadlines } from './order-reminders';
 
 /** Hai lần quét cùng một phạm vi cách nhau tối thiểu từng này giây (FE hỏi lại mỗi 2,5 đến 5 giây). */
@@ -51,6 +52,9 @@ export class OrderJobsService implements OnModuleInit, OnModuleDestroy {
     try {
       const n = await expirePending(this.prisma);
       if (n) this.log.log(`${n} đơn hết hạn đặt cọc`);
+      // Yêu cầu hủy của khách quá 24 giờ NCC chưa đồng ý: tự hủy (quét mỗi phút để đúng giờ)
+      const c = await autoCancelRequested(this.prisma);
+      if (c) this.log.log(`${c} đơn tự hủy theo yêu cầu của khách`);
     } catch (e) {
       this.log.error(`Quét hết hạn lỗi: ${(e as Error).message}`);
     }
@@ -58,8 +62,10 @@ export class OrderJobsService implements OnModuleInit, OnModuleDestroy {
 
   private async run(where: Prisma.ordersWhereInput) {
     const expired = await expirePending(this.prisma, where);
+    // Tự hủy yêu cầu hủy quá hạn TRƯỚC khi xét tự hoàn thành
+    const cancelled = await autoCancelRequested(this.prisma, where);
     const completed = await autoComplete(this.prisma, where);
-    return { expired, completed };
+    return { expired, cancelled, completed };
   }
 
   /** Nhắc hạn việc chi tiết (docs/TIMELINE.md mục 8.2). Lỗi không làm hỏng việc đọc. */
@@ -83,7 +89,7 @@ export class OrderJobsService implements OnModuleInit, OnModuleDestroy {
     try {
       const r = await this.run({});
       const reminded = await this.remind('all', {}, { all: true });
-      this.log.log(`Quét toàn hệ thống: ${r.expired} đơn hết hạn, ${r.completed} đơn tự hoàn thành, ${reminded} nhắc hạn việc`);
+      this.log.log(`Quét toàn hệ thống: ${r.expired} đơn hết hạn, ${r.cancelled} đơn tự hủy theo yêu cầu, ${r.completed} đơn tự hoàn thành, ${reminded} nhắc hạn việc`);
     } catch (e) {
       this.log.error(`Quét toàn hệ thống lỗi: ${(e as Error).message}`);
     }

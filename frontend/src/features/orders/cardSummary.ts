@@ -69,12 +69,14 @@ export function endedReason(status: string, cancelReason?: string | null): strin
 interface DepositedLike {
   status: string
   eventDate: string
+  cancelRequest?: { requestedDate: string } | null
   restPayment?: { status: 'Pending' | 'Received' | 'NotApplicable' } | null
   revisions: readonly { status: string; changes: readonly string[] }[]
 }
 
 /**
  * Nhãn trạng thái phía khách cho đơn đã cọc, thay "Đã đặt cọc" khi chữ đó dễ hiểu nhầm (null: giữ nhãn mặc định):
+ * - khách đã gửi yêu cầu hủy, chờ NCC xác nhận (tối đa 24 giờ rồi hệ thống tự hủy): "Chờ NCC xác nhận hủy";
  * - đang có yêu cầu đổi ngày thực hiện chưa xử lý (vd khách dời ngày cưới): "Chờ NCC đổi ngày";
  * - đã qua ngày thực hiện, chưa thanh toán phần còn lại: "Chờ thanh toán phần còn lại";
  * - đã qua ngày thực hiện, đã thanh toán đủ: "Chờ NCC hoàn tất" (hệ thống tự hoàn thành sau 7 ngày).
@@ -82,7 +84,21 @@ interface DepositedLike {
  */
 export function depositedStatusLabel(o: DepositedLike, today: string): { label: string; tone: 'warn' | 'wait' } | null {
   if (o.status !== 'Deposited') return null
+  if (o.cancelRequest) return { label: 'Chờ NCC xác nhận hủy', tone: 'warn' }
   if (o.revisions.some((r) => r.status === 'Requested' && r.changes.includes('EventDate'))) return { label: 'Chờ NCC đổi ngày', tone: 'warn' }
   if (today <= o.eventDate) return null
   return o.restPayment?.status === 'Pending' ? { label: 'Chờ thanh toán phần còn lại', tone: 'wait' } : { label: 'Chờ NCC hoàn tất', tone: 'wait' }
+}
+
+/** Yêu cầu hủy của khách quá từng này giờ mà NCC chưa đồng ý thì hệ thống tự hủy (khớp backend order-cancel.ts). */
+export const CANCEL_REQUEST_AUTO_HOURS = 24
+
+/**
+ * Thời điểm hệ thống tự hủy đơn có yêu cầu hủy: 24 giờ sau lúc gửi, hoặc 0 giờ ngày thực hiện (giờ Việt Nam) nếu sớm hơn.
+ * `requestedDate`: ISO lúc khách gửi; `eventDate`: "YYYY-MM-DD". Trả ISO.
+ */
+export function autoCancelAt(requestedDate: string, eventDate: string): string {
+  const after = new Date(requestedDate).getTime() + CANCEL_REQUEST_AUTO_HOURS * 3_600_000
+  const eventStart = new Date(`${eventDate}T00:00:00+07:00`).getTime()
+  return new Date(Math.min(after, eventStart)).toISOString()
 }

@@ -243,14 +243,12 @@ export class OrderAdjustmentsService {
     return this.orders.dtoOf(o.id);
   }
 
-  /** NCC từ chối yêu cầu hủy: đơn giữ nguyên Deposited */
-  async rejectCancel(userId: string, orderId: string, body: { note?: unknown }) {
-    requireDbFeature('orderAdjustments');
-    const { order: o } = await this.orders.ownedByVendor(userId, orderId);
-    const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 500) || null : null;
-    const r = await this.prisma.orders.updateMany({ where: { id: o.id, status: 'Deposited', cancel_requested_date: { not: null } }, data: { cancel_requested_date: null, cancel_request_note: null } });
-    if (!r.count) return fail('CANCEL_REQUEST_NOT_FOUND', 'Đơn không có yêu cầu hủy đang chờ.', 409);
-    await this.message(o, `NCC không đồng ý hủy đơn ${o.order_code}${note ? `: ${note}` : ''}. Đơn giữ nguyên.`, 'COUPLE', 'Yêu cầu hủy đơn không được chấp nhận');
-    return this.orders.dtoOf(o.id);
+  /**
+   * NCC từ chối yêu cầu hủy: ĐÃ BỎ (nhóm chốt 15/11/2026). Khách hủy là chấp nhận mất cọc, NCC không có lý do giữ khách lại;
+   * NCC chỉ đồng ý hủy (POST …/cancel), không phản hồi thì hệ thống tự hủy sau 24 giờ (order-cancel.ts autoCancelRequested).
+   */
+  async rejectCancel(userId: string, orderId: string, _body: { note?: unknown }) {
+    await this.orders.ownedByVendor(userId, orderId);
+    return fail('CANCEL_REJECT_NOT_ALLOWED', 'Không từ chối được yêu cầu hủy của khách: khách đã chấp nhận mất cọc. Bạn đồng ý hủy, hoặc hệ thống tự hủy sau 24 giờ.', 409);
   }
 }

@@ -294,7 +294,12 @@ function ServiceCell({ c, b, view, items, own }: { c: BudgetCategory; b: Budget;
               <Link to={paths.serviceDetail(v.id)} className="font-medium hover:underline" title={v.name}>
                 {shortVendorName(v.name)}
               </Link>
-              {v.status && <Badge tone={PLAN_STATUS[v.status].tone}>{PLAN_STATUS[v.status].label}</Badge>}
+              {v.cancelRequested ? (
+                // Khách đang yêu cầu hủy: hạng mục vẫn khóa, số tiền giữ nguyên cho tới khi hủy xong (tối đa 24 giờ)
+                <Badge tone="warn">Đang chờ hủy</Badge>
+              ) : (
+                v.status && <Badge tone={PLAN_STATUS[v.status].tone}>{PLAN_STATUS[v.status].label}</Badge>
+              )}
               {/* Chưa có đơn: bỏ chọn để hạng mục quay lại thanh chia và có gợi ý như hạng mục chưa chọn */}
               {(v.status === 'PLANNED' || v.status === 'DISCUSSING') && !v.hasOrder && <UnchooseButton vendor={v} />}
             </div>

@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
+import { autoCancelAt } from '@/features/orders/cardSummary'
 import type { Order } from '@/types/vendorOrder'
+import { formatDayTime } from '../calc'
 import { useSyncOrder } from '../hooks'
 
 /**
@@ -51,7 +53,8 @@ export function OrderRequestsPanel({ order: o }: { order: Order }) {
       {o.cancelRequest && (
         <div className="rounded-sm bg-warn-soft px-3 py-2.5 text-[13px] text-warn">
           <b>Khách yêu cầu hủy đơn</b> ngày {formatDate(o.cancelRequest.requestedDate.slice(0, 10))} (tiền cọc {formatMoney(o.depositAmount)} không hoàn)
-          {o.cancelRequest.note && `: "${o.cancelRequest.note}"`}.
+          {o.cancelRequest.note && `: "${o.cancelRequest.note}"`}. Bấm "Đồng ý hủy đơn" để xác nhận; nếu bạn chưa xác nhận, hệ thống tự hủy lúc{' '}
+          <b>{formatDayTime(autoCancelAt(o.cancelRequest.requestedDate, o.eventDate))}</b>.
         </div>
       )}
     </div>

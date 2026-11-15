@@ -9,7 +9,9 @@ import { toast } from '@/components/ui/toast'
 import { useRefreshPlanning } from '@/features/weddings/hooks'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/format'
+import { formatDayTime } from '@/features/vendorOrders/calc'
 import type { Order } from '@/types/vendorOrder'
+import { autoCancelAt } from '../cardSummary'
 
 const openChange = (o: Order) => o.guestChanges?.find((g) => g.status === 'AwaitingVendor' || g.status === 'AwaitingDeposit') ?? null
 
@@ -62,7 +64,7 @@ export function CoupleOrderRequests({ order: o }: { order: Order }) {
       )}
       {o.cancelRequest && (
         <div className="mt-3 rounded-sm bg-warn-soft px-3 py-2.5 text-[13px] leading-relaxed text-warn">
-          Bạn đã yêu cầu hủy đơn ngày {formatDate(o.cancelRequest.requestedDate.slice(0, 10))}, đang chờ nhà cung cấp xác nhận. Tiền cọc không được hoàn.
+          Bạn đã yêu cầu hủy đơn ngày {formatDate(o.cancelRequest.requestedDate.slice(0, 10))}, đang chờ nhà cung cấp xác nhận. Nếu nhà cung cấp chưa xác nhận, hệ thống tự hủy lúc <b>{formatDayTime(autoCancelAt(o.cancelRequest.requestedDate, o.eventDate))}</b>. Tiền cọc không được hoàn. Trước lúc đó bạn vẫn rút lại được.
           <div className="mt-2.5">
             <Button size="sm" variant="outline" disabled={withdraw.isPending} onClick={() => withdraw.mutate(undefined)}>
               Rút yêu cầu hủy
@@ -136,7 +138,7 @@ function CancelRequestDialog({ order: o, onClose }: { order: Order; onClose: () 
         <DialogHeader>
           <DialogTitle>Yêu cầu hủy đơn {o.orderCode}?</DialogTitle>
           <DialogDescription>
-            Tiền cọc {formatMoney(o.depositAmount)} không được hoàn và vẫn được tính vào khoản đã chi trong ngân sách. Đơn chỉ hủy khi nhà cung cấp xác nhận; hạng mục sẽ trở về "chưa chọn" trong kế hoạch.
+            Tiền cọc {formatMoney(o.depositAmount)} không được hoàn và vẫn được tính vào khoản đã chi trong ngân sách. Đơn hủy khi nhà cung cấp xác nhận, hoặc hệ thống tự hủy sau 24 giờ nếu nhà cung cấp chưa xác nhận; trong thời gian đó bạn rút lại yêu cầu được. Hủy xong, hạng mục trở về "chưa chọn" trong kế hoạch.
           </DialogDescription>
         </DialogHeader>
         <label className="text-[13px] font-medium">

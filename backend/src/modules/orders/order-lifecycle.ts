@@ -1,5 +1,6 @@
 import type { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { dbFeatures } from '../../prisma/db-features';
 import { notify, postMessage } from '../chat/chat-messages';
 import { publish } from '../realtime/realtime.bus';
 import { applyRestReceived, closableDetailTasksWhere, type RestDb } from './rest-payment';
@@ -153,11 +154,12 @@ export async function completeOrder(prisma: PrismaService, orderId: string, comp
 /**
  * Đơn Deposited có EventDate < hôm nay − 7 (đã quá ngày thực hiện hơn 7 ngày) tự hoàn thành; CompletedDate = cuối ngày EventDate + 7 (giờ VN)
  * để hoa hồng vào đúng tháng. Không kiểm tra đã ghi nhận đợt 2 hay chưa.
- * Bỏ qua đơn còn yêu cầu đổi ngày thực hiện chưa xử lý (DATE_CHANGE_PENDING_WHERE): ví dụ khách dời ngày cưới, dịch vụ chưa diễn ra.
+ * Bỏ qua đơn còn yêu cầu đổi ngày thực hiện chưa xử lý (DATE_CHANGE_PENDING_WHERE): ví dụ khách dời ngày cưới, dịch vụ chưa diễn ra;
+ * và đơn khách đang yêu cầu hủy (để order-cancel.ts autoCancelRequested hủy).
  */
 export async function autoComplete(prisma: PrismaService, scope: Prisma.ordersWhereInput = {}) {
   const cutoff = autoCompleteCutoff(todayVn());
-  const rows = await prisma.orders.findMany({ where: { status: 'Deposited', event_date: { lt: cutoff }, NOT: DATE_CHANGE_PENDING_WHERE, ...scope }, select: { id: true, event_date: true } });
+  const rows = await prisma.orders.findMany({ where: { status: 'Deposited', event_date: { lt: cutoff }, NOT: DATE_CHANGE_PENDING_WHERE, ...(dbFeatures.orderAdjustments && { cancel_requested_date: null }), ...scope }, select: { id: true, event_date: true } });
   let n = 0;
   for (const o of rows) {
     const completedAt = endOfDayVn(addDaysYmd(ymdOf(o.event_date!), AUTO_COMPLETE_DAYS));

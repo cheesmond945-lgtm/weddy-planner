@@ -6,7 +6,7 @@ import { BudgetCalcService, parseSplitConfig, serializeSplit } from './budget-ca
 import { tableCount } from './budget-engine';
 import { BASE_MODES, isValidSplit, markersOf, presetItems, TOTAL, type BaseMode, type SplitState } from './budget-split';
 import { bumpVersion, versionOf } from './wedding-version';
-import { requireDbFeature } from '../../prisma/db-features';
+import { dbFeatures, requireDbFeature } from '../../prisma/db-features';
 import { WeddingsService } from './weddings.service';
 
 const fail = (code: string, message: string, status: number, details?: unknown): never => {
@@ -58,11 +58,16 @@ export class BudgetService {
   }
 
   async summaryOf(w: Wedding) {
-    const [{ input, result }, snapshot, fresh] = await Promise.all([
+    const [{ input, result }, snapshot, fresh, cancelPending] = await Promise.all([
       this.calc.compute(w.id),
       this.weddings.planSnapshot(w.user_id, w.id),
       this.prisma.weddings.findUniqueOrThrow({ where: { id: w.id }, select: { updated_date: true } }),
+      // NCC có đơn đã cọc mà khách đang yêu cầu hủy (chờ NCC xác nhận, tối đa 24 giờ): chỉ gắn chữ "Đang chờ hủy", số tiền giữ nguyên
+      dbFeatures.orderAdjustments
+        ? this.prisma.orders.findMany({ where: { wedding_id: w.id, status: 'Deposited', cancel_requested_date: { not: null } }, select: { vendor_id: true } })
+        : Promise.resolve([]),
     ]);
+    const cancelRequested = new Set(cancelPending.map((o) => o.vendor_id));
     const split = result.split;
     // Mở lại tab khi nhóm chia đã đổi (chọn gói, có đơn, hủy đơn…): áp onGroupChange vào cấu hình đã lưu và lưu lại kết quả
     let splitVersion = input.stored?.version ?? 0;
@@ -101,6 +106,8 @@ export class BudgetService {
         status: snap?.status ?? null,
         cost: c.cost,
         hasOrder,
+        /** Khách đang yêu cầu hủy đơn đã cọc của NCC này (chờ NCC xác nhận) */
+        cancelRequested: cancelRequested.has(c.vendorId),
         /** Nhãn nguồn dưới số: PLANNED "Dự kiến", ORDER "Theo đơn", DEPOSITED "Đã cọc" */
         costSource: c.costSource,
         deposited: c.deposited,
