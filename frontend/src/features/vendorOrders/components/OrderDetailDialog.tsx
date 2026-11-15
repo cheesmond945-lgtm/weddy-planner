@@ -328,10 +328,6 @@ export function OrderDetailDialog({ order: o, onClose, onOpenForm, viewer = 'ven
     >
       {viewing && (
         <>
-          <button type="button" onClick={goBack} className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-gold-ink hover:underline">
-            <ArrowLeft className="size-4" />
-            Quay lại chi tiết đơn
-          </button>
           <InvoiceContent order={o} type={viewing} vendorName={vendorView ? undefined : o.vendorName} />
         </>
       )}

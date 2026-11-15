@@ -58,6 +58,7 @@ Tạo hoặc cập nhật. Body: `Wedding` không có `id` và `location`. Respo
   - **Tiệc cưới đã cọc ngày khác ngày mới:** 409 `VENUE_DATE_LOCKED` (`details.serviceId`, `orderCode`, `eventDate`). Khách nhắn nhà hàng đổi ngày tiệc trước (nhà hàng sửa đơn, hệ thống kiểm sảnh trống), rồi đổi ngày cưới sang đúng ngày tiệc.
   - **Đơn đã cọc làm đúng ngày cưới cũ** (trang trí, trang điểm…): lưu được; hệ thống gửi thay khách yêu cầu "Đổi ngày thực hiện" (order_revisions AfterDeposit, Requested), tin hệ thống vào chat, báo NCC. Đơn có yêu cầu này không tự hoàn thành và NCC chưa hoàn tất được cho tới khi sửa ngày hoặc từ chối. NCC không nhận ngày mới mà khách hủy thì khách mất cọc.
   - Đơn làm trước ngày cưới cũ (chụp ngoại cảnh, thử váy): chỉ nhắc khách. Đơn sau ngày cưới mới: báo NCC như trước.
+  - **Ngược lại, nhà hàng đổi ngày tiệc** (NCC sửa đơn tiệc đã cọc, đổi ngày thực hiện): nếu ngày cũ của đơn trùng ngày cưới thì ngày cưới tự đổi theo, dời hạn việc khung, các đơn đã cọc làm đúng ngày cưới cũ nhận yêu cầu đổi ngày, báo khách (timeline-hooks.ts `syncWeddingDateWithVenue`). Ngày cũ của đơn vốn khác ngày cưới thì không đụng tới.
 
 Lỗi: 400 `VALIDATION_ERROR`, `details` theo từng trường (`groomName`, `brideName`, `date`, `ward`, `guestCount`, `budget`, `budgetPreset`, `categorySlugs`); 400 `BUDGET_TOO_LOW` khi `budget` nhỏ hơn gói rẻ nhất trên Forever, hoặc nhỏ hơn tổng giá thấp nhất của các `categorySlugs` đã chọn theo số khách (`details.budget`, `details.categorySlugs`; cùng quy tắc với form, xem `GET /categories/min-costs` ở catalog.md)
 

@@ -10,7 +10,7 @@ import { Paginated } from '../../common/utils/pagination';
 import { notify, postMessage } from '../chat/chat-messages';
 import { hallBusyMessage } from '../halls/hall-busy';
 import { findHallConflict, lockHallDay, usesHalls } from '../halls/hall-store';
-import { applyOrderPackageSwitch, onOrderDeposited, onOrderEventDateChanged, planOrderPackageSwitch } from '../weddings/timeline-hooks';
+import { applyOrderPackageSwitch, onOrderDeposited, onOrderEventDateChanged, planOrderPackageSwitch, syncWeddingDateWithVenue } from '../weddings/timeline-hooks';
 import { packagesOfOrder } from '../weddings/package-task-meta';
 import { OrderJobsService } from './order-jobs.service';
 import { DATE_CHANGE_PENDING_WHERE, completeOrder, notifyRestCleared, notifyRestReceived } from './order-lifecycle';
@@ -783,6 +783,10 @@ export class OrdersService {
     if (pkgSwitch) await this.timelineHook('đổi gói', order.order_code, () => applyOrderPackageSwitch(this.prisma, pkgSwitch));
     // Đổi ngày thực hiện: việc chi tiết neo theo ngày đó trên timeline của khách phải tính lại
     if (changes.includes('EventDate')) await this.timelineHook('đổi ngày thực hiện', order.order_code, () => onOrderEventDateChanged(this.prisma, id));
+    // Đơn tiệc (có sảnh) đổi ngày: ngày cũ trùng ngày cưới thì ngày cưới của khách tự đổi theo (khách không phải tự đổi lại)
+    if (changes.includes('EventDate') && order.wedding_id && (p.packageId ?? order.package_id)) {
+      await this.timelineHook('đổi ngày cưới theo ngày tiệc', order.order_code, () => syncWeddingDateWithVenue(this.prisma, order.wedding_id!, current.eventDate, p.eventDate));
+    }
     const switchNote = pkgSwitch ? ` (Đổi gói: giữ tiến độ ${pkgSwitch.kept.length} việc, thêm ${pkgSwitch.addedTitles.length} việc, bỏ ${pkgSwitch.removedTitles.length} việc.)` : '';
 
     const conversationId = await this.conversationOf(order);

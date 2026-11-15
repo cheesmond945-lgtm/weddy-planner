@@ -257,3 +257,35 @@ export async function applyOrderPackageSwitch(prisma: PrismaService, plan: Packa
     ...(plan.create.length ? [prisma.timeline_tasks.createMany({ data: plan.create, skipDuplicates: true })] : []),
   ]);
 }
+
+/**
+ * Nhà hàng đổi ngày thực hiện của đơn tiệc đã cọc (NCC sửa đơn): nếu ngày cũ của đơn trùng ngày cưới (đây là tiệc cưới chính) thì
+ * ngày cưới của khách tự đổi theo, như khi khách tự đổi ngày cưới: dời hạn các việc khung chưa xong, các đơn đã cọc làm đúng ngày cưới cũ
+ * nhận yêu cầu đổi ngày (notifyVendorsOfWeddingDate), báo khách. Ngày cũ của đơn vốn khác ngày cưới thì không đụng tới. Trả true nếu đã đổi.
+ */
+export async function syncWeddingDateWithVenue(prisma: PrismaService, weddingId: string, oldDate: string, newDate: string): Promise<boolean> {
+  if (!oldDate || !newDate || oldDate === newDate) return false;
+  const w = await prisma.weddings.findUnique({ where: { id: weddingId }, select: { wedding_date: true, user_id: true } });
+  if (!w || ymdOf(w.wedding_date) !== oldDate) return false;
+  const changed = await prisma.$transaction(async (tx) => {
+    // Đổi có điều kiện theo ngày cũ: khách vừa tự đổi ngày cưới cùng lúc thì không ghi đè
+    const r = await tx.weddings.updateMany({ where: { id: weddingId, wedding_date: new Date(`${oldDate}T00:00:00Z`) }, data: { wedding_date: new Date(`${newDate}T00:00:00Z`), updated_date: new Date() } });
+    if (!r.count) return false;
+    for (const u of (await planWeddingDateChange(tx, weddingId, newDate, oldDate)).updates) await tx.timeline_tasks.update({ where: { id: u.id }, data: { scheduled_date: u.date } });
+    return true;
+  });
+  if (!changed) return false;
+  await notifyVendorsOfWeddingDate(prisma, weddingId, newDate, oldDate).catch(() => undefined);
+  const dmy = (s: string) => s.split('-').reverse().join('/');
+  if (w.user_id) {
+    await notify(prisma, {
+      userId: w.user_id,
+      type: 'WeddingDateChanged',
+      title: 'Ngày cưới đã được cập nhật',
+      content: `Nhà hàng đã đổi ngày tiệc sang ${dmy(newDate)}. Ngày cưới của bạn đã được cập nhật theo (trước là ${dmy(oldDate)}); hạn các việc trên timeline đã dời theo.`,
+      referenceType: 'Wedding',
+      referenceId: weddingId,
+    }).catch(() => undefined);
+  }
+  return true;
+}
