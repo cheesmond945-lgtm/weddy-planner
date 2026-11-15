@@ -37,8 +37,8 @@ describe('validateWeddingForm', () => {
     assert.ok(validateWeddingForm({ ...valid, budget: -5 }, TODAY).budget)
   })
 
-  it('chưa chọn khu vực: báo lỗi khu vực', () => {
-    assert.equal(validateWeddingForm({ ...valid, ward: '' }, TODAY).ward, 'Vui lòng chọn nơi tổ chức.')
+  it('chưa chọn nơi tổ chức vẫn hợp lệ (không bắt buộc)', () => {
+    assert.equal(validateWeddingForm({ ...valid, ward: '' }, TODAY).ward, undefined)
   })
 
   it('số khách rỗng / 0 / không phải số: báo lỗi', () => {

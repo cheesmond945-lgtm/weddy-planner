@@ -28,7 +28,6 @@ export function validateWeddingForm(v: WeddingFormValues, todayIso: string, minC
   const guests = v.guestCount ? Number(v.guestCount) : NaN
   if (!v.date) errs.date = 'Vui lòng chọn ngày tổ chức.'
   else if (v.date <= todayIso) errs.date = 'Ngày tổ chức phải sau hôm nay.'
-  if (!v.ward) errs.ward = 'Vui lòng chọn nơi tổ chức.'
   if (!(guests >= 1)) errs.guestCount = 'Vui lòng nhập số khách dự kiến (từ 1).'
   if (!(v.budget > 0)) errs.budget = 'Vui lòng nhập tổng ngân sách lớn hơn 0.'
   if (!v.services.length) errs.services = 'Vui lòng chọn ít nhất 1 dịch vụ.'

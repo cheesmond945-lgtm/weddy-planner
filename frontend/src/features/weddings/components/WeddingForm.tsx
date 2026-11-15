@@ -235,7 +235,7 @@ function WardField({ value, onChange, error }: { value: string; onChange: (v: st
   return (
     <div>
       <span id={`${id}-label`} className="mb-1.5 block text-[13px] font-medium">
-        <Required>Nơi tổ chức (Hà Nội)</Required>
+        Nơi tổ chức (Hà Nội)
       </span>
       <SearchSelect
         aria-labelledby={`${id}-label`}
