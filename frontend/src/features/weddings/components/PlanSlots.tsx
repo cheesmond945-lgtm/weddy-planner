@@ -143,16 +143,16 @@ export function PlanSlots({ categorySlugs, items, hasWedding, orders, onRevise, 
             ) : (
               <div className="flex flex-wrap items-center gap-4 rounded-lg border border-dashed border-line-strong/60 px-[22px] py-[18px]">
                 <div className="min-w-[200px] flex-1 text-[15px] text-muted-foreground">Chưa chọn dịch vụ cho hạng mục này.</div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button asChild variant="outline" size="sm">
-                    <Link to={`${paths.services}?category=${slug}`}>Xem dịch vụ</Link>
+                {/* Một nút: có thông tin đám cưới thì mở popup gợi ý (cuối popup có "Xem tất cả nhà cung cấp …"); chưa có thì sang Dịch vụ cưới */}
+                {hasWedding ? (
+                  <Button size="sm" onClick={() => aiSuggest(slug)}>
+                    Chọn dịch vụ
                   </Button>
-                  {hasWedding && (
-                    <Button variant="secondary" size="sm" onClick={() => aiSuggest(slug)}>
-                      Gợi ý cho bạn
-                    </Button>
-                  )}
-                </div>
+                ) : (
+                  <Button asChild size="sm">
+                    <Link to={`${paths.services}?category=${slug}`}>Chọn dịch vụ</Link>
+                  </Button>
+                )}
               </div>
             )}
             {/* Đơn của NCC không còn trong kế hoạch (đã bỏ / đổi NCC): vẫn hiện riêng dưới hạng mục */}

@@ -82,7 +82,7 @@ function Body({ slug, name }: { slug: string; name: string }) {
       <div className="mt-6 flex justify-center">
         <Button asChild variant="outline">
           <Link to={`${paths.services}?category=${slug}&ai=all`}>
-            Xem thêm nhà cung cấp {cat}
+            Xem tất cả nhà cung cấp {cat}
             <ArrowRight className="size-4" aria-hidden />
           </Link>
         </Button>
