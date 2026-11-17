@@ -6,6 +6,7 @@ import { vendorOrdersApi, type PackageSwitchPreview } from '@/api/vendorOrders'
 import { Button } from '@/components/ui/button'
 import { DateField } from '@/components/DateField'
 import { Input } from '@/components/ui/input'
+import { DepositTermsDialog } from '@/features/orders/components/DepositTermsDialog'
 import { useHallDates } from '@/features/halls/hooks'
 import { useWeddingReminder } from '@/features/vendorChat/hooks'
 import { isVenue } from '@/features/vendorPackages/constants'
@@ -189,6 +190,10 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
   const [showRequest, setShowRequest] = useState(true)
   // Hộp xác nhận trước khi gửi đơn, gửi bản cập nhật hoặc lưu chỉnh sửa
   const [confirmSend, setConfirmSend] = useState(false)
+  // NCC phải đồng ý Điều khoản đặt dịch vụ (gồm hoàn 100% cọc khi NCC không thực hiện) mỗi lần gửi đơn
+  const [termsAgreed, setTermsAgreed] = useState(false)
+  const [termsOpen, setTermsOpen] = useState(false)
+  const needTerms = mode.kind !== 'edit'
   const [confirmNoPackage, setConfirmNoPackage] = useState(false)
   // Sửa sau cọc: nội dung thay đổi, khách sẽ thấy (lưu vào OrderRevisions AfterDeposit)
   const [changeNote, setChangeNote] = useState('')
@@ -330,6 +335,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
         return
       }
     }
+    setTermsAgreed(false)
     setConfirmSend(true)
   }
 
@@ -579,7 +585,10 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
         </fieldset>
       </PanelDialog>
 
-      <ConfirmDialog open={confirmNoPackage} onOpenChange={setConfirmNoPackage} title="Đơn chưa gắn gói" confirmLabel="Vẫn gửi" cancelLabel="Quay lại chọn gói" onConfirm={() => setConfirmSend(true)}>
+      <ConfirmDialog open={confirmNoPackage} onOpenChange={setConfirmNoPackage} title="Đơn chưa gắn gói" confirmLabel="Vẫn gửi" cancelLabel="Quay lại chọn gói" onConfirm={() => {
+          setTermsAgreed(false)
+          setConfirmSend(true)
+        }}>
         <p>Đơn chưa gắn gói nào, khách sẽ không có công việc trong timeline sau khi cọc. Vẫn gửi?</p>
       </ConfirmDialog>
 
@@ -588,6 +597,7 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
         onOpenChange={setConfirmSend}
         title={mode.kind === 'edit' ? 'Chỉnh sửa đơn?' : mode.kind === 'resend' ? 'Chỉnh sửa đơn?' : 'Gửi đơn?'}
         confirmLabel={mode.kind === 'edit' ? 'Lưu chỉnh sửa' : mode.kind === 'resend' ? 'Chỉnh sửa đơn' : 'Gửi đơn'}
+        confirmDisabled={needTerms && !termsAgreed}
         onConfirm={doSend}
       >
         <p>
@@ -598,7 +608,19 @@ export function OrderFormDialog({ conversationId, customer, mode, onClose, onSen
               : 'Gửi đơn cho khách? Khách có 12 giờ để đặt cọc.'}
         </p>
         {mode.kind === 'edit' && switchPreview && <PackageSwitchSummary preview={switchPreview} />}
+        {needTerms && (
+          <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" checked={termsAgreed} onChange={(e) => setTermsAgreed(e.target.checked)} className="mt-0.5 accent-primary" />
+            <span>
+              Tôi đã đọc và đồng ý{' '}
+              <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => setTermsOpen(true)}>
+                Điều khoản đặt dịch vụ
+              </button>
+            </span>
+          </label>
+        )}
       </ConfirmDialog>
+      <DepositTermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
 
       <PanelDialog
         open={confirmClose}

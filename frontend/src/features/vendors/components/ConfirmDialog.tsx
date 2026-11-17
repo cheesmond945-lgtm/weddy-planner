@@ -11,13 +11,15 @@ interface ConfirmDialogProps {
   confirmLabel: string
   cancelLabel?: string
   danger?: boolean
+  /** Khóa nút xác nhận (vd. chưa tích đồng ý điều khoản). */
+  confirmDisabled?: boolean
   /** Biểu tượng tròn phía trên tiêu đề. */
   icon?: ReactNode
   onConfirm: () => void
 }
 
 /** Hộp thoại xác nhận Hủy / Đồng ý (ConfirmDialog trong prototype NCC). */
-export function ConfirmDialog({ open, onOpenChange, title, children, confirmLabel, cancelLabel = 'Hủy', danger, icon, onConfirm }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, onOpenChange, title, children, confirmLabel, cancelLabel = 'Hủy', danger, confirmDisabled, icon, onConfirm }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[460px]">
@@ -48,6 +50,7 @@ export function ConfirmDialog({ open, onOpenChange, title, children, confirmLabe
           <Button
             variant={danger ? 'destructive' : 'default'}
             className="min-w-24"
+            disabled={confirmDisabled}
             onClick={() => {
               onConfirm()
               onOpenChange(false)
