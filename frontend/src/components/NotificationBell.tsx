@@ -14,6 +14,9 @@ export interface BellNotification {
   createdAt: string
 }
 
+/** Nhắc việc trên timeline tạo trước khi rút gọn (còn liệt kê tên việc): chỉ giữ câu đếm số việc, như thông báo mới (task-owner.ts taskDigest) */
+const shortContent = (content: string) => content.replace(/^(Bạn có .+? trên timeline):.*$/s, '$1.')
+
 /** "5 phút trước", "3 giờ trước", "2 ngày trước"; quá 30 ngày thì ngày tháng. */
 function ago(iso: string) {
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
@@ -117,7 +120,7 @@ export function NotificationBell<T extends BellNotification>({ data, icons, targ
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className={cn('block text-[13.5px] leading-snug', n.isRead ? 'font-medium' : 'font-semibold')}>{n.title}</span>
-                        <span className="mt-0.5 block text-[12.5px] leading-snug text-muted-foreground">{n.content}</span>
+                        <span className="mt-0.5 block text-[12.5px] leading-snug text-muted-foreground">{shortContent(n.content)}</span>
                         <span className="mt-1 block text-[11.5px] text-muted-foreground tabular-nums">{ago(n.createdAt)}</span>
                       </span>
                       {!n.isRead && <i aria-label="Chưa đọc" className="mt-2 size-2 flex-none rounded-full bg-warn" />}
