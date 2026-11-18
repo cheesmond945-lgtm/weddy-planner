@@ -84,6 +84,10 @@ export interface TimelineItem {
   serviceId: string | null
   /** Cờ "Cần làm gấp" (lịch bị ép vì thời gian chuẩn bị ngắn) */
   urgent: boolean
+  /** "Ưu tiên k" của việc khung thuộc dịch vụ (khi lúc tạo còn ≤ 80 ngày tới ngày cưới); null nếu không có */
+  priority?: number | null
+  /** Việc gộp "Chọn và chốt …" (thời gian chuẩn bị ngắn): `note` là gợi ý các bước con */
+  mergedFrame?: boolean
   /** Todo (NCC đang làm) | Waiting (chờ khách) | Done. Việc khung và việc tự thêm chỉ Todo | Done */
   status: 'Todo' | 'Waiting' | 'Done'
   /** SERVICE_TASK: việc lấy từ gói của NCC (khách chỉ xem) */
