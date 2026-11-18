@@ -25,6 +25,7 @@ Ký hiệu: W ngày cưới, I hôm nay (giờ VN), L = W − I, L1 = L − 1, d
 - Dời cuối tuần (chỉ việc đi gặp / thử): **chỉ lùi** về T7/CN gần nhất trước hạn; bị chặn (trước I+1, trước D+k, trước hoặc trùng việc trước cùng dịch vụ) thì giữ ngày thường.
 - Chọn NCC cùng dịch vụ cách nhau ≥ 1 ngày; Mốc chốt sau Chọn NCC cuối ≥ 1 ngày; không việc nào trước I+1.
 - Cờ "· Gấp": việc bị kẹp về I+1 / không xếp được, hoặc (mức Gấp / Rất gấp VÀ bị ép > 50%). Mức Bình thường trở lên không có "Gấp". Việc quá hạn chỉ tô đỏ chữ "Hạn".
+- Cờ Gấp không lưu, tính lại lúc đọc với **đúng I đã dùng để tính hạn của từng việc**: `created_date` của việc khung = lần cuối hệ thống tính hạn, dùng làm I cho cờ Gấp (giờ VN). Lúc sinh khung và lúc thêm dịch vụ, DB ghi `created_date = now()`; lúc đổi ngày cưới (khách đổi, hoặc nhà hàng đổi ngày tiệc), các việc khung chưa xong được tính lại hạn thì đặt `created_date = now()` trong cùng lệnh cập nhật (`applyWeddingDateChange`). Lúc đọc, các việc nhóm theo ngày đó, mỗi nhóm chạy `planTimeline` một lần với W hiện tại và trạng thái gộp hiện tại (`frameUrgentCodes`). Khách tự sửa hạn (PATCH) không đổi `created_date`.
 
 **Việc chi tiết** (khi đơn Deposited, dùng D = ngày cọc thật, E = ngày thực hiện thật của đơn):
 - Các việc dạng E − x co theo hệ số min(1, (E − (D + k)) / x_max); không có chỗ (E − (D + k) ≤ 0) thì mọi việc trước sự kiện = max(I + 1, D + 1) và gắn cờ gấp.

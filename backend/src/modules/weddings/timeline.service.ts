@@ -5,7 +5,7 @@ import { customerReadonlyIssue, dateStatusOf } from '../orders/order-task-rules'
 import { loadPackageMeta, ownersFrom, packagesOfOrder } from './package-task-meta';
 import { baseCode, budgetPriorityOf, frameViewOf, hiddenByCategory, isCustomOrderTaskCode, isRemovedCode, PAY_PREFIX, PKG_PREFIX, removedCode } from './timeline-rows';
 import { planWeddingDateChange, todayVNDate, toYmd, vnYmd } from './timeline-hooks';
-import { dayOf, levelOf, mergedServicesOf, planTimeline, priorityLabels } from './timeline-schedule';
+import { dayOf, frameUrgentCodes, levelOf, mergedServicesOf, priorityLabels } from './timeline-schedule';
 import { dueBounds, dueRangeIssue, sequenceIssue } from './timeline-rules';
 import { ownerOf } from './task-owner';
 import { serviceKeyOf, SUGGEST_LABEL, TIMELINE_TEMPLATES, suggestOf, templateOf, type ServiceKey } from './timeline-templates';
@@ -32,19 +32,21 @@ const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{
  * - SELF -> TASK; CHOOSE -> CHOOSE (nút "Gợi ý {dịch vụ}"); BOOK (mã *_BOOK) -> CATEGORY_DEADLINE ("Chốt <hạng mục>", xong khi đã cọc)
  * - việc gắn đơn (task_code 'PKG:<id>' từ gói của NCC, 'PAY:<orderId>' thanh toán, hoặc mã chi tiết cũ) -> SERVICE_TASK: khách chỉ xem
  * - Việc chi tiết (SERVICE_TASK) nằm trong nhóm của Mốc chốt cùng hạng mục; Mốc chốt đã chốt mà đơn không có việc nào của gói mang vendorProcessMissing
- * `urgent` (Cần làm gấp) của việc khung tính lại khi đọc bằng đúng đầu vào lúc sinh (I = ngày tạo đám cưới); không lưu.
+ * `urgent` (Cần làm gấp) của việc khung tính lại khi đọc (frameUrgentCodes), không lưu: created_date của việc khung = lần cuối hệ thống
+ *   tính hạn, dùng làm I cho cờ Gấp (lúc sinh, lúc thêm dịch vụ, lúc đổi ngày cưới). Dòng thiếu created_date thì dùng ngày tạo đám cưới.
  * `priority` ("Ưu tiên k") tính theo HÔM NAY (L = W − hôm nay giờ VN, hiện khi L ≤ 80), xem priorityLabels; không lưu.
  * `mergedFrame` / `mergedHint`: việc gộp "Chọn và chốt …" nhận ra bằng mã (mergedServicesOf), gợi ý bước con lấy từ bộ mẫu (frameViewOf).
  */
-const frameUrgent = (w: { wedding_date: Date | null; created_date: Date | null }, keys: ServiceKey[], merged: ServiceKey[]) => {
-  const out = new Set<string>();
-  if (!w.wedding_date) return out;
-  try {
-    for (const t of planTimeline(TIMELINE_TEMPLATES, { wedding: toYmd(w.wedding_date), today: vnYmd(w.created_date ?? new Date()), services: keys, merged }).tasks) if (t.urgent) out.add(t.code);
-  } catch {
-    // ngày cưới không sau ngày tạo: không có cờ gấp
-  }
-  return out;
+const frameUrgent = (
+  w: { wedding_date: Date | null; created_date: Date | null },
+  keys: ServiceKey[],
+  merged: ServiceKey[],
+  tasks: readonly { task_code: string | null; created_date: Date | null }[],
+) => {
+  if (!w.wedding_date) return new Set<string>();
+  const fallback = w.created_date ?? new Date();
+  const rows = tasks.flatMap((t) => (t.task_code && templateOf(t.task_code) ? [{ code: t.task_code, planned: vnYmd(t.created_date ?? fallback) }] : []));
+  return frameUrgentCodes(TIMELINE_TEMPLATES, { wedding: toYmd(w.wedding_date), services: keys, merged, rows });
 };
 
 @Injectable()
@@ -98,7 +100,7 @@ export class TimelineService {
     // Cờ gấp: khung tính lại với I = ngày tạo
     const keys = [...new Set(tasks.map((t) => keyOfCat(t.category_id)).filter((k): k is ServiceKey => !!k))];
     const merged = mergedServicesOf(TIMELINE_TEMPLATES, allTasks.flatMap((t) => (t.task_code ? [baseCode(t.task_code)] : [])));
-    const urgent = frameUrgent(w, keys, merged);
+    const urgent = frameUrgent(w, keys, merged, tasks);
     const budget = budgetPriorityOf(w as { budget_preset?: string | null; custom_weights?: unknown }, (id) => keyOfCat(id));
     const priority = w.wedding_date ? priorityLabels(keys, dayOf(toYmd(w.wedding_date)) - dayOf(today), budget.preset, budget.weights) : null;
     const owners = ownersFrom(await loadPackageMeta(this.prisma, tasks.map((t) => t.task_code)));

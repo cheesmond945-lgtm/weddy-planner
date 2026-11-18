@@ -5,7 +5,7 @@ import { ORDER_INCLUDE, toOrderDto, ymd } from '../orders/order-mapping';
 import { BUDGET_PRESETS, type BudgetPreset } from './allocation.config';
 import { BudgetCalcService } from './budget-calc.service';
 import { fitsGuests, packageCost } from './budget-engine';
-import { notifyVendorsOfWeddingDate, onWeddingCategories, planWeddingDateChange } from './timeline-hooks';
+import { applyWeddingDateChange, notifyVendorsOfWeddingDate, onWeddingCategories, planWeddingDateChange } from './timeline-hooks';
 import { bumpVersion, versionOf } from './wedding-version';
 import { dbFeatures, requireDbFeature } from '../../prisma/db-features';
 import { isHanoiWard } from './wards';
@@ -179,7 +179,8 @@ export class WeddingsService {
         await tx.weddings.update({ where: { id: weddingId }, data: { ...data, updated_date: new Date() } });
         if (oldDate !== date) {
           dateChanged = true;
-          for (const u of (await planWeddingDateChange(tx, weddingId, date, oldDate)).updates) await tx.timeline_tasks.update({ where: { id: u.id }, data: { scheduled_date: u.date } });
+          // created_date của việc khung = lần cuối hệ thống tính hạn, dùng làm I cho cờ Gấp (applyWeddingDateChange)
+          await applyWeddingDateChange(tx, await planWeddingDateChange(tx, weddingId, date, oldDate));
         }
         // Ngân sách sửa tay của hạng mục bị bỏ chọn không còn ý nghĩa: xóa cùng
         if (dbFeatures.budgetTiers) await tx.wedding_category_budgets.deleteMany({ where: { wedding_id: weddingId, category_id: { notIn: categoryIds } } });

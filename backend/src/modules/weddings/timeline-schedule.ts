@@ -350,6 +350,34 @@ export function planTimeline(
   return { L, level: frame.level, K: frame.K, n, density, merged, order, priority, capSkipped, tasks };
 }
 
+/**
+ * Cờ Gấp của các việc khung, tính lúc đọc (hàm thuần, không đổi công thức Gấp của planFrame).
+ * created_date của việc khung = lần cuối hệ thống tính hạn, dùng làm I cho cờ Gấp: mỗi dòng mang `planned` = ngày đó (giờ VN).
+ * Nhóm các dòng theo `planned`, mỗi nhóm chạy planTimeline một lần với W hiện tại, dịch vụ và trạng thái gộp hiện tại,
+ * rồi lấy cờ Gấp của đúng mã trong nhóm. Nhóm có W ≤ I (RangeError) thì không có cờ Gấp. Trả tập mã Gấp.
+ */
+export function frameUrgentCodes(
+  templates: readonly TimelineTemplate[],
+  input: { wedding: string; services: readonly ServiceKey[]; merged: readonly ServiceKey[]; rows: readonly { code: string; planned: string }[] },
+): Set<string> {
+  const out = new Set<string>();
+  const byDay = new Map<string, Set<string>>();
+  for (const r of input.rows) {
+    if (!byDay.has(r.planned)) byDay.set(r.planned, new Set());
+    byDay.get(r.planned)!.add(r.code);
+  }
+  for (const [today, codes] of byDay) {
+    try {
+      for (const t of planTimeline(templates, { wedding: input.wedding, today, services: input.services, merged: input.merged }).tasks) {
+        if (t.urgent && codes.has(t.code)) out.add(t.code);
+      }
+    } catch {
+      // ngày cưới không sau ngày tính hạn: không có cờ Gấp
+    }
+  }
+  return out;
+}
+
 /** Số ngày tối thiểu từ ngày đặt cọc tới việc đầu tiên của gói: việc không sớm hơn D + 2. */
 export const MIN_AFTER_DEPOSIT = 2;
 
@@ -416,27 +444,37 @@ export interface DateChange {
  * Trạng thái gộp giữ như lúc sinh: `merged` (nơi gọi tính từ mọi dòng, kể cả dòng đã xóa) hoặc suy từ `tasks` (mergedServicesOf).
  * Việc đã xong, việc chi tiết của đơn (neo theo ngày thực hiện E của đơn) và việc khách tự thêm (không có mã mẫu) giữ nguyên. Trả các việc có hạn đổi.
  */
-export function replanOnWeddingDateChange(
-  templates: readonly TimelineTemplate[],
-  input: {
-    wedding: string;
-    today: string;
-    tasks: readonly ExistingTask[];
-    services: readonly ServiceKey[];
-    preset?: BudgetPresetKey | null;
-    weights?: ServiceWeights | null;
-    merged?: readonly ServiceKey[];
-  },
-): DateChange[] {
+type ReplanInput = {
+  wedding: string;
+  today: string;
+  tasks: readonly ExistingTask[];
+  services: readonly ServiceKey[];
+  preset?: BudgetPresetKey | null;
+  weights?: ServiceWeights | null;
+  merged?: readonly ServiceKey[];
+};
+
+export function replanOnWeddingDateChange(templates: readonly TimelineTemplate[], input: ReplanInput): DateChange[] {
+  return replanFrame(templates, input).changes;
+}
+
+/**
+ * Như replanOnWeddingDateChange, kèm `recomputed`: mã mọi việc khung chưa xong đã được tính lại hạn với I = hôm nay
+ * (kể cả việc ra đúng hạn cũ). Nơi gọi đặt created_date = now() cho các dòng này (I mới của cờ Gấp, xem frameUrgentCodes).
+ */
+export function replanFrame(templates: readonly TimelineTemplate[], input: ReplanInput): { changes: DateChange[]; recomputed: string[] } {
   const byCode = new Map(templates.map((t) => [t.code, t]));
   const have = new Map(input.tasks.map((t) => [t.code, t]));
   const changes: DateChange[] = [];
+  const recomputed: string[] = [];
   const merged = input.merged ?? mergedServicesOf(templates, input.tasks.map((t) => t.code));
   const plan = planTimeline(templates, { wedding: input.wedding, today: input.today, services: input.services, preset: input.preset, weights: input.weights, merged });
   for (const p of plan.tasks) {
     const tpl = byCode.get(p.code);
     const t = have.get(p.code);
-    if (tpl && isFrame(tpl.kind) && t && !t.done && t.date !== p.date) changes.push({ code: p.code, from: t.date, to: p.date });
+    if (!tpl || !isFrame(tpl.kind) || !t || t.done) continue;
+    recomputed.push(p.code);
+    if (t.date !== p.date) changes.push({ code: p.code, from: t.date, to: p.date });
   }
-  return changes.sort((a, b) => a.to.localeCompare(b.to));
+  return { changes: changes.sort((a, b) => a.to.localeCompare(b.to)), recomputed };
 }

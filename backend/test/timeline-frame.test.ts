@@ -8,6 +8,7 @@ import { describe, it } from 'node:test';
 import { TIMELINE_TEMPLATES, type BudgetPresetKey, type ServiceKey } from '../src/modules/weddings/timeline-templates.ts';
 import {
   dayOf,
+  frameUrgentCodes,
   mergeChains,
   mergedHint,
   mergedServicesOf,
@@ -15,6 +16,7 @@ import {
   planTimeline,
   priorityLabels,
   priorityOrder,
+  replanFrame,
   replanOnWeddingDateChange,
   ymd,
   type ServiceWeights,
@@ -324,6 +326,97 @@ describe('việc gộp: nhận ra bằng mã, gợi ý lấy từ bộ mẫu lú
       const row = { task_code: 'VENUE_BOOK', status: 'Todo', note, title: 'Tên khách tự đổi' };
       assert.deepEqual(frameViewOf(T, row, ctx), base, String(note));
     }
+  });
+});
+
+describe('cờ Gấp tính với I = created_date của từng dòng (dữ liệu giả, không đụng CSDL)', () => {
+  /** Dòng giả của timeline: mã, hạn, ngày hệ thống tính hạn (created_date giờ VN), đã xong chưa */
+  type Row = { code: string; date: string; planned: string; done: boolean };
+  /** Mô phỏng onWeddingCategories: sinh việc chưa có với I = hôm nay, created_date = hôm nay */
+  const generate = (rows: Row[], wedding: string, today: string, services: ServiceKey[]): Row[] => {
+    const have = new Set(rows.map((r) => r.code));
+    const merged = new Set(mergedServicesOf(T, have));
+    const fresh = planTimeline(T, { wedding, today, services })
+      .tasks.filter((t) => !have.has(t.code) && !(t.kind === 'CHOOSE' && t.service && merged.has(t.service)))
+      .map((t) => ({ code: t.code, date: t.date, planned: today, done: false }));
+    return [...rows, ...fresh];
+  };
+  /** Mô phỏng đổi ngày cưới + applyWeddingDateChange: dòng tính lại thì hạn mới và created_date = hôm nay */
+  const changeDate = (rows: Row[], wedding: string, today: string, services: ServiceKey[]): Row[] => {
+    const { changes, recomputed } = replanFrame(T, { wedding, today, tasks: rows.map((r) => ({ code: r.code, date: r.date, done: r.done })), services });
+    const to = new Map(changes.map((c) => [c.code, c.to]));
+    const re = new Set(recomputed);
+    return rows.map((r) => (re.has(r.code) ? { ...r, date: to.get(r.code) ?? r.date, planned: today } : r));
+  };
+  const urgentOf = (rows: Row[], wedding: string, services: ServiceKey[]) =>
+    frameUrgentCodes(T, { wedding, services, merged: mergedServicesOf(T, rows.map((r) => r.code)), rows });
+  /** Cách cũ: mọi dòng tính với I = ngày tạo đám cưới */
+  const urgentOld = (rows: Row[], wedding: string, created: string, services: ServiceKey[]) =>
+    new Set(planTimeline(T, { wedding, today: created, services, merged: mergedServicesOf(T, rows.map((r) => r.code)) }).tasks.filter((t) => t.urgent).map((t) => t.code));
+
+  const W = '2027-06-03';
+  const C = addDays(W, -200);
+  const FLOWER = ['FLOWER_SHORTLIST', 'FLOWER_PICK', 'FLOWER_BOOK'];
+
+  it('tạo khi còn 200 ngày, còn 30 ngày thêm hoa: 3 việc hoa Gấp (cách cũ thì không)', () => {
+    const base: ServiceKey[] = ['nha-hang', 'chup-anh'];
+    const all: ServiceKey[] = [...base, 'hoa-cuoi'];
+    let rows = generate([], W, C, base);
+    const X = addDays(W, -30);
+    rows = generate(rows, W, X, all);
+    assert.deepEqual(rows.filter((r) => FLOWER.includes(r.code)).map((r) => r.planned), [X, X, X]);
+    const urgent = urgentOf(rows, W, all);
+    for (const code of FLOWER) assert.ok(urgent.has(code), `${code} phải Gấp`);
+    // đúng bằng cờ Gấp của planTimeline với I = ngày thêm
+    const atAdd = planTimeline(T, { wedding: W, today: X, services: all });
+    for (const code of FLOWER) assert.equal(urgent.has(code), atAdd.tasks.find((t) => t.code === code)!.urgent);
+    // việc cũ của tiệc, chụp ảnh không bị ảnh hưởng (I = ngày tạo, L = 200: không Gấp)
+    for (const r of rows.filter((x) => x.planned === C)) assert.equal(urgent.has(r.code), false, r.code);
+    // cách cũ (I = ngày tạo đám cưới) bỏ sót
+    for (const code of FLOWER) assert.equal(urgentOld(rows, W, C, all).has(code), false);
+  });
+
+  it('tạo khi còn 200 ngày, dời ngày cưới còn 40 ngày: việc được tính lại mang Gấp đúng', () => {
+    const S: ServiceKey[] = ['nha-hang', 'chup-anh', 'trang-phuc'];
+    let rows = generate([], W, C, S);
+    rows = rows.map((r) => (r.code === 'SELF_FAMILY_ALIGN' ? { ...r, done: true } : r)); // một việc đã xong: không tính lại
+    const D = addDays(C, 100);
+    const W2 = addDays(D, 40);
+    rows = changeDate(rows, W2, D, S);
+    const expected = planTimeline(T, { wedding: W2, today: D, services: S });
+    const urgent = urgentOf(rows, W2, S);
+    for (const r of rows.filter((x) => !x.done)) {
+      const t = expected.tasks.find((x) => x.code === r.code)!;
+      assert.equal(r.date, t.date, r.code);
+      assert.equal(urgent.has(r.code), t.urgent, `${r.code}: Gấp phải là ${t.urgent}`);
+    }
+    assert.ok(urgent.size > 0, 'có việc Gấp sau khi dời');
+    // việc đã xong giữ created_date cũ
+    assert.equal(rows.find((r) => r.code === 'SELF_FAMILY_ALIGN')!.planned, C);
+    // cách cũ (I = ngày tạo, W mới, L = 140): không việc nào Gấp
+    assert.equal(urgentOld(rows, W2, C, S).size, 0);
+  });
+
+  it('dòng tính lại ra đúng hạn cũ vẫn được đặt lại created_date (recomputed ⊇ changes)', () => {
+    const S: ServiceKey[] = ['nha-hang'];
+    const rows = generate([], W, C, S);
+    const { changes, recomputed } = replanFrame(T, { wedding: addDays(W, 1), today: addDays(C, 1), tasks: rows.map((r) => ({ code: r.code, date: r.date, done: false })), services: S });
+    for (const c of changes) assert.ok(recomputed.includes(c.code), c.code);
+    assert.equal(recomputed.length, rows.length);
+  });
+
+  it('không thêm dịch vụ, không đổi ngày: cờ Gấp y như cách cũ (mọi L)', () => {
+    for (const L of [400, 200, 90, 60, 30, 21, 10, 5, 2, 1]) {
+      for (const S of [ALL, TWO, ONE]) {
+        const wedding = addDays(I, L);
+        const rows = generate([], wedding, I, S);
+        assert.deepEqual([...urgentOf(rows, wedding, S)].sort(), [...urgentOld(rows, wedding, I, S)].sort(), `L = ${L}, ${S.length} dịch vụ`);
+      }
+    }
+  });
+
+  it('nhóm có ngày cưới không sau ngày tính hạn: không cờ Gấp, không lỗi', () => {
+    assert.deepEqual([...frameUrgentCodes(T, { wedding: I, services: ALL, merged: [], rows: [{ code: 'VENUE_BOOK', planned: I }] })], []);
   });
 });
 

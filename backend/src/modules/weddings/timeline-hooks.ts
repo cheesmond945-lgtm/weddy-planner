@@ -6,7 +6,7 @@ import { syncOrderPackageTasks as syncOrderPackageTasksOf, type SyncDb } from '.
 import { loadPackageMeta, packagesOfOrder } from './package-task-meta';
 import { dbFeatures } from '../../prisma/db-features';
 import { baseCode, budgetPriorityOf, cancelPlan, frameRows, isOrderTaskCode, isRemovedCode, packageSwitchPlan, PKG_PREFIX, pkgTaskIdOf, replanOrderTasks, type PackageTaskRef, type ServiceRef } from './timeline-rows';
-import { mergedServicesOf, replanOnWeddingDateChange } from './timeline-schedule';
+import { mergedServicesOf, replanFrame } from './timeline-schedule';
 import { customerDateWarning, dateChangeIssue, vendorDateNotice, weddingDayRequestNote, type DateChangeKind } from './timeline-rules';
 import { serviceKeyOf, TIMELINE_TEMPLATES, templateOf, type ServiceKey } from './timeline-templates';
 
@@ -123,8 +123,10 @@ type Db = PrismaService | Prisma.TransactionClient;
 export interface DateChangePlan {
   /** Việc đổi hạn, để xem trước */
   changes: { id: string; title: string; oldDate: string; newDate: string }[];
-  /** Dòng cần UPDATE khi xác nhận */
+  /** Dòng cần UPDATE khi xác nhận (hạn mới) */
   updates: { id: string; date: Date }[];
+  /** Dòng việc khung đã được tính lại nhưng ra đúng hạn cũ: chỉ đặt lại created_date (I của cờ Gấp) */
+  touched: string[];
   /** Đơn có ngày thực hiện lệch ngày cưới mới (xem DateChangeKind); chưa cọc thì kèm blocksDeposit */
   warnings: { orderCode: string; vendorName: string; serviceId: string; eventDate: string; message: string; kind: DateChangeKind; blocksDeposit: boolean; blocksChange: boolean }[];
   /** Có đơn tiệc đã cọc khác ngày cưới mới: không cho lưu ngày cưới mới */
@@ -160,7 +162,8 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
   // Trạng thái gộp như lúc sinh (tính trên mọi dòng, kể cả dòng khách đã xóa)
   const merged = mergedServicesOf(TIMELINE_TEMPLATES, allTasks.flatMap((t) => (t.task_code ? [baseCode(t.task_code)] : [])));
   const budget = budgetPriorityOf(wedding, keyOf);
-  const changes = replanOnWeddingDateChange(TIMELINE_TEMPLATES, { wedding: newWedding, today, tasks: existing, services, merged, ...budget });
+  const { changes, recomputed } = replanFrame(TIMELINE_TEMPLATES, { wedding: newWedding, today, tasks: existing, services, merged, ...budget });
+  const changedCodes = new Set(changes.map((c) => c.code));
   const byCode = new Map(tasks.map((t) => [t.task_code, t]));
   const isVenue = (categoryId: string | null) => categoryKindOf(cats.find((c) => c.id === categoryId)?.name ?? null) === 'nha-hang';
   const warnings = orders.flatMap((o) => {
@@ -175,9 +178,21 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
   return {
     changes: changes.map((c) => ({ id: byCode.get(c.code)!.id, title: byCode.get(c.code)!.title ?? '', oldDate: c.from, newDate: c.to })),
     updates: changes.map((c) => ({ id: byCode.get(c.code)!.id, date: new Date(`${c.to}T00:00:00Z`) })),
+    touched: recomputed.filter((code) => !changedCodes.has(code)).map((code) => byCode.get(code)!.id),
     warnings,
     blocked: warnings.some((w) => w.blocksChange),
   };
+}
+
+/**
+ * Ghi kết quả đổi ngày cưới (gọi trong transaction đổi ngày). created_date của việc khung = lần cuối hệ thống tính hạn,
+ * dùng làm I cho cờ Gấp (frameUrgentCodes): dòng được tính lại hạn thì đặt created_date = now() cùng lệnh cập nhật scheduled_date;
+ * dòng tính lại ra đúng hạn cũ chỉ đặt lại created_date. Dòng không được tính lại (đã xong, gắn đơn, khách tự thêm) không đổi.
+ */
+export async function applyWeddingDateChange(db: Db, plan: Pick<DateChangePlan, 'updates' | 'touched'>) {
+  const now = new Date();
+  for (const u of plan.updates) await db.timeline_tasks.update({ where: { id: u.id }, data: { scheduled_date: u.date, created_date: now } });
+  if (plan.touched.length) await db.timeline_tasks.updateMany({ where: { id: { in: plan.touched } }, data: { created_date: now } });
 }
 
 /**
@@ -287,7 +302,7 @@ export async function syncWeddingDateWithVenue(prisma: PrismaService, weddingId:
     // Đổi có điều kiện theo ngày cũ: khách vừa tự đổi ngày cưới cùng lúc thì không ghi đè
     const r = await tx.weddings.updateMany({ where: { id: weddingId, wedding_date: new Date(`${oldDate}T00:00:00Z`) }, data: { wedding_date: new Date(`${newDate}T00:00:00Z`), updated_date: new Date() } });
     if (!r.count) return false;
-    for (const u of (await planWeddingDateChange(tx, weddingId, newDate, oldDate)).updates) await tx.timeline_tasks.update({ where: { id: u.id }, data: { scheduled_date: u.date } });
+    await applyWeddingDateChange(tx, await planWeddingDateChange(tx, weddingId, newDate, oldDate));
     return true;
   });
   if (!changed) return false;
