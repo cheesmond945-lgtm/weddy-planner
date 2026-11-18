@@ -42,9 +42,7 @@ export async function onWeddingCategories(prisma: PrismaService, weddingId: stri
     .filter((r) => {
       const t = templateOf(r.task_code);
       return !(t?.kind === 'CHOOSE' && t.service && mergedBefore.has(t.service));
-    })
-    // Chưa chạy SQL thêm cột note thì không ghi ghi chú gợi ý
-    .map((r) => (dbFeatures.timelineNotes ? r : { ...r, note: undefined }));
+    });
   if (!todo.length) return;
   await prisma.timeline_tasks.createMany({ data: todo, skipDuplicates: true });
 }

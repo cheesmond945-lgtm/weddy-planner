@@ -207,8 +207,8 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
           {!done && item.urgent && <span className="font-semibold text-warn">· Gấp</span>}
           {!done && !!item.priority && <span className="font-semibold text-info">· Ưu tiên {item.priority}</span>}
         </div>
-        {/* Việc gộp "Chọn và chốt …": gợi ý các bước con (ghi chú lúc sinh) */}
-        {item.mergedFrame && !done && item.note && <div className="mt-1 text-[12.5px] leading-snug text-muted-foreground">{item.note}</div>}
+        {/* Việc gộp "Chọn và chốt …": gợi ý các bước con từ bộ mẫu (backend chỉ gửi khi chưa xong) */}
+        {item.mergedFrame && !done && item.mergedHint && <div className="mt-1 text-[12.5px] leading-snug text-muted-foreground">{item.mergedHint}</div>}
         {autoDone && done && (
           <div className="mt-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-sage">
             <Check className="size-3.5" strokeWidth={3} aria-hidden />

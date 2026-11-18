@@ -9,17 +9,18 @@ import { TIMELINE_TEMPLATES, type BudgetPresetKey, type ServiceKey } from '../sr
 import {
   dayOf,
   mergeChains,
-  mergedNote,
+  mergedHint,
   mergedServicesOf,
   planFrame,
   planTimeline,
+  priorityLabels,
   priorityOrder,
   replanOnWeddingDateChange,
   ymd,
   type ServiceWeights,
   type TimelinePlan,
 } from '../src/modules/weddings/timeline-schedule.ts';
-import { budgetPriorityOf, frameRows } from '../src/modules/weddings/timeline-rows.ts';
+import { budgetPriorityOf, frameRows, frameViewOf } from '../src/modules/weddings/timeline-rows.ts';
 
 const T = TIMELINE_TEMPLATES;
 const I = '2026-11-15';
@@ -143,25 +144,23 @@ describe('Bước 0: gộp việc theo mật độ', () => {
     });
   });
 
-  it('ghi chú gợi ý: "Gợi ý: bước 1 → … → Chốt", ≤ 200 ký tự, đúng số bước con', () => {
+  it('gợi ý từ bộ mẫu: "Gợi ý: bước 1 → … → Chốt", đúng số bước con của chuỗi', () => {
     for (const s of ALL) {
-      const note = mergedNote(T, s);
-      assert.ok(note.startsWith('Gợi ý: '), note);
-      assert.ok(note.endsWith(' → Chốt'), note);
-      assert.ok(note.length <= 200, `${s}: ${note.length}`);
-      assert.equal(note.split(' → ').length, chainOf(s).length, s);
+      const hint = mergedHint(T, s);
+      assert.ok(hint.startsWith('Gợi ý: '), hint);
+      assert.ok(hint.endsWith(' → Chốt'), hint);
+      assert.equal(hint.split(' → ').length, chainOf(s).length, s);
     }
-    assert.equal(mergedNote(T, 'nha-hang'), 'Gợi ý: Lọc và hỏi giá 3–5 nhà hàng → Đi xem sảnh → Thử món, xin báo giá chính thức → Chốt');
+    assert.equal(mergedHint(T, 'nha-hang'), 'Gợi ý: Lọc và hỏi giá 3–5 nhà hàng → Đi xem sảnh → Thử món, xin báo giá chính thức → Chốt');
   });
 
-  it('frameRows ghi tên và ghi chú của việc gộp; việc khác không có ghi chú', () => {
+  it('frameRows ghi tên việc gộp, KHÔNG ghi cột note (để khách tự ghi chú)', () => {
     const rows = frameRows(T, { weddingId: 'w', wedding: addDays(I, 10), today: I, services: [{ key: 'nha-hang', categoryId: 'c1' }] });
     const venue = rows.find((r) => r.task_code === 'VENUE_BOOK')!;
     assert.equal(venue.title, 'Chọn và chốt trung tâm tiệc cưới');
-    assert.equal(venue.note, mergedNote(T, 'nha-hang'));
     assert.equal(venue.task_type, 'Frame');
     assert.equal(venue.category_id, 'c1');
-    assert.ok(rows.filter((r) => r.task_code !== 'VENUE_BOOK').every((r) => r.note === undefined));
+    assert.ok(rows.every((r) => !('note' in r)));
     assert.ok(!rows.some((r) => r.task_code === 'VENUE_SHORTLIST'));
   });
 });
@@ -200,7 +199,7 @@ describe('L > 80: không nhãn ưu tiên, kết quả bước 1–6 giống hệ
           now.tasks.map((t) => ({ code: t.code, date: t.date, urgent: t.urgent, shortened: t.shortened, rules: t.rules })),
           old.tasks.map((t) => ({ code: t.code, date: t.date, urgent: t.urgent, shortened: t.shortened, rules: t.rules })),
         );
-        assert.ok(now.tasks.every((t) => t.priority === null && !t.merged && t.note === null));
+        assert.ok(now.tasks.every((t) => t.priority === null && !t.merged && t.hint === null));
       });
     }
   }
@@ -250,7 +249,7 @@ describe('kịch bản (I = 15/11/2026)', () => {
             const mine = p.tasks.filter((t) => t.service === svc);
             assert.equal(mine.length, 1, svc);
             assert.ok(mine[0].merged && mine[0].code.endsWith('_BOOK') && mine[0].title.startsWith('Chọn và chốt '), svc);
-            assert.equal(mine[0].note, mergedNote(T, svc));
+            assert.equal(mine[0].hint, mergedHint(T, svc));
           }
           assert.ok(!p.tasks.some((t) => t.kind === 'CHOOSE'));
         });
@@ -270,6 +269,62 @@ describe('kịch bản (I = 15/11/2026)', () => {
       });
     });
   }
+});
+
+describe('nhãn ưu tiên tính theo HÔM NAY (L = W − hôm nay)', () => {
+  const W = '2027-03-01';
+  it('cùng đám cưới: hôm nay còn 81 ngày thì chưa có nhãn, còn 80 ngày thì có', () => {
+    assert.equal(priorityLabels(ALL, dayOf(W) - dayOf(addDays(W, -81)), 'VISUAL'), null);
+    assert.deepEqual(priorityLabels(ALL, dayOf(W) - dayOf(addDays(W, -80)), 'VISUAL'), { 'nha-hang': 1, 'trang-phuc': 2, makeup: 3, 'chup-anh': 4, decor: 5, 'hoa-cuoi': 6 });
+  });
+  it('không phụ thuộc ngày tạo: tạo khi còn 200 ngày, hôm nay còn 30 ngày vẫn có nhãn', () => {
+    const atCreate = planTimeline(T, { wedding: W, today: addDays(W, -200), services: ALL, preset: 'SPACE' });
+    assert.equal(atCreate.priority, null);
+    assert.deepEqual(priorityLabels(ALL, 30, 'SPACE'), { 'nha-hang': 1, decor: 2, 'hoa-cuoi': 3, 'trang-phuc': 4, makeup: 5, 'chup-anh': 6 });
+  });
+  it('ngày cưới hôm nay hoặc đã qua: không nhãn', () => {
+    assert.equal(priorityLabels(ALL, 0, 'BALANCED'), null);
+    assert.equal(priorityLabels(ALL, -3, 'BALANCED'), null);
+  });
+  it('frameViewOf: Chọn NCC / Mốc chốt mang nhãn của dịch vụ; việc chung, việc đã xong không có', () => {
+    const priority = priorityLabels(['nha-hang', 'decor'], 20, 'SPACE');
+    const ctx = { merged: [] as ServiceKey[], priority };
+    assert.equal(frameViewOf(T, { task_code: 'DECOR_SHORTLIST', status: 'Todo' }, ctx).priority, 2);
+    assert.equal(frameViewOf(T, { task_code: 'VENUE_BOOK', status: 'Todo' }, ctx).priority, 1);
+    assert.equal(frameViewOf(T, { task_code: 'VENUE_BOOK', status: 'Done' }, ctx).priority, null);
+    assert.equal(frameViewOf(T, { task_code: 'SELF_RINGS', status: 'Todo' }, ctx).priority, null);
+    assert.equal(frameViewOf(T, { task_code: null, status: 'Todo' }, ctx).priority, null);
+    assert.equal(frameViewOf(T, { task_code: 'DECOR_SHORTLIST', status: 'Todo' }, { merged: [], priority: null }).priority, null);
+  });
+});
+
+describe('việc gộp: nhận ra bằng mã, gợi ý lấy từ bộ mẫu lúc hiển thị', () => {
+  const merged = mergedServicesOf(T, ['VENUE_BOOK', 'PHOTO_SHORTLIST', 'PHOTO_CONSULT', 'PHOTO_BOOK', 'SELF_RINGS']);
+  const ctx = { merged, priority: null };
+  it('Mốc chốt của dịch vụ gộp: mergedFrame, gợi ý từ bộ mẫu, giữ nút Gợi ý khi chưa chốt', () => {
+    assert.deepEqual(frameViewOf(T, { task_code: 'VENUE_BOOK', status: 'Todo' }, ctx), {
+      priority: null,
+      mergedFrame: true,
+      mergedHint: mergedHint(T, 'nha-hang'),
+      suggestMerged: true,
+    });
+  });
+  it('đã chốt (Done): vẫn là việc gộp nhưng ẩn gợi ý và nút Gợi ý', () => {
+    assert.deepEqual(frameViewOf(T, { task_code: 'VENUE_BOOK', status: 'Done' }, ctx), { priority: null, mergedFrame: true, mergedHint: null, suggestMerged: false });
+  });
+  it('dịch vụ không gộp: Mốc chốt bình thường, không gợi ý', () => {
+    const v = frameViewOf(T, { task_code: 'PHOTO_BOOK', status: 'Todo' }, ctx);
+    assert.equal(v.mergedFrame, false);
+    assert.equal(v.mergedHint, null);
+    assert.equal(v.suggestMerged, false);
+  });
+  it('ghi chú của khách không ảnh hưởng gợi ý (gợi ý không đọc cột note, khách đổi tên việc cũng không sao)', () => {
+    const base = frameViewOf(T, { task_code: 'VENUE_BOOK', status: 'Todo' }, ctx);
+    for (const note of [null, '', 'Mẹ muốn tiệc ở quận 1', 'Gợi ý: cái khác hẳn']) {
+      const row = { task_code: 'VENUE_BOOK', status: 'Todo', note, title: 'Tên khách tự đổi' };
+      assert.deepEqual(frameViewOf(T, row, ctx), base, String(note));
+    }
+  });
 });
 
 describe('Bước 7.2: cờ Gấp đi theo hạn', () => {

@@ -7,7 +7,7 @@
  *   dạng cũ 'PKG:<id>' vẫn đọc được); 'PAY:<orderId>' việc thanh toán phần còn lại (mỗi đơn một việc);
  *   'ORD:<C|V|B>:<8 ký tự ngẫu nhiên>:<8 ký tự đầu của order_id>' việc RIÊNG của một đơn do NCC thêm (không thuộc gói; chữ cái là chủ việc).
  */
-import { planPackageTasks, planTimeline, type ServiceWeights } from './timeline-schedule.ts';
+import { mergedHint, planPackageTasks, planTimeline, type ServiceWeights } from './timeline-schedule.ts';
 import { isFrameKind, type BudgetPresetKey, type ServiceKey, type TimelineTemplate } from './timeline-templates.ts';
 
 export interface ServiceRef {
@@ -29,8 +29,6 @@ export interface TaskRow {
   task_type: 'Frame' | 'Detail';
   task_code: string;
   display_order: number;
-  /** Ghi chú (việc gộp "Chọn và chốt …": gợi ý bước con) */
-  note?: string | null;
 }
 
 const asDate = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
@@ -76,7 +74,8 @@ export const hiddenByCategory = (t: { task_code: string | null; order_id: string
 
 /**
  * Việc khung: Tự làm của "Chung" và Tự làm / Chọn NCC / Mốc chốt của các hạng mục đã chọn, hạn tính từ ngày cưới (planTimeline).
- * Mật độ việc > 1 thì chuỗi của mỗi dịch vụ gộp thành một việc "Chọn và chốt …" (mã *_BOOK, ghi chú gợi ý bước con).
+ * Mật độ việc > 1 thì chuỗi của mỗi dịch vụ gộp thành một việc "Chọn và chốt …" (mã *_BOOK). Không ghi cột note (để khách tự ghi chú);
+ * gợi ý bước con tính lúc hiển thị (frameViewOf).
  */
 export function frameRows(
   templates: readonly TimelineTemplate[],
@@ -96,9 +95,33 @@ export function frameRows(
       task_type: isFrameKind(t.kind) ? ('Frame' as const) : ('Detail' as const),
       task_code: t.code,
       display_order: t.order,
-      ...(p.note && { note: p.note }),
     };
   });
+}
+
+/**
+ * Phần hiển thị của một việc khung (hàm thuần, không đọc cột note):
+ * - priority: "Ưu tiên k" của việc Chọn NCC / Mốc chốt thuộc dịch vụ, theo nhãn đã tính với hôm nay (priorityLabels); việc đã xong không có.
+ * - mergedFrame: việc gộp "Chọn và chốt …", nhận ra bằng mã *_BOOK của dịch vụ có trong `merged` (mergedServicesOf), không dựa vào tên.
+ * - mergedHint: gợi ý bước con lấy từ bộ mẫu theo chuỗi của dịch vụ; chỉ khi chưa xong.
+ * - suggestMerged: việc gộp chưa chốt giữ nút "Gợi ý {dịch vụ}".
+ */
+export function frameViewOf(
+  templates: readonly TimelineTemplate[],
+  task: { task_code: string | null; status: string | null },
+  ctx: { merged: readonly ServiceKey[]; priority: Partial<Record<ServiceKey, number>> | null },
+): { priority: number | null; mergedFrame: boolean; mergedHint: string | null; suggestMerged: boolean } {
+  const tpl = task.task_code ? templates.find((t) => t.code === task.task_code) : undefined;
+  const done = task.status === 'Done';
+  const service = tpl?.service ?? null;
+  const mergedFrame = tpl?.kind === 'BOOK' && !!service && ctx.merged.includes(service);
+  const chain = tpl?.kind === 'CHOOSE' || tpl?.kind === 'BOOK';
+  return {
+    priority: !done && service && chain ? (ctx.priority?.[service] ?? null) : null,
+    mergedFrame,
+    mergedHint: mergedFrame && !done ? mergedHint(templates, service!) : null,
+    suggestMerged: mergedFrame && !done,
+  };
 }
 
 const PRESETS: readonly BudgetPresetKey[] = ['BALANCED', 'SPACE', 'VISUAL', 'CUSTOM'];

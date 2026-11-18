@@ -147,7 +147,6 @@ export function planFrame(templates: readonly TimelineTemplate[], input: { weddi
 
 /** Nhãn "Ưu tiên k" chỉ khi L ≤ ngưỡng này. */
 export const PRIORITY_MAX_L = 80;
-const NOTE_MAX = 200;
 const FINAL_CHECK = 'SELF_FINAL_CHECK';
 const isChain = (k: TaskKind) => k === 'CHOOSE' || k === 'BOOK';
 const byOrder = (a: TimelineTemplate, b: TimelineTemplate) => a.order - b.order;
@@ -173,15 +172,31 @@ export function priorityOrder(services: readonly ServiceKey[], preset?: BudgetPr
   return [...(picked.has('nha-hang') ? (['nha-hang'] as ServiceKey[]) : []), ...rest.filter((s) => picked.has(s))];
 }
 
-/** Ghi chú gợi ý của việc gộp: "Gợi ý: bước 1 → bước 2 → … → Chốt" từ các việc Chọn NCC của chuỗi, tối đa 200 ký tự. */
-export function mergedNote(templates: readonly TimelineTemplate[], service: ServiceKey): string {
-  const steps = templates.filter((t) => t.service === service && t.kind === 'CHOOSE').sort(byOrder).map((t) => STEP_HINT[t.code] ?? t.title);
-  const s = `Gợi ý: ${[...steps, 'Chốt'].join(' → ')}`;
-  return s.length > NOTE_MAX ? `${s.slice(0, NOTE_MAX - 1)}…` : s;
+/**
+ * Nhãn "Ưu tiên k" theo dịch vụ, tính lúc HIỂN THỊ với L = W − hôm nay (giờ VN): chỉ khi 0 < L ≤ 80, ngược lại null. Không lưu.
+ */
+export function priorityLabels(
+  services: readonly ServiceKey[],
+  L: number,
+  preset?: BudgetPresetKey | null,
+  weights?: ServiceWeights | null,
+): Partial<Record<ServiceKey, number>> | null {
+  if (!(L > 0 && L <= PRIORITY_MAX_L)) return null;
+  return Object.fromEntries(priorityOrder([...new Set(services)], preset, weights).map((s, i) => [s, i + 1])) as Partial<Record<ServiceKey, number>>;
 }
 
 /**
- * Bước 0: thay mọi việc Chọn NCC + Mốc chốt của từng dịch vụ trong `services` bằng một việc "Chọn và chốt …":
+ * Gợi ý bước con của việc gộp, lấy từ bộ mẫu theo chuỗi của dịch vụ (không lưu, không đọc cột note):
+ * "Gợi ý: bước 1 → bước 2 → … → Chốt".
+ */
+export function mergedHint(templates: readonly TimelineTemplate[], service: ServiceKey): string {
+  const steps = templates.filter((t) => t.service === service && t.kind === 'CHOOSE').sort(byOrder).map((t) => STEP_HINT[t.code] ?? t.title);
+  return `Gợi ý: ${[...steps, 'Chốt'].join(' → ')}`;
+}
+
+/**
+ * Bước 0: thay mọi việc Chọn NCC + Mốc chốt của từng dịch vụ trong `services` bằng một việc "Chọn và chốt …"
+ * (tên chỉ để hiển thị lúc sinh; việc gộp nhận ra bằng mã, xem mergedServicesOf):
  * giữ mã, thứ tự và d của Mốc chốt (để vẫn tự hoàn thành khi đặt cọc), không ưu tiên cuối tuần, không noShrink.
  */
 export function mergeChains(templates: readonly TimelineTemplate[], services: readonly ServiceKey[]): TimelineTemplate[] {
@@ -215,9 +230,9 @@ export interface TimelineTask extends ScheduledTask {
   offset: number;
   /** Việc gộp "Chọn và chốt …" (Bước 0) */
   merged: boolean;
-  /** Ghi chú gợi ý bước con (chỉ việc gộp) */
-  note: string | null;
-  /** "Ưu tiên k" (chỉ khi L ≤ 80 và việc thuộc một dịch vụ) */
+  /** Gợi ý bước con lấy từ bộ mẫu (chỉ việc gộp; không ghi vào CSDL) */
+  hint: string | null;
+  /** "Ưu tiên k" với L lúc sinh (chỉ khi L ≤ 80 và việc thuộc một dịch vụ); giao diện tính lại theo hôm nay (priorityLabels) */
   priority: number | null;
 }
 
@@ -242,7 +257,8 @@ export interface TimelinePlan {
 
 /**
  * Timeline khung đầy đủ (hàm thuần):
- * - Bước 0: n = số việc trước cưới của các dịch vụ khách chọn, mật độ = n / (L − 1). Mật độ > 1 thì gộp chuỗi từng dịch vụ (mergeChains).
+ * - Bước 0: n = số việc trước cưới của các dịch vụ khách chọn, mật độ = n / (L − 1). Mật độ > 1 thì gộp chuỗi từng dịch vụ (mergeChains);
+ *   việc gộp nhận ra bằng mã (mergedServicesOf), gợi ý bước con lấy từ bộ mẫu lúc hiển thị (mergedHint).
  *   `merged` truyền vào thì dùng đúng danh sách đó (tính lại timeline đã sinh: giữ trạng thái gộp như lúc sinh).
  * - Bước 1–6: planFrame trên danh sách sau Bước 0, không đổi công thức.
  * - Bước 7.1: L ≤ 80 thì mọi việc của dịch vụ mang nhãn "Ưu tiên k" (priorityOrder).
@@ -275,7 +291,7 @@ export function planTimeline(
 
   // Bước 7.1
   const order = priorityOrder(services, input.preset, input.weights);
-  const priority = L <= PRIORITY_MAX_L ? Object.fromEntries(order.map((s, i) => [s, i + 1])) as Partial<Record<ServiceKey, number>> : null;
+  const priority = priorityLabels(services, L, input.preset, input.weights);
   const tpl = new Map(effective.map((t) => [t.code, t]));
   const tasks: TimelineTask[] = frame.tasks.map((p) => {
     const t = tpl.get(p.code)!;
@@ -288,7 +304,7 @@ export function planTimeline(
       kind: t.kind,
       offset: t.offset,
       merged: isMerged,
-      note: isMerged ? mergedNote(templates, t.service!) : null,
+      hint: isMerged ? mergedHint(templates, t.service!) : null,
       priority: t.service && priority ? (priority[t.service] ?? null) : null,
     };
   });
