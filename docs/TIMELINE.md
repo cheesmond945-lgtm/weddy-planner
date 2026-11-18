@@ -33,6 +33,14 @@ Ký hiệu: W ngày cưới, I hôm nay (giờ VN), L = W − I, L1 = L − 1, d
 
 Kiểm chứng: 62 dòng sheet ví dụ (có kỳ vọng cập nhật theo luật chỉ lùi) và các L = 400, 180, 91, 45, 20, 7 trong `backend/test/timeline-schedule.test.ts`.
 
+**Bước 0 và Bước 7 của timeline khung** (`planTimeline` trong `timeline-schedule.ts`; các luật trên là Bước 1–6 của `planFrame`, không đổi):
+- Bước 0: n = số việc trước cưới của các dịch vụ khách chọn (không tính "Cảm ơn khách"), mật độ = n / (L − 1) (L − 1 ≤ 0 là vô hạn). Mật độ > 1 thì mọi việc Chọn NCC + Mốc chốt của mỗi dịch vụ gộp thành một việc "Chọn và chốt {dịch vụ}": giữ mã `*_BOOK` và d của Mốc chốt (vẫn tự xong khi đặt cọc), không dời cuối tuần, không noShrink; cột `note` ghi "Gợi ý: bước 1 → … → Chốt". Việc tự làm giữ nguyên.
+- Bước 7.1: L ≤ 80 thì mọi việc khung của dịch vụ mang nhãn "Ưu tiên k": trung tâm tiệc cưới là 1, còn lại theo mức chia ngân sách (Ưu tiên hình ảnh: trang phục → trang điểm → chụp ảnh → trang trí → hoa; Ưu tiên không gian: trang trí → hoa → trang phục → trang điểm → chụp ảnh; Cân bằng: chụp ảnh → trang phục → trang trí → trang điểm → hoa; Tùy chỉnh: % cao trước, bằng nhau theo Cân bằng). Chỉ đánh số dịch vụ đã chọn. Tính lúc đọc, không lưu.
+- Bước 7.2: có gộp thì các hạn (kèm cờ Gấp) của việc gộp sắp tăng dần, hạn sớm nhất cho dịch vụ ưu tiên cao nhất; trùng ngày thì việc ưu tiên thấp hơn lùi 1 ngày, không quá W − 1 (vượt thì để trùng).
+- Bước 7.3: việc trước cưới có hạn > W − 1 về W − 1; "Rà soát cuối" không sớm hơn việc trước cưới nào (tối đa W − 1). Cưới ngày mai (W − 1 < I + 1) thì giữ hành vi cũ.
+- Timeline đã sinh giữ trạng thái gộp (có mã Mốc chốt mà không còn mã Chọn NCC nào): đổi ngày cưới hay thêm dịch vụ không sinh lại việc Chọn NCC của dịch vụ đã gộp.
+- Kiểm chứng: `backend/test/timeline-frame.test.ts` (I = 15/11/2026; L = 400, 181, 90, 60, 30, 21, 20, 10, 5, 3, 2; L > 80 so khớp từng dòng với `planFrame`).
+
 ## 3. Vòng đời
 
 1. **Tạo / sửa thông tin đám cưới** (`PUT /weddings/me`): sinh việc khung theo W và I = hôm nay. Chỉ thêm mã chưa có, không bao giờ dời việc đã sinh.
