@@ -9,6 +9,7 @@ import type { OrderFormMode } from '@/features/vendorOrders/components/OrderForm
 import { useConversationOrders } from '@/features/vendorOrders/hooks'
 import { vendorConversationsApi } from '@/api/vendorConversations'
 import { ComposerTools } from '@/features/chat/components/ChatAttachments'
+import { AttachedPackages, PackagePickerButton, useAttachedPackages } from '@/features/chat/components/ChatPackages'
 import { ReplyBar, type NameOf } from '@/features/chat/components/MessageExtras'
 import { groupAlbums } from '@/features/chat/albums'
 import { useMessageReaction } from '@/features/chat/useMessageReaction'
@@ -93,11 +94,22 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
     if (target) el.scrollTo({ top: Math.max(0, target.offsetTop - el.clientHeight / 2 + target.offsetHeight / 2), behavior: 'smooth' })
   }, [c.id, count, highlightOrderId])
 
-  function submit() {
+  // NCC gợi ý gói cho khách (nút Gửi gói): gửi thẻ gói trước rồi mới tới lời nhắn
+  const pkgs = useAttachedPackages<VendorMessage>(vendorKeys.messages(user?.id, c.id), vendorKeys.conversations(user?.id), (ids, replyToId) =>
+    vendorConversationsApi.sendPackages(c.id, ids, replyToId),
+  )
+
+  async function submit() {
     const t = text.trim()
-    if (!t) return
+    if ((!t && !pkgs.items.length) || pkgs.sending) return
+    const withPackages = pkgs.items.length > 0
+    if (withPackages) {
+      if (!(await pkgs.flush(replying?.id))) return
+      setReplying(null)
+      if (!t) return
+    }
     send.mutate(
-      { text: t, replyToId: replying?.id },
+      { text: t, replyToId: withPackages ? undefined : replying?.id },
       {
         onSuccess: () => {
           setText('')
@@ -201,16 +213,22 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
           <ReplyBar reply={replying} nameOf={nameOf} onCancel={() => setReplying(null)} />
         </div>
       )}
+      {pkgs.items.length > 0 && (
+        <div className={cn('bg-surface px-6 pt-2.5 max-[900px]:px-3', !replying && 'border-t border-line-soft')}>
+          <AttachedPackages items={pkgs.items} onRemove={pkgs.remove} />
+        </div>
+      )}
       <form
-        className={cn('flex items-center gap-2.5 bg-surface px-6 pt-3.5 pb-[18px] max-[900px]:px-3 max-[900px]:pb-3', !replying && 'border-t border-line-soft')}
+        className={cn('flex items-center gap-2.5 bg-surface px-6 pt-3.5 pb-[18px] max-[900px]:px-3 max-[900px]:pb-3', !replying && !pkgs.items.length && 'border-t border-line-soft')}
         onSubmit={(e) => {
           e.preventDefault()
-          submit()
+          void submit()
         }}
       >
         <ComposerTools
           className="min-w-0 flex-1"
           sending={attach.isPending}
+          extra={<PackagePickerButton queryKey={['chat-packages', c.id]} load={() => vendorConversationsApi.packages(c.id)} selected={pkgs.items} onPick={pkgs.set} />}
           onFiles={(files) => void attach.sendFiles(files, replying?.id).then(() => setReplying(null))}
           onVoice={(clip) => void attach.send({ file: clip.blob, name: clip.name, durationSec: clip.durationSec, replyToId: replying?.id }).then(() => setReplying(null), () => undefined)}
         >
@@ -222,7 +240,7 @@ export function ChatThread({ conversation: c, onBack, onOpenForm, highlightOrder
             onChange={(e) => setText(e.target.value)}
             className="min-w-0 flex-1 rounded-pill border-0 bg-bg px-[18px] py-[15px] text-[15px] text-ink outline-none focus:outline-1 focus:outline-primary"
           />
-          <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending} className="ml-1 size-12 rounded-full">
+          <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending || pkgs.sending} className="ml-1 size-12 rounded-full">
             <Send className="size-[19px]" />
           </Button>
         </ComposerTools>

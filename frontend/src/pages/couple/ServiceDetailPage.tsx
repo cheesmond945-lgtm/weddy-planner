@@ -1,4 +1,5 @@
-import { useLocation, useNavigate, useParams } from 'react-router'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
+import { PACKAGE_PARAM } from '@/features/catalog/useOpenedPackage'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/api'
@@ -10,7 +11,7 @@ import { HallCalendar, HallDayBadge, HallsVerdict } from '@/features/halls/compo
 import { useMyOrders } from '@/features/orders/hooks'
 import { RESTAURANT_SLUG } from '@/features/vendors/constants'
 import { useWedding } from '@/features/weddings/hooks'
-import { AddToPlanButton, OpenChatButton, usePlanItemOf } from '@/features/weddings/planActions'
+import { AddToPlanButton, AskPackageButton, OpenChatButton, usePlanItemOf } from '@/features/weddings/planActions'
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { formatDate } from '@/lib/date'
 import { formatUnitPrice } from '@/features/catalog/price'
@@ -31,6 +32,17 @@ export default function ServiceDetailPage() {
   const booked = (myOrders ?? []).filter((o) => o.serviceId === serviceId && o.package && (o.status === 'Deposited' || o.status === 'Completed'))
   const mineOf = (packageId: string) => booked.filter((o) => o.package!.id === packageId).map((o) => o.eventDate)
   const bookedHall = booked.find((o) => o.eventDate === wedding?.date)?.package?.name ?? null
+  // Đóng khung chi tiết gói (mở theo ?goi=) trước khi mở hộp chat "Hỏi về gói này"
+  const [, setParams] = useSearchParams()
+  const closePackage = () =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete(PACKAGE_PARAM)
+        return next
+      },
+      { replace: true, preventScrollReset: true },
+    )
 
   // Về đúng danh sách (giữ bộ lọc) nếu đi từ trang Dịch vụ cưới
   const backTo = (location.state as { from?: string } | null)?.from ?? paths.services
@@ -74,8 +86,15 @@ export default function ServiceDetailPage() {
         <ServiceDetailView
           service={service}
           sidebarLead={halls ? <HallsVerdict serviceId={service.id} weddingDate={wedding?.date} bookedHall={bookedHall} /> : undefined}
-          // Cuối khung chi tiết gói: lịch sảnh (trung tâm tiệc)
-          packageExtra={halls ? (pkg) => <HallCalendar packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
+          // Cuối khung chi tiết gói: lịch sảnh (trung tâm tiệc) và nút hỏi NCC về đúng gói này
+          packageExtra={(pkg) => (
+            <>
+              {halls && <HallCalendar packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} />}
+              <div className="mt-4">
+                <AskPackageButton service={service} pkg={pkg} onOpen={closePackage} />
+              </div>
+            </>
+          )}
           packageBadge={halls ? (pkg) => <HallDayBadge packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
           packagesSubtitle={halls && wedding?.date ? `Sảnh bận hay còn trống vào ngày cưới của bạn (${formatDate(wedding.date)}). Bấm Xem chi tiết để xem lịch tháng.` : undefined}
           headActions={<FavoriteButton service={service} variant="icon" />}

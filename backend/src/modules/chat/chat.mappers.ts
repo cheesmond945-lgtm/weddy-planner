@@ -1,10 +1,36 @@
 import type { postMessage } from './chat-messages';
+import { isPackageMessage, parsePackageContent, readableContent } from './chat-package';
 
 export type ChatRole = 'Couple' | 'Vendor';
-export type MessageType = 'Text' | 'Order' | 'DepositReceipt' | 'FinalInvoice' | 'Image' | 'File' | 'Audio';
+export type MessageType = 'Text' | 'Order' | 'DepositReceipt' | 'FinalInvoice' | 'Image' | 'File' | 'Audio' | 'Package';
 export type MessageSender = 'COUPLE' | 'VENDOR' | 'SYSTEM';
 
 export type MessageRow = Awaited<ReturnType<typeof postMessage>>;
+
+/** Thẻ gói của tin Package (ServicesService.packageCards) */
+export interface PackageCard {
+  id: string;
+  serviceId: string | null;
+  name: string;
+  price: number;
+  unit: string;
+  minTables: number | null;
+  capacity: number | null;
+  imageUrl: string | null;
+  available: boolean;
+}
+
+/** Id gói của các tin Package (chưa thu hồi), để đọc thẻ gói một lần cho cả danh sách */
+export const packageIdsOf = (rows: { type: string | null; content: string | null; recalled_date: Date | null }[]) => [
+  ...new Set(rows.flatMap((m) => (isPackageMessage(m.type, m.content) && !m.recalled_date ? [parsePackageContent(m.content).id] : [])).filter((id): id is string => !!id)),
+];
+
+/** Thẻ gói của một tin Package: gói đã bị xóa thì chỉ còn tên, không mở được */
+function packageOf(m: MessageRow, cards?: Map<string, PackageCard>): PackageCard | null {
+  if (!isPackageMessage(m.type, m.content)) return null;
+  const { id, name } = parsePackageContent(m.content);
+  return (id && cards?.get(id)) || { id: id ?? '', serviceId: null, name, price: 0, unit: 'gói', minTables: null, capacity: null, imageUrl: null, available: false };
+}
 
 /** SenderId rỗng là tin hệ thống; còn lại so với tài khoản cặp đôi của hội thoại. */
 export const senderOf = (m: { sender_id: string | null }, coupleId: string | null): MessageSender =>
@@ -34,7 +60,7 @@ function reactionsOf(rows: { user_id: string; emoji: string | null }[], viewerId
 /** Nội dung thay cho tin đã thu hồi (tin cuối trong danh sách hội thoại, đoạn trích khi trả lời) */
 export const RECALLED_TEXT = 'Tin nhắn đã được thu hồi';
 
-export function toMessage(m: MessageRow, coupleId: string | null, viewerId?: string, fileUrls?: Map<string, string>) {
+export function toMessage(m: MessageRow, coupleId: string | null, viewerId?: string, fileUrls?: Map<string, string>, packages?: Map<string, PackageCard>) {
   const quoted = m.messages;
   // Tin đã thu hồi: không trả nội dung, tệp, cảm xúc, đoạn trích
   if (m.recalled_date) {
@@ -52,6 +78,7 @@ export function toMessage(m: MessageRow, coupleId: string | null, viewerId?: str
       reactions: [],
       isAuto: !!m.is_auto,
       attachment: null,
+      package: null,
       recalled: true,
     };
   }
@@ -62,17 +89,20 @@ export function toMessage(m: MessageRow, coupleId: string | null, viewerId?: str
     id: m.id,
     conversationId: m.conversation_id,
     sender: senderOf(m, coupleId),
-    type: m.type as MessageType,
+    // Thẻ gói lưu là tin Text (chat-package.ts), trả ra là Package
+    type: (isPackageMessage(m.type, m.content) ? 'Package' : m.type) as MessageType,
     orderId: m.order_id,
-    content: m.content,
+    content: readableContent(m.type, m.content),
     isRead: m.is_read,
     sentDate: (m.sent_date ?? new Date(0)).toISOString(),
     order: m.orders ? { orderCode: m.orders.order_code, status: m.orders.status } : null,
-    replyTo: quoted ? { id: quoted.id, sender: senderOf(quoted, coupleId), content: quoted.recalled_date ? RECALLED_TEXT : (quoted.content ?? '').slice(0, QUOTE_CHARS) } : null,
+    replyTo: quoted ? { id: quoted.id, sender: senderOf(quoted, coupleId), content: quoted.recalled_date ? RECALLED_TEXT : readableContent(quoted.type, quoted.content).slice(0, QUOTE_CHARS) } : null,
     reactions: reactionsOf(m.message_reactions, viewerId),
     isAuto: !!m.is_auto,
     /** Tin Image / File / Audio: link xem tạm (ký 1 giờ), tên, kiểu, dung lượng, độ dài ghi âm (giây) */
     attachment,
+    /** Tin Package: thẻ gói (ảnh, tên, giá, đơn vị) */
+    package: packageOf(m, packages),
     recalled: false,
   };
 }

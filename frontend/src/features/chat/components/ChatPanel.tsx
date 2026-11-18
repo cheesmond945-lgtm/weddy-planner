@@ -22,6 +22,7 @@ import { useMessageReaction } from '../useMessageReaction'
 import { useRecallMessage } from '../useRecallMessage'
 import { useSendAttachment } from '../useSendAttachment'
 import { AttachmentContent, ComposerTools, ImageAlbum } from './ChatAttachments'
+import { AttachedPackages, PackageMessageCard, PackagePickerButton, useAttachedPackages } from './ChatPackages'
 import { imagesOf, MessageShell, ReplyBar, type NameOf } from './MessageExtras'
 import { shortVendorName } from '@/lib/vendorName'
 import { quickReplies } from '../quickReplies'
@@ -103,6 +104,12 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
     setReplying(m)
     inputRef.current?.focus()
   }
+  // Thẻ gói đính kèm trên ô nhập: mở từ nút "Hỏi về gói này" (thay gói đang đính kèm) hoặc chọn bằng nút Gửi gói
+  const pkgs = useAttachedPackages<Message>(messagesKey, planningKeys.conversations(uid), (ids, replyToId) => chatApi.sendPackages(conversation.id, ids, replyToId))
+  const setAttached = pkgs.set
+  useEffect(() => {
+    if (panel.attachPackage) setAttached([panel.attachPackage])
+  }, [panel, setAttached])
 
   // Tin soạn sẵn chỉ dành cho lần nhắn đầu: tải xong tin cũ mà khách chưa nhắn lần nào thì mới điền, con trỏ đặt cuối câu
   const draftDone = useRef(false)
@@ -142,15 +149,22 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
     }
   }
 
-  function submit(e?: FormEvent) {
+  async function submit(e?: FormEvent) {
     e?.preventDefault()
     const t = text.trim()
-    if (!t) return
+    if ((!t && !pkgs.items.length) || pkgs.sending) return
+    // Có gói đính kèm: gửi thẻ gói trước (tin trả lời gắn vào thẻ đầu), rồi mới gửi lời nhắn
+    const withPackages = pkgs.items.length > 0
+    if (withPackages) {
+      if (!(await pkgs.flush(replying?.id))) return
+      setReplying(null)
+      if (!t) return
+    }
     const item: PendingMessage = {
       id: `tmp-${Date.now()}`,
       text: t,
       status: 'sending',
-      replyToId: replying?.id,
+      replyToId: withPackages ? undefined : replying?.id,
     }
     setPending((list) => [...list, item])
     setText('')
@@ -162,7 +176,7 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
     // Enter gửi, Shift+Enter xuống dòng; đang gõ dấu tiếng Việt (IME) thì Enter để bộ gõ xử lý
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
-      submit()
+      void submit()
     }
   }
 
@@ -268,10 +282,16 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
             <ReplyBar reply={replying} nameOf={nameOf} onCancel={() => setReplying(null)} />
           </div>
         )}
-        <form onSubmit={submit} className="flex items-end gap-2">
+        {pkgs.items.length > 0 && (
+          <div className="mb-2">
+            <AttachedPackages items={pkgs.items} onRemove={pkgs.remove} />
+          </div>
+        )}
+        <form onSubmit={(e) => void submit(e)} className="flex items-end gap-2">
           <ComposerTools
             className="min-w-0 flex-1 items-end"
             sending={attach.isPending}
+            extra={<PackagePickerButton queryKey={['chat-packages', conversation.id]} load={() => chatApi.packages(conversation.id)} selected={pkgs.items} onPick={pkgs.set} />}
             onFiles={(files) => void attach.sendFiles(files, replying?.id).then(() => setReplying(null))}
             onVoice={(clip) =>
               void attach
@@ -301,7 +321,7 @@ function PanelBody({ panel }: { panel: ChatPanelState }) {
               type="submit"
               aria-label="Gửi tin nhắn"
               title="Gửi (Enter)"
-              disabled={!text.trim()}
+              disabled={(!text.trim() && !pkgs.items.length) || pkgs.sending}
               className="grid size-10 shrink-0 place-items-center rounded-full bg-gold-700 text-white transition-colors hover:bg-gold-800 disabled:opacity-50"
             >
               <SendHorizontal className="size-[18px]" strokeWidth={1.75} />
@@ -377,6 +397,8 @@ function Bubble({
           <ImageAlbum images={album.flatMap((x) => (x.attachment ? [x.attachment] : []))} />
         ) : m.attachment ? (
           <AttachmentContent attachment={m.attachment} mine={mine} />
+        ) : m.package ? (
+          <PackageMessageCard pkg={m.package} mine={mine} linkable />
         ) : (
           <div className={cn(bubbleText, mine ? 'rounded-br-md bg-gold-700 text-white' : 'rounded-bl-md bg-gold-100 text-ink')}>{m.content}</div>
         )}

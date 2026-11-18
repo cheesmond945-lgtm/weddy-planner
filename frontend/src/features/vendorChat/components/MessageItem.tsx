@@ -2,6 +2,7 @@ import { Receipt } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { AttachmentContent, ImageAlbum } from '@/features/chat/components/ChatAttachments'
+import { PackageMessageCard } from '@/features/chat/components/ChatPackages'
 import { imagesOf, MessageShell, type NameOf } from '@/features/chat/components/MessageExtras'
 import { effectiveSender } from '@/features/chat/messageSender'
 import { formatStamp } from '@/features/vendorOrders/calc'
@@ -130,6 +131,8 @@ export function MessageItem({ message: m, order, isLatestCard, highlight, onOpen
           <ImageAlbum images={album.flatMap((x) => (x.attachment ? [x.attachment] : []))} />
         ) : m.attachment ? (
           <AttachmentContent attachment={m.attachment} mine={mine} />
+        ) : m.package ? (
+          <PackageMessageCard pkg={m.package} mine={mine} linkable={false} />
         ) : (
           <div className={cn('rounded-[20px] px-[15px] py-[11px] text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]', mine ? 'rounded-br-[5px] bg-primary text-primary-foreground' : 'rounded-bl-[5px] bg-bg text-ink')}>
             {m.content}

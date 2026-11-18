@@ -13,7 +13,8 @@ import { CHAT_MODE, CHAT_PARAM, chatPanel } from '@/features/chat/chatPanel'
 import { chosenPackageName } from '@/features/chat/quickReplies'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
-import type { ServiceDetail, ServiceSummary } from '@/types/catalog'
+import type { ServiceDetail, ServicePackage, ServiceSummary } from '@/types/catalog'
+import type { ChatPackage } from '@/types/chat'
 import { usePlan, useRefreshPlanning } from './hooks'
 
 // ---- Hộp hỏi thay dịch vụ (addPlan trong prototype) ----
@@ -129,9 +130,12 @@ export function usePlanActions() {
      * Chưa đăng nhập: đăng nhập xong quay lại trang với ?chat=<id> để tự mở lại khung chat (ChatPanelResume).
      * VITE_CHAT_MODE=zalo: mở Zalo của NCC thay vì chat trong Forever (xem features/chat/chatPanel.ts).
      */
-    openChat: (service: ServiceSummary & Partial<Pick<ServiceDetail, 'workingHours' | 'contactPhone'>>, opts?: { draft?: string }) => {
+    openChat: (service: ServiceSummary & Partial<Pick<ServiceDetail, 'workingHours' | 'contactPhone'>>, opts?: { draft?: string; pkg?: ChatPackage }) => {
       if (CHAT_MODE === 'zalo' && service.contactPhone) {
-        openZalo(service.contactPhone, opts?.draft ?? `Chào ${service.name}, mình xem dịch vụ trên Forever và muốn được tư vấn thêm.`)
+        openZalo(
+          service.contactPhone,
+          opts?.draft ?? (opts?.pkg ? `Chào ${service.name}, mình quan tâm gói ${opts.pkg.name}, muốn được tư vấn thêm.` : `Chào ${service.name}, mình xem dịch vụ trên Forever và muốn được tư vấn thêm.`),
+        )
         return
       }
       return requireCouple(
@@ -152,8 +156,10 @@ export function usePlanActions() {
             void refresh()
             chatPanel.open({
               conversation: conv,
-              draft: opts?.draft ?? (packageName ? `Mình đang quan tâm gói ${packageName}, muốn được tư vấn thêm ạ.` : ''),
+              // Hỏi về một gói cụ thể: thẻ gói đã nói rõ gói nào, câu soạn sẵn chỉ là lời hỏi
+              draft: opts?.draft ?? (opts?.pkg ? 'Mình muốn hỏi thêm về gói này ạ.' : packageName ? `Mình đang quan tâm gói ${packageName}, muốn được tư vấn thêm ạ.` : ''),
               packageName,
+              attachPackage: opts?.pkg ?? null,
               workingHours: service.workingHours,
             })
           }
@@ -275,6 +281,62 @@ interface OpenChatButtonProps {
   service: ServiceSummary & Partial<Pick<ServiceDetail, 'workingHours' | 'contactPhone'>>
   className?: string
   label?: string
+}
+
+/** Gói trên trang dịch vụ thành thẻ gói đính kèm trong chat */
+const chatPackageOf = (service: ServiceSummary, pkg: ServicePackage): ChatPackage => ({
+  id: pkg.id,
+  serviceId: service.id,
+  name: pkg.name,
+  price: pkg.price,
+  unit: pkg.pricingUnit === 'TABLE' || pkg.unit === 'bàn' ? 'bàn' : (pkg.unit ?? 'gói'),
+  minTables: pkg.minTables ?? null,
+  capacity: pkg.capacity ?? null,
+  imageUrl: pkg.imageUrl ?? service.coverImageUrl ?? null,
+  available: true,
+})
+
+/**
+ * Nút "Hỏi về gói này" trong khung chi tiết gói: mở chat với NCC, thẻ gói đang xem đính kèm sẵn trên ô nhập (khách bấm Gửi mới gửi).
+ * Nút phụ (viền) để "Chọn gói này cho kế hoạch" vẫn là nút chính. Không hiện cho tài khoản không phải cặp đôi.
+ */
+export function AskPackageButton({
+  service,
+  pkg,
+  className,
+  onOpen,
+}: {
+  service: ServiceSummary & Partial<Pick<ServiceDetail, 'workingHours' | 'contactPhone'>>
+  pkg: ServicePackage
+  className?: string
+  /** Gọi trước khi mở chat: đóng khung chi tiết gói (khung modal chặn bấm vào hộp chat) */
+  onOpen?: () => void
+}) {
+  const { user } = useAuth()
+  const { openChat } = usePlanActions()
+  const [busy, setBusy] = useState(false)
+  if (user && user.role !== 'COUPLE') return null
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={busy}
+      aria-busy={busy || undefined}
+      className={className}
+      onClick={async () => {
+        setBusy(true)
+        onOpen?.()
+        try {
+          await openChat(service, { pkg: chatPackageOf(service, pkg) })
+        } finally {
+          setBusy(false)
+        }
+      }}
+    >
+      <MessageCircle strokeWidth={1.75} />
+      Hỏi về gói này
+    </Button>
+  )
 }
 
 /** Nút "Nhắn tin với NCC": viền vàng đậm 1.5px, nền trong suốt, cao 44px; nút chính của trang vẫn là "Thêm vào kế hoạch". */

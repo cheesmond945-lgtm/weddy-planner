@@ -216,8 +216,6 @@ export interface DigestTask {
   due: string;
 }
 
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-
 /**
  * Thông báo tổng hợp mỗi ngày cho KHÁCH về việc không gắn đơn (thiệp, nhẫn, chọn NCC, Mốc chốt, việc tự thêm): một thông báo cho cả
  * các việc sắp đến hạn và quá hạn, thay vì mỗi việc một thông báo (timeline gấp thường dồn nhiều việc vào cùng một vài ngày).
@@ -232,8 +230,7 @@ export function taskDigest(tasks: readonly DigestTask[], today: string): { title
   const soon = staged.length - overdue;
   if (!staged.length) return null;
   const counts = [soon && `${soon} việc sắp đến hạn`, overdue && `${overdue} việc quá hạn`].filter(Boolean).join(' và ');
-  const shown = staged.slice(0, 3).map((t) => `"${clip(t.title, 60)}" (hạn ${dmyOf(t.due).slice(0, 5)})`);
-  const more = staged.length > 3 ? ` và ${staged.length - 3} việc khác` : '';
-  return { title: 'Việc cần làm trên timeline', content: `Bạn có ${counts} trên timeline: ${shown.join(', ')}${more}.`, soon, overdue };
+  // Chỉ báo số việc, không liệt kê tên việc (danh sách xem trên timeline, thông báo ngắn gọn dễ đọc)
+  return { title: 'Việc cần làm trên timeline', content: `Bạn có ${counts} trên timeline.`, soon, overdue };
 }
 

@@ -48,6 +48,18 @@ export class ConversationsController {
     return this.chat.sendAttachment(req.user, id, file, body ?? {});
   }
 
+  /** Các gói đang hiển thị của NCC trong hội thoại (ô chọn Gửi gói) */
+  @Get(':id/packages')
+  packages(@Req() req: any, @Param('id') id: string) {
+    return this.chat.packages(req.user, id);
+  }
+
+  /** Gửi thẻ gói ({ packageIds, replyToId? }): mỗi gói một tin Package */
+  @Post(':id/packages')
+  sendPackages(@Req() req: any, @Param('id') id: string, @Body() body: { packageIds?: unknown; replyToId?: unknown }) {
+    return this.chat.sendPackages(req.user, id, body?.packageIds, body?.replyToId);
+  }
+
   /** Thu hồi tin của chính mình với mọi người */
   @Delete(':id/messages/:messageId')
   recall(@Req() req: any, @Param('id') id: string, @Param('messageId') messageId: string) {
@@ -98,6 +110,18 @@ export class VendorConversationsController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_ATTACHMENT_BYTES } }))
   sendAttachment(@Req() req: any, @Param('id') id: string, @UploadedFile() file: Express.Multer.File | undefined, @Body() body: { replyToId?: unknown; durationSec?: unknown }) {
     return this.chat.sendAttachment(req.user, id, file, body ?? {});
+  }
+
+  /** Các gói đang hiển thị của NCC trong hội thoại (ô chọn Gửi gói) */
+  @Get(':id/packages')
+  packages(@Req() req: any, @Param('id') id: string) {
+    return this.chat.packages(req.user, id);
+  }
+
+  /** Gửi thẻ gói ({ packageIds, replyToId? }): mỗi gói một tin Package */
+  @Post(':id/packages')
+  sendPackages(@Req() req: any, @Param('id') id: string, @Body() body: { packageIds?: unknown; replyToId?: unknown }) {
+    return this.chat.sendPackages(req.user, id, body?.packageIds, body?.replyToId);
   }
 
   /** Thu hồi tin của chính mình với mọi người */

@@ -4,11 +4,11 @@
  *
  * Kiểu chat phía cặp đôi ở types/chat.ts giữ nguyên.
  */
-import type { MessageAttachment, MessageReaction, MessageReplyRef } from './chat'
+import type { ChatPackage, MessageAttachment, MessageReaction, MessageReplyRef } from './chat'
 import type { OrderStatus, RevisionChangeType } from './vendorOrder'
 
 /** Messages.Type */
-export const MESSAGE_TYPES = ['Text', 'Order', 'DepositReceipt', 'FinalInvoice', 'Image', 'File', 'Audio'] as const
+export const MESSAGE_TYPES = ['Text', 'Order', 'DepositReceipt', 'FinalInvoice', 'Image', 'File', 'Audio', 'Package'] as const
 export type MessageType = (typeof MESSAGE_TYPES)[number]
 
 /** SYSTEM: Messages.SenderId rỗng (tin hệ thống). */
@@ -34,6 +34,8 @@ export interface VendorMessage {
   isAuto?: boolean
   /** Tin Image / File / Audio */
   attachment?: MessageAttachment | null
+  /** Tin Package: thẻ gói */
+  package?: ChatPackage | null
   /** Người gửi đã thu hồi tin (không còn nội dung / tệp / cảm xúc) */
   recalled?: boolean
 }

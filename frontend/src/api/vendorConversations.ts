@@ -1,3 +1,4 @@
+import type { ChatPackage } from '@/types/chat'
 import type { VendorConversation, VendorMessage } from '@/types/vendorConversation'
 import { attachmentForm, type AttachmentInput } from './chat'
 import { http } from './client'
@@ -20,6 +21,13 @@ export const vendorConversationsApi = {
   /** Gửi ảnh / tệp / ghi âm */
   sendAttachment: (conversationId: string, input: AttachmentInput): Promise<VendorMessage> =>
     http.post(`/vendors/me/conversations/${conversationId}/attachments`, attachmentForm(input)),
+
+  /** Các gói đang hiển thị của chính NCC (ô chọn Gửi gói) */
+  packages: (conversationId: string): Promise<ChatPackage[]> => http.get(`/vendors/me/conversations/${conversationId}/packages`),
+
+  /** Gửi thẻ gói gợi ý cho khách: mỗi gói một tin Package */
+  sendPackages: (conversationId: string, packageIds: string[], replyToId?: string | null): Promise<VendorMessage[]> =>
+    http.post(`/vendors/me/conversations/${conversationId}/packages`, { packageIds, ...(replyToId && { replyToId }) }),
 
   /** Thu hồi tin của chính mình với mọi người */
   recall: (conversationId: string, messageId: string): Promise<VendorMessage> => http.delete(`/vendors/me/conversations/${conversationId}/messages/${messageId}`),

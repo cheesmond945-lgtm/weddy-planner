@@ -1,4 +1,4 @@
-import type { Conversation, Message } from '@/types/chat'
+import type { ChatPackage, Conversation, Message } from '@/types/chat'
 import { http } from './client'
 
 /** Tệp gửi trong chat: `name` bắt buộc với ghi âm (Blob không có tên); `durationSec` cho ghi âm */
@@ -30,6 +30,11 @@ export const chatApi = {
     http.post(`/conversations/${conversationId}/messages`, { text, ...(replyToId && { replyToId }) }),
   /** Gửi ảnh / tệp / ghi âm */
   sendAttachment: (conversationId: string, input: AttachmentInput): Promise<Message> => http.post(`/conversations/${conversationId}/attachments`, attachmentForm(input)),
+  /** Các gói đang hiển thị của NCC trong hội thoại (ô chọn Gửi gói) */
+  packages: (conversationId: string): Promise<ChatPackage[]> => http.get(`/conversations/${conversationId}/packages`),
+  /** Gửi thẻ gói: mỗi gói một tin Package, theo đúng thứ tự */
+  sendPackages: (conversationId: string, packageIds: string[], replyToId?: string | null): Promise<Message[]> =>
+    http.post(`/conversations/${conversationId}/packages`, { packageIds, ...(replyToId && { replyToId }) }),
   /** Thu hồi tin của chính mình với mọi người */
   recall: (conversationId: string, messageId: string): Promise<Message> => http.delete(`/conversations/${conversationId}/messages/${messageId}`),
   /** Thả / đổi cảm xúc; emoji null là gỡ cảm xúc của mình */

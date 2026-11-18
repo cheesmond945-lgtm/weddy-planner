@@ -39,9 +39,8 @@ export default function ServicesPage() {
   const planIds = new Set(usePlan().data?.items.map((i) => i.service.id) ?? [])
 
   const aiMode = filters.category ? params.get('ai') : null
-  // B1: người dùng chưa tự chọn khu vực thì chọn sẵn khu vực đám cưới (đổi được; "Tất cả khu vực" là ALL_AREAS)
-  const weddingArea = !aiMode && wedding?.ward && areas.data?.includes(wedding.ward) ? wedding.ward : ''
-  const view = { ...filters, area: filters.area || weddingArea }
+  // Không tự chọn sẵn khu vực theo nơi tổ chức trong form thiết lập (khách có thể nhập chưa đúng): chỉ lọc khi khách tự chọn
+  const view = filters
 
   // Tìm theo câu gõ: lần 1 không cho AI; nhận NEEDS_AI thì lần 2 kèm ai=1. Câu mới thì yêu cầu cũ bị hủy, chỉ dùng kết quả cuối.
   const q = filters.q.trim()

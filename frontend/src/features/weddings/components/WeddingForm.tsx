@@ -10,6 +10,7 @@ import { addDays, toISODate, today } from '@/lib/date'
 import type { BudgetPreset, Wedding, WeddingInput } from '@/types/wedding'
 import { presetOptionsFor } from '../presets'
 import { validateWeddingForm, type WeddingFormErrors } from '../weddingFormRules'
+import { cn } from '@/lib/utils'
 import { BudgetPresetPicker } from './BudgetPresetPicker'
 
 interface WeddingFormProps {
@@ -20,12 +21,17 @@ interface WeddingFormProps {
   onSubmit: (input: WeddingInput) => void
   /** Nút bên trái hàng nút (Hủy, hoặc Đăng xuất ở hộp thiết lập lần đầu) */
   secondaryAction?: ReactNode
+  /**
+   * Trong hộp thư (LetterDialog): hàng nút dính đáy vùng cuộn, nằm góc dưới bên phải trên ảnh cô dâu chú rể (máy tính),
+   * nên luôn thấy nút Lưu mà không phải cuộn xuống. Form 60% bề ngang nên hàng nút rộng 100/60 để chạm mép phải lá thư.
+   */
+  stickyActions?: boolean
 }
 
 type Errors = WeddingFormErrors
 
 /** Form thông tin đám cưới (4.1), như wedForm trong prototype. Dùng chung cho tạo mới và chỉnh sửa: cùng thứ tự trường, cùng validate. */
-export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, secondaryAction }: WeddingFormProps) {
+export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, secondaryAction, stickyActions }: WeddingFormProps) {
   const { data: categories = [] } = useCategories()
   const ids = { services: useId() }
 
@@ -181,8 +187,17 @@ export function WeddingForm({ initial, submitLabel, pending, error, onSubmit, se
 
       <FormError message={error} />
 
-      <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-line pt-3.5">
-        {blocked && <span className="mr-auto text-xs text-muted-foreground">Sửa các ô báo đỏ để lưu</span>}
+      <div
+        className={cn(
+          'flex flex-wrap items-center justify-end gap-2.5 border-t border-line pt-3.5',
+          // Máy tính: dính đáy, trong suốt, nút ở góc phải trên ảnh; điện thoại: dính đáy, nền kem mờ che phần form cuộn phía sau
+          stickyActions &&
+            'sticky bottom-0 z-10 -mb-[clamp(22px,3vw,34px)] bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] pb-[clamp(14px,2vw,22px)] backdrop-blur-[6px] md:w-[calc(100%/0.6)] md:border-0 md:bg-transparent md:pt-0 md:backdrop-blur-none',
+        )}
+      >
+        {blocked && (
+          <span className={cn('text-xs text-muted-foreground', stickyActions ? 'max-md:mr-auto md:rounded-pill md:bg-surface/90 md:px-3 md:py-1.5' : 'mr-auto')}>Sửa các ô báo đỏ để lưu</span>
+        )}
         {secondaryAction}
         <Button type="submit" disabled={pending || blocked} className="h-10 gap-2 px-5">
           {pending ? 'Đang lưu…' : submitLabel}

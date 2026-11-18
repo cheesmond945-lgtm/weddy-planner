@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { FitImage } from '@/components/FitImage'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useOpenedPackage } from '../useOpenedPackage'
 import type { ServiceDetail, ServicePackage } from '@/types/catalog'
 import { DetailCard } from './DetailCard'
 import { Lightbox } from './GalleryDialog'
@@ -29,7 +30,7 @@ type Viewing = { title: string; images: string[]; index: number }
 export function ServiceInfoPanel({ service, packageExtra, packageBadge, packagesSubtitle }: ServiceInfoPanelProps) {
   const [viewing, setViewing] = useState<Viewing | null>(null)
   // Gói đang mở trong khung bên phải (layout album)
-  const [opened, setOpened] = useState<ServicePackage | null>(null)
+  const [opened, setOpened] = useOpenedPackage(service)
   const highlights = service.capacity ? [...service.highlights, `Sức chứa tối đa ${service.capacity} khách`] : service.highlights
 
   // Ảnh không thuộc gói nào. Chỉ tính được khi mọi album có đủ danh sách ảnh (dữ liệu giả thiếu thì ẩn khối này)

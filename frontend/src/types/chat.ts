@@ -8,7 +8,7 @@ import type { PlanItemStatus } from './wedding'
 /** SYSTEM: Messages.SenderId rỗng (tin hệ thống). */
 export type MessageSender = 'COUPLE' | 'VENDOR' | 'SYSTEM'
 /** Messages.Type */
-export type MessageType = 'Text' | 'Order' | 'DepositReceipt' | 'FinalInvoice' | 'Image' | 'File' | 'Audio'
+export type MessageType = 'Text' | 'Order' | 'DepositReceipt' | 'FinalInvoice' | 'Image' | 'File' | 'Audio' | 'Package'
 
 /** Tệp của tin Image / File / Audio. `url` là link xem tạm (ký 1 giờ), null khi không ký được */
 export interface MessageAttachment {
@@ -18,6 +18,22 @@ export interface MessageAttachment {
   size: number
   /** Ghi âm: độ dài (giây) */
   duration: number | null
+}
+
+/** Thẻ gói dịch vụ gửi trong chat (tin Package) và một dòng của ô chọn Gửi gói */
+export interface ChatPackage {
+  id: string
+  /** Id dịch vụ (hồ sơ NCC) của gói, để mở lại khung chi tiết gói */
+  serviceId: string | null
+  name: string
+  price: number
+  /** "bàn" (giá một bàn) hoặc "gói" (trọn gói) */
+  unit: string
+  minTables: number | null
+  capacity: number | null
+  imageUrl: string | null
+  /** Gói còn hiển thị; gói đã ẩn hoặc đã xóa vẫn hiện thẻ trong tin cũ nhưng không mở được */
+  available: boolean
 }
 
 export interface Message {
@@ -41,6 +57,8 @@ export interface Message {
   isAuto?: boolean
   /** Tin Image / File / Audio */
   attachment?: MessageAttachment | null
+  /** Tin Package: thẻ gói */
+  package?: ChatPackage | null
   /** Người gửi đã thu hồi tin (không còn nội dung / tệp / cảm xúc) */
   recalled?: boolean
 }

@@ -9,7 +9,8 @@ import { WeddingsService } from '../weddings/weddings.service';
 import { publish } from '../realtime/realtime.bus';
 import { ChatAutoReplyService } from './chat-auto-reply.service';
 import { markNewMessageRead, messageInclude, postMessage } from './chat-messages';
-import { ChatRole, isUuid, REACTIONS, todayVn, toLastMessage, toMessage } from './chat.mappers';
+import { ChatRole, isUuid, packageIdsOf, REACTIONS, todayVn, toLastMessage, toMessage, type MessageRow, type PackageCard } from './chat.mappers';
+import { MAX_PACKAGES_PER_SEND, PACKAGE_STORED_TYPE, packageContent, parsePackageContent } from './chat-package';
 
 const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);
@@ -67,8 +68,49 @@ export class ChatService {
       orderBy: [{ sent_date: 'asc' }, { id: 'asc' }],
       include: messageInclude,
     });
-    const urls = await this.storage.signedChatUrls(rows.flatMap((m) => (m.attachment_path ? [m.attachment_path] : [])));
-    return rows.map((m) => toMessage(m, conv.couple_id, user.sub, urls));
+    const [urls, cards] = await Promise.all([this.storage.signedChatUrls(rows.flatMap((m) => (m.attachment_path ? [m.attachment_path] : []))), this.packageCardsOf(rows)]);
+    return rows.map((m) => toMessage(m, conv.couple_id, user.sub, urls, cards));
+  }
+
+  /** Thẻ gói (ảnh, giá) cho các tin Package trong danh sách, đọc một lần */
+  private async packageCardsOf(rows: MessageRow[]) {
+    const cards = await this.services.packageCards({ ids: packageIdsOf(rows) });
+    return new Map<string, PackageCard>(cards.map((c) => [c.id, c]));
+  }
+
+  /** Hồ sơ NCC của hội thoại (vendor_id của hội thoại là tài khoản người dùng của NCC) */
+  private async vendorOf(conv: { vendor_id: string | null }) {
+    const v = conv.vendor_id ? await this.prisma.vendor_profiles.findUnique({ where: { user_id: conv.vendor_id }, select: { id: true } }) : null;
+    return v ?? fail('VENDOR_PROFILE_NOT_FOUND', 'Không tìm thấy nhà cung cấp của hội thoại.', 404);
+  }
+
+  /** Các gói đang hiển thị của NCC trong hội thoại, cho ô chọn "Gửi gói" (cả hai bên dùng) */
+  async packages(user: ChatUser, id: string) {
+    const conv = await this.owned(user, id);
+    return this.services.packageCards({ vendorId: (await this.vendorOf(conv)).id });
+  }
+
+  /**
+   * Gửi thẻ gói (như "đang hỏi về sản phẩm này" trên sàn TMĐT): mỗi gói một tin Package, chỉ gói đang hiển thị của chính NCC trong hội thoại,
+   * tối đa MAX_PACKAGES_PER_SEND gói một lần, theo đúng thứ tự đã chọn. `replyToId` gắn vào thẻ đầu. Khách gửi thì xét trả lời tự động như tin chữ.
+   */
+  async sendPackages(user: ChatUser, id: string, packageIds: unknown, replyToId?: unknown) {
+    const conv = await this.owned(user, id);
+    const ids = Array.isArray(packageIds) ? [...new Set(packageIds.filter((x): x is string => typeof x === 'string' && isUuid(x)))] : [];
+    if (!ids.length) return fail('VALIDATION_ERROR', 'Chọn gói để gửi.', 400);
+    if (ids.length > MAX_PACKAGES_PER_SEND) return fail('VALIDATION_ERROR', `Gửi tối đa ${MAX_PACKAGES_PER_SEND} gói một lần.`, 400);
+    const vendor = await this.vendorOf(conv);
+    const cards = (await this.services.packageCards({ ids })).filter((c) => c.serviceId === vendor.id && c.available);
+    if (cards.length !== ids.length) return fail('PACKAGE_NOT_FOUND', 'Gói không còn hiển thị hoặc không thuộc nhà cung cấp này.', 404);
+    const replyTo = await this.replyTarget(id, replyToId);
+    const byId = new Map<string, PackageCard>(cards.map((c) => [c.id, c]));
+    const out: ReturnType<typeof toMessage>[] = [];
+    for (const [i, pid] of ids.entries()) {
+      const m = await postMessage(this.prisma, { conversationId: id, senderId: user.sub, type: PACKAGE_STORED_TYPE, content: packageContent(pid, byId.get(pid)!.name), replyToId: i === 0 ? replyTo : null });
+      out.push(toMessage(m, conv.couple_id, user.sub, undefined, byId));
+    }
+    if (user.role === 'Couple') this.autoReply.schedule(conv, out[out.length - 1].id);
+    return out;
   }
 
   /** Kiểm tin được trả lời thuộc đúng hội thoại; trả id hoặc null khi không trả lời tin nào. */
@@ -116,6 +158,8 @@ export class ChatService {
     const content = (text ?? '').trim();
     if (!content) return fail('VALIDATION_ERROR', 'Nhập nội dung tin nhắn.', 400);
     if (content.length > MAX_TEXT) return fail('VALIDATION_ERROR', `Tin nhắn tối đa ${MAX_TEXT} ký tự.`, 400);
+    // Dạng "pkg:<id> <tên>" dành cho thẻ gói (chat-package.ts): không cho gõ tay để giả thẻ gói
+    if (parsePackageContent(content).id) return fail('VALIDATION_ERROR', 'Nội dung tin nhắn không hợp lệ.', 400);
     const replyTo = await this.replyTarget(id, replyToId);
     const m = await postMessage(this.prisma, { conversationId: id, senderId: user.sub, content, replyToId: replyTo });
     // Tin nhắn không vào chuông thông báo: người nhận thấy số tin chưa đọc ở mục Tin nhắn (realtime đã báo trong postMessage)
@@ -166,7 +210,7 @@ export class ChatService {
     }
     publish({ users: [conv.couple_id!, conv.vendor_id!], event: 'message', data: { conversationId: id, orderId: null, type: 'Reaction' } });
     const row = await this.prisma.messages.findUniqueOrThrow({ where: { id: messageId }, include: messageInclude });
-    return toMessage(row, conv.couple_id, user.sub, await this.storage.signedChatUrls(row.attachment_path ? [row.attachment_path] : []));
+    return toMessage(row, conv.couple_id, user.sub, await this.storage.signedChatUrls(row.attachment_path ? [row.attachment_path] : []), await this.packageCardsOf([row]));
   }
 
   /** Tổng số tin của bên kia mà người xem chưa đọc, ở mọi hội thoại (huy hiệu menu Tin nhắn). Bỏ qua tin hệ thống và tin của chính mình. */

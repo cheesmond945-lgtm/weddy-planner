@@ -26,6 +26,7 @@ import { useRecallMessage } from '../useRecallMessage'
 import { useSendAttachment } from '../useSendAttachment'
 import { coupleWording } from '../wording'
 import { AttachmentContent, ComposerTools, ImageAlbum } from './ChatAttachments'
+import { AttachedPackages, PackageMessageCard, PackagePickerButton, useAttachedPackages } from './ChatPackages'
 import { imagesOf, MessageShell, ReplyBar, type NameOf } from './MessageExtras'
 import { shortVendorName } from '@/lib/vendorName'
 import { usePlan } from '@/features/weddings/hooks'
@@ -303,12 +304,23 @@ function Thread({ conversation }: { conversation: Conversation }) {
   // Mở hội thoại hoặc có tin mới thì cuộn xuống cuối, giữ ở cuối khi nội dung tải muộn
   useStickToBottom(listRef, `${conversation.id}:${messages.length}`)
 
-  function submit(e: FormEvent) {
+  // Thẻ gói đính kèm trên ô nhập (nút Gửi gói): gửi các thẻ trước rồi mới tới lời nhắn
+  const pkgs = useAttachedPackages<Message>(planningKeys.messages(user?.id, conversation.id), planningKeys.conversations(user?.id), (ids, replyToId) =>
+    chatApi.sendPackages(conversation.id, ids, replyToId),
+  )
+
+  async function submit(e: FormEvent) {
     e.preventDefault()
     const t = text.trim()
-    if (!t) return
+    if ((!t && !pkgs.items.length) || pkgs.sending) return
+    const withPackages = pkgs.items.length > 0
+    if (withPackages) {
+      if (!(await pkgs.flush(replying?.id))) return
+      setReplying(null)
+      if (!t) return
+    }
     send.mutate(
-      { text: t, replyToId: replying?.id },
+      { text: t, replyToId: withPackages ? undefined : replying?.id },
       {
         onSuccess: () => {
           setText('')
@@ -371,10 +383,16 @@ function Thread({ conversation }: { conversation: Conversation }) {
             <ReplyBar reply={replying} nameOf={nameOf} onCancel={() => setReplying(null)} />
           </div>
         )}
-        <form onSubmit={submit} className="flex items-center gap-2.5">
+        {pkgs.items.length > 0 && (
+          <div className="mb-2.5">
+            <AttachedPackages items={pkgs.items} onRemove={pkgs.remove} />
+          </div>
+        )}
+        <form onSubmit={(e) => void submit(e)} className="flex items-center gap-2.5">
           <ComposerTools
             className="min-w-0 flex-1"
             sending={attach.isPending}
+            extra={<PackagePickerButton queryKey={['chat-packages', conversation.id]} load={() => chatApi.packages(conversation.id)} selected={pkgs.items} onPick={pkgs.set} />}
             onFiles={(files) => void attach.sendFiles(files, replying?.id).then(() => setReplying(null))}
             onVoice={(clip) => void attach.send({ file: clip.blob, name: clip.name, durationSec: clip.durationSec, replyToId: replying?.id }).then(() => setReplying(null), () => undefined)}
           >
@@ -386,7 +404,7 @@ function Thread({ conversation }: { conversation: Conversation }) {
               aria-label="Tin nhắn"
               className="min-w-0 flex-1 rounded-pill border-0 bg-bg px-[18px] py-[15px] text-[15px] text-ink outline-none focus:outline-1 focus:outline-primary"
             />
-            <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending} className="ml-1 size-12 rounded-full">
+            <Button type="submit" size="icon" aria-label="Gửi tin nhắn" title="Gửi tin nhắn" disabled={send.isPending || pkgs.sending} className="ml-1 size-12 rounded-full">
               <Send className="size-[19px]" />
             </Button>
           </ComposerTools>
@@ -459,6 +477,8 @@ function MessageItem({
           <ImageAlbum images={album.flatMap((x) => (x.attachment ? [x.attachment] : []))} />
         ) : message.attachment ? (
           <AttachmentContent attachment={message.attachment} mine={mine} />
+        ) : message.package ? (
+          <PackageMessageCard pkg={message.package} mine={mine} linkable />
         ) : (
           <div className={cn(text, mine ? 'rounded-br-[5px] bg-primary text-primary-foreground' : 'rounded-bl-[5px] bg-bg text-nav')}>{message.content}</div>
         )}

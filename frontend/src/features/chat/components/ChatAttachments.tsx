@@ -106,6 +106,7 @@ export function ComposerTools({
   onVoice,
   sending,
   className,
+  extra,
   children,
 }: {
   onFiles: (files: File[]) => void
@@ -113,6 +114,8 @@ export function ComposerTools({
   /** Đang upload tệp: khoá nút và hiện vòng quay */
   sending: boolean
   className?: string
+  /** Nút thêm sau nút ghi âm (vd. Gửi gói dịch vụ) */
+  extra?: ReactNode
   children: ReactNode
 }) {
   const input = useRef<HTMLInputElement>(null)
@@ -158,6 +161,7 @@ export function ComposerTools({
           <Mic />
         </button>
       )}
+      {extra}
       {children}
     </div>
   )

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 import { FitImage } from '@/components/FitImage'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useOpenedPackage } from '../useOpenedPackage'
 import type { ServiceDetail, ServicePackage } from '@/types/catalog'
 import { Lightbox } from './GalleryDialog'
 import { attrsOf, imagesOf, withoutPrice } from './packageInfo'
@@ -78,7 +79,7 @@ function tileClasses(count: number, featured: boolean): string[] {
  * Bấm ô mở drawer chi tiết gói. Từng gói chỉ để xem: kế hoạch lưu theo NCC nên nút thêm vào kế hoạch chỉ ở khung giá bên phải.
  */
 export function PackageTiles({ service, extra }: PackageTilesProps) {
-  const [opened, setOpened] = useState<ServicePackage | null>(null)
+  const [opened, setOpened] = useOpenedPackage(service)
   const [showAll, setShowAll] = useState(false)
 
   const pkgs = service.packages

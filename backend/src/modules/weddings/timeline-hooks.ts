@@ -150,7 +150,7 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
   const warnings = orders.flatMap((o) => {
     const eventDate = ymdOf(o.event_date);
     const view = { orderCode: o.order_code ?? '', status: o.status, eventDate, vendorName: o.vendor_profiles?.business_name ?? '', venue: isVenue(o.vendor_profiles?.category_id ?? null) };
-    const issue = dateChangeIssue(view, newWedding, before);
+    const issue = dateChangeIssue(view, newWedding, before, today);
     if (!issue) return [];
     return [{ orderCode: view.orderCode, vendorName: view.vendorName, serviceId: o.vendor_profiles?.id ?? '', eventDate, kind: issue.kind, blocksDeposit: issue.blocksDeposit, blocksChange: issue.blocksChange, message: customerDateWarning(view, issue, newWedding) }];
   });
@@ -191,7 +191,7 @@ export async function notifyVendorsOfWeddingDate(prisma: PrismaService, weddingI
     const vendorUser = o.vendor_profiles?.user_id;
     if (!vendorUser) continue;
     const view = { orderCode: o.order_code ?? '', status: o.status, eventDate: ymdOf(o.event_date), vendorName: o.vendor_profiles?.business_name ?? '' };
-    const kind = dateChangeIssue(view, newWedding, oldWedding)?.kind;
+    const kind = dateChangeIssue(view, newWedding, oldWedding, vnYmd(new Date()))?.kind;
     if (kind === 'WEDDING_DAY' && oldWedding) {
       const note = weddingDayRequestNote(oldWedding, newWedding);
       // Đã có yêu cầu chỉnh sửa đang chờ thì không tạo thêm (mỗi đơn một yêu cầu đang chờ), chỉ báo NCC

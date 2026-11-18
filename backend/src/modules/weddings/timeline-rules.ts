@@ -108,10 +108,11 @@ export interface DateChangeIssue {
  * - Deposited, đúng ngày cưới cũ: WEDDING_DAY (dịch vụ trong ngày cưới, gửi yêu cầu đổi ngày cho NCC);
  * - Deposited khác: sau ngày cưới mới thì AFTER_WEDDING, khác ngày cưới mới thì nhắc (DIFFERENT, có thể là dịch vụ làm trước);
  * - Pending / NeedRevision: chỉ khi ngày thực hiện sau ngày cưới mới (AFTER_WEDDING, `blocksDeposit`: khách chưa cọc được cho tới khi NCC đổi ngày);
- * - các trạng thái khác (nháp, hết hạn, hủy, hoàn thành): không ảnh hưởng.
+ * - các trạng thái khác (nháp, hết hạn, hủy, hoàn thành): không ảnh hưởng;
+ * - `today` (giờ VN): đơn đã qua ngày thực hiện là dịch vụ đã làm xong (chỉ chờ tự hoàn thành), không ảnh hưởng.
  */
-export function dateChangeIssue(o: OrderForDateChange, newWedding: string, oldWedding?: string | null): DateChangeIssue | null {
-  if (!o.eventDate) return null;
+export function dateChangeIssue(o: OrderForDateChange, newWedding: string, oldWedding?: string | null, today?: string): DateChangeIssue | null {
+  if (!o.eventDate || (today && o.eventDate < today)) return null;
   const issue = (kind: DateChangeKind, blocksDeposit = false): DateChangeIssue => ({ kind, blocksDeposit, blocksChange: kind === 'VENUE_LOCKED' });
   if (o.status === 'Deposited') {
     if (o.eventDate === newWedding) return null;

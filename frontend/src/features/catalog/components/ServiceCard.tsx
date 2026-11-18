@@ -72,7 +72,7 @@ export function ServiceCard({ service, index = 0, imageAction, extraActions, bad
                 formatMoney(service.priceFrom)
               )}
             </span>
-            <span className="text-[13px] text-ink-2">{isTablePriced(service) ? ' / bàn · đã gồm sảnh' : ' / gói'}</span>
+            <span className="text-[13px] text-ink-2">{isTablePriced(service) ? ' / bàn · đã gồm sảnh' : service.category.slug === 'trang-phuc' ? ' / bộ' : ' / gói'}</span>
           </p>
           {details}
           <div className="mt-auto flex gap-2 pt-3">

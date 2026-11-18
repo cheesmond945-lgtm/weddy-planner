@@ -3,6 +3,7 @@ import { runAfter } from '../../common/after-response';
 import { GeminiService } from '../../integrations/ai/gemini.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { postMessage } from './chat-messages';
+import { readableContent } from './chat-package';
 
 /** Chờ NCC tự trả lời trong khoảng này; quá mà NCC chưa trả lời (đang bận) thì AI mới chào */
 const WAIT_VENDOR_MS = 20_000;
@@ -62,13 +63,13 @@ export class ChatAutoReplyService {
 
     const vendor = await this.prisma.vendor_profiles.findUnique({ where: { user_id: vendorUser }, select: { business_name: true, service_categories: { select: { name: true } } } });
     if (!vendor) return;
-    const history = await this.prisma.messages.findMany({ where: { conversation_id: conv.id }, orderBy: [{ sent_date: 'desc' }, { id: 'desc' }], take: HISTORY, select: { id: true, sender_id: true, content: true } });
+    const history = await this.prisma.messages.findMany({ where: { conversation_id: conv.id }, orderBy: [{ sent_date: 'desc' }, { id: 'desc' }], take: HISTORY, select: { id: true, sender_id: true, content: true, type: true } });
     if (history[0]?.id !== messageId) return; // NCC hoặc khách đã nhắn tiếp: tin sau sẽ được xét
 
     const who = (s: string | null) => (s === conv.couple_id ? 'Khách' : s === null ? 'Hệ thống' : 'NCC');
     const prompt = [
       `NCC: ${vendor.business_name ?? ''} · Lĩnh vực: ${vendor.service_categories?.name ?? ''}`,
-      `Hội thoại gần nhất (cũ đến mới):\n${[...history].reverse().map((m) => `${who(m.sender_id)}: ${(m.content ?? '').slice(0, 300)}`).join('\n')}`,
+      `Hội thoại gần nhất (cũ đến mới):\n${[...history].reverse().map((m) => `${who(m.sender_id)}: ${readableContent(m.type, m.content).slice(0, 300)}`).join('\n')}`,
     ].join('\n\n');
 
     const out = (await this.gemini.json(SYSTEM, prompt, AI_TIMEOUT_MS)) as { reply?: unknown; text?: unknown };

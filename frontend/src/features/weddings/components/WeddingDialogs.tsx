@@ -63,6 +63,7 @@ export function WeddingSetupDialog() {
       >
         {state.open && (
           <WeddingForm
+            stickyActions
             initial={null}
             submitLabel={
               <>
@@ -152,6 +153,7 @@ export function WeddingEditDialog({ open, onOpenChange }: { open: boolean; onOpe
       <LetterDialogContent title="Chỉnh sửa thông tin đám cưới" description="Khi đổi ngày tổ chức, bạn sẽ được xem trước hạn mới của các việc chưa xong rồi mới xác nhận.">
         {open && wedding && (
           <WeddingForm
+            stickyActions
             initial={wedding}
             submitLabel="Lưu thay đổi"
             pending={save.isPending || checking}

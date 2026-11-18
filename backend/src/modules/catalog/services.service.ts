@@ -40,6 +40,8 @@ export const categorySlug = (name: string | null) => (name ? (categoryKindOf(nam
  */
 export const TABLE_PRICED_SLUGS = ['nha-hang'];
 export const GUESTS_PER_TABLE = 10;
+/** Đơn vị hiển thị sau giá: tiệc theo bàn, trang phục theo bộ (mỗi gói là một bộ váy / vest), còn lại trọn gói. Chỉ để hiển thị, cách tính giá theo priceUnitOf / unit. */
+export const displayUnitOf = (slug: string, table: boolean) => (table ? 'bàn' : slug === 'trang-phuc' ? 'bộ' : 'gói');
 export const priceUnitOf = (slug: string) => (TABLE_PRICED_SLUGS.includes(slug) ? ('TABLE' as const) : ('PACKAGE' as const));
 /** Số mâm cần đặt: đủ chỗ cho số khách, không dưới số mâm tối thiểu của sảnh, ít nhất 1. */
 export const tablesFor = (guests: number | null | undefined, minTables: number | null | undefined) =>
@@ -156,15 +158,37 @@ export class ServicesService implements OnModuleInit {
     return this.storage.publicAlbumUrl(path);
   }
 
-  /** Gói đã duyệt của một NCC (rẻ nhất trước) kèm ảnh bìa: dùng làm "thẻ gói" đầu hội thoại phía NCC. */
-  async packageCards(vendorId: string) {
+  /**
+   * Thẻ gói trong chat (tin Package và ô chọn "Gửi gói"): tên, giá, đơn vị (bàn / gói), số bàn tối thiểu, ảnh bìa.
+   * `vendorId`: các gói đã duyệt của một NCC (rẻ nhất trước); `ids`: đúng các gói này (kể cả gói đã ẩn, `available` = false).
+   */
+  async packageCards(where: { vendorId: string } | { ids: string[] }) {
+    if ('ids' in where && !where.ids.length) return [];
     const pkgs = await this.prisma.service_packages.findMany({
-      where: { vendor_id: vendorId, status: 'Approved' },
+      where: 'vendorId' in where ? { vendor_id: where.vendorId, status: 'Approved' } : { id: { in: where.ids } },
       orderBy: [{ price: 'asc' }, { id: 'asc' }],
       relationLoadStrategy: 'join',
-      include: { package_albums: { orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }], take: 1 } },
+      include: {
+        package_albums: { orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }], take: 1 },
+        vendor_profiles: { select: { id: true, service_categories: { select: { name: true } } } },
+      },
     });
-    return pkgs.map((p) => ({ id: p.id, name: p.name, price: Number(p.price), imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null }));
+    return pkgs.map((p) => {
+      const slug = categorySlug(p.vendor_profiles?.service_categories?.name ?? null);
+      const isTable = priceUnitOf(slug) === 'TABLE' || unitOf(p) === 'mâm';
+      return {
+        id: p.id,
+        serviceId: p.vendor_id,
+        name: p.name ?? '',
+        price: Number(p.price),
+        unit: displayUnitOf(slug, isTable),
+        minTables: p.min_tables,
+        capacity: p.capacity,
+        imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null,
+        /** Gói còn hiển thị (đã duyệt): gói đã ẩn vẫn hiện thẻ trong tin cũ nhưng không mở được */
+        available: p.status === 'Approved',
+      };
+    });
   }
 
   /**
@@ -428,7 +452,7 @@ export class ServicesService implements OnModuleInit {
         price: Number(p.price),
         capacity: p.capacity,
         // Đơn vị tính (cột service_packages.unit, hoặc danh mục báo giá theo mâm): "mâm" là giá một mâm, giao diện gọi là "bàn"; còn lại là trọn gói
-        unit: isTable(p) ? 'bàn' : 'gói',
+        unit: displayUnitOf(categorySlug(v.service_categories?.name ?? null), isTable(p)),
         pricingUnit: isTable(p) ? ('TABLE' as const) : ('PACKAGE' as const),
         // Ảnh bìa và thẻ (tag) của gói: chỉ dùng cho tìm kiếm và bộ lọc, không so với đám cưới
         imageUrl: p.package_albums[0] ? this.img(p.package_albums[0].url) : null,

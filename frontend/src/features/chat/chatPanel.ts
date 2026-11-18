@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { Conversation } from '@/types/chat'
+import type { ChatPackage, Conversation } from '@/types/chat'
 
 /**
  * Cách nút "Nhắn tin với NCC" liên hệ nhà cung cấp, đổi bằng biến VITE_CHAT_MODE:
@@ -20,6 +20,8 @@ export interface ChatPanelState {
   packageName: string | null
   /** Giờ làm việc của NCC ("08:00 - 21:00"), ngoài giờ thì báo NCC sẽ trả lời sớm nhất có thể */
   workingHours?: string
+  /** Gói đính kèm sẵn trên ô nhập khi mở từ nút "Hỏi về gói này" (khách bấm Gửi mới gửi) */
+  attachPackage?: ChatPackage | null
 }
 
 let state: ChatPanelState | null = null
