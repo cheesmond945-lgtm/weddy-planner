@@ -7,8 +7,8 @@
  *   dạng cũ 'PKG:<id>' vẫn đọc được); 'PAY:<orderId>' việc thanh toán phần còn lại (mỗi đơn một việc);
  *   'ORD:<C|V|B>:<8 ký tự ngẫu nhiên>:<8 ký tự đầu của order_id>' việc RIÊNG của một đơn do NCC thêm (không thuộc gói; chữ cái là chủ việc).
  */
-import { planFrame, planPackageTasks } from './timeline-schedule.ts';
-import { isFrameKind, type ServiceKey, type TimelineTemplate } from './timeline-templates.ts';
+import { planPackageTasks, planTimeline, type ServiceWeights } from './timeline-schedule.ts';
+import { isFrameKind, type BudgetPresetKey, type ServiceKey, type TimelineTemplate } from './timeline-templates.ts';
 
 export interface ServiceRef {
   key: ServiceKey;
@@ -29,6 +29,8 @@ export interface TaskRow {
   task_type: 'Frame' | 'Detail';
   task_code: string;
   display_order: number;
+  /** Ghi chú (việc gộp "Chọn và chốt …": gợi ý bước con) */
+  note?: string | null;
 }
 
 const asDate = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
@@ -72,9 +74,15 @@ export const baseCode = (code: string) => (isRemovedCode(code) ? code.slice(REMO
 export const hiddenByCategory = (t: { task_code: string | null; order_id: string | null; category_id: string | null }, active: ReadonlySet<string>) =>
   t.task_code !== null && !t.order_id && !!t.category_id && !active.has(t.category_id);
 
-/** Việc khung: Tự làm của "Chung" và Tự làm / Chọn NCC / Mốc chốt của các hạng mục đã chọn, hạn tính từ ngày cưới. */
-export function frameRows(templates: readonly TimelineTemplate[], input: { weddingId: string; wedding: string; today: string; services: readonly ServiceRef[] }): TaskRow[] {
-  const plan = planFrame(templates, { wedding: input.wedding, today: input.today, services: input.services.map((s) => s.key) });
+/**
+ * Việc khung: Tự làm của "Chung" và Tự làm / Chọn NCC / Mốc chốt của các hạng mục đã chọn, hạn tính từ ngày cưới (planTimeline).
+ * Mật độ việc > 1 thì chuỗi của mỗi dịch vụ gộp thành một việc "Chọn và chốt …" (mã *_BOOK, ghi chú gợi ý bước con).
+ */
+export function frameRows(
+  templates: readonly TimelineTemplate[],
+  input: { weddingId: string; wedding: string; today: string; services: readonly ServiceRef[]; preset?: BudgetPresetKey | null; weights?: ServiceWeights | null },
+): TaskRow[] {
+  const plan = planTimeline(templates, { wedding: input.wedding, today: input.today, services: input.services.map((s) => s.key), preset: input.preset, weights: input.weights });
   const byCode = new Map(templates.map((t) => [t.code, t]));
   return plan.tasks.map((p) => {
     const t = byCode.get(p.code)!;
@@ -82,14 +90,37 @@ export function frameRows(templates: readonly TimelineTemplate[], input: { weddi
       wedding_id: input.weddingId,
       category_id: t.service ? (input.services.find((s) => s.key === t.service)?.categoryId ?? null) : null,
       order_id: null,
-      title: t.title,
+      title: p.title,
       scheduled_date: asDate(p.date),
       status: 'Todo' as const,
       task_type: isFrameKind(t.kind) ? ('Frame' as const) : ('Detail' as const),
       task_code: t.code,
       display_order: t.order,
+      ...(p.note && { note: p.note }),
     };
   });
+}
+
+const PRESETS: readonly BudgetPresetKey[] = ['BALANCED', 'SPACE', 'VISUAL', 'CUSTOM'];
+
+/**
+ * Mức chia ngân sách và tỷ lệ Tùy chỉnh của đám cưới, để xếp "Ưu tiên k" (hàm thuần).
+ * custom_weights dạng 2: { format: 2, items: [{ categoryId, slug, ratio }] }; dạng khác coi như chưa có tỷ lệ. Cột chưa có (SQL chưa chạy) thì null.
+ */
+export function budgetPriorityOf(
+  w: { budget_preset?: string | null; custom_weights?: unknown } | null | undefined,
+  keyOfCategory: (categoryId: string) => ServiceKey | undefined,
+): { preset: BudgetPresetKey | null; weights: Partial<Record<ServiceKey, number>> | null } {
+  const preset = w?.budget_preset && (PRESETS as string[]).includes(w.budget_preset) ? (w.budget_preset as BudgetPresetKey) : null;
+  const cw = w?.custom_weights as { format?: unknown; items?: unknown } | null | undefined;
+  if (!cw || typeof cw !== 'object' || cw.format !== 2 || !Array.isArray(cw.items)) return { preset, weights: null };
+  const weights: Partial<Record<ServiceKey, number>> = {};
+  for (const i of cw.items as { categoryId?: unknown; ratio?: unknown }[]) {
+    if (!i || typeof i.categoryId !== 'string' || typeof i.ratio !== 'number') continue;
+    const key = keyOfCategory(i.categoryId);
+    if (key) weights[key] = i.ratio;
+  }
+  return { preset, weights };
 }
 
 export type PackageTaskOwner = 'CUSTOMER' | 'VENDOR' | 'BOTH';

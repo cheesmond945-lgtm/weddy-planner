@@ -91,6 +91,51 @@ export const SUGGEST_LABEL: Record<ServiceKey, string> = {
   'hoa-cuoi': 'Gợi ý tiệm hoa cưới',
 };
 
+/** Tên dịch vụ trong câu (việc gộp "Chọn và chốt …"). */
+export const SERVICE_NAME: Record<ServiceKey, string> = {
+  'nha-hang': 'trung tâm tiệc cưới',
+  'chup-anh': 'chụp ảnh',
+  'trang-phuc': 'trang phục',
+  decor: 'trang trí',
+  makeup: 'trang điểm',
+  'hoa-cuoi': 'hoa cưới',
+};
+
+/** Tên việc gộp (Bước 0, mật độ > 1): mọi việc Chọn NCC + Mốc chốt của một dịch vụ thành một việc, giữ mã *_BOOK của Mốc chốt. */
+export const mergedTitle = (s: ServiceKey) => `Chọn và chốt ${SERVICE_NAME[s]}`;
+
+/** Bước con ngắn của từng việc Chọn NCC, ghép thành ghi chú gợi ý của việc gộp (cột note tối đa 200 ký tự). */
+export const STEP_HINT: Readonly<Record<string, string>> = {
+  VENUE_SHORTLIST: 'Lọc và hỏi giá 3–5 nhà hàng',
+  VENUE_TOUR: 'Đi xem sảnh',
+  VENUE_TASTE: 'Thử món, xin báo giá chính thức',
+  PHOTO_SHORTLIST: 'Lọc và hỏi giá 3–5 studio',
+  PHOTO_CONSULT: 'Gặp tư vấn, xem album và phim mẫu',
+  ATTIRE_SHORTLIST: 'Chọn thuê hay may, lọc cửa hàng',
+  ATTIRE_TRY_STORE: 'Đi thử váy, vest',
+  ATTIRE_PICK: 'Chọn mẫu, đo số đo',
+  DECOR_SHORTLIST: 'Lọc và hỏi giá đơn vị trang trí',
+  DECOR_VISIT: 'Xem công trình thực tế',
+  DECOR_SCOPE: 'Gửi concept, chốt hạng mục',
+  MAKEUP_SHORTLIST: 'Lọc và hỏi giá chuyên viên',
+  MAKEUP_ASSESS: 'Makeup thử hoặc xem video',
+  FLOWER_SHORTLIST: 'Lọc tiệm hoa, xem mẫu',
+  FLOWER_PICK: 'Chọn mẫu hoa, số lượng',
+};
+
+/** Mức chia ngân sách (weddings.budget_preset). */
+export type BudgetPresetKey = 'BALANCED' | 'SPACE' | 'VISUAL' | 'CUSTOM';
+
+/**
+ * Thứ tự ưu tiên các dịch vụ (trừ trung tâm tiệc cưới, luôn đứng đầu) theo mức chia ngân sách.
+ * Tùy chỉnh: theo tỷ lệ % (cao trước), bằng nhau thì theo thứ tự Cân bằng.
+ */
+export const PRIORITY_ORDER: Record<Exclude<BudgetPresetKey, 'CUSTOM'>, readonly ServiceKey[]> = {
+  VISUAL: ['trang-phuc', 'makeup', 'chup-anh', 'decor', 'hoa-cuoi'],
+  SPACE: ['decor', 'hoa-cuoi', 'trang-phuc', 'makeup', 'chup-anh'],
+  BALANCED: ['chup-anh', 'trang-phuc', 'decor', 'makeup', 'hoa-cuoi'],
+};
+
 /**
  * Nút "Gợi ý {dịch vụ} →": chỉ việc Chọn NCC đầu tiên của dịch vụ (cờ showSuggest, không suy theo tên việc), hoặc Mốc chốt đang Todo
  * mà dịch vụ vừa có đơn đã cọc bị hủy (khách cần tìm NCC khác). Mã không có trong mẫu (timeline cũ) thì không có nút.
