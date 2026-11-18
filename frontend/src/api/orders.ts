@@ -1,7 +1,7 @@
 import type { ServiceDetail } from '@/types/catalog'
 import type { Order, PaymentCreated, RevisionChangeType } from '@/types/order'
 import type { GuestChangeQuote } from '@/types/vendorOrder'
-import type { PayCheckResult, PayInfo } from '@/types/payment'
+import type { PayCheckResult } from '@/types/payment'
 import { http } from './client'
 
 /** Hợp đồng: docs/api/orders.md */
@@ -17,14 +17,10 @@ export const ordersApi = {
   requestRevision: (id: string, body: { changes: RevisionChangeType[]; note: string }): Promise<Order> =>
     http.post(`/orders/${id}/revision-requests`, body),
 
-  /** Đổi số khách (đơn tiệc đã cọc, trước ngày tổ chức 7 ngày): xem trước số bàn, giá trị mới, cọc bổ sung */
+  /** Đổi số khách (đơn tiệc đã cọc, trước ngày tổ chức 7 ngày): xem trước số bàn, giá trị mới (tiền cọc giữ nguyên) */
   quoteGuestChange: (id: string, guestCount: number): Promise<GuestChangeQuote> => http.get(`/orders/${id}/guest-changes/quote`, { query: { guestCount } }),
   /** Gửi yêu cầu đổi số khách, chờ NCC xác nhận */
   requestGuestChange: (id: string, body: { guestCount: number; note?: string }): Promise<Order> => http.post(`/orders/${id}/guest-changes`, body),
-  /** Mã QR nộp cọc bổ sung (NCC đã đồng ý, giá trị đơn tăng) */
-  payGuestChange: (id: string): Promise<PayInfo & { adjustmentId: string; demoMode: boolean }> => http.post(`/orders/${id}/guest-changes/pay`),
-  checkGuestChangePay: (id: string): Promise<PayCheckResult> => http.post(`/orders/${id}/guest-changes/pay/check`),
-  demoGuestChangePay: (id: string): Promise<PayCheckResult> => http.post(`/orders/${id}/guest-changes/pay/demo-confirm`),
   /** Khách tự hủy đơn chưa thanh toán cọc (Pending / NeedRevision): hủy ngay, không cần NCC xác nhận */
   cancelUnpaid: (id: string, note?: string): Promise<Order> => http.post(`/orders/${id}/cancel`, { note }),
   /** Khách yêu cầu hủy đơn đã cọc (tiền cọc không hoàn), chờ NCC xác nhận */

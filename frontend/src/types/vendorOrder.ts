@@ -145,10 +145,8 @@ export interface GuestChange {
   newTables: number
   oldAmount: number
   newAmount: number
-  /** Cọc bổ sung = 10% phần tăng; 0 khi giảm (không hoàn cọc) */
-  extraDeposit: number
-  /** AwaitingVendor: chờ NCC xác nhận; AwaitingDeposit: chờ nộp cọc bổ sung; Applied: đã áp dụng; Rejected: bị từ chối */
-  status: 'AwaitingVendor' | 'AwaitingDeposit' | 'Applied' | 'Rejected'
+  /** AwaitingVendor: chờ NCC xác nhận; Applied: đã áp dụng; Rejected: bị từ chối. Không có cọc bổ sung: tiền cọc giữ nguyên */
+  status: 'AwaitingVendor' | 'Applied' | 'Rejected'
   note: string | null
   createdDate: string
   appliedDate: string | null
@@ -161,7 +159,6 @@ export interface GuestChangeQuote {
   chargedTables: number
   oldAmount: number
   newAmount: number
-  extraDeposit: number
   /** Hạn cuối gửi yêu cầu (YYYY-MM-DD) */
   deadline: string
 }

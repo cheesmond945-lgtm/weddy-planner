@@ -40,8 +40,12 @@ export interface CommissionLine {
   eventDate: string
   /** Ngày đơn hoàn thành (YYYY-MM-DD, giờ VN): NCC xác nhận thu đủ hoặc hệ thống tự hoàn thành */
   completedDate?: string | null
-  /** Completed: tính trên tổng đơn. Cancelled: khách hủy sau cọc, NCC giữ cọc nên tính trên tiền cọc */
-  orderStatus?: 'Completed' | 'Cancelled'
+  /** Deposit: hoa hồng trên tiền cọc (ghi lúc khách cọc). Final: trên phần còn lại của tổng đơn (ghi lúc hoàn thành) */
+  commissionKind?: 'Deposit' | 'Final'
+  /** Ngày ghi nhận dòng hoa hồng (YYYY-MM-DD, giờ VN): ngày khách cọc hoặc ngày hoàn thành */
+  recordedDate?: string | null
+  /** Trạng thái hiện tại của đơn: Deposited (đã cọc, chưa xong), Completed, Cancelled (hủy sau cọc, hoa hồng cọc vẫn giữ) */
+  orderStatus?: 'Deposited' | 'Completed' | 'Cancelled'
   /** Ngày hủy (YYYY-MM-DD, giờ VN) khi orderStatus = Cancelled */
   cancelledDate?: string | null
   category: CategoryRef

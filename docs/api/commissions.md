@@ -14,13 +14,13 @@ Chưa có: Admin xác nhận / từ chối minh chứng, cấu hình tỷ lệ (
 | Mục | Quy tắc |
 |---|---|
 | Kỳ | Tháng dương lịch theo giờ Việt Nam (`Asia/Ho_Chi_Minh`). Mã bảng kê `DS<MM><YYYY>`, ví dụ `DS092026` |
-| Đơn vào kỳ | **Đơn hoàn thành**: `ServiceOrder` có `status = CONFIRMED` và `eventDate` (phiên bản hiện hành) trong tháng của kỳ. Đơn hủy, chưa xác nhận không tính |
+| Đơn vào kỳ | **Từ 18/11/2026 hoa hồng tính từ lúc khách cọc**, mỗi đơn tối đa 2 dòng (`commissions.kind`): **Deposit** = tỷ lệ × tiền cọc, ghi lúc cọc thành công, vào bảng kê tháng cọc; **Final** = tỷ lệ × (tổng đơn − phần đã tính), ghi lúc đơn hoàn thành, vào bảng kê tháng hoàn thành. Đơn đã cọc bị hủy: không tính thêm (đã thu ở dòng Deposit). Đổi số khách chỉ đổi tổng đơn, không cọc bổ sung. Lý do: NCC không né hoa hồng bằng cách để đơn treo, hủy rồi làm ngoài hệ thống. (Các dòng bên dưới về `CONFIRMED`/khoản thu là mô tả bản nháp cũ.) |
 | Căn cứ | Tổng các khoản đã thu thực tế của đơn (`payments`, cả VietQR lẫn NCC tự ghi nhận) có `paidAt` **trước thời điểm chốt kỳ** (00:00 ngày 1 tháng sau, giờ VN) |
 | Thu sau chốt | Khoản thu của đơn đã tính, `paidAt` sau thời điểm chốt: thành **dòng bổ sung** (`SUPPLEMENT`) ở kỳ của tháng thu. Bảng kê đã chốt không đổi |
 | Tỷ lệ | Theo lĩnh vực của NCC (danh mục `GET /categories`), số nguyên phần trăm: **Nhà hàng 8%, Chụp ảnh 12%, Trang phục 12%, lĩnh vực khác 10%**. Lưu vào từng dòng (`rate`) để đổi tỷ lệ sau không ảnh hưởng kỳ cũ |
 | Hoa hồng | Mỗi dòng: `round(baseAmount × rate / 100)` tới đồng; kỳ = tổng các dòng |
 | Chốt kỳ | Cuối tháng. BE có job chốt (ARCHITECTURE: `backend/src/jobs`, bảng kê hoa hồng tháng) chụp lại số liệu kỳ vừa hết |
-| Hạn thanh toán | **Ngày 20 tháng sau** (prototype: kỳ 09/2026 hạn 20/10/2026) |
+| Hạn thanh toán | **Ngày 25 tháng sau** (khớp code `addCommission`) |
 | Kỳ hiện tại | Luôn có, `status = OPEN` (tạm tính), số liệu đổi khi có đơn hoàn thành / khoản thu mới; chưa thanh toán được |
 
 Lĩnh vực của dòng: lĩnh vực đã xác minh của NCC (`verifiedCategory`, chưa có thì `category`) vì đơn không gắn danh mục riêng. **Cần chốt** nếu sau này một NCC có nhiều lĩnh vực.

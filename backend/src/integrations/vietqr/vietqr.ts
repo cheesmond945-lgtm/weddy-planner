@@ -4,7 +4,7 @@
  *
  * - Mã QR dựng bằng Quick Link của img.vietqr.io (số tiền và nội dung đã điền sẵn).
  * - Nội dung chuyển khoản bắt buộc bắt đầu bằng "SEVQR " (yêu cầu của SePay với VietinBank), sau đó phân biệt hai luồng:
- *   "FOREVER" + mã đơn (cọc), "FOREVERHH" + 8 ký tự đầu của id bảng kê (hoa hồng), "EVBS" + 8 ký tự đầu của id yêu cầu đổi số khách (cọc bổ sung). Tổng tối đa 25 ký tự, in hoa, không dấu.
+ *   "FOREVER" + mã đơn (cọc), "FOREVERHH" + 8 ký tự đầu của id bảng kê (hoa hồng). Tổng tối đa 25 ký tự, in hoa, không dấu.
  *   Tiền tố cũ "EVERLY" / "EVHH" (trước khi thống nhất tên Forever) vẫn được nhận khi đối soát, để khách chuyển theo mã QR cũ không bị mất.
  * - Xác nhận đã nhận tiền bằng cách hỏi SePay (sepay.ts), không tin kết quả do trình duyệt báo.
  */
@@ -14,8 +14,6 @@ export const SEPAY_PREFIX = 'SEVQR ';
 export const MAX_CONTENT_LENGTH = 25;
 export const DEPOSIT_PREFIX = 'FOREVER';
 export const COMMISSION_PREFIX = 'FOREVERHH';
-/** Cọc bổ sung khi đổi số khách của đơn tiệc đã cọc (giữ tiền tố cũ để mã QR đã tạo vẫn khớp) */
-export const EXTRA_DEPOSIT_PREFIX = 'EVBS';
 /** Tiền tố cũ, chỉ dùng để nhận tiền đã chuyển theo mã QR cũ */
 export const LEGACY_DEPOSIT_PREFIX = 'EVERLY';
 export const LEGACY_COMMISSION_PREFIX = 'EVHH';
@@ -52,9 +50,6 @@ const statementKey = (statementId: string) => statementId.replace(/-/g, '').slic
 export const commissionContent = (statementId: string) => withPrefix(`${COMMISSION_PREFIX}${statementKey(statementId)}`);
 /** Nội dung dùng để đối soát hoa hồng: nội dung hiện tại và nội dung theo tiền tố cũ. */
 export const commissionMatchContents = (statementId: string) => [commissionContent(statementId), withPrefix(`${LEGACY_COMMISSION_PREFIX}${statementKey(statementId)}`)];
-
-/** Cọc bổ sung của một yêu cầu đổi số khách: 8 ký tự hex đầu của id yêu cầu */
-export const extraDepositContent = (adjustmentId: string) => withPrefix(`${EXTRA_DEPOSIT_PREFIX}${adjustmentId.replace(/-/g, '').slice(0, 8)}`);
 
 /** Ngân hàng thường bỏ dấu cách và ký tự đặc biệt trong nội dung: so khớp trên chuỗi chữ hoa, chỉ giữ chữ và số. */
 export const normalizeContent = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');

@@ -1,7 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { buildPayInfo, extraDepositContent, vietqrConfig } from '../../integrations/vietqr/vietqr';
-import { demoPaymentEnabled } from '../../integrations/vietqr/demo-mode';
-import { SepayService } from '../../integrations/vietqr/sepay.service';
 import { requireDbFeature } from '../../prisma/db-features';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notify, postMessage } from '../chat/chat-messages';
@@ -11,12 +8,12 @@ import { fail, money, todayVn } from './order-rules';
 import { OrdersService } from './orders.service';
 
 /** Yêu cầu đang chờ của một đơn */
-const OPEN = ['AwaitingVendor', 'AwaitingDeposit'];
+const OPEN = ['AwaitingVendor'];
 
 /**
  * Đổi số khách khi tiệc đã cọc và khách yêu cầu hủy đơn đã cọc (docs/api/orders.md). Phép tính ở order-adjustment-rules.ts.
- * - Đổi số khách: khách gửi → NCC xác nhận → (tăng giá trị) khách nộp cọc bổ sung 10% phần tăng → áp dụng vào đơn.
- *   Giảm khách: NCC xác nhận là áp dụng ngay, không hoàn cọc. Hoa hồng tính trên giá trị đơn cuối cùng (lúc hoàn thành).
+ * - Đổi số khách: khách gửi → NCC xác nhận → áp dụng ngay vào đơn. Không có cọc bổ sung: tiền cọc giữ nguyên, giảm khách không hoàn cọc.
+ *   Hoa hồng: dòng Deposit đã tính lúc cọc; dòng Final tính trên (giá trị đơn cuối cùng − phần đã tính) lúc hoàn thành.
  * - Yêu cầu hủy: khách gửi (biết là mất cọc) → NCC hủy đơn với lý do "Khách yêu cầu hủy" (OrdersService.cancel) hoặc từ chối.
  */
 @Injectable()
@@ -26,7 +23,6 @@ export class OrderAdjustmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
-    private readonly sepay: SepayService,
   ) {}
 
   /** Đơn tiệc đã cọc + dòng tiền bàn + sức chứa / số bàn tối thiểu của sảnh */
@@ -68,7 +64,7 @@ export class OrderAdjustmentsService {
 
   // ================= Đổi số khách: phía khách =================
 
-  /** Xem trước: số bàn, giá trị đơn mới, cọc bổ sung (không ghi gì) */
+  /** Xem trước: số bàn, giá trị đơn mới (không ghi gì) */
   async quote(userId: string, orderId: string, guestCount: unknown) {
     requireDbFeature('orderAdjustments');
     const o = await this.orders.ownedByCouple(userId, orderId);
@@ -98,54 +94,17 @@ export class OrderAdjustmentsService {
         unit_price: Number(ctx.line.unit_price),
         old_amount: q.oldAmount,
         new_amount: q.newAmount,
-        extra_deposit: q.extraDeposit,
         note,
       },
     });
     const change = `${ctx.guestCount ? `${ctx.guestCount} → ` : ''}${newGuestCount} khách (${q.oldTables} → ${q.chargedTables} bàn), giá trị đơn ${money(q.oldAmount)} → ${money(q.newAmount)}`;
-    await this.message(o, `Khách yêu cầu đổi số khách đơn ${o.order_code}: ${change}${q.extraDeposit ? `, cọc bổ sung ${money(q.extraDeposit)}` : ', không hoàn cọc'}${note ? ` · "${note}"` : ''}.`, 'VENDOR', 'Khách yêu cầu đổi số khách');
+    await this.message(o, `Khách yêu cầu đổi số khách đơn ${o.order_code}: ${change}${', không hoàn cọc'}${note ? ` · "${note}"` : ''}.`, 'VENDOR', 'Khách yêu cầu đổi số khách');
     return this.orders.dtoOf(o.id);
-  }
-
-  /** Mã QR nộp cọc bổ sung (yêu cầu đang AwaitingDeposit) */
-  async payInfo(userId: string, orderId: string) {
-    requireDbFeature('orderAdjustments');
-    const cfg = vietqrConfig() ?? fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VietQR.', 501);
-    const o = await this.orders.ownedByCouple(userId, orderId);
-    const a = await this.awaitingDeposit(o.id);
-    return { adjustmentId: a.id, demoMode: demoPaymentEnabled(), ...buildPayInfo(cfg, { amount: Number(a.extra_deposit), content: extraDepositContent(a.id) }) };
-  }
-
-  /** Hỏi SePay đã nhận cọc bổ sung chưa; có thì áp dụng vào đơn */
-  async checkPay(userId: string, orderId: string) {
-    requireDbFeature('orderAdjustments');
-    if (!vietqrConfig()) return fail('PAYMENT_NOT_CONFIGURED', 'Chưa cấu hình cổng thanh toán VietQR.', 501);
-    const o = await this.orders.ownedByCouple(userId, orderId);
-    const a = await this.awaitingDeposit(o.id);
-    const txn = await this.sepay.findPayment(extraDepositContent(a.id), Number(a.extra_deposit));
-    if (!txn) return { status: 'PENDING' as const, message: 'Chưa nhận được tiền. Nếu bạn vừa chuyển khoản, vui lòng đợi ít giây.' };
-    await this.apply(o, a.id, txn.id, txn.paidAt);
-    return { status: 'PAID' as const, message: 'Đã nhận cọc bổ sung, đơn đã được cập nhật.' };
-  }
-
-  /** Chế độ thử (PAYMENT_DEMO_MODE=true): ghi nhận cọc bổ sung ngay */
-  async demoPay(userId: string, orderId: string) {
-    requireDbFeature('orderAdjustments');
-    if (!demoPaymentEnabled()) return fail('NOT_FOUND', 'Không tìm thấy.', 404);
-    const o = await this.orders.ownedByCouple(userId, orderId);
-    const a = await this.awaitingDeposit(o.id);
-    await this.apply(o, a.id, `DEMO-BS-${a.id.slice(0, 8)}`, new Date());
-    return { status: 'PAID' as const, message: 'Đã nộp cọc bổ sung (chế độ thử), đơn đã được cập nhật.' };
-  }
-
-  private async awaitingDeposit(orderId: string) {
-    const a = await this.prisma.order_adjustments.findFirst({ where: { order_id: orderId, status: 'AwaitingDeposit' } });
-    return a ?? fail('ADJUSTMENT_NOT_FOUND', 'Đơn không có khoản cọc bổ sung đang chờ.', 409);
   }
 
   // ================= Đổi số khách: phía NCC =================
 
-  /** NCC xác nhận: tăng giá trị thì chờ khách nộp cọc bổ sung; không tăng thì áp dụng ngay */
+  /** NCC xác nhận: áp dụng ngay vào đơn */
   async approve(userId: string, orderId: string) {
     requireDbFeature('orderAdjustments');
     const { order: o } = await this.orders.ownedByVendor(userId, orderId);
@@ -157,12 +116,7 @@ export class OrderAdjustmentsService {
       await this.prisma.order_adjustments.update({ where: { id: a.id }, data: { status: 'Rejected', decided_date: new Date() } });
       return fail('ADJUSTMENT_OUTDATED', 'Đơn đã thay đổi sau khi khách gửi yêu cầu. Yêu cầu đã được hủy, khách cần gửi lại.', 409);
     }
-    if (Number(a.extra_deposit) > 0) {
-      await this.prisma.order_adjustments.update({ where: { id: a.id }, data: { status: 'AwaitingDeposit', decided_date: new Date() } });
-      await this.message(o, `NCC đã đồng ý đổi số khách đơn ${o.order_code} thành ${a.new_guest_count} khách. Bạn nộp cọc bổ sung ${money(Number(a.extra_deposit))} để áp dụng.`, 'COUPLE', 'Nộp cọc bổ sung để đổi số khách');
-    } else {
-      await this.apply(o, a.id, null, null);
-    }
+    await this.apply(o, a.id);
     return this.orders.dtoOf(o.id);
   }
 
@@ -177,27 +131,26 @@ export class OrderAdjustmentsService {
   }
 
   /**
-   * Áp dụng vào đơn (một lần): dòng tiền bàn = đơn giá lúc đặt × số bàn tính tiền mới; giá trị đơn, tiền cọc (+ cọc bổ sung), số khách;
+   * Áp dụng vào đơn (một lần): dòng tiền bàn = đơn giá lúc đặt × số bàn tính tiền mới; giá trị đơn, số khách (tiền cọc giữ nguyên);
    * ghi lịch sử chỉnh sửa (AfterDeposit, Quantity) và đổi số khách dự kiến của đám cưới.
    */
-  private async apply(o: OrderRow, adjustmentId: string, transactionCode: string | null, paidAt: Date | null) {
+  private async apply(o: OrderRow, adjustmentId: string) {
     const done = await this.prisma.$transaction(async (tx) => {
       const a = await tx.order_adjustments.findUnique({ where: { id: adjustmentId } });
       if (!a || !OPEN.includes(a.status)) return null;
       const line = tableLineOf(o.order_items, o.package_id)!;
-      const extra = Number(a.extra_deposit);
       const r = await tx.orders.updateMany({
         where: { id: o.id, status: 'Deposited', total_amount: a.old_amount },
-        data: { total_amount: a.new_amount, deposit_amount: { increment: extra }, guest_count: a.new_guest_count },
+        data: { total_amount: a.new_amount, guest_count: a.new_guest_count },
       });
       if (!r.count) return 'CHANGED' as const;
       await tx.order_items.update({ where: { id: line.id }, data: { quantity: a.new_tables, amount: Number(a.unit_price) * a.new_tables } });
-      await tx.order_adjustments.update({ where: { id: a.id }, data: { status: 'Applied', applied_date: new Date(), transaction_code: transactionCode, paid_date: paidAt } });
+      await tx.order_adjustments.update({ where: { id: a.id }, data: { status: 'Applied', applied_date: new Date() } });
       await tx.order_revisions.create({
         data: {
           order_id: o.id,
           revision_type: 'AfterDeposit',
-          request_note: `Đổi số khách ${a.old_guest_count ? `${a.old_guest_count} → ` : ''}${a.new_guest_count} khách (${a.old_tables} → ${a.new_tables} bàn)${extra ? `, cọc bổ sung ${money(extra)}` : ''}`,
+          request_note: `Đổi số khách ${a.old_guest_count ? `${a.old_guest_count} → ` : ''}${a.new_guest_count} khách (${a.old_tables} → ${a.new_tables} bàn)`,
           old_total_amount: a.old_amount,
           new_total_amount: a.new_amount,
           status: 'Applied',
@@ -209,14 +162,12 @@ export class OrderAdjustmentsService {
       return a;
     });
     if (done === 'CHANGED') {
-      if (transactionCode) this.logger.warn(`Khách đã nộp cọc bổ sung (mã ${transactionCode}) cho đơn ${o.order_code} nhưng đơn đã thay đổi: cần xử lý thủ công.`);
       return fail('ADJUSTMENT_OUTDATED', 'Đơn đã thay đổi nên chưa áp dụng được. Vui lòng liên hệ Forever để được hỗ trợ.', 409);
     }
     if (!done) return;
-    const extra = Number(done.extra_deposit);
-    const text = `Đơn ${o.order_code} đã đổi thành ${done.new_guest_count} khách (${done.new_tables} bàn), giá trị mới ${money(Number(done.new_amount))}${extra ? `, đã nhận cọc bổ sung ${money(extra)}` : ', tiền cọc giữ nguyên (không hoàn)'}.`;
+    const text = `Đơn ${o.order_code} đã đổi thành ${done.new_guest_count} khách (${done.new_tables} bàn), giá trị mới ${money(Number(done.new_amount))}, tiền cọc giữ nguyên (không hoàn).`;
     await this.message(o, text, 'VENDOR', 'Đơn đã đổi số khách');
-    if (!extra) await this.message(o, text, 'COUPLE', 'Đơn đã đổi số khách').catch(() => undefined);
+    await this.message(o, text, 'COUPLE', 'Đơn đã đổi số khách').catch(() => undefined);
   }
 
   // ================= Khách yêu cầu hủy đơn đã cọc =================

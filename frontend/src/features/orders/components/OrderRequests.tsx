@@ -1,7 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ordersApi } from '@/api/orders'
-import { VietqrPanel } from '@/components/VietqrPanel'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -13,7 +12,7 @@ import { formatDayTime } from '@/features/vendorOrders/calc'
 import type { Order } from '@/types/vendorOrder'
 import { autoCancelAt } from '../cardSummary'
 
-const openChange = (o: Order) => o.guestChanges?.find((g) => g.status === 'AwaitingVendor' || g.status === 'AwaitingDeposit') ?? null
+const openChange = (o: Order) => o.guestChanges?.find((g) => g.status === 'AwaitingVendor') ?? null
 
 /** Ghi lại thay đổi rồi tải lại kế hoạch và danh sách đơn */
 function useOrderWrite<T>(fn: (v: T) => Promise<Order>, done: string) {
@@ -32,11 +31,10 @@ function useOrderWrite<T>(fn: (v: T) => Promise<Order>, done: string) {
 
 /**
  * Yêu cầu sau cọc của khách trên thẻ đơn (docs/api/orders.md): yêu cầu hủy đơn (tiền cọc không hoàn, NCC xác nhận). Đổi số khách đi qua
- * "Yêu cầu chỉnh sửa" (ô Đổi số khách); yêu cầu đổi số khách cũ còn mở vẫn hiện trạng thái và nút nộp cọc bổ sung.
+ * "Yêu cầu chỉnh sửa" (ô Đổi số khách); yêu cầu đổi số khách còn mở thì hiện trạng thái chờ NCC xác nhận (không có cọc bổ sung).
  */
 export function CoupleOrderRequests({ order: o }: { order: Order }) {
   const [cancelling, setCancelling] = useState(false)
-  const [paying, setPaying] = useState(false)
   const withdraw = useOrderWrite(() => ordersApi.withdrawCancel(o.id), 'Đã rút yêu cầu hủy đơn')
   if (o.status !== 'Deposited') return null
 
@@ -45,21 +43,8 @@ export function CoupleOrderRequests({ order: o }: { order: Order }) {
     <>
       {change && (
         <div className="mt-3 rounded-sm bg-surface-2 px-3 py-2.5 text-[13px] leading-relaxed">
-          {change.status === 'AwaitingVendor' ? (
-            <>
-              Đang chờ nhà cung cấp xác nhận đổi {change.oldGuestCount ? `${change.oldGuestCount} → ` : ''}
-              <b>{change.newGuestCount} khách</b> ({change.newTables} bàn, giá trị mới {formatMoney(change.newAmount)}).
-            </>
-          ) : (
-            <>
-              Nhà cung cấp đã đồng ý đổi thành <b>{change.newGuestCount} khách</b>. Nộp cọc bổ sung <b>{formatMoney(change.extraDeposit)}</b> để áp dụng.
-              <div className="mt-2.5">
-                <Button size="sm" variant="success" onClick={() => setPaying(true)}>
-                  Nộp cọc bổ sung
-                </Button>
-              </div>
-            </>
-          )}
+          Đang chờ nhà cung cấp xác nhận đổi {change.oldGuestCount ? `${change.oldGuestCount} → ` : ''}
+          <b>{change.newGuestCount} khách</b> ({change.newTables} bàn, giá trị mới {formatMoney(change.newAmount)}). Tiền cọc giữ nguyên.
         </div>
       )}
       {o.cancelRequest && (
@@ -80,7 +65,6 @@ export function CoupleOrderRequests({ order: o }: { order: Order }) {
         )}
       </div>
       {cancelling && <CancelRequestDialog order={o} onClose={() => setCancelling(false)} />}
-      {paying && change && <ExtraDepositDialog order={o} onClose={() => setPaying(false)} />}
     </>
   )
 }
@@ -153,41 +137,6 @@ function CancelRequestDialog({ order: o, onClose }: { order: Order; onClose: () 
             Gửi yêu cầu hủy
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** Nộp cọc bổ sung qua VietQR (cùng cách với đặt cọc) */
-function ExtraDepositDialog({ order: o, onClose }: { order: Order; onClose: () => void }) {
-  const refresh = useRefreshPlanning()
-  const qc = useQueryClient()
-  const info = useQuery({ queryKey: ['guest-change-pay', o.id], queryFn: () => ordersApi.payGuestChange(o.id), retry: false, staleTime: Infinity })
-  const paid = () => {
-    toast('Đã nhận cọc bổ sung, đơn đã được cập nhật')
-    void refresh()
-    void qc.invalidateQueries({ queryKey: ['orders'] })
-    onClose()
-  }
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[460px]">
-        <DialogHeader>
-          <DialogTitle>Nộp cọc bổ sung · Đơn {o.orderCode}</DialogTitle>
-          <DialogDescription>Chuyển khoản đúng số tiền và nội dung; hệ thống tự ghi nhận khi nhận được tiền.</DialogDescription>
-        </DialogHeader>
-        {info.isError ? (
-          <p className="text-sm text-warn">{(info.error as Error).message}</p>
-        ) : !info.data ? (
-          <div className="h-[320px] animate-pulse rounded-md bg-muted" aria-busy="true" />
-        ) : (
-          <VietqrPanel
-            info={info.data}
-            check={() => ordersApi.checkGuestChangePay(o.id)}
-            onPaid={paid}
-            demoPay={info.data.demoMode ? () => ordersApi.demoGuestChangePay(o.id) : undefined}
-          />
-        )}
       </DialogContent>
     </Dialog>
   )

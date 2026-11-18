@@ -6,13 +6,10 @@
  * - Kiểm tra sức chứa của sảnh.
  * - Giá trị đơn mới = giá trị cũ − dòng tiền bàn + đơn giá lúc đặt × max(số bàn mới, số bàn tối thiểu); số bàn tối thiểu
  *   không vượt số bàn đã thỏa thuận trong đơn.
- * - Cọc bổ sung = EXTRA_DEPOSIT_RATE × phần tăng; giảm khách thì không hoàn cọc (giá trị đơn không thấp hơn số đã cọc).
+ * - Không có cọc bổ sung: tiền cọc giữ nguyên; giảm khách không hoàn cọc (giá trị đơn không thấp hơn số đã cọc).
  */
 import { GUEST_CHANGE_CUTOFF_DAYS } from '../weddings/allocation.config';
 import { GUESTS_PER_TABLE } from '../weddings/budget.config';
-
-/** Tỷ lệ cọc bổ sung trên phần tăng của giá trị đơn */
-export const EXTRA_DEPOSIT_RATE = 0.1;
 
 export interface TableLine {
   /** Đơn giá/bàn lúc đặt */
@@ -45,7 +42,6 @@ export type GuestChangeQuote =
       chargedTables: number;
       oldAmount: number;
       newAmount: number;
-      extraDeposit: number;
       /** Hạn cuối gửi yêu cầu (YYYY-MM-DD) */
       deadline: string;
     }
@@ -77,8 +73,7 @@ export function quoteGuestChange(i: GuestChangeInput): GuestChangeQuote {
   const chargedTables = Math.max(newTables, floor, 1);
   // Giảm khách không hoàn cọc: giá trị đơn không thấp hơn số đã cọc
   const newAmount = Math.max(i.deposit, Math.round(i.orderTotal - i.table.amount + i.table.unitPrice * chargedTables));
-  const extraDeposit = Math.round(Math.max(0, newAmount - i.orderTotal) * EXTRA_DEPOSIT_RATE);
-  return { ok: true, oldTables: i.table.quantity, newTables, chargedTables, oldAmount: i.orderTotal, newAmount, extraDeposit, deadline };
+  return { ok: true, oldTables: i.table.quantity, newTables, chargedTables, oldAmount: i.orderTotal, newAmount, deadline };
 }
 
 /** Dòng tiền bàn của đơn tiệc: dòng gắn đúng sảnh của đơn, không có thì dòng có đơn vị "bàn"/"mâm" */

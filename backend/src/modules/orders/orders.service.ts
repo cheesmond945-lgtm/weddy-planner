@@ -13,7 +13,7 @@ import { findHallConflict, lockHallDay, usesHalls } from '../halls/hall-store';
 import { applyOrderPackageSwitch, onOrderDeposited, onOrderEventDateChanged, planOrderPackageSwitch, syncWeddingDateWithVenue } from '../weddings/timeline-hooks';
 import { packagesOfOrder } from '../weddings/package-task-meta';
 import { OrderJobsService } from './order-jobs.service';
-import { DATE_CHANGE_PENDING_WHERE, completeOrder, notifyRestCleared, notifyRestReceived } from './order-lifecycle';
+import { DATE_CHANGE_PENDING_WHERE, addCommission, completeOrder, notifyRestCleared, notifyRestReceived } from './order-lifecycle';
 import { finishDepositedCancel } from './order-cancel';
 import { runAfter } from '../../common/after-response';
 import { payCode } from '../weddings/timeline-rows';
@@ -463,6 +463,8 @@ export class OrdersService {
         update: { status: 'Paid', transaction_code: txCode, paid_date: paidAt },
       });
       await tx.invoices.create({ data: { order_id: orderId, invoice_code: receiptCode, type: 'DepositReceipt' } });
+      // Hoa hồng tính ngay khi khách cọc, trên tiền cọc (cọc cố định, không có cọc bổ sung): hủy hay hoàn thành sau đó đều không đổi
+      await addCommission(tx, o, { id: o.vendor_profiles!.id, category_id: categoryId }, paidAt, 'Deposit', o.deposit_amount);
       await tx.plan_vendors.upsert({ where: { wedding_id_vendor_id: { wedding_id: o.wedding_id!, vendor_id: o.vendor_id! } }, create: { wedding_id: o.wedding_id!, vendor_id: o.vendor_id! }, update: {} });
       return true;
     });

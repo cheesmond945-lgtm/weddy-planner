@@ -124,15 +124,17 @@ export class AdminPaymentsService {
     const [y, m] = period.split('-').map(Number);
     // Dòng hoa hồng thiếu đơn (dữ liệu hỏng) thì bỏ qua
     const lines = row.commissions.flatMap((c) => (c.orders ? [{ ...c, orders: c.orders }] : [])).map((c) => {
-      const done = c.orders.completed_date ?? c.orders.cancelled_date;
+      const done = c.created_date;
       const completedMonth = done ? ymdVN(done).slice(0, 7) : null;
       return {
-        orderStatus: c.orders.status === 'Cancelled' ? 'Cancelled' : 'Completed',
+        orderStatus: c.orders.status === 'Cancelled' ? 'Cancelled' : c.orders.status === 'Completed' ? 'Completed' : 'Deposited',
+        commissionKind: c.kind,
         id: c.id,
         orderId: c.orders.id,
         orderCode: c.orders.order_code,
         customerName: c.orders.customer_name,
         eventDate: ymd(c.orders.event_date),
+        /** Lúc ghi nhận dòng hoa hồng (khách cọc hoặc đơn hoàn thành) */
         completedAt: done?.toISOString() ?? null,
         orderAmount: Number(c.order_amount),
         rate: Number(c.rate),

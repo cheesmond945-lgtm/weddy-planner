@@ -18,12 +18,11 @@ const base = (over = {}) => ({
   ...over,
 });
 
-test('tăng 300 → 350 khách: 35 bàn, giá trị mới 185tr, cọc bổ sung 10% phần tăng = 2,5tr', () => {
+test('tăng 300 → 350 khách: 35 bàn, giá trị mới 185tr', () => {
   const q = r.quoteGuestChange(base());
   assert.equal(q.ok, true);
   assert.deepEqual([q.oldTables, q.newTables, q.chargedTables], [30, 35, 35]);
   assert.equal(q.newAmount, 185 * M);
-  assert.equal(q.extraDeposit, 2.5 * M);
   assert.equal(q.deadline, '2026-12-13');
 });
 
@@ -32,7 +31,6 @@ test('giảm khách: không hoàn cọc, tính theo số bàn tối thiểu củ
   // 20 bàn < tối thiểu 25 → 25 × 5tr = 125tr + 10tr = 135tr
   assert.equal(q.chargedTables, 25);
   assert.equal(q.newAmount, 135 * M);
-  assert.equal(q.extraDeposit, 0);
   // Giá trị đơn không thấp hơn số đã cọc
   const tiny = r.quoteGuestChange(base({ newGuestCount: 10, minTables: null, deposit: 100 * M }));
   assert.equal(tiny.newAmount, 100 * M);
@@ -69,10 +67,8 @@ test('sảnh tăng số bàn tối thiểu sau khi đặt: không tính vượt 
   const up = r.quoteGuestChange({ ...o, newGuestCount: 320 });
   assert.equal(up.chargedTables, 32);
   assert.equal(up.newAmount, 208 * M);
-  assert.equal(up.extraDeposit, 1.3 * M);
   const down = r.quoteGuestChange({ ...o, newGuestCount: 250 });
   // Không xuống dưới 30 bàn đã thỏa thuận (tối thiểu của sảnh lớn hơn), giá giữ nguyên, không hoàn cọc
   assert.equal(down.chargedTables, 30);
   assert.equal(down.newAmount, 195 * M);
-  assert.equal(down.extraDeposit, 0);
 });

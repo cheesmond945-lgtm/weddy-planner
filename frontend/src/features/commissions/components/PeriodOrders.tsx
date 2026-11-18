@@ -46,7 +46,7 @@ export function PeriodOrders({ summary, detail, loading }: { summary: Commission
               <tr>
                 <th className={th}>Đơn hàng</th>
                 <th className={th}>Ngày cưới</th>
-                <th className={th}>Hoàn thành</th>
+                <th className={th}>Ghi nhận</th>
                 <th className={cn(th, 'text-right')}>Doanh thu</th>
                 <th className={cn(th, 'text-right')}>Tỷ lệ</th>
                 <th className={cn(th, 'text-right')}>Hoa hồng</th>
@@ -63,8 +63,11 @@ export function PeriodOrders({ summary, detail, loading }: { summary: Commission
                   </td>
                   <td className={cn(td, 'whitespace-nowrap tabular-nums')}>{formatDay(l.eventDate)}</td>
                   <td className={cn(td, 'whitespace-nowrap tabular-nums')}>
-                    {l.orderStatus === 'Cancelled' ? formatDay(l.cancelledDate) : formatDay(l.completedDate)}
-                    {l.orderStatus === 'Cancelled' && <span className="mt-1 block w-fit rounded-pill bg-gold-soft px-2 text-[11px] text-gold-ink">Đã hủy · tính trên tiền cọc</span>}
+                    {formatDay(l.recordedDate ?? l.completedDate)}
+                    <span className="mt-1 block w-fit rounded-pill bg-gold-soft px-2 text-[11px] text-gold-ink">
+                      {l.commissionKind === 'Deposit' ? 'Tiền cọc' : 'Phần còn lại'}
+                      {l.orderStatus === 'Cancelled' && ' · đơn đã hủy'}
+                    </span>
                     {/* Hoàn thành ở kỳ đã thanh toán thì được tính dồn sang kỳ này */}
                     {l.originPeriod && <span className="mt-1 block w-fit rounded-pill bg-info-soft px-2 text-[11px] text-info">Dồn từ kỳ {formatPeriod(l.originPeriod)}</span>}
                   </td>

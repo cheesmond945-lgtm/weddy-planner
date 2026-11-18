@@ -41,7 +41,6 @@ type AdjustmentRow = {
   new_tables: number;
   old_amount: unknown;
   new_amount: unknown;
-  extra_deposit: unknown;
   status: string;
   note: string | null;
   created_date: Date;
@@ -132,7 +131,7 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
     guestCount: cancel.guest_count ?? null,
     /** Khách yêu cầu hủy đơn đã cọc, chờ NCC xác nhận; null khi không có */
     cancelRequest: cancel.cancel_requested_date ? { requestedDate: cancel.cancel_requested_date.toISOString(), note: cancel.cancel_request_note ?? null } : null,
-    /** Yêu cầu đổi số khách, mới nhất trước (status: AwaitingVendor, AwaitingDeposit, Applied, Rejected) */
+    /** Yêu cầu đổi số khách, mới nhất trước (status: AwaitingVendor, Applied, Rejected) */
     guestChanges: (cancel.order_adjustments ?? []).map((a) => ({
       id: a.id,
       oldGuestCount: a.old_guest_count,
@@ -141,7 +140,6 @@ export function toOrderDto(o: OrderRow, conversationId: string) {
       newTables: a.new_tables,
       oldAmount: Number(a.old_amount),
       newAmount: Number(a.new_amount),
-      extraDeposit: Number(a.extra_deposit),
       status: a.status,
       note: a.note,
       createdDate: a.created_date.toISOString(),

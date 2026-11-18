@@ -52,14 +52,13 @@ Mỗi hội thoại của khách có `latestOrder` = đơn đã gửi mới nh�
 - Giá trị đơn mới = giá trị cũ − dòng tiền bàn + **đơn giá lúc đặt** × max(⌈số khách mới / 10⌉, số bàn tối thiểu của sảnh); số bàn tối thiểu không vượt số bàn đã thỏa thuận trong đơn (sảnh tăng tối thiểu sau khi đặt). Giảm khách không hoàn cọc (giá trị mới không thấp hơn số đã cọc).
 - Cọc bổ sung = 10% phần tăng (`EXTRA_DEPOSIT_RATE`). Hoa hồng tính trên giá trị đơn cuối cùng (lúc hoàn thành).
 - Số khách mới vượt sức chứa của sảnh: 409 `GUEST_CHANGE_CAPACITY`. Quá hạn: 409 `GUEST_CHANGE_CUTOFF`. Trùng số khách hiện tại: 409 `GUEST_CHANGE_SAME`. Đã có yêu cầu đang chờ: 409 `GUEST_CHANGE_PENDING`.
-- Trạng thái (`order_adjustments.status`): `AwaitingVendor` Chờ NCC xác nhận → (tăng giá trị) `AwaitingDeposit` Chờ nộp cọc bổ sung → `Applied` Đã áp dụng; hoặc `Rejected` Bị từ chối. Giảm hoặc giữ giá trị: NCC đồng ý là áp dụng ngay.
-- Áp dụng: dòng tiền bàn = đơn giá × số bàn tính tiền mới; `total_amount`, `deposit_amount` (+ cọc bổ sung), `guest_count` của đơn; số khách dự kiến của đám cưới; một dòng lịch sử chỉnh sửa (AfterDeposit, Quantity). Đơn đã đổi giá trị từ lúc khách gửi (NCC sửa đơn): 409 `ADJUSTMENT_OUTDATED`, khách gửi lại.
+- Trạng thái (`order_adjustments.status`): `AwaitingVendor` Chờ NCC xác nhận → `Applied` Đã áp dụng; hoặc `Rejected` Bị từ chối. **Không có cọc bổ sung** (bỏ từ 18/11/2026): NCC đồng ý là áp dụng ngay, tiền cọc giữ nguyên, giảm khách không hoàn cọc.
+- Áp dụng: dòng tiền bàn = đơn giá × số bàn tính tiền mới; `total_amount`, `guest_count` (`deposit_amount` giữ nguyên) của đơn; số khách dự kiến của đám cưới; một dòng lịch sử chỉnh sửa (AfterDeposit, Quantity). Đơn đã đổi giá trị từ lúc khách gửi (NCC sửa đơn): 409 `ADJUSTMENT_OUTDATED`, khách gửi lại.
 
 | Phía | Endpoint |
 |---|---|
 | Khách | `GET /orders/:id/guest-changes/quote?guestCount=` xem trước `{ oldTables, newTables, chargedTables, oldAmount, newAmount, extraDeposit, deadline }` |
 | Khách | `POST /orders/:id/guest-changes` `{ guestCount, note? }` |
-| Khách | `POST /orders/:id/guest-changes/pay` mã VietQR cọc bổ sung (nội dung `EVBS` + 8 ký tự đầu id yêu cầu); `POST …/pay/check` hỏi SePay; `POST …/pay/demo-confirm` (chế độ thử) |
 | NCC | `POST /vendors/me/orders/:id/guest-changes/approve`, `POST /vendors/me/orders/:id/guest-changes/reject` `{ note? }` |
 
 ### Khách yêu cầu hủy đơn đã cọc

@@ -90,32 +90,39 @@ export class CommissionsService {
       const total = Number(o.total_amount);
       const deposit = Number(o.deposit_amount);
       const payments: { paymentId: string; installmentName: string; paidAt: string; method: 'VIETQR' | 'BANK_TRANSFER' | 'CASH'; amount: number }[] = [];
-      if (o.payments?.status === 'Paid' && o.payments.paid_date) {
+      // Dòng Deposit: chỉ khoản cọc. Dòng Final: phần còn lại (dòng Final cũ tính trên cả tổng đơn thì hiện cả hai khoản)
+      const depositIn = c.kind === 'Deposit' || Number(c.order_amount) >= total;
+      const finalIn = c.kind === 'Final';
+      if (depositIn && o.payments?.status === 'Paid' && o.payments.paid_date) {
         payments.push({ paymentId: o.payments.id, installmentName: 'Đợt 1 – Đặt cọc', paidAt: o.payments.paid_date.toISOString(), method: 'VIETQR', amount: deposit });
       }
-      if (o.completed_date) {
+      if (finalIn && o.completed_date) {
         payments.push({ paymentId: `final-${o.id}`, installmentName: 'Đợt 2 – Thanh toán còn lại', paidAt: o.completed_date.toISOString(), method: 'CASH', amount: total - deposit });
       }
       return {
         id: c.id,
         kind: 'ORDER',
+        /** Deposit: hoa hồng trên tiền cọc (ghi lúc khách cọc). Final: trên phần còn lại (ghi lúc hoàn thành) */
+        commissionKind: c.kind,
+        /** Ngày ghi nhận dòng hoa hồng (giờ VN): ngày khách cọc hoặc ngày hoàn thành */
+        recordedDate: c.created_date ? ymdVN(c.created_date) : null,
         orderId: o.id,
         orderCode: o.order_code,
         customerName: o.customer_name,
         eventDate: ymd(o.event_date),
         /** Ngày đơn hoàn thành (NCC xác nhận thu đủ hoặc hệ thống tự hoàn thành), giờ VN */
         completedDate: o.completed_date ? ymdVN(o.completed_date) : null,
-        /** Completed: tính trên tổng đơn. Cancelled: khách hủy sau cọc, NCC giữ cọc nên tính trên tiền cọc */
-        orderStatus: o.status === 'Cancelled' ? 'Cancelled' : 'Completed',
+        /** Trạng thái hiện tại của đơn: Deposited (đã cọc, chưa xong), Completed, Cancelled (đã hủy sau cọc, hoa hồng cọc vẫn giữ) */
+        orderStatus: o.status === 'Cancelled' ? 'Cancelled' : o.status === 'Completed' ? 'Completed' : 'Deposited',
         cancelledDate: o.cancelled_date ? ymdVN(o.cancelled_date) : null,
         category: cat,
         rate: Number(c.rate),
         baseAmount: Number(c.order_amount),
         commissionAmount: Number(c.amount),
         payments,
-        // Đơn hoàn thành ở tháng khác kỳ này là đơn được tính dồn (bảng kê tháng đó đã thanh toán)
+        // Dòng được ghi nhận ở tháng khác kỳ này là dòng được tính dồn (bảng kê tháng đó đã thanh toán)
         originPeriod: (() => {
-          const at = o.completed_date ?? o.cancelled_date;
+          const at = c.created_date;
           return at && ymdVN(at).slice(0, 7) !== period ? ymdVN(at).slice(0, 7) : null;
         })(),
       };

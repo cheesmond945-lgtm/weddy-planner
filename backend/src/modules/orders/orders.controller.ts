@@ -31,26 +31,6 @@ export class CoupleOrdersController {
     return this.adjustments.request(req.user.sub, id, body ?? {});
   }
 
-  /** Mã QR nộp cọc bổ sung (NCC đã đồng ý, giá trị đơn tăng) */
-  @HttpCode(200)
-  @Post(':id/guest-changes/pay')
-  payGuestChange(@Req() req: any, @Param('id') id: string) {
-    return this.adjustments.payInfo(req.user.sub, id);
-  }
-
-  @HttpCode(200)
-  @Post(':id/guest-changes/pay/check')
-  checkGuestChangePay(@Req() req: any, @Param('id') id: string) {
-    return this.adjustments.checkPay(req.user.sub, id);
-  }
-
-  /** Chế độ thử (PAYMENT_DEMO_MODE=true): ghi nhận cọc bổ sung ngay */
-  @HttpCode(200)
-  @Post(':id/guest-changes/pay/demo-confirm')
-  demoGuestChangePay(@Req() req: any, @Param('id') id: string) {
-    return this.adjustments.demoPay(req.user.sub, id);
-  }
-
   /** Khách tự hủy đơn chưa thanh toán cọc (Pending / NeedRevision): { note? } */
   @HttpCode(200)
   @Post(':id/cancel')

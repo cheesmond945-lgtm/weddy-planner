@@ -4,7 +4,6 @@ import { dbFeatures } from '../../prisma/db-features';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { notify, postMessage } from '../chat/chat-messages';
 import { onOrderCancelled } from '../weddings/timeline-hooks';
-import { addCommission } from './order-lifecycle';
 import { ORDER_INCLUDE, type OrderRow } from './order-mapping';
 import { CANCEL_LABEL, HOUR, money, todayVn, type CancelReason } from './order-rules';
 
@@ -17,7 +16,7 @@ export const CANCEL_REQUEST_AUTO_HOURS = 24;
  * Hủy một đơn đã cọc (Deposited) và làm các việc kèm theo; dùng chung cho NCC hủy (POST …/cancel) và hệ thống tự hủy yêu cầu hủy quá hạn.
  * - CUSTOMER_REQUEST: chỉ khi khách còn yêu cầu hủy lúc ghi; khách mất cọc, NCC giữ cọc.
  * - VENDOR_UNABLE: NCC hoàn 100% cọc ngoài hệ thống.
- * Cả hai lý do đều tính hoa hồng trên TIỀN CỌC (VENDOR_UNABLE: như phí hủy của NCC), để NCC không né hoa hồng bằng cách hủy rồi làm ngoài hệ thống.
+ * Hoa hồng đã tính trên TIỀN CỌC từ lúc khách cọc (không phụ thuộc hủy hay hoàn thành), nên hủy không làm đổi hoa hồng.
  * Sau khi hủy: bỏ yêu cầu đổi số khách đang chờ, gỡ việc chi tiết trên timeline, gỡ NCC khỏi kế hoạch (nếu không còn đơn khác), tin hệ thống, thông báo.
  * Trả false nếu đơn không còn hủy được (đã đổi trạng thái, hoặc khách vừa rút yêu cầu hủy).
  */
@@ -33,15 +32,14 @@ export async function finishDepositedCancel(prisma: PrismaService, order: OrderR
       data: { status: 'Cancelled', cancelled_date: cancelledAt, cancel_reason: reason, ...(dbFeatures.orderAdjustments && { cancel_requested_date: null, cancel_request_note: null }) },
     });
     if (!r.count) return false;
-    // Hủy sau cọc (cả hai lý do) đều tính hoa hồng trên tiền cọc, cùng transaction với việc đổi trạng thái
-    await addCommission(tx, order, { id: order.vendor_profiles!.id, category_id: order.vendor_profiles?.service_categories?.id ?? null }, cancelledAt, order.deposit_amount);
+    // Hoa hồng đã tính lúc khách cọc, hủy không phát sinh thêm
     return true;
   });
   if (!cancelled) return false;
 
   // Yêu cầu đổi số khách đang chờ không còn ý nghĩa
   if (dbFeatures.orderAdjustments) {
-    await prisma.order_adjustments.updateMany({ where: { order_id: id, status: { in: ['AwaitingVendor', 'AwaitingDeposit'] } }, data: { status: 'Rejected', decided_date: new Date() } });
+    await prisma.order_adjustments.updateMany({ where: { order_id: id, status: 'AwaitingVendor' }, data: { status: 'Rejected', decided_date: new Date() } });
   }
   try {
     await onOrderCancelled(prisma, { id, wedding_id: order.wedding_id!, vendor_id: order.vendor_id! });

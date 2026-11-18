@@ -35,15 +35,18 @@ model commission_statements {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model commissions {
   id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  order_id              String?                @unique @db.Uuid
+  order_id              String?                @db.Uuid
   statement_id          String?                @db.Uuid
   order_amount          Decimal?               @db.Decimal(18, 2)
   rate                  Decimal?               @db.Decimal(5, 2)
   amount                Decimal?               @db.Decimal(18, 2)
   created_date          DateTime?              @default(now()) @db.Timestamptz(6)
+  /// Deposit: trên tiền cọc (lúc khách cọc); Final: trên phần còn lại của tổng đơn (lúc hoàn thành)
+  kind                  String                 @default("Final") @db.VarChar(20)
   orders                orders?                @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   commission_statements commission_statements? @relation(fields: [statement_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@unique([order_id, kind], map: "ux_commissions_order_kind")
   @@index([statement_id], map: "ix_commissions_statement")
 }
 
@@ -237,7 +240,7 @@ model orders {
   guest_count           Int?
   cancel_requested_date DateTime?          @db.Timestamptz(6)
   cancel_request_note   String?
-  commissions           commissions?
+  commissions           commissions[]
   invoices              invoices[]
   messages              messages[]
   order_adjustments     order_adjustments[]
@@ -670,7 +673,7 @@ model task_confirmations {
 }
 
 /// Yêu cầu đổi số khách của đơn tiệc đã cọc (backend/prisma/manual/2026-11-02-02-order-adjustments.sql).
-/// status: AwaitingVendor, AwaitingDeposit, Applied, Rejected. Mỗi đơn chỉ một yêu cầu đang chờ (ux_order_adjustments_open).
+/// status: AwaitingVendor, Applied, Rejected (không còn cọc bổ sung, backend/prisma/manual/2026-11-18-commission-on-deposit.sql). Mỗi đơn chỉ một yêu cầu đang chờ (ux_order_adjustments_open).
 model order_adjustments {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   order_id         String    @db.Uuid
@@ -681,11 +684,8 @@ model order_adjustments {
   unit_price       Decimal   @db.Decimal(18, 2)
   old_amount       Decimal   @db.Decimal(18, 2)
   new_amount       Decimal   @db.Decimal(18, 2)
-  extra_deposit    Decimal   @default(0) @db.Decimal(18, 2)
   status           String    @default("AwaitingVendor") @db.VarChar(20)
   note             String?
-  transaction_code String?   @unique @db.VarChar(100)
-  paid_date        DateTime? @db.Timestamptz(6)
   created_date     DateTime  @default(now()) @db.Timestamptz(6)
   decided_date     DateTime? @db.Timestamptz(6)
   applied_date     DateTime? @db.Timestamptz(6)

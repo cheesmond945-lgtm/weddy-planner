@@ -74,25 +74,27 @@ export async function expirePending(prisma: PrismaService, scope: Prisma.ordersW
 }
 
 /**
- * Hoa hồng của một đơn hoàn thành vào bảng kê của THÁNG HOÀN THÀNH (giờ VN), hạn nộp ngày 25 tháng sau.
+ * Ghi một dòng hoa hồng của đơn vào bảng kê của THÁNG ghi nhận (giờ VN), hạn nộp ngày 25 tháng sau. Một đơn tối đa 2 dòng:
+ * - Deposit: tính trên TIỀN CỌC, ghi lúc khách cọc thành công (markDepositPaid). Để NCC không né hoa hồng bằng cách để đơn treo, hủy rồi làm ngoài hệ thống.
+ * - Final: tính trên (tổng đơn − phần đã tính ở dòng Deposit), ghi lúc đơn hoàn thành (completeOrder). Đơn hủy sau cọc không ghi thêm.
  * Bảng kê đã thanh toán thì đã khép lại: hoa hồng được tính dồn sang bảng kê tháng sau (lặp tới kỳ chưa thanh toán).
- */
-/**
- * `base` mặc định là tổng đơn (đơn hoàn thành). Đơn bị hủy sau cọc: truyền tiền cọc, vì NCC đã giữ khoản cọc đó
- * (đóng chỗ lách "hủy đơn rồi làm ngoài hệ thống"). Hoàn thành: rate × (cọc + phần còn lại) = rate × tổng; hủy: rate × cọc.
+ * Trả false nếu đơn đã có dòng cùng loại (UNIQUE(order_id, kind)) hoặc không còn gì để tính.
  */
 export async function addCommission(
   tx: Prisma.TransactionClient,
   o: { id: string; total_amount: Prisma.Decimal | null },
   vendor: { id: string; category_id: string | null },
-  completedAt: Date,
-  base: Prisma.Decimal | number | null = o.total_amount,
+  at: Date,
+  kind: 'Deposit' | 'Final',
+  base: Prisma.Decimal | number | null,
 ) {
+  if (Number(base) <= 0) return false;
+  if (await tx.commissions.findUnique({ where: { order_id_kind: { order_id: o.id, kind } }, select: { id: true } })) return false;
   const category = await tx.service_categories.findUniqueOrThrow({ where: { id: vendor.category_id! } });
   const rate = Number(category.commission_rate);
   const total = Number(base);
   const commission = Math.round((total * rate) / 100);
-  const vn = new Date(completedAt.getTime() + 7 * HOUR);
+  const vn = new Date(at.getTime() + 7 * HOUR);
   let periodMonth = new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), 1));
   for (;;) {
     const closed = await tx.commission_statements.findUnique({ where: { vendor_id_period_month: { vendor_id: vendor.id, period_month: periodMonth } }, select: { status: true } });
@@ -105,12 +107,13 @@ export async function addCommission(
     create: { vendor_id: vendor.id, period_month: periodMonth, due_date: dueDate, total_orders: 0, total_amount: 0, status: 'Unpaid' },
     update: {},
   });
-  await tx.commissions.create({ data: { order_id: o.id, statement_id: st.id, order_amount: total, rate, amount: commission } });
+  await tx.commissions.create({ data: { order_id: o.id, statement_id: st.id, order_amount: total, rate, amount: commission, kind } });
   await tx.commission_statements.update({ where: { id: st.id }, data: { total_orders: { increment: 1 }, total_amount: { increment: commission } } });
+  return true;
 }
 
 /**
- * Deposited -> Completed: ghi CompletedDate, tạo hoa hồng, thêm tin hệ thống và báo khách (và NCC nếu hệ thống tự hoàn thành).
+ * Deposited -> Completed: ghi CompletedDate, tạo hoa hồng dòng Final (phần còn lại), thêm tin hệ thống và báo khách (và NCC nếu hệ thống tự hoàn thành).
  * Trả false nếu đơn không còn ở Deposited (đã có người xử lý trước).
  */
 export async function completeOrder(prisma: PrismaService, orderId: string, completedAt: Date, by: 'VENDOR' | 'SYSTEM', opts: { restReceived?: boolean } = {}) {
@@ -120,7 +123,9 @@ export async function completeOrder(prisma: PrismaService, orderId: string, comp
   const done = await prisma.$transaction(async (tx) => {
     const r = await tx.orders.updateMany({ where: { id: orderId, status: 'Deposited' }, data: { status: 'Completed', completed_date: completedAt } });
     if (!r.count) return false;
-    await addCommission(tx, o, o.vendor_profiles!, completedAt);
+    // Hoa hồng phần còn lại = tổng đơn (giá trị cuối, kể cả đã đổi số khách) − phần đã tính lúc cọc
+    const charged = await tx.commissions.aggregate({ where: { order_id: orderId }, _sum: { order_amount: true } });
+    await addCommission(tx, o, o.vendor_profiles!, completedAt, 'Final', Number(o.total_amount) - Number(charged._sum.order_amount ?? 0));
     // Dịch vụ đã xong: đóng mọi việc chi tiết chưa Done (Todo và Waiting) của đơn trên timeline khách (không để tồn đọng thành việc quá hạn)
     // KHÔNG đóng việc thanh toán phần còn lại (PAY:): đơn Completed mà chưa ghi nhận thì đợt 2 vẫn là "chưa nhận"
     await tx.timeline_tasks.updateMany({ where: closableDetailTasksWhere(orderId), data: { status: 'Done', completed_date: completedAt } });
