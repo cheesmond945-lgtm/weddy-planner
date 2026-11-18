@@ -4,8 +4,9 @@ import { notify, postMessage } from '../chat/chat-messages';
 import { categoryKindOf } from '../catalog/category-kind';
 import { syncOrderPackageTasks as syncOrderPackageTasksOf, type SyncDb } from './order-package-sync';
 import { loadPackageMeta, packagesOfOrder } from './package-task-meta';
-import { baseCode, cancelPlan, frameRows, isOrderTaskCode, isRemovedCode, packageSwitchPlan, PKG_PREFIX, pkgTaskIdOf, replanOrderTasks, type PackageTaskRef, type ServiceRef } from './timeline-rows';
-import { replanOnWeddingDateChange } from './timeline-schedule';
+import { dbFeatures } from '../../prisma/db-features';
+import { baseCode, budgetPriorityOf, cancelPlan, frameRows, isOrderTaskCode, isRemovedCode, packageSwitchPlan, PKG_PREFIX, pkgTaskIdOf, replanOrderTasks, type PackageTaskRef, type ServiceRef } from './timeline-rows';
+import { mergedServicesOf, replanOnWeddingDateChange } from './timeline-schedule';
 import { customerDateWarning, dateChangeIssue, vendorDateNotice, weddingDayRequestNote, type DateChangeKind } from './timeline-rules';
 import { serviceKeyOf, TIMELINE_TEMPLATES, templateOf, type ServiceKey } from './timeline-templates';
 
@@ -20,17 +21,30 @@ export const toYmd = ymdOf;
 /**
  * Khi lưu thông tin đám cưới: sinh timeline khung từ mẫu (timeline-templates.ts), hạn tính từ ngày cưới và hôm nay.
  * Chỉ thêm việc CHƯA có (theo task_code): việc đã sinh không bao giờ bị dời hay tính lại; hạng mục mới chọn thêm sau đó chỉ được thêm việc của nó.
+ * Dịch vụ đã gộp thành "Chọn và chốt …" lúc sinh thì không thêm lại các việc Chọn NCC của nó (dù lần này mật độ ≤ 1).
  */
 export async function onWeddingCategories(prisma: PrismaService, weddingId: string, weddingDate: Date, categoryIds: string[]) {
-  const cats = categoryIds.length ? await prisma.service_categories.findMany({ where: { id: { in: categoryIds } }, select: { id: true, name: true } }) : [];
+  const [cats, wedding] = await Promise.all([
+    categoryIds.length ? prisma.service_categories.findMany({ where: { id: { in: categoryIds } }, select: { id: true, name: true } }) : Promise.resolve([]),
+    dbFeatures.budgetAllocation ? prisma.weddings.findUnique({ where: { id: weddingId }, select: { budget_preset: true, custom_weights: true } }) : Promise.resolve(null),
+  ]);
   const services: ServiceRef[] = cats.flatMap((c) => {
     const key = serviceKeyOf(c.name);
     return key ? [{ key, categoryId: c.id }] : [];
   });
-  const rows = frameRows(TIMELINE_TEMPLATES, { weddingId, wedding: ymdOf(weddingDate), today: vnYmd(new Date()), services });
+  const budget = budgetPriorityOf(wedding, (id) => services.find((s) => s.categoryId === id)?.key);
+  const rows = frameRows(TIMELINE_TEMPLATES, { weddingId, wedding: ymdOf(weddingDate), today: vnYmd(new Date()), services, ...budget });
   // Việc khung khách đã xóa (DEL:<mã>) cũng tính là đã có: không sinh lại
   const existing = new Set((await prisma.timeline_tasks.findMany({ where: { wedding_id: weddingId, task_code: { not: null } }, select: { task_code: true } })).map((t) => baseCode(t.task_code!)));
-  const todo = rows.filter((r) => !existing.has(r.task_code));
+  const mergedBefore = new Set(mergedServicesOf(TIMELINE_TEMPLATES, existing));
+  const todo = rows
+    .filter((r) => !existing.has(r.task_code))
+    .filter((r) => {
+      const t = templateOf(r.task_code);
+      return !(t?.kind === 'CHOOSE' && t.service && mergedBefore.has(t.service));
+    })
+    // Chưa chạy SQL thêm cột note thì không ghi ghi chú gợi ý
+    .map((r) => (dbFeatures.timelineNotes ? r : { ...r, note: undefined }));
   if (!todo.length) return;
   await prisma.timeline_tasks.createMany({ data: todo, skipDuplicates: true });
 }
@@ -126,13 +140,14 @@ export interface DateChangePlan {
  */
 export async function planWeddingDateChange(db: Db, weddingId: string, newWedding: string, oldWedding?: string | null): Promise<DateChangePlan> {
   const before = oldWedding !== undefined ? oldWedding : ymdOf((await db.weddings.findUnique({ where: { id: weddingId }, select: { wedding_date: true } }))?.wedding_date ?? null) || null;
-  const [allTasks, cats, orders] = await Promise.all([
+  const [allTasks, cats, orders, wedding] = await Promise.all([
     db.timeline_tasks.findMany({ where: { wedding_id: weddingId }, select: { id: true, title: true, task_code: true, scheduled_date: true, status: true, order_id: true, category_id: true } }),
     db.service_categories.findMany({ select: { id: true, name: true } }),
     db.orders.findMany({
       where: { wedding_id: weddingId },
       select: { id: true, order_code: true, status: true, event_date: true, payments: { select: { paid_date: true } }, vendor_profiles: { select: { id: true, business_name: true, category_id: true } } },
     }),
+    dbFeatures.budgetAllocation ? db.weddings.findUnique({ where: { id: weddingId }, select: { budget_preset: true, custom_weights: true } }) : Promise.resolve(null),
   ]);
   // Việc khung khách đã xóa: không dời hạn
   const tasks = allTasks.filter((t) => !isRemovedCode(t.task_code));
@@ -144,7 +159,10 @@ export async function planWeddingDateChange(db: Db, weddingId: string, newWeddin
   const services = [...new Set(tasks.map((t) => keyOf(t.category_id)).filter((k): k is ServiceKey => !!k))];
   const existing = tasks.filter((t) => t.task_code && templateOf(t.task_code)).map((t) => ({ code: t.task_code!, date: ymdOf(t.scheduled_date), done: t.status === 'Done' }));
 
-  const changes = replanOnWeddingDateChange(TIMELINE_TEMPLATES, { wedding: newWedding, today, tasks: existing, services });
+  // Trạng thái gộp như lúc sinh (tính trên mọi dòng, kể cả dòng khách đã xóa)
+  const merged = mergedServicesOf(TIMELINE_TEMPLATES, allTasks.flatMap((t) => (t.task_code ? [baseCode(t.task_code)] : [])));
+  const budget = budgetPriorityOf(wedding, keyOf);
+  const changes = replanOnWeddingDateChange(TIMELINE_TEMPLATES, { wedding: newWedding, today, tasks: existing, services, merged, ...budget });
   const byCode = new Map(tasks.map((t) => [t.task_code, t]));
   const isVenue = (categoryId: string | null) => categoryKindOf(cats.find((c) => c.id === categoryId)?.name ?? null) === 'nha-hang';
   const warnings = orders.flatMap((o) => {

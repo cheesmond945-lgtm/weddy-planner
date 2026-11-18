@@ -3,9 +3,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { categorySlug } from '../catalog/services.service';
 import { customerReadonlyIssue, dateStatusOf } from '../orders/order-task-rules';
 import { loadPackageMeta, ownersFrom, packagesOfOrder } from './package-task-meta';
-import { hiddenByCategory, isCustomOrderTaskCode, isRemovedCode, PAY_PREFIX, PKG_PREFIX, removedCode } from './timeline-rows';
+import { baseCode, budgetPriorityOf, hiddenByCategory, isCustomOrderTaskCode, isRemovedCode, PAY_PREFIX, PKG_PREFIX, removedCode } from './timeline-rows';
 import { planWeddingDateChange, todayVNDate, toYmd, vnYmd } from './timeline-hooks';
-import { dayOf, levelOf, planFrame } from './timeline-schedule';
+import { dayOf, levelOf, mergedServicesOf, planTimeline, type ServiceWeights } from './timeline-schedule';
 import { dueBounds, dueRangeIssue, sequenceIssue } from './timeline-rules';
 import { ownerOf } from './task-owner';
 import { serviceKeyOf, SUGGEST_LABEL, TIMELINE_TEMPLATES, suggestOf, templateOf, type ServiceKey } from './timeline-templates';
@@ -32,17 +32,26 @@ const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{
  * - SELF -> TASK; CHOOSE -> CHOOSE (nút "Gợi ý {dịch vụ}"); BOOK (mã *_BOOK) -> CATEGORY_DEADLINE ("Chốt <hạng mục>", xong khi đã cọc)
  * - việc gắn đơn (task_code 'PKG:<id>' từ gói của NCC, 'PAY:<orderId>' thanh toán, hoặc mã chi tiết cũ) -> SERVICE_TASK: khách chỉ xem
  * - Việc chi tiết (SERVICE_TASK) nằm trong nhóm của Mốc chốt cùng hạng mục; Mốc chốt đã chốt mà đơn không có việc nào của gói mang vendorProcessMissing
- * `urgent` (Cần làm gấp) của việc khung tính lại khi đọc bằng đúng đầu vào lúc sinh; không lưu.
+ * `urgent` (Cần làm gấp) và `priority` ("Ưu tiên k", L ≤ 80) của việc khung tính lại khi đọc bằng đúng đầu vào lúc sinh (planTimeline); không lưu.
+ * `mergedFrame`: việc gộp "Chọn và chốt …" (dịch vụ có Mốc chốt mà không còn mã Chọn NCC nào, xem mergedServicesOf).
  */
-const frameUrgent = (w: { wedding_date: Date | null; created_date: Date | null }, keys: ServiceKey[]) => {
-  const out = new Set<string>();
-  if (!w.wedding_date) return out;
+const frameFlags = (
+  w: { wedding_date: Date | null; created_date: Date | null },
+  keys: ServiceKey[],
+  merged: ServiceKey[],
+  budget: { preset: ReturnType<typeof budgetPriorityOf>['preset']; weights: ServiceWeights | null },
+) => {
+  const urgent = new Set<string>();
+  let priority: Partial<Record<ServiceKey, number>> | null = null;
+  if (!w.wedding_date) return { urgent, priority };
   try {
-    for (const t of planFrame(TIMELINE_TEMPLATES, { wedding: toYmd(w.wedding_date), today: vnYmd(w.created_date ?? new Date()), services: keys }).tasks) if (t.urgent) out.add(t.code);
+    const plan = planTimeline(TIMELINE_TEMPLATES, { wedding: toYmd(w.wedding_date), today: vnYmd(w.created_date ?? new Date()), services: keys, merged, ...budget });
+    for (const t of plan.tasks) if (t.urgent) urgent.add(t.code);
+    priority = plan.priority;
   } catch {
-    // ngày cưới không sau ngày tạo: không có cờ gấp
+    // ngày cưới không sau ngày tạo: không có cờ gấp, không nhãn ưu tiên
   }
-  return out;
+  return { urgent, priority };
 };
 
 @Injectable()
@@ -95,7 +104,8 @@ export class TimelineService {
 
     // Cờ gấp: khung tính lại với I = ngày tạo
     const keys = [...new Set(tasks.map((t) => keyOfCat(t.category_id)).filter((k): k is ServiceKey => !!k))];
-    const urgent = frameUrgent(w, keys);
+    const merged = mergedServicesOf(TIMELINE_TEMPLATES, allTasks.flatMap((t) => (t.task_code ? [baseCode(t.task_code)] : [])));
+    const { urgent, priority } = frameFlags(w, keys, merged, budgetPriorityOf(w as { budget_preset?: string | null; custom_weights?: unknown }, keyOfCat));
     const owners = ownersFrom(await loadPackageMeta(this.prisma, tasks.map((t) => t.task_code)));
     // Đơn đã có việc chi tiết (của gói hoặc mã cũ, không tính việc thanh toán) thì NCC đã có quy trình
     const hasProcess = new Set(tasks.filter((t) => t.order_id && t.task_code && !t.task_code.startsWith(PAY_PREFIX)).map((t) => t.order_id!));
@@ -150,6 +160,10 @@ export class TimelineService {
         // SERVICE_TASK: dịch vụ của đơn (để "Hẹn với NCC"); CHOOSE / CATEGORY_DEADLINE: dịch vụ đang trong kế hoạch của hạng mục
         serviceId: kind === 'SERVICE_TASK' ? (order?.vendor_profiles?.id ?? null) : (planned?.serviceId ?? null),
         urgent: !done && !!t.task_code && urgent.has(t.task_code),
+        /** "Ưu tiên k" của việc khung thuộc dịch vụ (Chọn NCC / Mốc chốt), chỉ khi L lúc sinh ≤ 80; việc đã xong không hiện */
+        priority: !done && tpl?.service && (kind === 'CHOOSE' || kind === 'CATEGORY_DEADLINE') ? (priority?.[tpl.service] ?? null) : null,
+        /** Việc gộp "Chọn và chốt …": ghi chú (note) là gợi ý các bước con */
+        mergedFrame: kind === 'CATEGORY_DEADLINE' && !!tpl?.service && merged.includes(tpl.service),
         /** Todo (NCC đang làm) | Waiting (chờ khách) | Done. Việc khung và việc tự thêm chỉ Todo | Done */
         status: (t.status ?? 'Todo') as 'Todo' | 'Waiting' | 'Done',
         /** SERVICE_TASK: việc lấy từ gói của NCC ('PKG:<id>') */
@@ -179,7 +193,8 @@ export class TimelineService {
       };
     }).map((i, idx) => {
       const tpl = templateOf(tasks[idx].task_code);
-      const suggest = suggestOf(tpl, { done: i.isDone, hasCancelledOrder: !!i.cancelledOrder });
+      // Việc gộp thay cho việc Chọn NCC đầu tiên: giữ nút "Gợi ý {dịch vụ}" khi chưa chốt
+      const suggest = suggestOf(tpl, { done: i.isDone, hasCancelledOrder: !!i.cancelledOrder }) || (i.mergedFrame && !i.isDone);
       return { ...i, suggest, suggestLabel: suggest && tpl?.service ? SUGGEST_LABEL[tpl.service] : null };
     });
 
