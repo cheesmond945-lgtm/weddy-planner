@@ -9,6 +9,7 @@
  * Việc khung: 31 việc (đợt 1). Mã không còn trong mẫu (vd SELF_ENGAGEMENT của timeline cũ) vẫn nằm trong CSDL; templateOf trả undefined, các nơi dùng phải chịu được.
  */
 import { categoryKindOf } from '../catalog/category-kind.ts';
+import { H10 } from './budget-split.ts';
 
 /** Hạng mục theo slug (xem categorySlug trong catalog). Chụp ảnh và quay phim là một hạng mục "chup-anh". */
 export type ServiceKey = 'nha-hang' | 'chup-anh' | 'trang-phuc' | 'decor' | 'makeup' | 'hoa-cuoi';
@@ -127,13 +128,24 @@ export const STEP_HINT: Readonly<Record<string, string>> = {
 export type BudgetPresetKey = 'BALANCED' | 'SPACE' | 'VISUAL' | 'CUSTOM';
 
 /**
- * Thứ tự ưu tiên các dịch vụ (trừ trung tâm tiệc cưới, luôn đứng đầu) theo mức chia ngân sách.
- * Tùy chỉnh: theo tỷ lệ % (cao trước), bằng nhau thì theo thứ tự Cân bằng.
+ * Thứ tự Cân bằng: theo thời gian nhà cung cấp cần chuẩn bị, từ dài đến ngắn (độ lệch Mốc chốt trong bộ mẫu:
+ * chụp ảnh 170, trang phục 130, trang trí 115, trang điểm 95, hoa cưới 45 ngày trước cưới). Dùng để xếp hòa.
+ */
+const LEAD_TIME_ORDER: readonly ServiceKey[] = ['chup-anh', 'trang-phuc', 'decor', 'makeup', 'hoa-cuoi'];
+
+/** Xếp theo hệ số chia ngân sách h (budget-split.ts H10, thiếu thì h = 10), cao trước; bằng nhau giữ thứ tự Cân bằng (sort ổn định). */
+const byBudgetWeight = (h: Record<string, number>): readonly ServiceKey[] =>
+  [...LEAD_TIME_ORDER].sort((a, b) => (h[b] ?? 10) - (h[a] ?? 10));
+
+/**
+ * Thứ tự ưu tiên các dịch vụ (trừ trung tâm tiệc cưới, luôn đứng đầu) theo mức chia ngân sách: sinh từ cùng hệ số h mà
+ * thuật toán chia ngân sách dùng, để dịch vụ được chia nhiều tiền hơn thì chốt trước. Tùy chỉnh: theo tỷ lệ % (cao trước),
+ * bằng nhau thì theo thứ tự Cân bằng.
  */
 export const PRIORITY_ORDER: Record<Exclude<BudgetPresetKey, 'CUSTOM'>, readonly ServiceKey[]> = {
-  VISUAL: ['trang-phuc', 'makeup', 'chup-anh', 'decor', 'hoa-cuoi'],
-  SPACE: ['decor', 'hoa-cuoi', 'trang-phuc', 'makeup', 'chup-anh'],
-  BALANCED: ['chup-anh', 'trang-phuc', 'decor', 'makeup', 'hoa-cuoi'],
+  VISUAL: byBudgetWeight(H10.VISUAL), // chụp ảnh → trang phục → trang điểm → trang trí → hoa cưới
+  SPACE: byBudgetWeight(H10.SPACE), // trang trí → hoa cưới → chụp ảnh → trang phục → trang điểm
+  BALANCED: byBudgetWeight(H10.BALANCED), // = LEAD_TIME_ORDER
 };
 
 /**

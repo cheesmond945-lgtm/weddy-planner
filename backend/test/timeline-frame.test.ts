@@ -62,11 +62,11 @@ const run = (s: Scenario): TimelinePlan => planTimeline(T, { wedding: addDays(I,
 const chainOf = (s: ServiceKey) => T.filter((t) => t.service === s && (t.kind === 'CHOOSE' || t.kind === 'BOOK')).sort((a, b) => a.order - b.order);
 
 describe('Bước 7.1: thứ tự ưu tiên theo mức chia ngân sách', () => {
-  it('Ưu tiên hình ảnh: tiệc → trang phục → trang điểm → chụp ảnh → trang trí → hoa', () => {
-    assert.deepEqual(priorityOrder(ALL, 'VISUAL'), ['nha-hang', 'trang-phuc', 'makeup', 'chup-anh', 'decor', 'hoa-cuoi']);
+  it('Ưu tiên hình ảnh: tiệc → chụp ảnh → trang phục → trang điểm → trang trí → hoa', () => {
+    assert.deepEqual(priorityOrder(ALL, 'VISUAL'), ['nha-hang', 'chup-anh', 'trang-phuc', 'makeup', 'decor', 'hoa-cuoi']);
   });
-  it('Ưu tiên không gian: tiệc → trang trí → hoa → trang phục → trang điểm → chụp ảnh', () => {
-    assert.deepEqual(priorityOrder(ALL, 'SPACE'), ['nha-hang', 'decor', 'hoa-cuoi', 'trang-phuc', 'makeup', 'chup-anh']);
+  it('Ưu tiên không gian: tiệc → trang trí → hoa → chụp ảnh → trang phục → trang điểm', () => {
+    assert.deepEqual(priorityOrder(ALL, 'SPACE'), ['nha-hang', 'decor', 'hoa-cuoi', 'chup-anh', 'trang-phuc', 'makeup']);
   });
   it('Cân bằng: tiệc → chụp ảnh → trang phục → trang trí → trang điểm → hoa', () => {
     assert.deepEqual(priorityOrder(ALL, 'BALANCED'), ['nha-hang', 'chup-anh', 'trang-phuc', 'decor', 'makeup', 'hoa-cuoi']);
@@ -277,12 +277,12 @@ describe('nhãn ưu tiên tính theo HÔM NAY (L = W − hôm nay)', () => {
   const W = '2027-03-01';
   it('cùng đám cưới: hôm nay còn 81 ngày thì chưa có nhãn, còn 80 ngày thì có', () => {
     assert.equal(priorityLabels(ALL, dayOf(W) - dayOf(addDays(W, -81)), 'VISUAL'), null);
-    assert.deepEqual(priorityLabels(ALL, dayOf(W) - dayOf(addDays(W, -80)), 'VISUAL'), { 'nha-hang': 1, 'trang-phuc': 2, makeup: 3, 'chup-anh': 4, decor: 5, 'hoa-cuoi': 6 });
+    assert.deepEqual(priorityLabels(ALL, dayOf(W) - dayOf(addDays(W, -80)), 'VISUAL'), { 'nha-hang': 1, 'chup-anh': 2, 'trang-phuc': 3, makeup: 4, decor: 5, 'hoa-cuoi': 6 });
   });
   it('không phụ thuộc ngày tạo: tạo khi còn 200 ngày, hôm nay còn 30 ngày vẫn có nhãn', () => {
     const atCreate = planTimeline(T, { wedding: W, today: addDays(W, -200), services: ALL, preset: 'SPACE' });
     assert.equal(atCreate.priority, null);
-    assert.deepEqual(priorityLabels(ALL, 30, 'SPACE'), { 'nha-hang': 1, decor: 2, 'hoa-cuoi': 3, 'trang-phuc': 4, makeup: 5, 'chup-anh': 6 });
+    assert.deepEqual(priorityLabels(ALL, 30, 'SPACE'), { 'nha-hang': 1, decor: 2, 'hoa-cuoi': 3, 'chup-anh': 4, 'trang-phuc': 5, makeup: 6 });
   });
   it('ngày cưới hôm nay hoặc đã qua: không nhãn', () => {
     assert.equal(priorityLabels(ALL, 0, 'BALANCED'), null);
