@@ -1,4 +1,4 @@
-import { Ban, CalendarDays, Check, Clock, Hourglass, Lock, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { Ban, CalendarDays, Check, Clock, Flag, Hourglass, Lock, Pencil, Sparkles, Trash2, Zap } from 'lucide-react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { CategoryIcon, categoryColor } from '@/features/catalog/categoryIcons'
@@ -39,6 +39,29 @@ function ServiceTag({ item }: { item: TimelineItem }) {
     >
       <CategoryIcon slug={slug} size={13} strokeWidth={2} />
       {item.category!.name}
+    </span>
+  )
+}
+
+const flagPill = 'inline-flex shrink-0 items-center gap-1 rounded-pill px-2 py-0.5 text-[11.5px] leading-none font-bold whitespace-nowrap ring-1 ring-inset'
+
+/** Tag "Gấp": việc bị ép thời gian lúc lập lịch (đỏ nhạt) */
+function UrgentTag() {
+  return (
+    <span className={cn(flagPill, 'bg-warn-soft text-warn ring-warn/25')} title="Việc bị dồn lịch gấp so với lịch mẫu">
+      <Zap className="size-3 fill-current" strokeWidth={2.5} aria-hidden />
+      Gấp
+    </span>
+  )
+}
+
+/** Tag "Ưu tiên k": thứ tự dịch vụ nên lo trước (xanh nhạt, số nổi bật) */
+function PriorityTag({ rank }: { rank: number }) {
+  return (
+    <span className={cn(flagPill, 'bg-info-soft text-info ring-info/25')} title={`Dịch vụ ưu tiên thứ ${rank}: nên lo trước các dịch vụ có số lớn hơn`}>
+      <Flag className="size-3" strokeWidth={2.5} aria-hidden />
+      Ưu tiên
+      <span className="-mr-0.5 ml-0.5 grid size-4 place-items-center rounded-full bg-info text-[10.5px] text-white">{rank}</span>
     </span>
   )
 }
@@ -129,11 +152,7 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
               Sắp đến hạn
             </span>
           ),
-          !done && item.urgent && (
-            <span key="urgent" className="font-semibold text-warn">
-              Gấp
-            </span>
-          ),
+          !done && item.urgent && <UrgentTag key="urgent" />,
           item.isCustomOrderTask && (
             <span key="custom" className="rounded-pill border border-dashed border-gold-ink/50 px-2 py-0.5 text-[11.5px] leading-none font-medium text-gold-ink">
               NCC thêm
@@ -204,8 +223,12 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
           <span className={cn(overdue && 'text-warn')}>Hạn {formatDate(item.dueDate!)}</span>
           {dueSoon && <span className="font-semibold text-gold-ink">· Sắp đến hạn</span>}
           {overdue && <span className="font-semibold text-warn">· Quá hạn</span>}
-          {!done && item.urgent && <span className="font-semibold text-warn">· Gấp</span>}
-          {!done && !!item.priority && <span className="font-semibold text-info">· Ưu tiên {item.priority}</span>}
+          {!done && (item.urgent || !!item.priority) && (
+            <span className="ml-1 inline-flex flex-wrap items-center gap-1.5">
+              {item.urgent && <UrgentTag />}
+              {!!item.priority && <PriorityTag rank={item.priority} />}
+            </span>
+          )}
         </div>
         {/* Việc gộp "Chọn và chốt …": gợi ý các bước con từ bộ mẫu (backend chỉ gửi khi chưa xong) */}
         {item.mergedFrame && !done && item.mergedHint && <div className="mt-1 text-[12.5px] leading-snug text-muted-foreground">{item.mergedHint}</div>}
