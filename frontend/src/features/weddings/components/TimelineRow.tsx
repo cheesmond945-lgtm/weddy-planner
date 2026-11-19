@@ -271,14 +271,19 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
 
       {/* Bấm nút trong thẻ không mở hộp xác nhận */}
       <div className="flex flex-wrap items-center gap-2 max-[640px]:w-full max-[640px]:pl-[42px]" onClick={(e) => e.stopPropagation()}>
-        {/* Nhãn Ưu tiên ở cột phải, cùng hàng (căn giữa) với nút Gợi ý / Sửa, để dòng hạn bên trái thoáng */}
-        {!done && !!item.priority && <PriorityTag rank={item.priority} />}
-        {suggests && item.category && (
-          // Mở popup gợi ý nhà cung cấp ngay trên Timeline (SuggestionsDialog), như nút "Gợi ý cho bạn" ở Kế hoạch
-          <Button variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5" onClick={() => aiSuggest(item.category!.slug)}>
-            <Sparkles className="size-[15px] shrink-0" />
-            <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${inSentence(label)}`} →</span>
-          </Button>
+        {/* Cột dọc căn phải: nhãn Ưu tiên ở trên, nút Gợi ý ở dưới (cách nhau 8px). Căn phải nên nhãn Ưu tiên của các thẻ thẳng hàng nhau.
+            Điện thoại: xếp ngang dưới tên việc như cũ. */}
+        {((!done && !!item.priority) || (suggests && item.category)) && (
+          <div className="flex flex-col items-end gap-2 max-[640px]:flex-row max-[640px]:flex-wrap max-[640px]:items-center">
+            {!done && !!item.priority && <PriorityTag rank={item.priority} />}
+            {suggests && item.category && (
+              // Mở popup gợi ý nhà cung cấp ngay trên Timeline (SuggestionsDialog), như nút "Gợi ý cho bạn" ở Kế hoạch
+              <Button variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5" onClick={() => aiSuggest(item.category!.slug)}>
+                <Sparkles className="size-[15px] shrink-0" />
+                <span className="min-w-0 whitespace-normal text-left leading-tight">{item.suggestLabel ?? `Gợi ý ${inSentence(label)}`} →</span>
+              </Button>
+            )}
+          </div>
         )}
         {/* Việc khung và việc tự thêm chưa xong: sửa tên, hạn và xóa (việc chi tiết của đơn do NCC sửa, khách chỉ xem).
             Hai nút nhỏ xếp dọc, chỉ hiện khi rê chuột hoặc focus vào thẻ; màn hình cảm ứng (không rê chuột) thì luôn hiện */}
