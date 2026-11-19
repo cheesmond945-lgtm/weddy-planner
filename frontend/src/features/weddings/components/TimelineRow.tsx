@@ -43,13 +43,14 @@ function ServiceTag({ item }: { item: TimelineItem }) {
   )
 }
 
-const flagPill = 'inline-flex shrink-0 items-center gap-1 rounded-pill px-2 py-0.5 text-[11.5px] leading-none font-bold whitespace-nowrap ring-1 ring-inset'
+/** Cùng kiểu với ServiceTag: nền màu nhạt, không viền */
+const flagPill = 'inline-flex shrink-0 items-center gap-1 rounded-pill px-2 py-0.5 text-[12px] leading-none font-semibold whitespace-nowrap'
 
 /** Tag "Gấp": việc bị ép thời gian lúc lập lịch (đỏ nhạt) */
 function UrgentTag() {
   return (
-    <span className={cn(flagPill, 'bg-warn-soft text-warn ring-warn/25')} title="Việc bị dồn lịch gấp so với lịch mẫu">
-      <Zap className="size-3 fill-current" strokeWidth={2.5} aria-hidden />
+    <span className={cn(flagPill, 'bg-[color-mix(in_srgb,var(--warn)_14%,transparent)] text-warn')} title="Việc bị dồn lịch gấp so với lịch mẫu">
+      <Zap className="size-[13px]" strokeWidth={2} aria-hidden />
       Gấp
     </span>
   )
@@ -58,10 +59,9 @@ function UrgentTag() {
 /** Tag "Ưu tiên k": thứ tự dịch vụ nên lo trước (xanh nhạt, số nổi bật) */
 function PriorityTag({ rank }: { rank: number }) {
   return (
-    <span className={cn(flagPill, 'bg-info-soft text-info ring-info/25')} title={`Dịch vụ ưu tiên thứ ${rank}: nên lo trước các dịch vụ có số lớn hơn`}>
-      <Flag className="size-3" strokeWidth={2.5} aria-hidden />
-      Ưu tiên
-      <span className="-mr-0.5 ml-0.5 grid size-4 place-items-center rounded-full bg-info text-[10.5px] text-white">{rank}</span>
+    <span className={cn(flagPill, 'bg-[color-mix(in_srgb,var(--info)_14%,transparent)] text-info')} title={`Dịch vụ ưu tiên thứ ${rank}: nên lo trước các dịch vụ có số lớn hơn`}>
+      <Flag className="size-[13px]" strokeWidth={2} aria-hidden />
+      Ưu tiên {rank}
     </span>
   )
 }
@@ -224,7 +224,7 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
           {dueSoon && <span className="font-semibold text-gold-ink">· Sắp đến hạn</span>}
           {overdue && <span className="font-semibold text-warn">· Quá hạn</span>}
           {!done && (item.urgent || !!item.priority) && (
-            <span className="ml-1 inline-flex flex-wrap items-center gap-1.5">
+            <span className="ml-auto inline-flex flex-wrap items-center justify-end gap-1.5 pl-2">
               {item.urgent && <UrgentTag />}
               {!!item.priority && <PriorityTag rank={item.priority} />}
             </span>
