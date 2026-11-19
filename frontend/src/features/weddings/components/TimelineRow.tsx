@@ -59,7 +59,7 @@ function UrgentTag() {
 /** Tag "Ưu tiên k": thứ tự dịch vụ nên lo trước (xanh nhạt, số nổi bật) */
 function PriorityTag({ rank }: { rank: number }) {
   return (
-    <span className={cn(flagPill, 'bg-[color-mix(in_srgb,var(--info)_14%,transparent)] text-info')} title={`Dịch vụ ưu tiên thứ ${rank}: nên lo trước các dịch vụ có số lớn hơn`}>
+    <span className={cn(flagPill, 'px-2.5 py-1.5 text-[12.5px] bg-[color-mix(in_srgb,var(--info)_14%,transparent)] text-info')} title={`Dịch vụ ưu tiên thứ ${rank}: nên lo trước các dịch vụ có số lớn hơn`}>
       <Flag className="size-[13px]" strokeWidth={2} aria-hidden />
       Ưu tiên {rank}
     </span>
@@ -223,10 +223,9 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
           <span className={cn(overdue && 'text-warn')}>Hạn {formatDate(item.dueDate!)}</span>
           {dueSoon && <span className="font-semibold text-gold-ink">· Sắp đến hạn</span>}
           {overdue && <span className="font-semibold text-warn">· Quá hạn</span>}
-          {!done && (item.urgent || !!item.priority) && (
-            <span className="ml-auto inline-flex flex-wrap items-center justify-end gap-1.5 pl-2">
-              {item.urgent && <UrgentTag />}
-              {!!item.priority && <PriorityTag rank={item.priority} />}
+          {!done && item.urgent && (
+            <span className="ml-1">
+              <UrgentTag />
             </span>
           )}
         </div>
@@ -272,6 +271,8 @@ export function TimelineCard({ item, leaving, nested, conflictDate, onComplete, 
 
       {/* Bấm nút trong thẻ không mở hộp xác nhận */}
       <div className="flex flex-wrap items-center gap-2 max-[640px]:w-full max-[640px]:pl-[42px]" onClick={(e) => e.stopPropagation()}>
+        {/* Nhãn Ưu tiên ở cột phải, cùng hàng (căn giữa) với nút Gợi ý / Sửa, để dòng hạn bên trái thoáng */}
+        {!done && !!item.priority && <PriorityTag rank={item.priority} />}
         {suggests && item.category && (
           // Mở popup gợi ý nhà cung cấp ngay trên Timeline (SuggestionsDialog), như nút "Gợi ý cho bạn" ở Kế hoạch
           <Button variant="secondary" size="sm" className="h-auto min-h-8 max-w-full whitespace-normal py-1.5" onClick={() => aiSuggest(item.category!.slug)}>
