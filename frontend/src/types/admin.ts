@@ -305,7 +305,8 @@ export interface AdminPackageList {
 
 // ---- Thanh toán (bảng kê hoa hồng) ----
 
-export type AdminStatementStatus = 'UNPAID' | 'PAID'
+/** UNPAID: chưa thanh toán, chưa tới hạn; OVERDUE: quá hạn chưa thanh toán; PAID: đã thanh toán */
+export type AdminStatementStatus = 'UNPAID' | 'OVERDUE' | 'PAID'
 
 export interface AdminStatement {
   id: string

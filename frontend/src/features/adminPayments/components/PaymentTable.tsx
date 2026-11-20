@@ -55,11 +55,17 @@ export function PaymentTable({ statements, startIndex }: PaymentTableProps) {
               <td className={cn(td, num, 'font-semibold')}>{formatMoney(s.commissionAmount)}</td>
               <td className={cn(td, 'whitespace-nowrap tabular-nums', s.status === 'PAID' ? 'text-ink' : s.isOverdue ? 'text-warn' : 'text-muted-foreground')}>
                 {s.status === 'PAID' ? formatDay(s.paidAt) : formatDate(s.dueDate)}
-                {s.status === 'UNPAID' && <span className="block text-[11.5px]">{s.isOverdue ? 'Quá hạn' : 'Hạn thanh toán'}</span>}
+                {s.status !== 'PAID' && <span className="block text-[11.5px]">{s.isOverdue ? 'Quá hạn' : 'Hạn thanh toán'}</span>}
                 {s.lateDays && <span className="block text-[11.5px] text-warn">Trả trễ {s.lateDays} ngày</span>}
               </td>
               <td className={td}>
-                <Badge tone={s.status === 'PAID' ? 'done' : 'warn'}>{s.status === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}</Badge>
+                {s.status === 'OVERDUE' ? (
+                  <Badge tone="warn" className="bg-destructive/10 text-destructive">
+                    Quá hạn
+                  </Badge>
+                ) : (
+                  <Badge tone={s.status === 'PAID' ? 'done' : 'warn'}>{s.status === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}</Badge>
+                )}
               </td>
             </tr>
           )

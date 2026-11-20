@@ -66,7 +66,7 @@ export default function AdminPaymentsPage() {
         s.revenue,
         s.commissionAmount,
         s.dueDate,
-        s.status === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán',
+        s.status === 'PAID' ? 'Đã thanh toán' : s.status === 'OVERDUE' ? 'Quá hạn' : 'Chưa thanh toán',
         s.paidAt ?? '',
         s.transactionCode ?? '',
       ])
@@ -108,7 +108,8 @@ export default function AdminPaymentsPage() {
           <SearchBox value={search} onChange={setSearch} placeholder="Tìm kiếm mã bảng kê, tên nhà cung cấp..." />
           <FilterSelect label="Lọc theo trạng thái" value={status} onChange={(v) => set({ tt: v })}>
             <option value="">Tất cả trạng thái</option>
-            <option value="UNPAID">Chưa thanh toán</option>
+            <option value="UNPAID">Chưa thanh toán (chưa quá hạn)</option>
+            <option value="OVERDUE">Quá hạn</option>
             <option value="PAID">Đã thanh toán</option>
           </FilterSelect>
           <FilterSelect label="Lọc theo năm" value={year} onChange={(v) => set({ nam: v })}>

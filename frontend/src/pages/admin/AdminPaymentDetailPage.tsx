@@ -54,7 +54,7 @@ export default function AdminPaymentDetailPage() {
     )
   }
 
-  const unpaid = s.status === 'UNPAID'
+  const unpaid = s.status !== 'PAID'
   // Kỳ đã chốt (trước tháng hiện tại, giờ Việt Nam) và có hoa hồng mới ghi nhận thanh toán được
   const recordable = unpaid && s.commissionAmount > 0 && s.period < new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7)
   const locked = s.vendorInfo.accountLocked
@@ -91,11 +91,13 @@ export default function AdminPaymentDetailPage() {
         title="Chi tiết thanh toán"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={s.status === 'PAID' ? 'done' : 'warn'} className="gap-2 border border-current/25 px-5 py-2 text-base font-bold shadow-portal">
+            <Badge
+              tone={s.status === 'PAID' ? 'done' : 'warn'}
+              className={cn('gap-2 border border-current/25 px-5 py-2 text-base font-bold shadow-portal', s.status === 'OVERDUE' && 'bg-destructive/10 text-destructive')}
+            >
               <i aria-hidden className="size-2.5 rounded-full bg-current" />
-              {s.status === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+              {s.status === 'PAID' ? 'Đã thanh toán' : s.status === 'OVERDUE' ? 'Quá hạn' : 'Chưa thanh toán'}
             </Badge>
-            {s.isOverdue && <Badge tone="warn">Quá hạn</Badge>}
             {s.lateDays && <Badge tone="warn">Trả trễ {s.lateDays} ngày</Badge>}
           </div>
         }

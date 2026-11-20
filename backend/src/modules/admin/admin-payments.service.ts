@@ -66,7 +66,8 @@ export class AdminPaymentsService {
         revenue: r.commissions.reduce((s, c) => s + Number(c.order_amount), 0),
         commissionAmount: Number(r.total_amount),
         dueDate: due,
-        status: paid ? 'PAID' : 'UNPAID',
+        // Ba trạng thái như CSDL: PAID, OVERDUE (quá hạn chưa nộp), UNPAID (chưa nộp, chưa tới hạn)
+        status: paid ? 'PAID' : r.status === 'Overdue' || due < today ? 'OVERDUE' : 'UNPAID',
         isOverdue: !paid && (r.status === 'Overdue' || due < today),
         /** Đã thanh toán sau hạn bao nhiêu ngày (null: chưa trả hoặc trả đúng hạn) */
         lateDays: paid ? lateDaysOf(r.due_date, r.paid_date) : null,
@@ -94,7 +95,7 @@ export class AdminPaymentsService {
     const size = Math.min(5000, Math.max(1, Math.trunc(Number(q.pageSize)) || 10));
     const sum = (f: (s: (typeof all)[number]) => boolean) => filtered.filter(f).reduce((a, s) => a + s.commissionAmount, 0);
     return {
-      stats: { total: sum(() => true), paid: sum((s) => s.status === 'PAID'), unpaid: sum((s) => s.status === 'UNPAID') },
+      stats: { total: sum(() => true), paid: sum((s) => s.status === 'PAID'), unpaid: sum((s) => s.status !== 'PAID') },
       items: filtered.slice((page - 1) * size, page * size),
       total: filtered.length,
       periods: [...new Set(all.map((s) => s.period))].sort().reverse(),
