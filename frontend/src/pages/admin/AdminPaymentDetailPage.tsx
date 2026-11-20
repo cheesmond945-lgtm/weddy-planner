@@ -30,6 +30,7 @@ export default function AdminPaymentDetailPage() {
   const [code, setCode] = useState('')
   const [paidOn, setPaidOn] = useState(() => toISODate(today()))
   const [unlock, setUnlock] = useState(true)
+  const [unhide, setUnhide] = useState(true)
   const [errors, setErrors] = useState<{ transactionCode?: string; paidAt?: string; form?: string }>({})
   const [confirm, setConfirm] = useState(false)
 
@@ -57,6 +58,7 @@ export default function AdminPaymentDetailPage() {
   // Kỳ đã chốt (trước tháng hiện tại, giờ Việt Nam) và có hoa hồng mới ghi nhận thanh toán được
   const recordable = unpaid && s.commissionAmount > 0 && s.period < new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7)
   const locked = s.vendorInfo.accountLocked
+  const hidden = s.vendorInfo.profileHidden
   const readOnly = cn(controlClass, 'bg-surface-2')
   const busy = record.isPending
 
@@ -71,7 +73,7 @@ export default function AdminPaymentDetailPage() {
 
   function submit() {
     record.mutate(
-      { id: s!.id, transactionCode: code.trim(), paidAt: paidOn, unlock: locked && unlock },
+      { id: s!.id, transactionCode: code.trim(), paidAt: paidOn, unlock: locked && unlock, unhide: hidden && unhide },
       {
         onSuccess: () => setConfirm(false),
         onError: (e) => {
@@ -99,6 +101,16 @@ export default function AdminPaymentDetailPage() {
         }
       />
 
+      {unpaid && s.isOverdue && !hidden && (
+        <Notice
+          tone="warn"
+          title="Bảng kê đã quá hạn. Nếu nhà cung cấp cố tình không thanh toán, bạn có thể ẩn hồ sơ để ngừng nhận đơn mới (nhà cung cấp vẫn đăng nhập để hoàn thành đơn đã cọc)."
+        >
+          <Button asChild variant="outline" size="sm" className="mt-2">
+            <Link to={paths.admin.vendor(s.vendorInfo.id)}>Mở hồ sơ nhà cung cấp</Link>
+          </Button>
+        </Notice>
+      )}
       {recordable && (
         <Notice tone="info" title="Nhà cung cấp chuyển khoản trực tiếp cho Forever (ví dụ tài khoản bị khóa nên không thanh toán qua VietQR được)? Nhập ngày thanh toán và mã giao dịch rồi bấm “Ghi nhận đã thanh toán”." />
       )}
@@ -155,6 +167,12 @@ export default function AdminPaymentDetailPage() {
                   Tài khoản nhà cung cấp đang bị khóa: mở khóa sau khi ghi nhận
                 </label>
               )}
+              {hidden && (
+                <label className="flex items-center gap-2 text-[13.5px]">
+                  <input type="checkbox" className="accent-gold" checked={unhide} disabled={busy} onChange={(e) => setUnhide(e.target.checked)} />
+                  Hồ sơ nhà cung cấp đang bị ẩn: hiện lại sau khi ghi nhận
+                </label>
+              )}
               {errors.form && (
                 <p role="alert" className="text-[13px] text-destructive">
                   {errors.form}
@@ -180,9 +198,7 @@ export default function AdminPaymentDetailPage() {
         confirmLabel="Ghi nhận"
         pending={busy}
         notice={
-          locked && unlock
-            ? 'Bảng kê chuyển sang Đã thanh toán, tài khoản nhà cung cấp được mở khóa. Nhà cung cấp nhận được thông báo.'
-            : 'Bảng kê chuyển sang Đã thanh toán. Nhà cung cấp nhận được thông báo.'
+          `Bảng kê chuyển sang Đã thanh toán${locked && unlock ? ', tài khoản nhà cung cấp được mở khóa' : ''}${hidden && unhide ? ', hồ sơ nhà cung cấp được hiển thị lại' : ''}. Nhà cung cấp nhận được thông báo.`
         }
         onConfirm={submit}
       >

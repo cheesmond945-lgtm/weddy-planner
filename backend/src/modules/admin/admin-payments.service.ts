@@ -11,6 +11,8 @@ export interface RecordPaymentDto {
   paidAt?: string;
   /** Mở khóa tài khoản NCC (nếu đang bị khóa) sau khi ghi nhận */
   unlock?: boolean;
+  /** Hiện lại hồ sơ NCC (nếu đang bị ẩn vì quá hạn hoa hồng) sau khi ghi nhận */
+  unhide?: boolean;
 }
 
 export interface StatementQueryDto {
@@ -160,6 +162,8 @@ export class AdminPaymentsService {
         phone: v.users?.phone_number ?? null,
         /** Tài khoản NCC đang bị khóa (vd quá hạn hoa hồng): ghi nhận thanh toán có thể mở khóa luôn */
         accountLocked: v.users?.status === 'Locked',
+        /** Hồ sơ NCC đang bị ẩn (vd quá hạn hoa hồng): ghi nhận thanh toán có thể hiện lại hồ sơ luôn */
+        profileHidden: v.status === 'Hidden',
       },
       lines,
     };
@@ -171,7 +175,7 @@ export class AdminPaymentsService {
    */
   async recordPayment(id: string, body: RecordPaymentDto) {
     const row = UUID.test(id)
-      ? await this.prisma.commission_statements.findUnique({ where: { id }, include: { vendor_profiles: { select: { user_id: true, users: { select: { status: true } } } } } })
+      ? await this.prisma.commission_statements.findUnique({ where: { id }, include: { vendor_profiles: { select: { id: true, status: true, user_id: true, users: { select: { status: true } } } } } })
       : null;
     if (!row) return fail('COMMISSION_STATEMENT_NOT_FOUND', 'Không tìm thấy bảng kê.', 404);
     if (row.status === 'Paid') return fail('COMMISSION_ALREADY_PAID', 'Bảng kê đã được thanh toán.', 409);
@@ -197,16 +201,19 @@ export class AdminPaymentsService {
 
     const userId = row.vendor_profiles?.user_id ?? null;
     const unlock = !!body.unlock && !!userId && row.vendor_profiles?.users?.status === 'Locked';
+    const profile = row.vendor_profiles;
+    const unhide = !!body.unhide && profile?.status === 'Hidden';
     await this.prisma.$transaction([
       this.prisma.commission_statements.update({ where: { id }, data: { status: 'Paid', transaction_code: code, paid_date: paidAt! } }),
       ...(unlock ? [this.prisma.users.update({ where: { id: userId! }, data: { status: 'Active' } })] : []),
+      ...(unhide ? [this.prisma.vendor_profiles.update({ where: { id: profile!.id }, data: { status: 'Approved', updated_date: new Date() } })] : []),
     ]);
     if (userId) {
       await notify(this.prisma, {
         userId,
         type: 'CommissionPaid',
         title: 'Đã ghi nhận thanh toán hoa hồng',
-        content: `Forever đã ghi nhận hoa hồng ${Number(row.total_amount).toLocaleString('vi-VN')}đ của kỳ ${period.slice(5)}/${period.slice(0, 4)} (mã giao dịch ${code}).${unlock ? ' Tài khoản của bạn đã được mở khóa.' : ''}`,
+        content: `Forever đã ghi nhận hoa hồng ${Number(row.total_amount).toLocaleString('vi-VN')}đ của kỳ ${period.slice(5)}/${period.slice(0, 4)} (mã giao dịch ${code}).${unlock ? ' Tài khoản của bạn đã được mở khóa.' : ''}${unhide ? ' Hồ sơ và các gói dịch vụ của bạn đã được hiển thị lại.' : ''}`,
         referenceType: 'CommissionStatement',
         referenceId: id,
       });

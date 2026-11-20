@@ -18,18 +18,19 @@ export function useAdminStatement(id: string) {
   return useQuery({ queryKey: ['admin', 'statement', id] as const, queryFn: () => adminApi.getStatement(id), enabled, staleTime: 0 })
 }
 
-/** Ghi nhận đã thanh toán (NCC chuyển khoản ngoài VietQR), có thể mở khóa tài khoản NCC luôn. */
+/** Ghi nhận đã thanh toán (NCC chuyển khoản ngoài VietQR), có thể mở khóa tài khoản và hiện lại hồ sơ NCC luôn. */
 export function useRecordStatementPayment() {
   const qc = useQueryClient()
   const refresh = useRefreshAdminSummary()
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string; transactionCode: string; paidAt: string; unlock: boolean }) => adminApi.recordStatementPayment(id, body),
-    onSuccess: (s, { unlock }) => {
+    mutationFn: ({ id, ...body }: { id: string; transactionCode: string; paidAt: string; unlock: boolean; unhide: boolean }) => adminApi.recordStatementPayment(id, body),
+    onSuccess: (s, { unlock, unhide }) => {
       qc.setQueryData(['admin', 'statement', s.id], s)
       void qc.invalidateQueries({ queryKey: keys.all })
       void qc.invalidateQueries({ queryKey: ['admin', 'users'] })
+      if (unhide) void qc.invalidateQueries({ queryKey: ['admin', 'vendors'] })
       refresh()
-      toast(`Đã ghi nhận thanh toán bảng kê ${s.code}${unlock ? ' và mở khóa tài khoản nhà cung cấp' : ''}.`)
+      toast(`Đã ghi nhận thanh toán bảng kê ${s.code}${unlock ? ' và mở khóa tài khoản nhà cung cấp' : ''}${unhide ? ' và hiện lại hồ sơ nhà cung cấp' : ''}.`)
     },
   })
 }

@@ -395,6 +395,8 @@ export interface AdminStatementDetail extends AdminStatement {
     phone: string | null
     /** Tài khoản NCC đang bị khóa */
     accountLocked: boolean
+    /** Hồ sơ NCC đang bị ẩn */
+    profileHidden: boolean
   }
   lines: AdminStatementLine[]
 }

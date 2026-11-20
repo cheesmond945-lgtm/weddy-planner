@@ -46,7 +46,7 @@ export const TERMS_ARTICLES: TermsArticle[] = [
       'Forever lập bảng kê hoa hồng hằng tháng, gồm các đơn hoàn thành trong tháng.',
       'Đối tác chủ động đối soát và thanh toán toàn bộ hoa hồng của bảng kê chậm nhất ngày 25 của tháng kế tiếp, qua mã QR thanh toán trên hệ thống.',
       'Forever gửi thông báo nhắc trước hạn và khi bảng kê quá hạn.',
-      'Nếu Đối tác cố tình không thanh toán hoa hồng, hoặc quá hạn thanh toán từ 7 ngày, Forever sẽ khóa tài khoản. Khi tài khoản bị khóa, các gói dịch vụ ngừng hiển thị và Đối tác không thể nhận đơn mới.',
+      'Nếu Đối tác cố tình không thanh toán hoa hồng, hoặc quá hạn thanh toán từ 7 ngày, Forever có thể ẩn hồ sơ của Đối tác. Khi hồ sơ bị ẩn, các gói dịch vụ ngừng hiển thị và Đối tác không thể nhận đơn mới; Đối tác vẫn đăng nhập để hoàn thành các đơn khách đã đặt cọc và thanh toán hoa hồng. Hồ sơ được hiển thị lại sau khi Đối tác thanh toán đủ.',
     ],
   },
   {

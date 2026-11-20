@@ -21,10 +21,9 @@ function targetOf(n: AdminNotification): string | null {
       return n.refId ? paths.admin.package(n.refId) : paths.admin.catalog
     case 'CommissionReceived':
     case 'CommissionOverdue':
-      return n.refId ? paths.admin.payment(n.refId) : paths.admin.payments
-    // Quá hạn đủ ngày theo điều khoản: Admin khóa tài khoản ở mục Người dùng
+    // Quá hạn đủ ngày theo điều khoản: mở bảng kê, từ đó Admin vào hồ sơ NCC để ẩn
     case 'CommissionLockable':
-      return paths.admin.users
+      return n.refId ? paths.admin.payment(n.refId) : paths.admin.payments
     default:
       return null
   }

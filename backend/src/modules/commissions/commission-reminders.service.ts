@@ -8,7 +8,7 @@ import { ymd, ymdVN } from '../orders/order-mapping';
 const DUE_SOON_DAYS = 2;
 /** Sau hạn, nhắc NCC khi quá hạn bấy nhiêu ngày (rồi tới mốc LOCK_AFTER_DAYS). */
 const OVERDUE_REMIND_DAYS = 3;
-/** Theo điều khoản: quá hạn bấy nhiêu ngày thì báo NCC tài khoản có thể bị khóa, và Admin được khóa tài khoản NCC. */
+/** Theo điều khoản: quá hạn bấy nhiêu ngày thì báo NCC hồ sơ có thể bị ẩn, và Admin được ẩn hồ sơ NCC. */
 const LOCK_AFTER_DAYS = 7;
 const CHECK_EVERY_MS = 60 * 60 * 1000;
 
@@ -43,9 +43,9 @@ export interface PlannedNotification {
 
 /**
  * Các thông báo cần gửi hôm nay cho một bảng kê chưa thanh toán (hàm thuần, để thử theo từng ngày).
- * - NCC: trước hạn 2 ngày, 1 ngày, đúng ngày hạn; sau hạn 3 ngày; và khi quá hạn 7 ngày chưa thanh toán (báo tài khoản có thể bị khóa).
+ * - NCC: trước hạn 2 ngày, 1 ngày, đúng ngày hạn; sau hạn 3 ngày; và khi quá hạn 7 ngày chưa thanh toán (báo hồ sơ có thể bị ẩn).
  *   Hai mốc sau hạn kèm email.
- * - Admin: một lần khi bảng kê quá hạn, một lần khi quá hạn đủ 7 ngày (đủ điều kiện khóa). Khóa hay không do Admin quyết định.
+ * - Admin: một lần khi bảng kê quá hạn, một lần khi quá hạn đủ 7 ngày (đủ điều kiện ẩn hồ sơ). Ẩn hay không do Admin quyết định.
  * Chống trùng dựa trên các thông báo đã gửi của bảng kê, nên chạy mỗi giờ hay khởi động lại cũng không gửi lặp;
  * backend tắt vài ngày thì lần chạy sau gửi đúng mốc hiện tại, không gửi bù các mốc đã lỡ.
  */
@@ -77,10 +77,10 @@ export function planReminders(s: ReminderStatement, today: string, sent: SentNot
     out.push({
       userId: s.vendorUserId,
       type: OVERDUE,
-      title: lockable ? 'Hoa hồng quá hạn: tài khoản có thể bị khóa' : 'Hoa hồng đã quá hạn thanh toán',
+      title: lockable ? 'Hoa hồng quá hạn: hồ sơ có thể bị ẩn' : 'Hoa hồng đã quá hạn thanh toán',
       content: lockable
-        ? `Bảng kê hoa hồng ${periodText} (${money}) đã quá hạn ${late} ngày (hạn ${vnDate(s.dueDate)}). Theo điều khoản, tài khoản quá hạn từ ${LOCK_AFTER_DAYS} ngày có thể bị khóa. Vui lòng thanh toán ngay.`
-        : `Bảng kê hoa hồng ${periodText} (${money}) đã quá hạn ${late} ngày (hạn ${vnDate(s.dueDate)}). Vui lòng thanh toán sớm: theo điều khoản, quá hạn ${LOCK_AFTER_DAYS} ngày tài khoản có thể bị khóa.`,
+        ? `Bảng kê hoa hồng ${periodText} (${money}) đã quá hạn ${late} ngày (hạn ${vnDate(s.dueDate)}). Theo điều khoản, quá hạn từ ${LOCK_AFTER_DAYS} ngày hồ sơ và các gói dịch vụ của bạn có thể bị ẩn, ngừng nhận đơn mới. Vui lòng thanh toán ngay.`
+        : `Bảng kê hoa hồng ${periodText} (${money}) đã quá hạn ${late} ngày (hạn ${vnDate(s.dueDate)}). Vui lòng thanh toán sớm: theo điều khoản, quá hạn ${LOCK_AFTER_DAYS} ngày hồ sơ có thể bị ẩn.`,
     });
   }
   if (!toAdmin(OVERDUE)) {
@@ -98,8 +98,8 @@ export function planReminders(s: ReminderStatement, today: string, sent: SentNot
       out.push({
         userId: id,
         type: LOCKABLE,
-        title: `Đủ điều kiện khóa: ${s.vendorName}`,
-        content: `${s.vendorName} quá hạn hoa hồng ${periodText} (${money}) ${late} ngày. Theo điều khoản, có thể khóa tài khoản ở mục Người dùng.`,
+        title: `Đủ điều kiện ẩn hồ sơ: ${s.vendorName}`,
+        content: `${s.vendorName} quá hạn hoa hồng ${periodText} (${money}) ${late} ngày. Theo điều khoản, có thể ẩn hồ sơ ở mục Quản lý hồ sơ (nhà cung cấp vẫn đăng nhập để hoàn thành đơn đã cọc).`,
       });
     }
   }
