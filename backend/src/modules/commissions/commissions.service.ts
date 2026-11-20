@@ -8,7 +8,7 @@ import { lateDaysOf, ymd, ymdVN } from '../orders/order-mapping';
  * - Một bảng kê cho mỗi NCC mỗi tháng; đơn vào kỳ của THÁNG HOÀN THÀNH (khi NCC thu đủ phần còn lại).
  * - Đơn bị hủy sau cọc (NCC giữ cọc) vào kỳ của tháng hủy, hoa hồng tính trên TIỀN CỌC: rate × cọc + rate × còn lại = rate × tổng.
  * - Tỷ lệ lấy từ service_categories.commission_rate, lưu cố định vào từng dòng (commissions.rate).
- * - Bảng kê chỉ có hai trạng thái Unpaid/Paid do Admin ghi nhận (mã giao dịch, ngày trả); không có minh chứng NCC tự gửi.
+ * - Bảng kê có ba trạng thái Unpaid/Overdue/Paid (Overdue: quá hạn chưa nộp, lưu trong CSDL); Paid do Admin hoặc VietQR ghi nhận (mã giao dịch, ngày trả); không có minh chứng NCC tự gửi.
  */
 const fail = (code: string, message: string, status: number): never => {
   throw new HttpException({ code, message }, status);
@@ -47,7 +47,8 @@ export class CommissionsService {
       pendingAmount: 0,
       closingDate: lastDay(s.period),
       dueDate: ymd(s.due_date),
-      isOverdue: !current && !paid && ymd(s.due_date) < today,
+      // Overdue là trạng thái lưu trong CSDL (job chuyển mỗi giờ); so ngày để đúng ngay cả khi job chưa chạy
+      isOverdue: !current && !paid && (s.status === 'Overdue' || ymd(s.due_date) < today),
       /** Đã thanh toán sau hạn bao nhiêu ngày (null: chưa trả hoặc trả đúng hạn) */
       lateDays: paid ? lateDaysOf(s.due_date, s.paid_date) : null,
     };

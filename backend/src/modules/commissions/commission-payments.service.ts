@@ -84,14 +84,14 @@ export class CommissionPaymentsService {
 
   /**
    * Ghi nhận bảng kê Đã thanh toán và báo NCC, Admin. Nhiều lần kiểm tra có thể đến cùng lúc:
-   * chỉ cập nhật khi bảng kê còn Unpaid, bên đến sau nhận ALREADY và không gửi thông báo lần hai.
+   * chỉ cập nhật khi bảng kê còn Unpaid hoặc Overdue, bên đến sau nhận ALREADY và không gửi thông báo lần hai.
    */
   private async markPaid(row: NonNullable<Awaited<ReturnType<CommissionPaymentsService['load']>>>, transactionNo: string, paidAt: Date): Promise<'PAID' | 'ALREADY'> {
     if (row.status === 'Paid') return 'ALREADY';
     // Mã giao dịch phải duy nhất: nếu trùng thì thêm hậu tố
     const taken = await this.prisma.commission_statements.findUnique({ where: { transaction_code: transactionNo }, select: { id: true } });
     const txCode = taken && taken.id !== row.id ? `${transactionNo}-${row.id.slice(0, 4)}` : transactionNo;
-    const { count } = await this.prisma.commission_statements.updateMany({ where: { id: row.id, status: 'Unpaid' }, data: { status: 'Paid', transaction_code: txCode, paid_date: paidAt } });
+    const { count } = await this.prisma.commission_statements.updateMany({ where: { id: row.id, status: { in: ['Unpaid', 'Overdue'] } }, data: { status: 'Paid', transaction_code: txCode, paid_date: paidAt } });
     if (!count) return 'ALREADY';
 
     const money = `${Number(row.total_amount).toLocaleString('vi-VN')}đ`;

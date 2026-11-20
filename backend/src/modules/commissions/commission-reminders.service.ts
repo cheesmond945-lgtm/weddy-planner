@@ -1,14 +1,15 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../../integrations/mail/mail.service';
 import { notify } from '../chat/chat-messages';
 import { ymd, ymdVN } from '../orders/order-mapping';
 
-/** Nhắc NCC mỗi ngày từ bao nhiêu ngày trước hạn (2: nhắc 2 ngày trước, 1 ngày trước và đúng ngày hạn). */
+/** Nhắc NCC mỗi ngày từ bấy nhiêu ngày trước hạn tới đúng ngày hạn (2: 2 ngày trước, 1 ngày trước, đúng ngày hạn). */
 const DUE_SOON_DAYS = 2;
-/** Sau hạn, nhắc NCC lặp lại mỗi bấy nhiêu ngày. */
-const OVERDUE_EVERY_DAYS = 7;
-/** Theo điều khoản: quá hạn bấy nhiêu ngày thì Admin được khóa tài khoản NCC. */
-const LOCK_AFTER_DAYS = 15;
+/** Sau hạn, nhắc NCC khi quá hạn bấy nhiêu ngày (rồi tới mốc LOCK_AFTER_DAYS). */
+const OVERDUE_REMIND_DAYS = 3;
+/** Theo điều khoản: quá hạn bấy nhiêu ngày thì báo NCC tài khoản có thể bị khóa, và Admin được khóa tài khoản NCC. */
+const LOCK_AFTER_DAYS = 7;
 const CHECK_EVERY_MS = 60 * 60 * 1000;
 
 /** NCC: sắp đến hạn / đã quá hạn. Admin: có NCC quá hạn / quá hạn đủ ngày để khóa. */
@@ -42,9 +43,9 @@ export interface PlannedNotification {
 
 /**
  * Các thông báo cần gửi hôm nay cho một bảng kê chưa thanh toán (hàm thuần, để thử theo từng ngày).
- * - NCC: mỗi ngày một lần từ 2 ngày trước hạn tới ngày hạn; sau hạn nhắc ngay ngày đầu rồi mỗi 7 ngày,
- *   từ ngày quá hạn thứ 15 kèm cảnh báo khóa tài khoản theo điều khoản.
- * - Admin: một lần khi bảng kê quá hạn, một lần khi quá hạn đủ 15 ngày (đủ điều kiện khóa). Khóa hay không do Admin quyết định.
+ * - NCC: trước hạn 2 ngày, 1 ngày, đúng ngày hạn; sau hạn 3 ngày; và khi quá hạn 7 ngày chưa thanh toán (báo tài khoản có thể bị khóa).
+ *   Hai mốc sau hạn kèm email.
+ * - Admin: một lần khi bảng kê quá hạn, một lần khi quá hạn đủ 7 ngày (đủ điều kiện khóa). Khóa hay không do Admin quyết định.
  * Chống trùng dựa trên các thông báo đã gửi của bảng kê, nên chạy mỗi giờ hay khởi động lại cũng không gửi lặp;
  * backend tắt vài ngày thì lần chạy sau gửi đúng mốc hiện tại, không gửi bù các mốc đã lỡ.
  */
@@ -68,15 +69,17 @@ export function planReminders(s: ReminderStatement, today: string, sent: SentNot
     return out;
   }
 
-  const lastOverdue = Math.max(-Infinity, ...toVendor.filter((n) => n.type === OVERDUE).map((n) => dayNumber(n.day)));
-  if (dayNumber(today) - lastOverdue >= OVERDUE_EVERY_DAYS) {
-    const lockable = late >= LOCK_AFTER_DAYS;
+  // NCC: nhắc khi quá hạn 3 ngày, rồi khi quá hạn 7 ngày kèm cảnh báo có thể bị khóa. Mỗi mốc một lần; bỏ lỡ đúng ngày thì
+  // gửi ở lần chạy sau, và nếu đã quá mốc sau thì chỉ gửi mốc sau (không gửi dồn hai thông báo).
+  const milestone = late >= LOCK_AFTER_DAYS ? LOCK_AFTER_DAYS : late >= OVERDUE_REMIND_DAYS ? OVERDUE_REMIND_DAYS : 0;
+  if (milestone && !toVendor.some((n) => n.type === OVERDUE && dayNumber(n.day) >= dayNumber(s.dueDate) + milestone)) {
+    const lockable = milestone === LOCK_AFTER_DAYS;
     out.push({
       userId: s.vendorUserId,
       type: OVERDUE,
       title: lockable ? 'Hoa hồng quá hạn: tài khoản có thể bị khóa' : 'Hoa hồng đã quá hạn thanh toán',
       content: lockable
-        ? `Bảng kê hoa hồng ${periodText} (${money}) đã quá hạn ${late} ngày (hạn ${vnDate(s.dueDate)}). Theo điều khoản, tài khoản quá hạn từ ${LOCK_AFTER_DAYS} ngày sẽ bị xem xét khóa. Vui lòng thanh toán ngay.`
+        ? `Bảng kê hoa hồng ${periodText} (${money}) đã quá hạn ${late} ngày (hạn ${vnDate(s.dueDate)}). Theo điều khoản, tài khoản quá hạn từ ${LOCK_AFTER_DAYS} ngày có thể bị khóa. Vui lòng thanh toán ngay.`
         : `Bảng kê hoa hồng ${periodText} (${money}) đã quá hạn ${late} ngày (hạn ${vnDate(s.dueDate)}). Vui lòng thanh toán sớm: theo điều khoản, quá hạn ${LOCK_AFTER_DAYS} ngày tài khoản có thể bị khóa.`,
     });
   }
@@ -109,7 +112,17 @@ export class CommissionRemindersService implements OnModuleInit, OnModuleDestroy
   private readonly log = new Logger(CommissionRemindersService.name);
   private timer?: NodeJS.Timeout;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly mail: MailService) {}
+
+  /** Gửi email nhắc quá hạn cho NCC; lỗi email không ảnh hưởng thông báo trên website. */
+  private async emailVendor(userId: string, name: string, title: string, content: string) {
+    try {
+      const u = await this.prisma.users.findUnique({ where: { id: userId }, select: { email: true } });
+      if (u?.email) await this.mail.sendCommissionOverdue(u.email, name, title, content);
+    } catch (e) {
+      this.log.error(`Không gửi được email nhắc quá hạn: ${(e as Error).message}`);
+    }
+  }
 
   onModuleInit() {
     setTimeout(() => void this.run(), 15_000).unref();
@@ -126,8 +139,14 @@ export class CommissionRemindersService implements OnModuleInit, OnModuleDestroy
     try {
       const today = ymdVN(now);
       const limit = new Date((dayNumber(today) + DUE_SOON_DAYS) * 86_400_000);
+      // Qua ngày hạn mà chưa nộp thì lưu trạng thái Overdue vào CSDL (không chỉ là nhãn tính khi hiển thị)
+      const { count: markedOverdue } = await this.prisma.commission_statements.updateMany({
+        where: { status: 'Unpaid', total_amount: { gt: 0 }, due_date: { lt: new Date(`${today}T00:00:00Z`) } },
+        data: { status: 'Overdue' },
+      });
+      if (markedOverdue) this.log.log(`Đã chuyển ${markedOverdue} bảng kê hoa hồng sang trạng thái quá hạn.`);
       const rows = await this.prisma.commission_statements.findMany({
-        where: { status: 'Unpaid', total_amount: { gt: 0 }, due_date: { lte: limit } },
+        where: { status: { in: ['Unpaid', 'Overdue'] }, total_amount: { gt: 0 }, due_date: { lte: limit } },
         include: { vendor_profiles: { select: { user_id: true, business_name: true } } },
       });
       if (!rows.length) return 0;
@@ -149,7 +168,11 @@ export class CommissionRemindersService implements OnModuleInit, OnModuleDestroy
           history.filter((n) => n.reference_id === r.id && n.type && n.user_id && n.created_date).map((n) => ({ type: n.type!, userId: n.user_id!, day: ymdVN(n.created_date!) })),
           adminIds,
         );
-        for (const n of plan) await notify(this.prisma, { ...n, referenceType: 'CommissionStatement', referenceId: r.id });
+        for (const n of plan) {
+          await notify(this.prisma, { ...n, referenceType: 'CommissionStatement', referenceId: r.id });
+          // Quá hạn: ngoài thông báo trên website còn gửi email cho NCC (chống trùng theo thông báo ở trên nên chỉ gửi một lần mỗi mốc)
+          if (n.type === OVERDUE && n.userId === vendorUserId) await this.emailVendor(vendorUserId, r.vendor_profiles?.business_name || 'Nhà cung cấp', n.title, n.content);
+        }
         sent += plan.length;
       }
       if (sent) this.log.log(`Đã gửi ${sent} thông báo nhắc hạn / quá hạn thanh toán hoa hồng.`);

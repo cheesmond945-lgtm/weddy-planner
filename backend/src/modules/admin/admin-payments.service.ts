@@ -65,7 +65,7 @@ export class AdminPaymentsService {
         commissionAmount: Number(r.total_amount),
         dueDate: due,
         status: paid ? 'PAID' : 'UNPAID',
-        isOverdue: !paid && due < today,
+        isOverdue: !paid && (r.status === 'Overdue' || due < today),
         /** Đã thanh toán sau hạn bao nhiêu ngày (null: chưa trả hoặc trả đúng hạn) */
         lateDays: paid ? lateDaysOf(r.due_date, r.paid_date) : null,
         paidAt: r.paid_date?.toISOString() ?? null,

@@ -544,7 +544,7 @@
 
   Invoices.Type                                             DepositReceipt, FinalInvoice                                                                                                                                                                                                                                                                                                Giấy xác nhận cọc (tự động khi cọc thành công), Hóa đơn cuối (nhà cung cấp xuất khi khách yêu cầu, không bắt buộc)
 
-  CommissionStatements.Status                               Unpaid, Paid                                                                                                                                                                                                                                                                                                                Chưa nộp, Đã nộp. "Quá hạn" không lưu, tính khi truy vấn: Unpaid và DueDate đã qua
+  CommissionStatements.Status                               Unpaid, Paid                                                                                                                                                                                                                                                                                                                Chưa nộp, Quá hạn (chưa nộp và DueDate đã qua, job chuyển mỗi giờ), Đã nộp
 
   Notifications.Type (gợi ý)                                TaskUpcoming, TaskRescheduled, OrderSent, OrderRevisionRequested, OrderDeposited, OrderExpired, OrderCancelled, OrderCompleted, VendorSubmitted, VendorApproved, VendorNeedRevision, PackageSubmitted, PackageApproved, PackageNeedRevision, NewConsultationRequest, CommissionDueSoon, CommissionOverdue, CommissionPaid   Công việc sắp đến ngày thực hiện, ngày khách đổi lịch, các thay đổi của đơn, kết quả duyệt hồ sơ và gói, yêu cầu tư vấn mới, nhắc nộp hoặc quá hạn hoa hồng
   ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1554,7 +1554,7 @@ Bảng CommissionStatements lưu bảng kê hoa hồng theo tháng của từng 
 
   7     TransactionCode   CHARACTER VARYING(100)     UNIQUE                                            Mã giao dịch nộp hoa hồng, chỉ có khi đã nộp
 
-  8     Status            CHARACTER VARYING(20)      NOT NULL, DEFAULT 'Unpaid', CHECK: Unpaid, Paid   Trạng thái nộp
+  8     Status            CHARACTER VARYING(20)      NOT NULL, DEFAULT 'Unpaid', CHECK: Unpaid, Paid, Overdue   Trạng thái nộp
 
   9     PaidDate          TIMESTAMP WITH TIME ZONE                                                     Ngày nộp
 
@@ -2324,14 +2324,14 @@ Ràng buộc bảng: UNIQUE (OrderId, Type). Quan hệ Orders--Invoices là 1:n 
 
   TransactionCode?   VARCHAR(100)    UNIQUE. Mã giao dịch nộp hoa hồng
 
-  Status             VARCHAR(20)     DEFAULT \'Unpaid\', CHECK: Unpaid, Paid
+  Status             VARCHAR(20)     DEFAULT \'Unpaid\', CHECK: Unpaid, Paid, Overdue
 
   PaidDate?          TIMESTAMPTZ     
 
   CreatedDate        TIMESTAMPTZ     
   ------------------------------------------------------------------------------------------------------------
 
-Ràng buộc bảng: UNIQUE (VendorId, PeriodMonth). \"Quá hạn\" không lưu, tính khi truy vấn: Status = \'Unpaid\' AND DueDate \< hôm nay. Nộp một lần cho cả bảng kê, không có bảng giao dịch nộp riêng.
+Ràng buộc bảng: UNIQUE (VendorId, PeriodMonth). Trạng thái Overdue (quá hạn) được lưu: job chuyển Unpaid thành Overdue khi DueDate \< hôm nay. Nộp một lần cho cả bảng kê, không có bảng giao dịch nộp riêng.
 
 5.26. Commissions (1:1 với Orders)
 

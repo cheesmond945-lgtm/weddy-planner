@@ -156,6 +156,19 @@ Nếu không phải bạn yêu cầu, hãy liên hệ quản trị viên Forever
     return this.send(to, 'Email đăng nhập Forever đã được thay đổi', html, text);
   }
 
+  /** Email nhắc NCC bảng kê hoa hồng đã quá hạn (cùng nội dung với thông báo trên website), kèm nút tới trang thanh toán. */
+  sendCommissionOverdue(to: string, name: string, title: string, content: string) {
+    const url = `${(process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173').trim()}/vendor/commissions`;
+    const html = this.notice(
+      title,
+      `<p style="margin:0 0 12px">Chào ${esc(name)},</p>
+      <p style="margin:0 0 16px">${esc(content)}</p>
+      <p style="margin:0"><a href="${esc(url)}" style="display:inline-block;background:#a8802f;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 28px;border-radius:999px">Thanh toán hoa hồng</a></p>`,
+    );
+    const text = `Chào ${name},\n\n${content}\n\nThanh toán hoa hồng: ${url}`;
+    return this.send(to, title, html, text);
+  }
+
   /** Khung email thông báo ngắn (logo, tiêu đề, nội dung HTML đã escape sẵn). */
   private notice(title: string, body: string) {
     return `<!doctype html>
