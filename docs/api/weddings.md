@@ -202,7 +202,7 @@ Response 200
         "service": { "id": "sv-1", "name": "Mipec Place", "…": "ServiceSummary" },
         "package": { "id": "pk-2", "name": "Sảnh Cánh Bướm Hồng", "cost": 100000000, "chargedTables": 20, "calculation": "Sảnh Cánh Bướm Hồng: 20 bàn × 5.000.000đ = 100.000.000đ (tối thiểu 20 bàn)" },
         "reasons": ["Khoảng 100.000.000đ cho 20 bàn", "Cùng phường Cầu Giấy với địa điểm tổ chức", "Ít đánh giá"],
-        "warning": "Gói này tối thiểu 20 bàn, nhiều hơn dự kiến 5 bàn",
+        "warning": "Sảnh Cánh Bướm Hồng đặt tối thiểu 20 bàn, nhiều hơn dự kiến 5 bàn",
         "fewReviews": true
       }
     ],
@@ -234,7 +234,7 @@ Xếp hạng (lấy tối đa `SUGGESTION_COUNT` = 3):
 
 Không loại theo điểm: dưới `MIN_REVIEWS` = 3 lượt chỉ gắn `fewReviews` và lý do "Ít đánh giá".
 
-Lý do (`reasons`, 3 ý, chỉ từ điều kiện đã khớp thật): "Giá từ X, nằm trong ngân sách {hạng mục}" (nhà hàng: "Khoảng X cho N bàn"); "Cùng phường … với địa điểm tổ chức" hoặc "Cùng khu vực tổ chức"; "Đánh giá 4.5/5 từ 12 lượt" hoặc "Ít đánh giá". `warning`: nhà hàng có số bàn tối thiểu cao hơn dự kiến.
+Lý do (`reasons`, 3 ý, chỉ từ điều kiện đã khớp thật): "Giá từ X, nằm trong ngân sách {hạng mục}" (nhà hàng: "Khoảng X cho N bàn"); "Cùng phường … với địa điểm tổ chức" hoặc "Cùng khu vực tổ chức"; "Đánh giá 4.5/5 từ 12 lượt" hoặc "Ít đánh giá". `warning`: nhà hàng có số bàn tối thiểu cao hơn dự kiến, ghi rõ sảnh: "Sảnh X đặt tối thiểu N bàn…" (sảnh đủ chỗ duy nhất), "Các sảnh đủ chỗ đều đặt tối thiểu từ N bàn…", hoặc "Giá ước tính theo sảnh X (…). Có sảnh khác vừa N bàn" (sảnh rẻ nhất bắt đặt thêm nhưng vẫn có sảnh vừa).
 
 Không có gợi ý: `cheapest`, `cheapestPackage` là dịch vụ có chi phí ước tính thấp nhất ngoài ngân sách, `raiseBudgetTo` = đúng chi phí đó; `noVenueFits` khi không nhà hàng nào có sảnh đủ chỗ. `totalInCategory`, `outOfBudgetCount` để FE ghi "Xem thêm n dịch vụ" / "Xem tất cả dịch vụ". `guestCount`, `tables` chỉ có giá trị với nhà hàng.
 

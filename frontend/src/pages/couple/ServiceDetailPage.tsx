@@ -15,6 +15,7 @@ import { AddToPlanButton, AskPackageButton, OpenChatButton, usePlanItemOf } from
 import { PLAN_STATUS } from '@/features/weddings/status'
 import { formatDate } from '@/lib/date'
 import { formatUnitPrice } from '@/features/catalog/price'
+import { hallMismatch } from '@/features/catalog/hallFit'
 import { paths } from '@/routes/paths'
 
 /** Trang chi tiết dịch vụ (2.2). */
@@ -96,6 +97,7 @@ export default function ServiceDetailPage() {
             </>
           )}
           packageBadge={halls ? (pkg) => <HallDayBadge packageId={pkg.id} weddingDate={wedding?.date} mine={mineOf(pkg.id)} /> : undefined}
+          packageMismatch={halls ? (pkg) => hallMismatch(pkg, wedding) : undefined}
           packagesSubtitle={halls && wedding?.date ? `Sảnh bận hay còn trống vào ngày cưới của bạn (${formatDate(wedding.date)}). Bấm Xem chi tiết để xem lịch tháng.` : undefined}
           headActions={<FavoriteButton service={service} variant="icon" />}
           sidebarActions={

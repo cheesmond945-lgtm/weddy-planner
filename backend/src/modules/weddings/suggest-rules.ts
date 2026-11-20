@@ -162,13 +162,29 @@ export interface SuggestionCopy {
   fewReviews: boolean;
 }
 
+/**
+ * Cảnh báo số bàn tối thiểu của nhà hàng. Thẻ là cả nhà cung cấp (nhiều sảnh) nên ghi rõ đang nói sảnh nào:
+ * - mọi sảnh đủ chỗ đều tối thiểu nhiều bàn hơn dự kiến: "Sảnh X đặt tối thiểu…" (1 sảnh) / "Các sảnh đủ chỗ đều đặt tối thiểu từ…";
+ * - còn sảnh vừa số bàn dự kiến nhưng sảnh rẻ nhất (dùng để ước tính) bắt đặt thêm: nói giá ước tính theo sảnh nào và có sảnh vừa.
+ */
+export function tablesWarning(c: Estimated, ctx: Pick<SuggestContext, 'slug' | 'guestCount' | 'tables'>): string | null {
+  const { estimate } = c;
+  if (estimate.extraTables <= 0) return null;
+  const halls = c.packages.filter((p) => p.unit === 'mâm' && fitsGuests(p, ctx.slug, ctx.guestCount));
+  const needExtra = (p: EnginePackage) => (p.minTables ?? 0) > ctx.tables;
+  if (halls.every(needExtra)) {
+    const min = Math.min(...halls.map((p) => p.minTables!));
+    if (halls.length === 1) return `Sảnh ${halls[0].name} đặt tối thiểu ${min} bàn, nhiều hơn dự kiến ${min - ctx.tables} bàn`;
+    return `Các sảnh đủ chỗ đều đặt tối thiểu từ ${min} bàn, nhiều hơn dự kiến ${min - ctx.tables} bàn`;
+  }
+  return `Giá ước tính theo sảnh ${estimate.package.name} (tối thiểu ${estimate.package.minTables} bàn, nhiều hơn dự kiến ${estimate.extraTables} bàn). Có sảnh khác vừa ${ctx.tables} bàn`;
+}
+
 /** Dòng của một thẻ gợi ý (trước khi bỏ dòng trùng giữa các thẻ, xem dropSharedReasons). */
-export function buildReasons(c: Estimated, _ctx: SuggestContext): SuggestionCopy {
+export function buildReasons(c: Estimated, ctx: SuggestContext): SuggestionCopy {
   const fewReviews = c.reviewCount < MIN_REVIEWS || c.rating === null;
   const reasons = fewReviews ? [] : [`${c.rating!.toFixed(1)}/5 từ ${c.reviewCount} lượt`];
-  const { estimate } = c;
-  const warning = estimate.extraTables > 0 ? `Gói này tối thiểu ${estimate.package.minTables} bàn, nhiều hơn dự kiến ${estimate.extraTables} bàn` : null;
-  return { reasons, warning, fewReviews };
+  return { reasons, warning: tablesWarning(c, ctx), fewReviews };
 }
 
 /** Chỉ giữ dòng khác nhau giữa các thẻ: dòng giống hệt ở mọi thẻ (từ 2 thẻ trở lên) thì bỏ. Cảnh báo luôn giữ. */

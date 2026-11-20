@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Flower2, ImageIcon } from 'lucide-react'
+import { Check, ChevronRight, Flower2, ImageIcon, TriangleAlert } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { FitImage } from '@/components/FitImage'
 import { formatMoney } from '@/lib/format'
@@ -16,6 +16,8 @@ interface ServiceInfoPanelProps {
   packageExtra?: (pkg: ServicePackage) => ReactNode
   /** Nhãn dưới card gói (sảnh bận / trống ngày cưới), đứng cạnh nút "Xem chi tiết" */
   packageBadge?: (pkg: ServicePackage) => ReactNode
+  /** Lý do gói không hợp với đám cưới của khách; có thì card hiện chữ đỏ */
+  packageMismatch?: (pkg: ServicePackage) => string | null
   /** Phụ đề mục Gói dịch vụ thay cho câu mặc định */
   packagesSubtitle?: string
 }
@@ -27,7 +29,7 @@ type Viewing = { title: string; images: string[]; index: number }
  * Tab "Thông tin chung": giới thiệu, gói dịch vụ, ảnh thực tế ngoài gói (2.2).
  * Gói hiện theo service.packageLayout: "album" = card ảnh ghép (14B), "tiles" = mỗi gói một ô ảnh (14D).
  */
-export function ServiceInfoPanel({ service, packageExtra, packageBadge, packagesSubtitle }: ServiceInfoPanelProps) {
+export function ServiceInfoPanel({ service, packageExtra, packageBadge, packageMismatch, packagesSubtitle }: ServiceInfoPanelProps) {
   const [viewing, setViewing] = useState<Viewing | null>(null)
   // Gói đang mở trong khung bên phải (layout album)
   const [opened, setOpened] = useOpenedPackage(service)
@@ -72,6 +74,7 @@ export function ServiceInfoPanel({ service, packageExtra, packageBadge, packages
                 images={imagesOf(service, p)}
                 onOpen={() => setOpened(p)}
                 badge={packageBadge?.(p)}
+                mismatch={packageMismatch?.(p) ?? null}
               />
             ))}
           </div>
@@ -115,21 +118,26 @@ interface PackageCardProps {
   onOpen: () => void
   /** Nhãn sảnh bận / trống ngày cưới của khách (trung tâm tiệc cưới) */
   badge?: ReactNode
+  /** Lý do gói không hợp với đám cưới của khách (chữ đỏ dưới tên); null là phù hợp */
+  mismatch?: string | null
 }
 
 /**
- * Card một gói (gọn): ảnh ghép, tên + thuộc tính, giá. Mô tả và toàn bộ ảnh nằm trong khung bên phải khi bấm card,
- * để lưới không giãn lệch khi mở rộng mô tả.
+ * Card một gói (gọn): ảnh ghép, tên + thuộc tính, số bàn tối thiểu, giá. Mô tả và toàn bộ ảnh nằm trong khung bên phải khi bấm card,
+ * để lưới không giãn lệch khi mở rộng mô tả. Gói không hợp với đám cưới: viền đỏ + dòng lý do đỏ.
  */
-function PackageCard({ pkg, images, onOpen, badge }: PackageCardProps) {
+function PackageCard({ pkg, images, onOpen, badge, mismatch }: PackageCardProps) {
   const attrs = attrsOf(pkg)
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`Xem chi tiết và ${images.length} ảnh của gói ${pkg.name}`}
-      className="group @container/card flex flex-col overflow-hidden rounded-lg border border-line bg-surface text-left transition-[translate,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-700"
+      aria-label={`Xem chi tiết và ${images.length} ảnh của gói ${pkg.name}${mismatch ? `. ${mismatch}` : ''}`}
+      className={cn(
+        'group @container/card flex flex-col overflow-hidden rounded-lg border bg-surface text-left transition-[translate,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-700',
+        mismatch ? 'border-destructive/50' : 'border-line',
+      )}
     >
       <Mosaic name={pkg.name} images={images} promotion={pkg.promotion} />
 
@@ -139,6 +147,11 @@ function PackageCard({ pkg, images, onOpen, badge }: PackageCardProps) {
           <div className="min-w-0">
             <h3 className="line-clamp-2 font-serif text-[22px] leading-[1.25] font-semibold text-ink group-hover:text-gold-700">{pkg.name}</h3>
             {attrs && <p className="mt-1 text-sm text-ink-2">{attrs}</p>}
+            {!!pkg.minTables && (
+              <p className="mt-0.5 text-sm text-ink-2">
+                Tối thiểu <b className={cn('font-semibold', mismatch ? 'text-destructive' : 'text-ink')}>{pkg.minTables} bàn</b>
+              </p>
+            )}
           </div>
           <div className="shrink-0 text-right @max-[360px]/card:flex @max-[360px]/card:items-baseline @max-[360px]/card:gap-1.5 @max-[360px]/card:text-left">
             <span className="block text-[13px] text-ink-2">Từ</span>
@@ -146,6 +159,12 @@ function PackageCard({ pkg, images, onOpen, badge }: PackageCardProps) {
             <span className="block text-[13px] text-ink-2">/ {pkg.unit ?? 'gói'}</span>
           </div>
         </div>
+        {mismatch && (
+          <p className="flex items-start gap-1.5 text-sm font-medium text-destructive">
+            <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+            <span>{mismatch}</span>
+          </p>
+        )}
         <div className="mt-auto flex items-center justify-between gap-2 border-t border-line pt-3">
           {badge ?? <span />}
           <span className="inline-flex items-center gap-0.5 text-sm font-semibold text-gold-700 group-hover:underline">

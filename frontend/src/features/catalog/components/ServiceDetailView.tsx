@@ -31,11 +31,13 @@ interface ServiceDetailViewProps {
   packageExtra?: (pkg: ServicePackage) => ReactNode
   /** Nhãn dưới card gói (sảnh bận / trống ngày cưới, module halls) */
   packageBadge?: (pkg: ServicePackage) => ReactNode
+  /** Lý do gói không hợp với đám cưới của khách (sảnh thiếu chỗ, tối thiểu nhiều bàn hơn dự kiến); null là phù hợp */
+  packageMismatch?: (pkg: ServicePackage) => string | null
   packagesSubtitle?: string
 }
 
 /** Nội dung trang chi tiết dịch vụ (2.2), như renderDetail trong prototype. */
-export function ServiceDetailView({ service, headActions, sidebarActions, sidebarTip, sidebarLead, packageExtra, packageBadge, packagesSubtitle }: ServiceDetailViewProps) {
+export function ServiceDetailView({ service, headActions, sidebarActions, sidebarTip, sidebarLead, packageExtra, packageBadge, packageMismatch, packagesSubtitle }: ServiceDetailViewProps) {
   const [tab, setTab] = useState<Tab>('info')
   const [galleryOpen, setGalleryOpen] = useState(false)
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -128,7 +130,7 @@ export function ServiceDetailView({ service, headActions, sidebarActions, sideba
           {/* @container/content: lưới gói đo theo bề rộng cột nội dung này (2 cột khi từ 700px) */}
           <div id="service-tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="@container/content">
             {tab === 'info' ? (
-              <ServiceInfoPanel service={service} packageExtra={packageExtra} packageBadge={packageBadge} packagesSubtitle={packagesSubtitle} />
+              <ServiceInfoPanel service={service} packageExtra={packageExtra} packageBadge={packageBadge} packageMismatch={packageMismatch} packagesSubtitle={packagesSubtitle} />
             ) : (
               <WebReviewsPanel serviceId={service.id} />
             )}

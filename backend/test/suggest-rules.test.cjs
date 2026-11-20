@@ -35,7 +35,18 @@ test('nhà hàng có số bàn tối thiểu cao hơn dự kiến: tính theo s�
   const [s] = suggest([v], c);
   const copy = r.buildReasons(s, c);
   assert.deepEqual(copy.reasons, ['4.8/5 từ 10 lượt']);
-  assert.equal(copy.warning, 'Gói này tối thiểu 40 bàn, nhiều hơn dự kiến 10 bàn');
+  assert.equal(copy.warning, 'Sảnh Gói p1 đặt tối thiểu 40 bàn, nhiều hơn dự kiến 10 bàn');
+});
+
+test('cảnh báo số bàn: nhiều sảnh đủ chỗ đều bắt đặt thêm thì nói chung, có sảnh vừa thì nói giá theo sảnh nào', () => {
+  const c = venueCtx({ tables: 30 });
+  const warn = (packages) => r.tablesWarning(r.hardFilter([vendor('a', packages)], c).passed[0], c);
+  // Mọi sảnh đủ chỗ đều tối thiểu > 30 bàn (sảnh 200 khách không đủ chỗ nên không tính)
+  assert.equal(warn([table('x', 'a', 5_000_000, 40), table('y', 'a', 4_500_000, 45), table('nho', 'a', 3_000_000, 10, 200)]), 'Các sảnh đủ chỗ đều đặt tối thiểu từ 40 bàn, nhiều hơn dự kiến 10 bàn');
+  // Sảnh rẻ nhất (5tr × 40 = 200tr) bắt đặt thêm, còn sảnh 6,8tr × 30 = 204tr vừa 30 bàn
+  assert.equal(warn([table('x', 'a', 5_000_000, 40), table('y', 'a', 6_800_000, 20)]), 'Giá ước tính theo sảnh Gói x (tối thiểu 40 bàn, nhiều hơn dự kiến 10 bàn). Có sảnh khác vừa 30 bàn');
+  // Sảnh rẻ nhất vừa số bàn: không cảnh báo
+  assert.equal(warn([table('x', 'a', 5_000_000, 20), table('y', 'a', 4_000_000, 60)]), null);
 });
 
 test('nhà hàng: lọc ngân sách theo tổng chi phí, không theo đơn giá', () => {
@@ -159,9 +170,9 @@ test('chuẩn hóa phường/xã: bỏ tiền tố và dấu', () => {
 
 test('dòng giống nhau ở mọi thẻ thì bỏ, khác nhau thì giữ; cảnh báo luôn giữ', () => {
   const copy = (reasons, warning = null) => ({ reasons, warning, fewReviews: false });
-  const same = r.dropSharedReasons([copy(['5.0/5 từ 3 lượt']), copy(['5.0/5 từ 3 lượt'], 'Gói này tối thiểu 20 bàn, nhiều hơn dự kiến 5 bàn')]);
+  const same = r.dropSharedReasons([copy(['5.0/5 từ 3 lượt']), copy(['5.0/5 từ 3 lượt'], 'Sảnh Vàng đặt tối thiểu 20 bàn, nhiều hơn dự kiến 5 bàn')]);
   assert.deepEqual(same.map((x) => x.reasons), [[], []]);
-  assert.equal(same[1].warning, 'Gói này tối thiểu 20 bàn, nhiều hơn dự kiến 5 bàn');
+  assert.equal(same[1].warning, 'Sảnh Vàng đặt tối thiểu 20 bàn, nhiều hơn dự kiến 5 bàn');
   const diff = r.dropSharedReasons([copy(['4.8/5 từ 12 lượt']), copy(['4.2/5 từ 5 lượt']), copy([])]);
   assert.deepEqual(diff.map((x) => x.reasons), [['4.8/5 từ 12 lượt'], ['4.2/5 từ 5 lượt'], []]);
   assert.deepEqual(r.dropSharedReasons([copy(['4.8/5 từ 12 lượt'])])[0].reasons, ['4.8/5 từ 12 lượt']); // một thẻ: giữ
