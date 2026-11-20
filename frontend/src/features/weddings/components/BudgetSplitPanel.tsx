@@ -708,7 +708,9 @@ function SplitRow({
               aria-hidden
               title={`Giá gói cao nhất: ${money(category.maxPackagePrice ?? 0)}`}
               className="pointer-events-none absolute top-1/2 h-4 w-0.5 -translate-y-1/2 rounded bg-warn"
-              style={{ left: `calc(${(r.marker! / TOTAL) * 100}% - 1px)` }}
+              // Trình duyệt đặt tâm nút ở nửa nút + (bề rộng − nút) × tỷ lệ, không phải đúng tỷ lệ%: canh vạch theo cùng công thức
+              // để dịch vụ đúng bằng giá gói cao nhất thì nút nằm khít trên vạch (trước đây tỷ lệ nhỏ nút lệch phải, lớn lệch trái)
+              style={{ left: `calc(var(--range-thumb, 16px) / 2 + (100% - var(--range-thumb, 16px)) * ${r.marker! / TOTAL} - 1px)` }}
             />
           )}
         </div>

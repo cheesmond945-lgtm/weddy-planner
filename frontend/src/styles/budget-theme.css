@@ -47,7 +47,10 @@
   background-color: color-mix(in srgb, var(--accent-soft) 45%, transparent);
 }
 
-/* Thanh kéo: rãnh mảnh, nút tròn xanh rêu */
+/* Thanh kéo: rãnh mảnh, nút tròn xanh rêu. --range-thumb: cỡ nút (gồm viền), vạch giá gói cao nhất dùng để canh đúng tâm nút */
+.budget-theme {
+  --range-thumb: 16px;
+}
 .budget-theme input[type='range'] {
   appearance: none;
   height: 22px;
@@ -66,8 +69,9 @@
 }
 .budget-theme input[type='range']::-webkit-slider-thumb {
   appearance: none;
-  width: 16px;
-  height: 16px;
+  box-sizing: border-box;
+  width: var(--range-thumb);
+  height: var(--range-thumb);
   margin-top: -6px;
   border-radius: 50%;
   background: var(--accent);
@@ -75,8 +79,9 @@
   box-shadow: 0 1px 4px rgb(40 50 30 / 0.3);
 }
 .budget-theme input[type='range']::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  box-sizing: border-box;
+  width: var(--range-thumb);
+  height: var(--range-thumb);
   border-radius: 50%;
   background: var(--accent);
   border: 3px solid var(--surface);
