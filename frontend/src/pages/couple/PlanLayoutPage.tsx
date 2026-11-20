@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Navigate, Outlet, useLocation } from 'react-router'
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router'
+import { paths } from '@/routes/paths'
 import { EmptyState } from '@/components/EmptyState'
 import { PageTitle } from '@/components/PageTitle'
 import { Button } from '@/components/ui/button'
@@ -18,6 +19,7 @@ export default function PlanLayoutPage() {
   const save = useSaveWedding()
   const [editing, setEditing] = useState(false)
   const { pathname, search } = useLocation()
+  const navigate = useNavigate()
 
   if (wedding.isPending) return <div className="h-[420px] animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Đang tải" />
   if (wedding.isError) {
@@ -44,7 +46,15 @@ export default function PlanLayoutPage() {
             submitLabel="Tạo timeline khung"
             pending={save.isPending}
             error={save.error?.message}
-            onSubmit={(input) => save.mutate(input, { onSuccess: () => toast('Đã tạo timeline khung') })}
+            // Tạo xong chuyển thẳng sang tab Timeline (không dừng ở Tổng quan)
+            onSubmit={(input) =>
+              save.mutate(input, {
+                onSuccess: () => {
+                  toast('Đã tạo timeline khung')
+                  navigate(paths.planTab.timeline, { replace: true })
+                },
+              })
+            }
           />
         </div>
       </>
