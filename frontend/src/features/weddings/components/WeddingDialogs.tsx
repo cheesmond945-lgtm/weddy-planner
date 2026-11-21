@@ -40,6 +40,17 @@ const closeSetup = () => {
   emit()
 }
 
+/** Hộp thiết lập đang mở không: trang Kế hoạch dùng để không hiện thêm form thiết lập thứ hai phía sau hộp. */
+export function useWeddingSetupOpen() {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l)
+      return () => listeners.delete(l)
+    },
+    () => setupState.open,
+  )
+}
+
 /** Hộp "Thiết lập thông tin đám cưới" không đóng được, như authDone trong prototype. Đặt một lần trong CoupleLayout. */
 export function WeddingSetupDialog() {
   const state = useSyncExternalStore(
