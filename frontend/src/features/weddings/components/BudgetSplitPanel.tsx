@@ -456,12 +456,16 @@ function FundArea({
           <p className="flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <i className="fund-dot fund-dot--spend" aria-hidden />
-              {spend.custom ? 'Chi theo tỷ lệ bạn tự chia' : 'Chi tối đa theo giá gói đắt nhất'} <strong className="text-ink tabular-nums">{money(spend.max)}</strong>
+              {/* Không dư đồng nào (không dịch vụ nào bị giới hạn ở gói đắt nhất): chỉ nói là chia hết quỹ, không nhắc gói đắt nhất / Còn dư 0đ */}
+              {spend.custom ? 'Chi theo tỷ lệ bạn tự chia' : spend.rest >= DISPLAY_ROUND_UNIT ? 'Chi tối đa theo giá gói đắt nhất' : 'Chia hết quỹ cho các dịch vụ'}{' '}
+              <strong className="text-ink tabular-nums">{money(spend.max)}</strong>
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <i className="fund-dot fund-dot--rest" aria-hidden />
-              Còn dư <strong className="text-ink tabular-nums">{money(spend.rest)}</strong>
-            </span>
+            {spend.rest >= DISPLAY_ROUND_UNIT && (
+              <span className="inline-flex items-center gap-1.5">
+                <i className="fund-dot fund-dot--rest" aria-hidden />
+                Còn dư <strong className="text-ink tabular-nums">{money(spend.rest)}</strong>
+              </span>
+            )}
           </p>
         )}
       </div>

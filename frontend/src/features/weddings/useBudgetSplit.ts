@@ -5,7 +5,7 @@ import { weddingsApi } from '@/api/weddings'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/store/auth'
 import type { Budget } from '@/types/wedding'
-import type { SplitState } from './budgetSplit'
+import { reconcile, type SplitState } from './budgetSplit'
 import { configBody, stateFromConfig } from './budgetSplitView'
 import { planningKeys } from './hooks'
 
@@ -54,6 +54,23 @@ export function useBudgetSplit(b: Budget) {
     setDraft(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverKey, b.preset])
+
+  // Nhóm chia đổi khi còn thay đổi chưa lưu (vd. vừa chọn gói cho một dịch vụ: dịch vụ đó rời phần chia): áp nhóm mới vào bản nháp
+  // như backend (reconcile), giữ các tỷ lệ khách đang kéo. Backend đã lưu cấu hình theo nhóm mới (tăng version), nên nhận version đó
+  // để nút Lưu không bị 409 rồi mất thay đổi.
+  const groupKey = b.split.eligible.map((e) => e.categoryId).join()
+  useEffect(() => {
+    const st = draftRef.current
+    if (!dirty.current || inFlight.current || !st) return
+    const excluded = st.excluded.filter((id) => b.split.eligible.some((e) => e.categoryId === id))
+    const group = b.split.eligible.filter((e) => !excluded.includes(e.categoryId)).map((e) => ({ id: e.categoryId, slug: e.slug, median: e.median }))
+    const r = reconcile({ ...st, excluded }, group)
+    if (!r.changed && excluded.length === st.excluded.length) return
+    if (server) versionRef.current = server.version
+    draftRef.current = r.state
+    setDraft(r.state)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupKey])
 
   // Hạng mục tự mở khóa khi nhóm đổi (backend áp onGroupChange lúc đọc)
   const noticeKey = b.split.notices.join('\n')
