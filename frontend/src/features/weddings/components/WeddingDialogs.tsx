@@ -99,7 +99,8 @@ export function WeddingSetupDialog() {
             secondaryAction={
               <button
                 type="button"
-                className="mr-auto text-sm font-medium text-gold-700 underline underline-offset-[3px]"
+                // Máy tính: hàng nút trong suốt nằm trên ảnh, nên để Đăng xuất cạnh nút chính (có nền) thay vì đẩy sang trái đè lên form
+                className="text-sm font-medium text-gold-700 underline underline-offset-[3px] max-md:mr-auto md:rounded-pill md:bg-surface/90 md:px-4 md:py-2.5"
                 onClick={() => {
                   closeSetup()
                   logout()
